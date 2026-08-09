@@ -125,6 +125,10 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
     details: {
       taskId,
       ...(result.validationRunId === undefined ? {} : { validationRunId: result.validationRunId }),
+      ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+      ...(result.recoveryEvidence === undefined
+        ? {}
+        : { recoveryEvidence: result.recoveryEvidence }),
     },
     help,
   });

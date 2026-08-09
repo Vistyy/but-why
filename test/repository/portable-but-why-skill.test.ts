@@ -131,6 +131,11 @@ describe("portable But Why skill", () => {
     expect(implementation).toContain(
       "Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.",
     );
+    expect(implementation).toContain("target repository's configured blocking Check");
+    expect(implementation).toContain(
+      "instead of assuming a source-repository command or file layout",
+    );
+    expect(implementation).not.toContain("`just quality`");
     expect(implementation).toContain(
       "When Change Submit returns Findings, run `<but-why> change findings <change-id>`.",
     );

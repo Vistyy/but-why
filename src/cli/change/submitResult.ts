@@ -208,6 +208,9 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
           ? {}
           : { observedCommit: result.observedRemoteHeadSha }),
         ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+        ...(result.recoveryEvidence === undefined
+          ? {}
+          : { recoveryEvidence: result.recoveryEvidence }),
       },
       help: ["Inspect and resolve the remote commit or pull request, then retry Submit."],
     });
@@ -237,6 +240,9 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
       details: {
         changeId,
         ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+        ...(result.recoveryEvidence === undefined
+          ? {}
+          : { recoveryEvidence: result.recoveryEvidence }),
       },
       help: ["Inspect the pending publication and retry Submit."],
     });

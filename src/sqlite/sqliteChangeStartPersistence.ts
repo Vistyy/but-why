@@ -6,8 +6,6 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { TaskState } from "../task/lifecycle.js";
-import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -22,6 +20,11 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
+import {
+  type DecodedTaskGraph,
+  readDecodedTaskGraph,
+  taskDependencyFacts,
+} from "./sqliteTaskReadModel.js";
 
 const columns = [
   "id",
@@ -145,7 +148,8 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
 
 const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const task = yield* readTask(sql, taskId);
+    const graph = yield* readDecodedTaskGraph(sql, "prepare Task-backed Change Start");
+    const task = graph.tasksById.get(taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     const activeReview = yield* readActiveTaskReview(sql, taskId);
     if (activeReview !== undefined) {
@@ -158,13 +162,9 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
-    const blockedBy = yield* sql<TaskDependencyFact>`
-      SELECT tasks.id, tasks.title, tasks.state
-      FROM task_dependencies
-      JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-      WHERE task_dependencies.dependent_task_id = ${taskId} AND tasks.state <> 'done'
-      ORDER BY tasks.numeric_id ASC
-    `;
+    const blockedBy = taskDependencyFacts(graph, taskId, "prerequisites").filter(
+      (dependency) => dependency.state !== "done",
+    );
     return blockedBy.length === 0
       ? { ok: true as const, task }
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
@@ -172,8 +172,8 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.map(
-    sql<TaskRow>`SELECT id, title, description, state FROM tasks WHERE id = ${taskId}`,
-    (rows) => rows[0],
+    readDecodedTaskGraph(sql, "prepare Task-backed Change Start"),
+    (graph: DecodedTaskGraph) => graph.tasksById.get(taskId),
   );
 
 const readActiveTaskReview = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
@@ -263,13 +263,6 @@ const mapRow = (row: ChangeStartRow | undefined) => {
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-type TaskRow = {
-  readonly id: string;
-  readonly title: string;
-  readonly description: string;
-  readonly state: TaskState;
-};
 
 type ChangeStartRow = {
   readonly id: string;

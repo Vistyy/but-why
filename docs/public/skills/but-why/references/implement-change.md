@@ -61,12 +61,12 @@ The Operator decides whether to continue, resolve, cancel, or replace the Task.
 Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.
 Stop and report after raising the blocker.
 Collect only the focused evidence required for the Candidate during implementation.
-Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
+Do not manually run a repository-wide quality command, unfiltered test or coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.
 If Acceptance Context requires a blocking gate to pass, satisfy that requirement through Change Submit instead of running the gate manually.
 After a Check failure, reproduce the reported failure with the narrowest applicable command before changing code or submitting again.
-Use the repository's routine quality command only when the failure cannot be reproduced by a narrower supported command.
-Never run the complete quality command manually during Change implementation.
+Use the target repository's configured blocking Check only through Change Submit.
+When a Check failure cannot be reproduced by a narrower supported command, use the target repository's supported focused diagnostic path instead of assuming a source-repository command or file layout.
 Commit one complete Candidate before Submission.
 
 This step is complete when the committed Candidate satisfies the accepted intent and focused verification passes without a manually duplicated blocking Check.

@@ -1011,14 +1011,7 @@ describe("Change Submit orchestration", () => {
         dependencies({
           events,
           change,
-          observedPullRequest: {
-            number: 42,
-            url: "https://github.test/acme/repo/pull/42",
-            repository: { owner: "acme", repo: "repo" },
-            baseBranch: "main",
-            headBranch: "change-1",
-            headSha: "published-head",
-          },
+          pullRequestObservation: "unavailable",
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -1035,7 +1028,7 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "owned_pull_request_unavailable",
         changeId: change.id,
-        reason: "pull_request_facts_unavailable",
+        reason: "pull_request_unavailable",
       });
       expect(events).toEqual(["observe_pull_request"]);
     }),
@@ -1390,7 +1383,11 @@ type PublicationFixture = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
 };
 
-type PullRequestObservation = "exact_open" | "exact_closed_unmerged" | "exact_merged";
+type PullRequestObservation =
+  | "exact_open"
+  | "exact_closed_unmerged"
+  | "exact_merged"
+  | "unavailable";
 
 const dependencies = (input: {
   readonly change: ChangeRecord;
@@ -1610,6 +1607,7 @@ const pullRequestGateway = (
       return undefined;
     }
     const observation = observations.shift() ?? input.pullRequestObservation ?? "exact_open";
+    if (observation === "unavailable") return undefined;
     const base = {
       number: publication.pullRequest.number,
       url: publication.pullRequest.url,

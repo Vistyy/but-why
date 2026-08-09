@@ -9,10 +9,16 @@ import type { ChangeCleanup, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
+  classifyOwnedPullRequest,
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
+  ownedPublication,
 } from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestGateway,
+  PublicationFailureEvidence,
+} from "./ownedPullRequestGateway.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 
 export type CancellationUseCases = {
@@ -66,6 +72,8 @@ export type TaskCancellationResult =
         | "active_validation_run";
       readonly taskId: PublicTaskId;
       readonly validationRunId?: string;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
     };
 
 export type ChangeCancellationResult =
@@ -88,6 +96,8 @@ export type ChangeCancellationResult =
         | "active_validation_run";
       readonly changeId: string;
       readonly validationRunId?: string;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
     };
 
 export const openCancellationUseCases = (
@@ -194,6 +204,10 @@ const cancelTask = (
         ...(result.validationRunId === undefined
           ? {}
           : { validationRunId: result.validationRunId }),
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+        ...(result.recoveryEvidence === undefined
+          ? {}
+          : { recoveryEvidence: result.recoveryEvidence }),
       };
     }
     return {
@@ -332,28 +346,75 @@ const closeOwnedPullRequest = (
 ):
   | { readonly ok: true; readonly status: "closed"; readonly pullRequest: null }
   | { readonly ok: true; readonly status: "merged"; readonly pullRequest: GitHubPullRequest }
-  | { readonly ok: false; readonly code: "github_close_failed" } => {
-  const publication = change.publication;
-  if (publication === null || publication.pullRequest === null)
-    return { ok: true, status: "closed", pullRequest: null };
-  try {
-    if (dependencies.github.closePullRequest === undefined) {
-      return { ok: false, code: "github_close_failed" };
+  | {
+      readonly ok: false;
+      readonly code: "github_close_failed";
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
+    } => {
+  const publication = ownedPublication(change);
+  if (publication === undefined) return { ok: true, status: "closed", pullRequest: null };
+  let evidence: PublicationFailureEvidence | undefined;
+  if (dependencies.github.closePullRequest !== undefined) {
+    try {
+      const result = dependencies.github.closePullRequest({
+        target: publication.target,
+        number: publication.pullRequest.number,
+      });
+      if (result.ok) {
+        const classified = classifyOwnedPullRequest(publication, result.pullRequest);
+        if (classified.kind === "exact_closed_unmerged")
+          return { ok: true, status: "closed", pullRequest: null };
+        if (classified.kind === "exact_merged")
+          return { ok: true, status: "merged", pullRequest: classified.pullRequest };
+        evidence = conflictingCloseEvidence;
+      } else {
+        evidence = result.evidence;
+      }
+    } catch {
+      evidence = unavailableCloseEvidence;
     }
-    const result = dependencies.github.closePullRequest({
-      target: publication.target,
-      number: publication.pullRequest.number,
-    });
-    if (!result.ok) return { ok: false, code: "github_close_failed" };
-    return result.pullRequest.merged === true
-      ? { ok: true, status: "merged", pullRequest: result.pullRequest }
-      : result.pullRequest.state === "closed"
-        ? { ok: true, status: "closed", pullRequest: null }
-        : { ok: false, code: "github_close_failed" };
-  } catch {
-    return { ok: false, code: "github_close_failed" };
+  } else {
+    evidence = unavailableCloseEvidence;
   }
+
+  const recovered = observeOwnedPullRequest(dependencies.github, change);
+  if (recovered.kind === "exact_closed_unmerged")
+    return { ok: true, status: "closed", pullRequest: null };
+  if (recovered.kind === "exact_merged")
+    return { ok: true, status: "merged", pullRequest: recovered.pullRequest };
+  return {
+    ok: false,
+    code: "github_close_failed",
+    ...(evidence === undefined ? {} : { evidence }),
+    recoveryEvidence:
+      recovered.kind === "unavailable" ? unavailableRecoveryEvidence : conflictingRecoveryEvidence,
+  };
 };
+
+const conflictingCloseEvidence = {
+  operation: "pull_request_close",
+  classification: "conflict",
+  reason: "postcondition_mismatch",
+} as const;
+
+const unavailableCloseEvidence = {
+  operation: "pull_request_close",
+  classification: "unavailable",
+  reason: "unavailable",
+} as const;
+
+const unavailableRecoveryEvidence = {
+  operation: "remote_lookup",
+  classification: "unavailable",
+  reason: "unavailable",
+} as const;
+
+const conflictingRecoveryEvidence = {
+  operation: "remote_lookup",
+  classification: "conflict",
+  reason: "postcondition_mismatch",
+} as const;
 
 const cleanupTerminalChange = (
   dependencies: CancellationDependencies,
