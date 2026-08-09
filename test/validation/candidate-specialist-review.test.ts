@@ -34,6 +34,7 @@ import {
   git,
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
+import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
@@ -503,7 +504,7 @@ describe("Candidate Specialist Review phase", () => {
     ).toEqual(["Durable Specialist Finding"]);
   }, 15_000);
 
-  it("cannot pass after producer runtime, Artifact-recording, or Candidate-integrity failure", async () => {
+  it("cannot pass after producer runtime or Artifact-recording failure", async () => {
     const runtimeHarness = phaseHarness();
     const launchFailure = new SandcastleToolingFailed({
       operationName: "run_reviewer_agent",
@@ -543,27 +544,63 @@ describe("Candidate Specialist Review phase", () => {
       operationName: "record_reviewer_artifacts",
     });
     expect(artifactHarness.rounds).toEqual([]);
+  });
 
-    const integrityHarness = phaseHarness();
+  it("rejects real Candidate mutation before recording a Specialist result", async () => {
+    const repo = candidateReadyRepo();
+    const captured = await Effect.runPromise(captureLocalCandidate({ cwd: repo, now }));
+    if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+    const rounds: RecordCandidateSpecialistRoundInput[] = [];
+    const sandbox: Pick<Sandbox, "exec" | "run"> = {
+      exec: async (command, options) => {
+        const result = runTestProcess("bash", ["-lc", command], {
+          cwd: options?.cwd ?? repo,
+        });
+        return {
+          exitCode: result.status ?? 1,
+          stdout: result.stdout,
+          stderr: result.stderr,
+        };
+      },
+      run: async () => {
+        throw new Error("Captured Specialist runtime must not call Sandbox.run");
+      },
+    };
     const integrityFailure = await Effect.runPromise(
       Effect.flip(
-        integrityHarness.run(
-          { review: () => Effect.succeed(success()) },
-          {
-            sandbox: {
-              exec: async () => ({ exitCode: 0, stdout: `${"9".repeat(40)}\n`, stderr: "" }),
-              run: async () => {
-                throw new Error("Captured Specialist runtime must not call Sandbox.run");
-              },
-            },
+        runSpecialistReviewPhase({
+          validationRunId: "323e4567-e89b-42d3-a456-426614174000",
+          changeId: captured.changeId,
+          candidate: captured,
+          policies: [policy("standards")],
+          runtime: {
+            review: () =>
+              Effect.sync(() => {
+                writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
+                return success();
+              }),
           },
-        ),
+          sandbox,
+          artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+          commandCwd: repo,
+          resourceRoot: repo,
+          allowedUntrackedFiles: [],
+          now,
+          listArtifacts: () => Effect.succeed([]),
+          listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
+          recordSpecialistRound: (round) =>
+            Effect.sync(() => {
+              rounds.push(round);
+            }),
+        }),
       ),
     );
+
     expect(integrityFailure).toMatchObject({
       _tag: "GitToolingFailed",
       operationName: "verify_candidate_head",
     });
-    expect(integrityHarness.rounds).toEqual([]);
-  });
+    expect(rounds).toEqual([]);
+    expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);
+  }, 15_000);
 });
