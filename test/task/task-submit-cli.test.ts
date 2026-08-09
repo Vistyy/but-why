@@ -272,7 +272,7 @@ describe("by task submission CLI", () => {
   );
 
   it.effect(
-    "starts a fresh Review after a completed Review",
+    "shows the latest fresh Review when completed Reviews share a timestamp",
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
@@ -289,8 +289,8 @@ describe("by task submission CLI", () => {
         const second = yield* runByInProcessEffect(
           root,
           ["--json", "task", "submit", "BY-1"],
-          secondNow,
-          { taskReviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
+          firstNow,
+          { taskReviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
         );
         expect(second.status).toBe(0);
         const result = JSON.parse(second.stdout) as {
@@ -299,8 +299,14 @@ describe("by task submission CLI", () => {
         expect(result.review.id).not.toBe(
           (JSON.parse(first.stdout) as { review: { id: string } }).review.id,
         );
-        expect(result.review.outcome).toBe("blocked");
+        expect(result.review.outcome).toBe("passed");
         expect(reviewInputs).toHaveLength(2);
+
+        const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+        expect(JSON.parse(shown.stdout)).toMatchObject({
+          taskReview: { latest: { id: result.review.id, outcome: "passed" } },
+          nextAction: "by task approve BY-1",
+        });
       }),
     60_000,
   );
@@ -332,6 +338,21 @@ describe("by task submission CLI", () => {
         expect(reviewInputs).toHaveLength(2);
       }),
     60_000,
+  );
+
+  it.effect("reports Task Review policy failures with a Task-owned code", () =>
+    Effect.gen(function* () {
+      const root = yield* createInitializedTask();
+      yield* Effect.sync(() => writeFileSync(join(root, ".test-global-config.json"), "{"));
+
+      const result = yield* runByInProcessEffect(root, ["--json", "task", "submit", "BY-1"]);
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "task_review_policy_invalid" },
+        help: ["Fix the Task Reviewer policy, then retry Task Submission."],
+      });
+    }),
   );
 
   it.effect("reports an unknown Task for submission", () =>

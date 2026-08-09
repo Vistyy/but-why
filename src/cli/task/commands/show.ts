@@ -40,10 +40,7 @@ export const runTaskShowCommand = (
       const reviewSummary =
         reviewInspection === undefined || !reviewInspection.ok
           ? null
-          : yield* Effect.all({
-              latest: reviewInspection.inspection.latestCompletedForTask(taskId.taskId),
-              active: reviewInspection.inspection.activeForTask(taskId.taskId),
-            });
+          : yield* reviewInspection.inspection.inspectForTask(taskId.taskId);
       const review =
         reviewSummary === null
           ? null

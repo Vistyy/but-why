@@ -5,7 +5,8 @@ export const taskReviewsMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(`
     CREATE TABLE task_reviews (
-      id TEXT PRIMARY KEY,
+      admission_order INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
       task_id TEXT NOT NULL,
       proposal_snapshot TEXT NOT NULL,
       proposal_key TEXT NOT NULL,
@@ -21,7 +22,7 @@ export const taskReviewsMigration = Effect.gen(function* () {
     )
   `);
   yield* sql.unsafe(`
-    CREATE INDEX task_reviews_task_created_idx ON task_reviews (task_id, created_at)
+    CREATE INDEX task_reviews_task_admission_idx ON task_reviews (task_id, admission_order)
   `);
   yield* sql.unsafe(`
     CREATE TABLE active_task_reviews (

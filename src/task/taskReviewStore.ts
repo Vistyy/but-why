@@ -108,6 +108,11 @@ export type ActiveTaskReview = {
   readonly taskId: PublicTaskId;
 };
 
+export type TaskReviewInspectionSnapshot = {
+  readonly active?: ActiveTaskReview;
+  readonly latest?: TaskReviewRecord;
+};
+
 export type TaskReviewPersistence = {
   readonly start: (input: StartTaskReviewInput) => StorageEffect<StartTaskReviewResult>;
   readonly getTaskFact: (taskId: PublicTaskId) => StorageEffect<TaskReviewTaskFact | undefined>;
@@ -124,6 +129,7 @@ export type TaskReviewPersistence = {
   readonly latestCompletedReviewForTask: (
     taskId: PublicTaskId,
   ) => StorageEffect<TaskReviewRecord | undefined>;
+  readonly inspectForTask: (taskId: PublicTaskId) => StorageEffect<TaskReviewInspectionSnapshot>;
   readonly recordWorkspaceSetup: (input: TaskReviewWorkspaceSetup) => StorageEffect<void>;
   readonly recordToolingFailure: (
     input: RecordTaskReviewToolingFailureInput,

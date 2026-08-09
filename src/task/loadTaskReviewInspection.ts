@@ -8,9 +8,8 @@ import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskReviewPersistence } from "../sqlite/sqliteTaskReviewPersistence.js";
 import { type AbandonTaskReviewResult, openAbandonTaskReview } from "./abandonTaskReview.js";
 import type { PublicTaskId } from "./taskId.js";
-import type { TaskReviewRecord } from "./taskReview.js";
 import type {
-  ActiveTaskReview,
+  TaskReviewInspectionSnapshot,
   TaskReviewPersistence,
   TaskReviewTaskFact,
 } from "./taskReviewStore.js";
@@ -19,12 +18,9 @@ export type TaskReviewInspection = {
   readonly getTaskFact: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskReviewTaskFact | undefined, RepositoryStorageError>;
-  readonly latestCompletedForTask: (
+  readonly inspectForTask: (
     taskId: PublicTaskId,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly activeForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<ActiveTaskReview | undefined, RepositoryStorageError>;
+  ) => Effect.Effect<TaskReviewInspectionSnapshot, RepositoryStorageError>;
   readonly abandon: (input: {
     readonly reviewId: string;
     readonly reason: string;
@@ -61,9 +57,7 @@ export const loadTaskReviewInspection = (input: {
     ok: true,
     inspection: {
       getTaskFact: (taskId) => run((persistence) => persistence.getTaskFact(taskId)),
-      latestCompletedForTask: (taskId) =>
-        run((persistence) => persistence.latestCompletedReviewForTask(taskId)),
-      activeForTask: (taskId) => run((persistence) => persistence.getActiveForTask(taskId)),
+      inspectForTask: (taskId) => run((persistence) => persistence.inspectForTask(taskId)),
       abandon: (abandonInput) =>
         run((persistence) =>
           openAbandonTaskReview({

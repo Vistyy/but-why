@@ -441,6 +441,49 @@ it.scoped("rejects malformed relational evidence when reading the latest Review"
   ),
 );
 
+it.scoped("selects the latest admitted Review when completion timestamps and IDs disagree", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Durable Review order", firstNow);
+
+      yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-z-older",
+        now: firstNow,
+      });
+      yield* recordRemovedWorkspace(reviews, "review-z-older", firstNow);
+      yield* reviews.complete({
+        reviewId: "review-z-older",
+        outcome: "blocked",
+        findings: blockingFindings("review-z-older"),
+        now: firstNow,
+      });
+
+      yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-a-newer",
+        now: firstNow,
+      });
+      expect(yield* reviews.inspectForTask(task.id)).toMatchObject({
+        active: { reviewId: "review-a-newer" },
+        latest: { id: "review-z-older", outcome: "blocked" },
+      });
+      yield* recordRemovedWorkspace(reviews, "review-a-newer", firstNow);
+      yield* reviews.complete({ reviewId: "review-a-newer", outcome: "passed", now: firstNow });
+
+      expect(yield* reviews.inspectForTask(task.id)).toMatchObject({
+        latest: { id: "review-a-newer", outcome: "passed" },
+      });
+    }),
+  ),
+);
+
 it.scoped("records Findings and leaves the Task New for a blocked Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

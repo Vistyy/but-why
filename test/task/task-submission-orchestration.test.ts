@@ -636,7 +636,7 @@ describe("Task Submission orchestration", () => {
 
           expect(result).toMatchObject({
             ok: false,
-            code: "validation_policy_invalid",
+            code: "task_review_policy_invalid",
           });
           expect(reviewInputs).toHaveLength(0);
         }),

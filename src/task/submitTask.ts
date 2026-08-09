@@ -96,7 +96,7 @@ export type TaskSubmitResult =
       readonly completionFailure: TaskReviewCompletionFailure;
     }
   | { readonly ok: false; readonly code: "main_checkout_unavailable" }
-  | { readonly ok: false; readonly code: "validation_policy_invalid"; readonly message: string }
+  | { readonly ok: false; readonly code: "task_review_policy_invalid"; readonly message: string }
   | { readonly ok: false; readonly code: "submission_in_progress" };
 
 export type TaskSubmission = {
@@ -138,7 +138,7 @@ const submitTask = (
     if (!repoConfig.ok) {
       return {
         ok: false as const,
-        code: "validation_policy_invalid" as const,
+        code: "task_review_policy_invalid" as const,
         message: repoConfig.message,
       };
     }
@@ -146,7 +146,7 @@ const submitTask = (
     if (!global.ok) {
       return {
         ok: false as const,
-        code: "validation_policy_invalid" as const,
+        code: "task_review_policy_invalid" as const,
         message: global.message,
       };
     }
@@ -159,7 +159,7 @@ const submitTask = (
     if (!policy.ok) {
       return {
         ok: false as const,
-        code: "validation_policy_invalid" as const,
+        code: "task_review_policy_invalid" as const,
         message: policyResolutionMessage(policy.error),
       };
     }

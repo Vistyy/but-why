@@ -91,9 +91,9 @@ const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {
           message: "The Local Repository's canonical main checkout is unavailable.",
           help: ["Restore the canonical main checkout, then retry Task Submission."],
         });
-      case "validation_policy_invalid":
+      case "task_review_policy_invalid":
         return runtimeError({
-          code: "validation_policy_invalid",
+          code: "task_review_policy_invalid",
           message: result.message,
           help: ["Fix the Task Reviewer policy, then retry Task Submission."],
         });

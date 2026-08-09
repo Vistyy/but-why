@@ -79,6 +79,20 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           );
         }),
       ),
+    inspectForTask: (taskId) =>
+      repository.transaction("inspect Task Review for Task", (sql) =>
+        Effect.gen(function* () {
+          yield* validateStoredTaskReviewEvidence(sql, taskId);
+          const active = yield* getActiveForTask(sql, taskId);
+          const latest = yield* latestCompletedReviewForTask(sql, taskId).pipe(
+            Effect.flatMap(decodeReviewOptional),
+          );
+          return {
+            ...(active === undefined ? {} : { active }),
+            ...(latest === undefined ? {} : { latest }),
+          };
+        }),
+      ),
     listFindings: (reviewId) =>
       repository
         .operation("list Task Review Findings", (sql) => listFindings(sql, reviewId))
@@ -518,7 +532,7 @@ const validateStoredTaskReviewEvidence = (
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
       WHERE task_id = ${taskId}
-      ORDER BY created_at, id
+      ORDER BY admission_order
     `;
     const activeRows = yield* sql<ActiveTaskReviewRow>`
       SELECT task_id AS taskId, review_id AS reviewId
@@ -652,7 +666,7 @@ const latestCompletedReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTa
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
       WHERE task_id = ${taskId} AND state = 'complete'
-      ORDER BY created_at DESC, id DESC
+      ORDER BY admission_order DESC
       LIMIT 1
     `,
     (rows) => rows[0],
