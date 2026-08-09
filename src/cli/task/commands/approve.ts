@@ -9,12 +9,11 @@ import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
+  type TaskIdCommand,
   taskNotFound,
   withTasks,
 } from "../taskCliSupport.js";
 import { taskApprovalStateHelp } from "../taskStateHelp.js";
-
-export type TaskIdCommand = { readonly taskId: string };
 
 export const runApproveCommand = (
   command: TaskIdCommand,
@@ -29,9 +28,16 @@ export const runApproveCommand = (
       tasks.approveTask(taskId.taskId, environment.now().toISOString()),
       (result) => {
         if (!result.ok) {
-          return result.code === "task_not_found"
-            ? taskNotFound(taskId.taskId)
-            : invalidTaskApproval(taskId.taskId, result.state);
+          if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
+          if (result.code === "task_review_active") {
+            return runtimeError({
+              code: "task_review_active",
+              message: `Cannot approve task ${taskId.taskId} while its Task Review is active.`,
+              details: { taskId: taskId.taskId },
+              help: [`Inspect the active Review with \`by task show ${taskId.taskId}\`.`],
+            });
+          }
+          return invalidTaskApproval(taskId.taskId, result.state);
         }
         return success({
           task: {

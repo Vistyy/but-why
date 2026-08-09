@@ -12,8 +12,8 @@ _Avoid_: Agent-selected workflow, Task Approval, Change Start
 
 **Task Recording Authorization**:
 The Operator's explicit permission to persist one proposed set of Task Contexts and Task Dependencies.
-It does not authorize Task Approval, Change Start, or Implementation Authorization.
-_Avoid_: Task Approval, approval to implement, automatic Change Start
+It does not authorize Task Submission, Task Approval, Change Start, or Implementation Authorization.
+_Avoid_: Task Submission, Task Approval, approval to implement, automatic Change Start
 
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
@@ -36,11 +36,32 @@ _Avoid_: Task Worktree, durable Task Context, Artifact
 The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
+**Task Submission Authorization**:
+The Operator's explicit permission to submit one exact presented Task Context and direct Task Dependency set for Task Review.
+It covers only that exact proposal and does not authorize a changed proposal, Task Recording, Change Start, or Implementation Authorization.
+The CLI does not persist Task Submission Authorization.
+_Avoid_: Task Recording Authorization, Task Approval, Implementation Authorization
+
+**Task Submission**:
+The synchronous operation that runs one fresh advisory Task Review for an unlinked New Task.
+Passed, Finding-blocked, and tooling-failed outcomes leave the Task New.
+_Avoid_: Task Approval, Change Submission
+
+**Task Review**:
+The durable active or completed advisory Review of one exact Task proposal against repository evidence by one Task Reviewer.
+Its proposal identity contains only the complete Task Context and canonical direct Task Dependency ID set.
+Its point-in-time dependency evidence, Review Base, and built-in reviewer policy are separate immutable evidence.
+_Avoid_: Validation Run, Candidate validation, generic Review domain
+
+**Task Reviewer**:
+The Agent Profile with the built-in instructions that judges one Task proposal.
+_Avoid_: Candidate Reviewer, Specialist Reviewer, generic reviewer framework
+
 **Task Approval**:
 The Operator's explicit confirmation that recorded Task intent can move from New to Todo.
-V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
+A Task Review is advisory and does not grant Task Approval.
 Task Context and Task Dependencies become immutable at Task Approval.
-_Avoid_: Change Start, Implementation Authorization
+_Avoid_: Task Submission, Change Start, Implementation Authorization
 
 **Task Lifecycle**:
 The user-facing progress of a Task through New, Todo, Done, or Cancelled.

@@ -4,6 +4,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -24,8 +25,7 @@ it.scoped("preserves terminal Task policy", () => {
         });
         if (!created.ok) throw new Error(created.code);
         const taskId = publicTaskId(`BY-${index + 1}`);
-        const approved = yield* tasks.approveTask({ taskId, now: secondNow });
-        if (!approved.ok) throw new Error(approved.code);
+        yield* transitionTaskToTodo(taskId, secondNow);
         yield* repository.operation(
           "set terminal Task fixture state",
           (sql) => sql`
@@ -34,11 +34,6 @@ it.scoped("preserves terminal Task policy", () => {
         );
         const contextBefore = yield* tasks.getTaskContextById(taskId);
 
-        expect(yield* tasks.approveTask({ taskId, now: thirdNow })).toEqual({
-          ok: false,
-          code: "invalid_task_state",
-          state,
-        });
         expect(
           yield* tasks.updateTaskContext({
             taskId,
@@ -71,7 +66,7 @@ it.scoped(
         });
         if (!approved.ok) throw new Error(approved.code);
         const taskId = publicTaskId("BY-1");
-        yield* tasks.approveTask({ taskId, now: secondNow });
+        yield* transitionTaskToTodo(taskId, secondNow);
 
         for (const proposal of [
           { title: "Approved title", description: "Approved description" },

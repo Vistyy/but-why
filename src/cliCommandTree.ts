@@ -236,11 +236,24 @@ const taskShowCommand = withCliHandler(
     ),
 );
 const taskApproveCommand = withCliHandler(
-  leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
+  leaf("approve", "Permanently approve Task intent.", {
+    taskId: taskIdArgument,
+  }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/approve.js")).pipe(
       Effect.flatMap(({ runApproveCommand }) =>
         runApproveCommand({ taskId: values.taskId }, environment),
+      ),
+    ),
+);
+const taskSubmitCommand = withCliHandler(
+  leaf("submit", "Run one synchronous advisory Review of an unlinked New Task.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
+      Effect.flatMap(({ runSubmitCommand }) =>
+        runSubmitCommand({ taskId: values.taskId }, environment),
       ),
     ),
 );
@@ -266,11 +279,39 @@ taskCommand = group(
     taskListCommand,
     taskShowCommand,
     taskApproveCommand,
+    taskSubmitCommand,
     taskContextCommand,
     taskCancelCommand,
   ],
   {},
   () => generatedCommandUsage(taskCommand),
+);
+
+const taskReviewAbandonCommand = withCliHandler(
+  leaf("abandon", "Explicitly abandon an interrupted Task Review.", {
+    reviewId: Args.text({ name: "review-id" }),
+    reason: Options.text("reason"),
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/taskReview/commands/abandon.js")).pipe(
+      Effect.flatMap(({ runAbandonCommand }) =>
+        runAbandonCommand(
+          {
+            reviewId: values.reviewId,
+            reason: values.reason,
+          },
+          environment,
+        ),
+      ),
+    ),
+);
+let taskReviewCommand: AnyCommand;
+taskReviewCommand = group(
+  "task-review",
+  "Recover interrupted Task Reviews.",
+  [taskReviewAbandonCommand],
+  {},
+  () => generatedCommandUsage(taskReviewCommand),
 );
 
 const changeDecisionAddCommand = withCliHandler(
@@ -651,6 +692,7 @@ const commandTree = commandRootWithHandler.pipe(
     initCommand,
     snapshotCommand,
     taskCommand,
+    taskReviewCommand,
     changeCommand,
     validationRunCommand,
   ]),

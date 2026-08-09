@@ -1,6 +1,6 @@
 # Operator Workflow
 
-Use this reference when selecting a Work Route, recording Tasks, approving a Task, authorizing implementation, or starting a fresh Implementer Interactive Session.
+Use this reference when selecting a Work Route, recording Tasks, submitting a Task for review, authorizing implementation, or starting a fresh Implementer Interactive Session.
 Read target-repository instructions and current repository state before you act.
 Use a repository documentation authority map when one exists.
 Do not infer documentation authority from a file name, directory, or document label.
@@ -14,13 +14,17 @@ If the selected Work Route conflicts with a higher-priority instruction, support
 
 **Task Recording Authorization** is the Operator's explicit permission to record one complete proposed Task graph.
 It permits only the approved Task Context and Task Dependency mutations.
-It does not permit Task Approval, Change Start, implementation, or Implementation Authorization.
+It does not permit Task Submission, Change Start, implementation, or Implementation Authorization.
 
-**Task Approval** is a separate Operator action for one recorded Task.
+**Task Submission Authorization** is the Operator's explicit permission to submit one exact presented Task Context and direct Task Dependency set for advisory Task Review.
+It covers only that exact proposal and does not permit a changed proposal, Task Recording, Task Approval, Change Start, implementation, or Implementation Authorization.
+
+**Task Approval** is the Operator's explicit confirmation that one recorded Task can move from New to Todo.
+A Task Review is advisory and does not grant Task Approval.
 Task Approval does not start a Change or launch implementation.
 
 **Implementation Authorization** is the Operator's explicit permission to implement one selected work item through its selected Work Route.
-Task Recording Authorization and Task Approval do not grant Implementation Authorization.
+Task Recording Authorization, Task Submission Authorization, and Task Approval do not grant Implementation Authorization.
 Do not begin implementation or start a Change without Implementation Authorization for that work item.
 A Task-backed Change Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
 A taskless Change uses the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
@@ -90,6 +94,21 @@ Before designing or revising a Task Verification Contract, read [Task verificati
 
 This section is complete when every authorized Task and Task Dependency is recorded, unapproved, and unlinked to a Change.
 
+## Submit a Task for Review
+
+When the Operator explicitly requests Task Submission Authorization, inspect the selected recorded Task and its complete Task Context and direct Task Dependency set.
+Present the exact Context and dependency set to the Operator and obtain Task Submission Authorization for that exact proposal before running `by task submit <task-id>`.
+Do not submit a different proposal, and do not record Task Context or dependency changes without a new Task Recording Authorization.
+Treat the returned Task Review result as authoritative.
+Passed, Finding-blocked, and tooling-failed Reviews leave the Task New.
+After a passed Review, obtain separate Task Approval before running `by task approve <task-id>`.
+After Findings, revise the Task only with new Task Recording Authorization.
+After Tooling Failure, use the returned recovery action.
+Run `by task show <task-id>` only when required review or Change-link state is omitted.
+Do not approve the Task, start a Change, or launch an Implementer Interactive Session as part of Task Submission.
+
+This section is complete when the selected Task proposal has Task Submission Authorization and its returned advisory Task Review result is known.
+
 ## Approve a Task
 
 When the Operator explicitly requests Task Approval, inspect the selected recorded Task and run `by task approve <task-id>`.
@@ -157,10 +176,12 @@ by task dependencies clear <task-id>
 by task list [--all] [--state <state>] [--limit <positive integer | all>]
 by task show <task-id>
 by task approve <task-id>
+by task submit <task-id>
 by task context <task-id>
 by task context draft <task-id>
 by task context apply <task-id>
 by task cancel <task-id> --reason <reason>
+by task-review abandon <review-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
 by change prepare [<change-id>]
 by change list [--all]

@@ -123,7 +123,9 @@ Its `count` is the number of returned Tasks and its `total` is the number matchi
 
 ## Command ownership
 
-- `by task show` owns Task lifecycle, dependency, and linked Change metadata.
+- `by task show` owns Task lifecycle, dependency, Task Review summary, and linked Change metadata.
+- `by task submit` returns one structured Task Review result: `passed`, `blocked`, or `tooling_failed`, with the resulting New Task state and a valid next action.
+- `by task-review abandon` owns interrupted Task Review cleanup and abandonment.
 - `by task context` owns the complete Task title, description, and approved Resolution context.
 - `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
 - `by change blocker list` owns complete Implementation Blocker and Implementation Blocker Resolution history.

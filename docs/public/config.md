@@ -149,6 +149,18 @@ For a taskless Change, But Why supplies no Acceptance Context block or explanati
 The same conditional behavior applies to initial and continuation Specialist prompts.
 Configured instructions define the concern, but cannot override these common boundaries.
 
+## Task Review
+
+Task Submission runs one fresh advisory Task Review for an unlinked New Task.
+Passed, Finding-blocked, and tooling-failed Reviews leave the Task New.
+Its Agent Profile selection comes from Global `defaultAgentProfile` and resolves against Repo and Global Agent Profiles.
+Submission fails when no default profile resolves.
+It always uses the complete built-in Task Reviewer instructions.
+The built-in instructions require the strict Task Dependency definition and complete Task Verification Contract rules.
+Task Submission resolves the Task Reviewer policy and Repository Preparation from the Repo Config at the canonical-main-checkout `HEAD` commit.
+Configured Repository Preparation runs in a disposable exact-`HEAD` workspace.
+Automatic Validation Checks do not run.
+
 ## Agent Environment
 
 Repo Config may define one `agentEnvironment.command` argument list.

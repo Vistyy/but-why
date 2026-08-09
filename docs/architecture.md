@@ -9,13 +9,14 @@ A Task owns requested intent, dependencies, and user-facing lifecycle.
 A Change owns one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and an owned pull request.
 A Change may link to one Task.
 
-Task commands manage intent and lifecycle.
+Task commands manage intent, advisory Task Reviews, and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
-Submission executes the fixed Validation Gate against a Candidate.
+Task Submission executes one Task Review without running Automatic Validation Checks.
+Change Submission executes the fixed Validation Gate against a Candidate.
 
 The source hierarchy follows these owners:
 
-- `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
+- `src/task/` owns Task records, Task Review records and lifecycle, Task Submission, Task lifecycle rules, identity, persistence interfaces, files, and composition.
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
 - `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production. `ChangeUseCases.implement` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`. `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeUseCases.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
 - `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
@@ -35,6 +36,19 @@ CLI modules select operations and translate results.
 They do not construct storage or coordinate persistence.
 Task and Change modules own the narrow persistence operations that preserve their invariants.
 Repository storage composition owns database lifecycle and constructs SQLite Adapters.
+
+## Task Review workflow
+
+`by task submit <task-id>` accepts one unlinked New Task and runs one fresh synchronous advisory Task Review.
+Admission records the complete Task Context and canonical direct Task Dependency ID set as proposal identity.
+It separately records point-in-time dependency evidence, the exact canonical-main-checkout `HEAD` as Review Base, and the complete built-in reviewer policy.
+Repository Preparation and the Task Reviewer run in a disposable exact-Base workspace without Automatic Validation Checks or uncommitted canonical-checkout content.
+
+One Active Review can exist for a Task.
+The owner-keyed SQLite Execution Lock, storage uniqueness, proposal rereading under the lock, mutation guards, and compare-and-set completion protect the admitted proposal.
+Passed, Finding-blocked, and tooling-failed completion records durable outcome evidence, removes the Active Review, and leaves the Task New.
+An interrupted Review remains active until the operator knows its process stopped and runs `by task-review abandon <review-id> --reason <reason>`.
+Cleanup failure records the failed operation and diagnostic while preserving the Active Review for another abandonment attempt.
 
 ## Change workflow
 

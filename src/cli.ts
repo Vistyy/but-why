@@ -7,6 +7,7 @@ import { runCommandTree } from "./cliCommandTree.js";
 import { type CliResult, runtimeError } from "./cliResults.js";
 import type { ReviewerOutput } from "./contracts/reviewerOutput.js";
 import type { OutputFormat } from "./output/structured.js";
+import type { TaskReviewReviewerOutput } from "./task/taskReviewPolicy.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
@@ -19,6 +20,7 @@ export type CliEnvironment = {
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };

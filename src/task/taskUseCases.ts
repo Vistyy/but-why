@@ -69,6 +69,7 @@ export type ApplyTaskContextDraftResult =
   | { readonly ok: true; readonly task: TaskRecord; readonly context: TaskContext }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
+  | { readonly ok: false; readonly code: "task_review_active" }
   | { readonly ok: false; readonly error: TaskContextDraftReadError }
   | {
       readonly ok: false;
