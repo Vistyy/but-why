@@ -34,16 +34,13 @@ import {
   decodeImplementationDecisions,
   decodeReviewerSession,
   decodeReviewerTranscript,
+  implementationBlockerReadColumns,
   type UnknownChangeRow,
   type UnknownImplementationBlockerRow,
   type UnknownImplementationDecisionRow,
+  validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
-
-const blockerColumns = `CAST(sequence AS TEXT) AS sequence, typeof(sequence) AS sequenceType,
-  id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt,
-  resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
-  resolution_content AS resolutionContent`;
 
 export const openSqliteChangePersistence = (): Effect.Effect<
   ChangePersistence,
@@ -241,7 +238,7 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
 const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.flatMap(
     sql.unsafe<UnknownImplementationBlockerRow>(
-      `SELECT ${blockerColumns} FROM implementation_blockers WHERE change_id = ?`,
+      `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
       [changeId],
     ),
     (rows) =>
@@ -690,22 +687,6 @@ const mapRow = (
         return change;
       });
 
-const validateChangeRelationships = (
-  sql: SqlClient.SqlClient,
-  change: ChangeRecord,
-  operationName: string,
-) =>
-  Effect.gen(function* () {
-    if (change.taskId !== null) {
-      const taskRows = yield* sql<Record<string, unknown>>`
-        SELECT id FROM tasks WHERE id = ${change.taskId}
-      `;
-      yield* decodePersisted(operationName, () => {
-        const taskId = decodeStoredString(taskRows[0]?.["id"], "linked Task ID");
-        if (taskId !== change.taskId) throw new Error("Change belongs to an unknown Task");
-      });
-    }
-  });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 

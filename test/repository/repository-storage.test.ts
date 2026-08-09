@@ -53,6 +53,37 @@ import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import { startTestProcess } from "../support/testProcess.js";
 
+const installPublicationIdentity = (
+  changeId: string,
+  candidateId: string,
+  validationRunId: string,
+  now: string,
+) =>
+  Effect.gen(function* () {
+    const repository = yield* RepositorySql;
+    yield* repository.operation("install publication identity fixture", (sql) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT OR IGNORE INTO candidates (
+            id, change_id, change_base_sha, head_sha, created_at
+          ) VALUES (
+            ${candidateId}, ${changeId}, ${`${candidateId}-base`}, ${`${candidateId}-head`}, ${now}
+          )
+        `;
+        yield* sql`
+          INSERT OR IGNORE INTO candidate_validation_runs (
+            id, candidate_id, policy_snapshot, implementation_decisions,
+            latest_resolved_blocker_id, state, outcome, created_at, updated_at
+          ) VALUES (
+            ${validationRunId}, ${candidateId},
+            '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+            'complete', 'passed', ${now}, ${now}
+          )
+        `;
+      }),
+    );
+  });
+
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
   const rows = yield* repositorySql.operation(
@@ -691,6 +722,12 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base",
           now: "2026-07-17T22:57:30.000Z",
         };
+        yield* installPublicationIdentity(
+          publication.changeId,
+          publication.candidateId,
+          publication.validationRunId,
+          publication.now,
+        );
         const begun = yield* changes.beginPublication(publication);
         if (!begun.ok) throw new Error(begun.code);
         const recorded = yield* changes.recordPublishedPullRequest({
@@ -791,6 +828,12 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base",
           now: "2026-07-17T22:57:30.000Z",
         };
+        yield* installPublicationIdentity(
+          first.changeId,
+          first.candidateId,
+          first.validationRunId,
+          first.now,
+        );
         if (!(yield* changes.beginPublication(first)).ok) throw new Error("begin failed");
         if (
           !(yield* changes.recordPublishedPullRequest({
@@ -806,6 +849,12 @@ describe("repository SQL storage", () => {
           expectedHeadSha: "second-head",
           now: "2026-07-17T22:59:00.000Z",
         };
+        yield* installPublicationIdentity(
+          newer.changeId,
+          newer.candidateId,
+          newer.validationRunId,
+          newer.now,
+        );
         const replaced = yield* changes.recordPublishedPullRequest({
           ...newer,
           pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
@@ -896,6 +945,12 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base",
           now: "2026-07-17T22:57:30.000Z",
         };
+        yield* installPublicationIdentity(
+          publication.changeId,
+          publication.candidateId,
+          publication.validationRunId,
+          publication.now,
+        );
         if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
         if (
           !(yield* changes.recordPublishedPullRequest({
@@ -972,6 +1027,12 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base",
           now: "2026-07-17T22:57:30.000Z",
         };
+        yield* installPublicationIdentity(
+          publication.changeId,
+          publication.candidateId,
+          publication.validationRunId,
+          publication.now,
+        );
         if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
         if (
           !(yield* changes.recordPublishedPullRequest({
@@ -1286,9 +1347,10 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
-        ).toBeUndefined();
+        const ownershipError = yield* changes
+          .getPassingPublicationEvidence(captured.changeId, authority)
+          .pipe(Effect.flip);
+        expect(ownershipError).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),
   );
@@ -1721,6 +1783,12 @@ describe("repository SQL storage", () => {
           expectedHeadSha: "first-head",
           now: "2026-07-25T15:11:00.000Z",
         };
+        yield* installPublicationIdentity(
+          pending.changeId,
+          pending.candidateId,
+          pending.validationRunId,
+          pending.now,
+        );
         expect(yield* changes.beginPublication(pending)).toMatchObject({ ok: true, created: true });
         const second = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -1744,6 +1812,12 @@ describe("repository SQL storage", () => {
           expectedCurrentHeadBranch: "feature",
           expectedCurrentTarget: target,
         };
+        yield* installPublicationIdentity(
+          replacement.changeId,
+          replacement.candidateId,
+          replacement.validationRunId,
+          replacement.now,
+        );
         expect(yield* changes.replacePendingPublication(replacement)).toMatchObject({ ok: true });
         expect(
           yield* changes.replacePendingPublication({
@@ -1774,6 +1848,12 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T15:30:00.000Z",
           });
           if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+          yield* installPublicationIdentity(
+            captured.changeId,
+            captured.candidateId,
+            "legacy-run",
+            "2026-07-25T15:30:00.000Z",
+          );
           yield* repository.operation("install legacy publication facts", (sql) =>
             Effect.gen(function* () {
               yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
@@ -1816,6 +1896,12 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const upgraded = yield* openSqliteChangePersistence();
+              yield* installPublicationIdentity(
+                captured.changeId,
+                captured.candidateId,
+                "legacy-run",
+                "2026-07-25T15:30:00.000Z",
+              );
               expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
               const current = yield* upgraded.getChangeById(captured.changeId);
               expect(current?.publication).toMatchObject({
@@ -1844,6 +1930,12 @@ describe("repository SQL storage", () => {
               });
               expect(next.ok).toBe(true);
               if (!next.ok) throw new Error(next.code);
+              yield* installPublicationIdentity(
+                captured.changeId,
+                next.candidateId,
+                "next-run",
+                "2026-07-25T15:31:00.000Z",
+              );
               yield* repository.operation(
                 "prepare revised publication after upgrade",
                 (sql) => sql`
@@ -1919,6 +2011,12 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base-1",
           now: "2026-07-25T16:01:00.000Z",
         };
+        yield* installPublicationIdentity(
+          publication.changeId,
+          publication.candidateId,
+          publication.validationRunId,
+          publication.now,
+        );
         expect(yield* changes.beginPublication(publication)).toMatchObject({ ok: true });
         expect(
           yield* changes.recordPublishedPullRequest({
@@ -1936,6 +2034,12 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T16:02:00.000Z",
         });
         if (!second.ok) throw new Error(`Candidate capture failed: ${second.code}`);
+        yield* installPublicationIdentity(
+          first.changeId,
+          second.candidateId,
+          "run-2",
+          "2026-07-25T16:03:00.000Z",
+        );
         const recorded = yield* changes.recordPublishedPullRequest({
           changeId: first.changeId,
           candidateId: second.candidateId,
@@ -3127,6 +3231,25 @@ describe("repository SQL storage", () => {
                       '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}',
                       'candidate-1', 'run-1', 'acme', 'repo', 'main', 'origin',
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidates (
+                      id, change_id, change_base_sha, head_sha, created_at
+                    ) VALUES (
+                      'candidate-1', 'change-with-failure', 'base-sha', 'head-sha',
+                      '2026-07-25T17:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidate_validation_runs (
+                      id, candidate_id, policy_snapshot, implementation_decisions,
+                      latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                    ) VALUES (
+                      'run-1', 'candidate-1',
+                      '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                      'complete', 'passed', '2026-07-25T17:30:00.000Z',
+                      '2026-07-25T17:30:00.000Z'
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;

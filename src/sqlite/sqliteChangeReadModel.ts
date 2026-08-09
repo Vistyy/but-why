@@ -1,3 +1,6 @@
+import type * as SqlClient from "@effect/sql/SqlClient";
+import { Effect } from "effect";
+
 import type { ChangeRecord, ChangeState } from "../change/change.js";
 import { changeState } from "../change/change.js";
 import type { ChangeStartRecord } from "../change/changeStartStore.js";
@@ -13,6 +16,7 @@ import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContext
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import { decodeSqliteChangePublication } from "./sqliteChangePublication.js";
 import {
+  decodePersisted,
   decodeStoredNullableString,
   decodeStoredSqlitePositiveInteger,
   decodeStoredString,
@@ -276,6 +280,13 @@ export const decodeImplementationDecisions = (
     .sort((left, right) => left.sequence - right.sequence);
 };
 
+export const implementationBlockerReadColumns = `
+  CAST(sequence AS TEXT) AS sequence, typeof(sequence) AS sequenceType,
+  id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt,
+  resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
+  resolution_content AS resolutionContent
+`;
+
 export type UnknownImplementationBlockerRow = {
   readonly sequence: unknown;
   readonly sequenceType: unknown;
@@ -393,6 +404,51 @@ export const decodeReviewerTranscript = (
     filePath: decodeStoredString(row["filePath"], "Reviewer Transcript file path"),
   };
 };
+
+export const validateChangeRelationships = (
+  sql: SqlClient.SqlClient,
+  change: ChangeRecord,
+  operationName: string,
+) =>
+  Effect.gen(function* () {
+    if (change.taskId !== null) {
+      const taskRows = yield* sql<Record<string, unknown>>`
+        SELECT id FROM tasks WHERE id = ${change.taskId}
+      `;
+      yield* decodePersisted(operationName, () => {
+        const taskId = decodeStoredString(taskRows[0]?.["id"], "linked Task ID");
+        if (taskId !== change.taskId) throw new Error("Change belongs to an unknown Task");
+      });
+    }
+
+    if (change.publication !== null) {
+      const publicationRows = yield* sql<Record<string, unknown>>`
+        SELECT candidate.change_id AS candidateChangeId,
+          validation_run.candidate_id AS validationRunCandidateId
+        FROM candidates AS candidate
+        LEFT JOIN candidate_validation_runs AS validation_run
+          ON validation_run.id = ${change.publication.validationRunId}
+        WHERE candidate.id = ${change.publication.candidateId}
+      `;
+      yield* decodePersisted(operationName, () => {
+        const row = publicationRows[0];
+        const candidateChangeId = decodeStoredString(
+          row?.["candidateChangeId"],
+          "publication Candidate Change ID",
+        );
+        const validationRunCandidateId = decodeStoredString(
+          row?.["validationRunCandidateId"],
+          "publication Validation Run Candidate ID",
+        );
+        if (candidateChangeId !== change.id) {
+          throw new Error("Publication Candidate belongs to another Change");
+        }
+        if (validationRunCandidateId !== change.publication?.candidateId) {
+          throw new Error("Publication Validation Run belongs to another Candidate");
+        }
+      });
+    }
+  });
 
 export const decodeCandidateCaptureChange = (row: Record<string, unknown>) => ({
   id: decodeStoredString(row["id"], "Candidate capture Change ID"),

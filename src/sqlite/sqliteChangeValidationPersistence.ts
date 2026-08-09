@@ -25,9 +25,15 @@ import {
   encodeSqliteCandidateValidationPolicy,
 } from "./sqliteCandidateValidationPolicy.js";
 import {
+  decodeImplementationBlockerHistory,
+  implementationBlockerReadColumns,
+  type UnknownImplementationBlockerRow,
+} from "./sqliteChangeReadModel.js";
+import {
   decodeSqliteJsonStringArray,
   encodeSqliteJsonStringArray,
 } from "./sqliteJsonStringArray.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeValidationPersistence = (): Effect.Effect<
   ChangeValidationPersistence,
@@ -170,6 +176,9 @@ const candidateColumns = `
   head_sha AS headSha, created_at AS createdAt
 `;
 
+const compareStoredStrings = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
+
 const getCandidateById = (sql: SqlClient.SqlClient, candidateId: string) =>
   Effect.map(
     sql.unsafe<CandidateRecord>(`SELECT ${candidateColumns} FROM candidates WHERE id = ?`, [
@@ -218,28 +227,32 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       });
     }
 
-    const unresolvedBlockers = yield* sql<{ readonly id: string }>`
-      SELECT blocker.id
-      FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
-        AND blocker.resolved_at IS NULL
-      LIMIT 1
-    `;
-    if (unresolvedBlockers.length > 0) {
+    const blockerRows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns}
+       FROM implementation_blockers
+       WHERE change_id = ?`,
+      [candidate.changeId],
+    );
+    const blockerHistory = yield* decodePersisted("start Candidate Validation Run", () =>
+      decodeImplementationBlockerHistory(blockerRows, candidate.changeId),
+    );
+    if (blockerHistory.active !== null) {
       return {
         reused: false,
         blocked: true,
       } satisfies StartCandidateValidationRunResult;
     }
-    const latestResolved = yield* sql<{ readonly id: string }>`
-      SELECT blocker.id
-      FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
-        AND blocker.resolved_at IS NOT NULL
-      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-      LIMIT 1
-    `;
-    const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
+    const latestResolvedBlockerId =
+      [...blockerHistory.blockers]
+        .filter(
+          (blocker): blocker is typeof blocker & { readonly resolvedAt: string } =>
+            blocker.resolvedAt !== null,
+        )
+        .sort(
+          (left, right) =>
+            compareStoredStrings(right.resolvedAt, left.resolvedAt) ||
+            right.sequence - left.sequence,
+        )[0]?.id ?? null;
     const policySnapshot = yield* Effect.try({
       try: () => encodeSqliteCandidateValidationPolicy(input.policy),
       catch: (cause) =>

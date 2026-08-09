@@ -9,6 +9,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -132,6 +133,62 @@ describe("SQLite Change decoding", () => {
             sql`UPDATE changes SET publication_candidate_id = NULL WHERE id = 'change-malformed'`,
         );
 
+        const other = yield* starts.create({
+          id: "change-publication-owner",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/change-publication-owner",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "base-sha",
+          worktreePath: `${input.commonDirectory}/worktrees/change-publication-owner`,
+          now: "2026-08-09T20:10:00.000Z",
+        });
+        if (!other.ok) throw new Error(other.code);
+        yield* repository.operation("inject foreign publication ownership", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+              VALUES (
+                'foreign-candidate', 'change-publication-owner', 'base-sha', 'head-sha',
+                '2026-08-09T20:10:00.000Z'
+              )
+            `;
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
+              ) VALUES (
+                'foreign-run', 'foreign-candidate',
+                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]',
+                NULL, 'complete', 'passed', '2026-08-09T20:10:00.000Z',
+                '2026-08-09T20:10:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = 'foreign-candidate',
+                publication_validation_run_id = 'foreign-run', publication_owner = 'acme',
+                publication_repo = 'repo', publication_base_branch = 'main',
+                publication_remote_name = 'origin', publication_head_branch = 'foreign',
+                publication_expected_head_sha = 'head-sha'
+              WHERE id = 'change-malformed'
+            `;
+          }),
+        );
+        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+        yield* repository.operation(
+          "restore absent publication",
+          (sql) => sql`
+            UPDATE changes SET
+              publication_candidate_id = NULL, publication_validation_run_id = NULL,
+              publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL,
+              publication_remote_name = NULL, publication_head_branch = NULL,
+              publication_expected_head_sha = NULL
+            WHERE id = 'change-malformed'
+          `,
+        );
+
         yield* repository.operation("install malformed Acceptance Context", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -180,6 +237,7 @@ describe("SQLite Change decoding", () => {
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -207,6 +265,15 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(changes.listImplementationBlockers(captured.changeId));
+        yield* expectPersistedDataInvalid(
+          validation.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy: { checks: [], copyFiles: [], specialistReviews: [] },
+            now: "2026-08-09T20:22:00.000Z",
+          }),
+        );
 
         yield* repository.operation(
           "complete first blocker resolution",

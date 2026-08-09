@@ -15,11 +15,11 @@ import {
   decodeChangeRow,
   requireChangeStartRecord,
   type UnknownChangeRow,
+  validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import {
   type DecodedTaskGraph,
   decodePersisted,
-  decodeStoredString,
   readDecodedTaskGraph,
   taskDependencyFacts,
 } from "./sqliteTaskReadModel.js";
@@ -165,16 +165,7 @@ const mapRow = (row: UnknownChangeRow | undefined, sql: SqlClient.SqlClient) =>
         const change = yield* decodePersisted("read Change Start", () =>
           requireChangeStartRecord(decodeChangeRow(row)),
         );
-        if (change.taskId !== null) {
-          const taskRows = yield* sql<Record<string, unknown>>`
-            SELECT id FROM tasks WHERE id = ${change.taskId}
-          `;
-          yield* decodePersisted("read Change Start", () => {
-            const taskId = decodeStoredString(taskRows[0]?.["id"], "linked Task ID");
-            if (taskId !== change.taskId)
-              throw new Error("Change Start belongs to an unknown Task");
-          });
-        }
+        yield* validateChangeRelationships(sql, change, "read Change Start");
         return change;
       });
 
