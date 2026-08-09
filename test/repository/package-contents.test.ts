@@ -190,7 +190,7 @@ describe("release package boundary", () => {
       if (current === undefined || staticEntryFiles.has(current)) continue;
       staticEntryFiles.add(current);
       const source = readFileSync(current, "utf8");
-      for (const match of source.matchAll(/from["'](\.\.?(?:\/)[^"']+)["']/g)) {
+      for (const match of source.matchAll(/(?:from|import)["'](\.\.?(?:\/)[^"']+)["']/g)) {
         const target = match[1];
         if (target !== undefined) staticEntryQueue.push(join(dirname(current), target));
       }

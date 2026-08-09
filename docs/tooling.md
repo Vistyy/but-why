@@ -85,7 +85,8 @@ The production CLI keeps the complete Effect CLI descriptor tree in `src/cliComm
 The release package boundary test builds, packs, and installs one package fixture per invocation.
 Its packed-content owner verifies package metadata and the package allowlist.
 Its bundled-graph owner verifies lazy command loading and generated dynamic targets against the prepared built artifact.
-Its installed-runtime owner runs the packaged CLI from the installed layout and verifies trusted continuation asset loading and truthful missing or invalid extension failures.
+Its installed-runtime owner seeds only the required Change state through the in-process fixture, then runs the packaged CLI from the installed layout to verify trusted continuation asset loading and truthful missing or invalid extension failures.
+Broad Init, Change Start, and Change Implement semantics remain owned by [`test/repository/init-edge-cases.test.ts`](../test/repository/init-edge-cases.test.ts), [`test/change/change-start-managed-worktree.test.ts`](../test/change/change-start-managed-worktree.test.ts), and [`test/change/change-implement.test.ts`](../test/change/change-implement.test.ts).
 See [`test/repository/package-contents.test.ts`](../test/repository/package-contents.test.ts).
 Run it with `just test test/repository/package-contents.test.ts`.
 
