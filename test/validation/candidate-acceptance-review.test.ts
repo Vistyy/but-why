@@ -252,7 +252,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     }),
   );
 
-  it.scoped("clears earlier Acceptance Findings after a later clean report", () =>
+  it.scoped("preserves earlier Acceptance Findings through failure until a clean report", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier acceptance Finding");
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -267,6 +267,27 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const earlier = yield* runTaskBackedCandidate(ready);
       expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
       if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "failed acceptance candidate");
+      const failedCandidate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:01:00.000Z",
+      });
+      if (!failedCandidate.ok) throw new Error(`Candidate capture failed: ${failedCandidate.code}`);
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: false,
+          failure: new SandcastleToolingFailed({
+            operationName: "run_reviewer_agent",
+            message: "Temporary reviewer failure.",
+          }),
+          sessionUsability: "unknown" as const,
+          attempts: 1,
+          stdout: "",
+        }),
+      );
+      const failed = yield* runTaskBackedCandidate(ready, passingValidationPolicy, failedCandidate);
+      expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
 
       git(ready.repo, "commit", "--allow-empty", "-m", "clean acceptance candidate");
       const cleanCandidate = yield* captureLocalCandidate({
@@ -284,7 +305,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       );
       const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
       expect(clean).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review.mock.calls[1]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
 
       git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
       const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
@@ -293,8 +314,8 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledTimes(3);
-      expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(4);
+      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
     }),
   );
 
