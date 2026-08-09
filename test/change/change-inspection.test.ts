@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
@@ -652,7 +653,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
             2,
           )}\n`,
         );
-        const reviewerAgentRuntime: ReviewerAgentRuntime = {
+        const reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput> = {
           review: () =>
             Effect.succeed({
               ok: true as const,

@@ -11,16 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
-import { Effect } from "effect";
-import {
-  SandcastleToolingFailed,
-  type ValidationToolingFailure,
-} from "../change/validation/validationToolingFailures.js";
-import {
-  decodeReviewerOutputContract,
-  type ReviewerOutput,
-  validateReviewerArtifactRefs,
-} from "../contracts/reviewerOutput.js";
+import { Data, Effect } from "effect";
+import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import {
   type AgentEnvironmentCommand,
   prependAgentEnvironment,
@@ -29,19 +21,37 @@ import {
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { piResourceFlags } from "./piRuntime.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
-import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
-export type ReviewerAgentRuntime = {
-  readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult>;
+export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecutionFailed")<{
+  readonly operationName: string;
+  readonly message: string;
+  readonly diagnostics?: readonly ContractDiagnostic[];
+  readonly correctionPrompt?: string;
+}> {}
+
+export type ReviewerOutputDecoder<Output> = (
+  output: unknown,
+) => Effect.Effect<Output, ReviewerExecutionFailed>;
+
+export type ReviewerRuntimeFailure = {
+  readonly operationName: string;
+  readonly message: string;
+  readonly diagnostics?: readonly ContractDiagnostic[];
+  readonly correctionPrompt?: string;
+};
+
+export type ReviewerAgentRuntime<Output = unknown> = {
+  readonly review: (
+    input: ReviewerAgentInput<Output>,
+  ) => Effect.Effect<ReviewerAgentResult<Output>>;
 };
 
 export type ReviewerSessionUsability = "unusable" | "unknown";
 
-export type ReviewerAgentInput = {
+export type ReviewerAgentInput<Output> = {
   readonly sandbox: Pick<Sandbox, "run">;
   readonly reviewer: string;
-  readonly validationRunId: string;
-  readonly availableArtifactRefs: readonly string[];
+  readonly decodeOutput: ReviewerOutputDecoder<Output>;
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd?: string;
@@ -51,10 +61,10 @@ export type ReviewerAgentInput = {
   readonly resumeSession?: string;
 };
 
-export type ReviewerAgentResult =
+export type ReviewerAgentResult<Output = unknown> =
   | {
       readonly ok: true;
-      readonly report: ReviewerOutput;
+      readonly report: Output;
       readonly attempts: number;
       readonly stdout: string;
       readonly sessionReference?: string;
@@ -62,7 +72,7 @@ export type ReviewerAgentResult =
     }
   | {
       readonly ok: false;
-      readonly failure: ValidationToolingFailure;
+      readonly failure: ReviewerRuntimeFailure;
       readonly sessionUsability: ReviewerSessionUsability;
       readonly attempts: number;
       readonly stdout: string;
@@ -70,7 +80,9 @@ export type ReviewerAgentResult =
       readonly sessionFilePath?: string;
     };
 
-const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
+const reviewWithPi = <Output>(
+  input: ReviewerAgentInput<Output>,
+): Effect.Effect<ReviewerAgentResult<Output>> =>
   Effect.gen(function* () {
     const sessionSnapshot =
       input.resumeSession === undefined || input.sessionStorageRoot === undefined
@@ -187,7 +199,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       }
       attempts += 1;
       const corrected = yield* Effect.either(
-        runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(failure))),
+        runSandbox(() => resume(failure.correctionPrompt ?? failure.message)),
       );
       if (corrected._tag === "Left") {
         restoreSession();
@@ -217,7 +229,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     };
   });
 
-export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
+export const piReviewerAgentRuntime = {
   review: reviewWithPi,
 };
 
@@ -263,40 +275,29 @@ const isolatedPiReviewerAgent = (
   };
 };
 
-const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, attempts: number) =>
-  decodeReviewerOutputContract({
-    reviewer: input.reviewer,
-    attempts,
-    output: parseTaggedReviewerOutput(result.stdout),
-  }).pipe(
-    Effect.flatMap((output) =>
-      validateReviewerArtifactRefs({
-        reviewer: input.reviewer,
-        attempts,
-        validationRunId: input.validationRunId,
-        output,
-        availableArtifactRefs: input.availableArtifactRefs,
-      }),
-    ),
-  );
+const validateRunResult = <Output>(
+  input: ReviewerAgentInput<Output>,
+  result: SandboxRunResult,
+  _attempts: number,
+) => input.decodeOutput(parseTaggedReviewerOutput(result.stdout));
 
 const runSandbox = (
   run: () => Promise<SandboxRunResult>,
-): Effect.Effect<SandboxRunResult, SandcastleToolingFailed> =>
+): Effect.Effect<SandboxRunResult, ReviewerExecutionFailed> =>
   Effect.tryPromise({
     try: run,
     catch: (error) =>
-      new SandcastleToolingFailed({
+      new ReviewerExecutionFailed({
         operationName: "run_reviewer_agent",
         message: errorMessage(error),
       }),
   });
 
 const sandcastleFailure = (
-  failure: SandcastleToolingFailed,
+  failure: ReviewerExecutionFailed,
   attempts: number,
   stdout: string,
-): ReviewerAgentResult => ({
+): ReviewerAgentResult<never> => ({
   ok: false,
   failure,
   sessionUsability: classifyReviewerSessionUsability(failure),
@@ -305,9 +306,9 @@ const sandcastleFailure = (
 });
 
 const classifyReviewerSessionUsability = (
-  failure: ValidationToolingFailure,
+  failure: ReviewerRuntimeFailure,
 ): ReviewerSessionUsability =>
-  failure._tag === "SandcastleToolingFailed" &&
+  failure.operationName === "run_reviewer_agent" &&
   (/^resumeSession ".+" not found(?: under|: expected)/m.test(failure.message) ||
     /^Session resume failed:/m.test(failure.message) ||
     /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
