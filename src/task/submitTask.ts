@@ -292,12 +292,22 @@ const submitTask = (
 
     const findings = phase?.findings ?? [];
     const outcome = phase?.outcome ?? "blocked";
-    const completed = yield* dependencies.persistence.complete({
-      reviewId,
-      outcome,
-      findings,
-      now: input.now,
-    });
+    const completed = yield* dependencies.persistence.complete(
+      outcome === "passed"
+        ? { reviewId, outcome, now: input.now }
+        : findings[0] === undefined
+          ? {
+              reviewId,
+              outcome: "tooling_failed",
+              toolingFailure: taskReviewToolingFailureRecord({
+                errorKind: "infrastructure_tooling_failed",
+                operationName: "run_task_review",
+                errorMessage: "Task Review completed without a result.",
+              }),
+              now: input.now,
+            }
+          : { reviewId, outcome, findings: [findings[0], ...findings.slice(1)], now: input.now },
+    );
     if (!completed.ok) {
       return { ok: false as const, code: "submission_in_progress" as const };
     }

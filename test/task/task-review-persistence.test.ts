@@ -7,6 +7,7 @@ import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskRevi
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import type { TaskReviewPolicySnapshot } from "../../src/task/taskReview.js";
+import type { CompleteTaskReviewInput } from "../../src/task/taskReviewStore.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { transitionTaskToTodo } from "../support/taskApproval.js";
 
@@ -21,6 +22,18 @@ const policy: TaskReviewPolicySnapshot = {
   instructionsSource: "built_in",
   profile: { agentProfile: "task-reviewer", scope: "repo" },
 };
+
+const blockingFindings = (reviewId: string) =>
+  [
+    {
+      id: `${reviewId}-F1`,
+      reviewId,
+      title: "Blocking finding",
+      description: "The Review found a blocking problem.",
+      evidence: "Focused reviewer evidence.",
+      files: [],
+    },
+  ] as const;
 
 const createTask = (tasks: TaskPersistence, title: string, now: string) =>
   Effect.gen(function* () {
@@ -158,6 +171,7 @@ it.scoped("clears a stored completion failure after successful completion or aba
       yield* reviews.complete({
         reviewId: "review-recovered-complete",
         outcome: "blocked",
+        findings: blockingFindings("review-recovered-complete"),
         now: secondNow,
       });
       expect(yield* reviews.getCompletionFailure("review-recovered-complete")).toBeUndefined();
@@ -381,6 +395,7 @@ it.scoped("completion requires the Active Review marker and rejects passing Find
       const completed = yield* reviews.complete({
         reviewId: "review-missing-marker",
         outcome: "blocked",
+        findings: blockingFindings("review-missing-marker"),
         now: secondNow,
       });
       expect(completed).toEqual({ ok: false, code: "review_not_active" });
@@ -408,10 +423,70 @@ it.scoped("completion requires the Active Review marker and rejects passing Find
           },
         ],
         now: secondNow,
-      });
-      expect(rejected).toEqual({ ok: false, code: "passed_with_findings" });
+      } as unknown as CompleteTaskReviewInput);
+      expect(rejected).toEqual({ ok: false, code: "invalid_outcome_evidence" });
       expect(yield* tasks.getTaskById(passingFindings.id)).toMatchObject({ state: "new" });
       expect(yield* reviews.getActiveForTask(passingFindings.id)).toBeDefined();
+    }),
+  ),
+);
+
+it.scoped("rejects missing outcome evidence and preserves each Active Review", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      for (const [reviewId, outcome] of [
+        ["review-blocked-without-findings", "blocked"],
+        ["review-tooling-without-failure", "tooling_failed"],
+      ] as const) {
+        const task = yield* createTask(tasks, reviewId, firstNow);
+        yield* reviews.start({ taskId: task.id, baseCommit, policy, reviewId, now: firstNow });
+        const rejected = yield* reviews.complete({
+          reviewId,
+          outcome,
+          now: secondNow,
+        } as unknown as CompleteTaskReviewInput);
+        expect(rejected).toEqual({ ok: false, code: "invalid_outcome_evidence" });
+        expect(yield* reviews.getActiveByReviewId(reviewId)).toBeDefined();
+      }
+    }),
+  ),
+);
+
+it.scoped("rejects non-passing completion after the Task leaves New", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      for (const [reviewId, completion] of [
+        [
+          "review-blocked-task-changed",
+          { outcome: "blocked", findings: blockingFindings("review-blocked-task-changed") },
+        ],
+        [
+          "review-tooling-task-changed",
+          {
+            outcome: "tooling_failed",
+            toolingFailure: {
+              errorKind: "infrastructure_tooling_failed",
+              operationName: "run_task_reviewer_agent",
+              errorMessage: "reviewer failed",
+            },
+          },
+        ],
+      ] as const) {
+        const task = yield* createTask(tasks, reviewId, firstNow);
+        yield* reviews.start({ taskId: task.id, baseCommit, policy, reviewId, now: firstNow });
+        yield* transitionTaskToTodo(task.id, secondNow);
+        const rejected = yield* reviews.complete({
+          reviewId,
+          ...completion,
+          now: thirdNow,
+        });
+        expect(rejected).toEqual({ ok: false, code: "task_state_changed" });
+        expect(yield* reviews.getActiveByReviewId(reviewId)).toBeDefined();
+      }
     }),
   ),
 );
@@ -429,7 +504,12 @@ it.scoped("compare-and-set completion rejects a second completion and unknown re
         reviewId: "review-cas",
         now: firstNow,
       });
-      yield* reviews.complete({ reviewId: "review-cas", outcome: "blocked", now: secondNow });
+      yield* reviews.complete({
+        reviewId: "review-cas",
+        outcome: "blocked",
+        findings: blockingFindings("review-cas"),
+        now: secondNow,
+      });
 
       const second = yield* reviews.complete({
         reviewId: "review-cas",
@@ -483,6 +563,7 @@ it.scoped("completion rejects an Active marker bound to a different Task", () =>
       const completed = yield* reviews.complete({
         reviewId: "review-marker-first",
         outcome: "blocked",
+        findings: blockingFindings("review-marker-first"),
         now: secondNow,
       });
       expect(completed).toEqual({ ok: false, code: "review_not_active" });

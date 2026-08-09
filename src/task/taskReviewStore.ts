@@ -6,7 +6,6 @@ import type { PublicTaskId } from "./taskId.js";
 import type {
   TaskReviewAbandonmentContext,
   TaskReviewFinding,
-  TaskReviewOutcome,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
   TaskReviewRecord,
@@ -39,13 +38,20 @@ export type StartTaskReviewResult =
   | { readonly ok: false; readonly code: "task_linked_to_change" }
   | { readonly ok: false; readonly code: "review_active"; readonly reviewId: string };
 
+type TaskReviewFindingInput = Omit<TaskReviewFinding, "createdAt">;
+type TaskReviewToolingFailureInput = Omit<RecordTaskReviewToolingFailureInput, "reviewId" | "now">;
+
 export type CompleteTaskReviewInput = {
   readonly reviewId: string;
-  readonly outcome: TaskReviewOutcome;
-  readonly findings?: readonly Omit<TaskReviewFinding, "createdAt">[];
-  readonly toolingFailure?: Omit<RecordTaskReviewToolingFailureInput, "reviewId" | "now">;
   readonly now: string;
-};
+} & (
+  | { readonly outcome: "passed" }
+  | {
+      readonly outcome: "blocked";
+      readonly findings: readonly [TaskReviewFindingInput, ...TaskReviewFindingInput[]];
+    }
+  | { readonly outcome: "tooling_failed"; readonly toolingFailure: TaskReviewToolingFailureInput }
+);
 
 export type CompleteTaskReviewResult =
   | { readonly ok: true; readonly review: TaskReviewRecord; readonly task: TaskReviewTaskFact }
@@ -55,7 +61,7 @@ export type CompleteTaskReviewResult =
         | "review_not_found"
         | "review_not_active"
         | "task_state_changed"
-        | "passed_with_findings";
+        | "invalid_outcome_evidence";
     };
 
 export type TaskReviewTaskFact = {

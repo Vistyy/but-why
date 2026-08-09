@@ -232,10 +232,14 @@ const complete = (
     if (review.state !== "running") {
       return { ok: false as const, code: "review_not_active" as const };
     }
-    if (input.outcome === "passed" && (input.findings ?? []).length > 0) {
-      // A passing Review cannot retain Findings: approval and blocking findings
-      // are mutually exclusive lifecycle outcomes.
-      return { ok: false as const, code: "passed_with_findings" as const };
+    const findings = "findings" in input && Array.isArray(input.findings) ? input.findings : [];
+    const toolingFailure = "toolingFailure" in input ? input.toolingFailure : undefined;
+    const evidenceIsValid =
+      (input.outcome === "passed" && findings.length === 0 && toolingFailure === undefined) ||
+      (input.outcome === "blocked" && findings.length > 0 && toolingFailure === undefined) ||
+      (input.outcome === "tooling_failed" && findings.length === 0 && toolingFailure !== undefined);
+    if (!evidenceIsValid) {
+      return { ok: false as const, code: "invalid_outcome_evidence" as const };
     }
     const taskId = storedPublicTaskId(review.taskId);
     // Completion must apply to the exact Review that owns the Active marker for
@@ -246,6 +250,13 @@ const complete = (
     `;
     if (active[0] === undefined) {
       return { ok: false as const, code: "review_not_active" as const };
+    }
+
+    const taskState = yield* sql<{ readonly state: string }>`
+      SELECT state FROM tasks WHERE id = ${taskId}
+    `;
+    if (taskState[0]?.state !== "new") {
+      return { ok: false as const, code: "task_state_changed" as const };
     }
 
     if (input.outcome === "passed") {
@@ -259,19 +270,19 @@ const complete = (
       }
     }
 
-    if (input.toolingFailure !== undefined) {
+    if (toolingFailure !== undefined) {
       yield* sql`
         INSERT INTO task_review_tooling_failures (
           review_id, error_kind, operation_name, error_message, created_at
         ) VALUES (
-          ${input.reviewId}, ${input.toolingFailure.errorKind},
-          ${input.toolingFailure.operationName}, ${input.toolingFailure.errorMessage}, ${input.now}
+          ${input.reviewId}, ${toolingFailure.errorKind},
+          ${toolingFailure.operationName}, ${toolingFailure.errorMessage}, ${input.now}
         )
       `;
     }
 
     yield* Effect.forEach(
-      input.findings ?? [],
+      findings,
       (finding) => sql`
         INSERT INTO task_review_findings (
           id, review_id, title, description, evidence, files, created_at
