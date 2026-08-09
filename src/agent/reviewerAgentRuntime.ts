@@ -13,10 +13,6 @@ import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 import {
-  type ReviewerExecutionFailure,
-  SandcastleToolingFailed,
-} from "./reviewerExecutionFailure.js";
-import {
   decodeValidationReviewerOutput,
   type ReviewerOutput,
 } from "../contracts/reviewerOutput.js";
@@ -28,6 +24,10 @@ import {
 } from "./agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { piResourceFlags } from "./piRuntime.js";
+import {
+  type ReviewerExecutionFailure,
+  SandcastleToolingFailed,
+} from "./reviewerExecutionFailure.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 

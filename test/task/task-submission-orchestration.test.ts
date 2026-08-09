@@ -11,10 +11,10 @@ import type {
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import { SandcastleToolingFailed } from "../../src/agent/reviewerExecutionFailure.js";
-import { ReviewerOutputContractFailed } from "../../src/contracts/reviewerOutputContractFailure.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
+import { ReviewerOutputContractFailed } from "../../src/contracts/reviewerOutputContractFailure.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";

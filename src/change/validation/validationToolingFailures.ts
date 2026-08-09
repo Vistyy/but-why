@@ -1,7 +1,6 @@
 import { Data } from "effect";
-
-import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
 import type { ReviewerExecutionFailure } from "../../agent/reviewerExecutionFailure.js";
+import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
 import type { ReviewerOutputContractFailed } from "../../contracts/reviewerOutputContractFailure.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";

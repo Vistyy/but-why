@@ -101,7 +101,7 @@ const taskReviewOutputSchema = Schema.Struct({
 
 export type TaskReviewReviewerOutput = Schema.Schema.Type<typeof taskReviewOutputSchema>;
 
-export const decodeTaskReviewReviewerOutput = (input: {
+const decodeTaskReviewReviewerOutput = (input: {
   readonly reviewer: string;
   readonly attempts: number;
   readonly output: unknown;
