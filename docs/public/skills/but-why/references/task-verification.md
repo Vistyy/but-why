@@ -11,6 +11,8 @@ The contract states the confidence required for one implementation Task without 
 
 **Verification Evidence** is an interpretable observation or artifact that supports or refutes one Verification Claim.
 
+**Required Seam** is a boundary required by a Verification Claim or accepted verification plan because interaction across that boundary is part of the Claim.
+
 **Task Verification Contract** is the Task Context section that records Material Risks, required Verification Claims and Evidence, escalation conditions, and explicit exclusions.
 It is preserved in Acceptance Context when the Task starts.
 
@@ -27,11 +29,13 @@ A different input, fixture, branch, assertion, or code path does not make a fail
 2. Define only the Verification Claims needed to address those risks.
    A requirement, code change, branch, or scenario does not by itself require a separate Claim.
    A Claim must not require a stronger product guarantee than accepted intent justifies.
-3. Select the least-cost feasible Evidence that establishes each Claim reliably.
+3. Select the least costly reliable supported Evidence that establishes each complete Claim through every Required Seam.
+   Evidence establishes a Verification Claim only through decoded observations that contain the facts the Claim requires.
+   Missing, malformed, or unavailable observations do not establish the Claim.
    Start with applicable mandatory gates, retained Evidence, focused execution, inspection, and other proportionate one-time Evidence.
    Use integration or end-to-end Evidence only when the Claim includes that interaction.
    Specify a mechanism only when the Claim requires it.
-   An Implementer may use another mechanism that establishes the complete Claim through every required interaction.
+   An Implementer may use another mechanism that establishes the complete Claim through every Required Seam.
 4. Confirm that every required mechanism exists in the supported environment.
    Expose an unresolved confidence or feasibility problem instead of silently weakening the contract.
 
