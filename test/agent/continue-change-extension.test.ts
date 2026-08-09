@@ -189,15 +189,23 @@ describe("packaged Change Implement continuation extension", () => {
       expect.stringContaining("complete Bash tool call before any part of it executed"),
     ]);
     expect(harness.sent[0]).toContain(
-      "review the complete Candidate against the complete accepted intent",
+      "Do not retry Change Submission until you complete this reassessment",
+    );
+    expect(harness.sent[0]).toContain(
+      "Inspect the Change and read the complete current Acceptance Context",
+    );
+    expect(harness.sent[0]).toContain("linked Task Context");
+    expect(harness.sent[0]).toContain("approved Implementation Blocker Resolutions");
+    expect(harness.sent[0]).toContain(
+      "Managed Worktree status and the complete Candidate diff against the current Change Base",
     );
     expect(harness.sent[0]).toContain(
       "every accepted outcome, acceptance criterion, constraint, and verification requirement",
     );
-    expect(harness.sent[0]).toContain("Correct every discrepancy you find");
-    expect(harness.sent[0]).toContain(
-      "rerun all required pre-Submission commands and retry the blocked Change Submit command",
-    );
+    expect(harness.sent[0]).toContain("identify each unsatisfied or unsupported item");
+    expect(harness.sent[0]).toContain("Correct and commit every discrepancy you find");
+    expect(harness.sent[0]).toContain("Rerun all required pre-Submission commands");
+    expect(harness.sent[0]).toContain("Retry the blocked Change Submit command");
     expect(harness.sendOptions).toEqual([{ deliverAs: "steer" }]);
 
     expect(

@@ -213,6 +213,20 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
     });
   }
   if (
+    result.code === "publication_tooling_failed" &&
+    result.evidence?.operation === "push_destination"
+  ) {
+    return runtimeError({
+      code: result.code,
+      message:
+        "Exactly one safe push destination could not be validated for the selected publication remote.",
+      details: { changeId, evidence: result.evidence },
+      help: [
+        "Correct the selected publication remote's effective push destination, then retry Submit.",
+      ],
+    });
+  }
+  if (
     result.code === "publication_creation_unconfirmed" ||
     result.code === "publication_lookup_ambiguous" ||
     result.code === "publication_tooling_failed"

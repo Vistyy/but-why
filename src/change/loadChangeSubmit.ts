@@ -122,8 +122,8 @@ export const loadChangeSubmit = (input: {
       refreshBase: refreshRemoteChangeBase,
       readBranchHead: (cwd, expectedBranchRef) =>
         Effect.sync(() => readRepositoryBranchHead(cwd, expectedBranchRef)),
-      detectTarget: (cwd, branch, baseRef, baseRemoteUrl) =>
-        detectGitHubPrTarget(cwd, branch, undefined, undefined, baseRef, baseRemoteUrl),
+      detectTarget: (cwd, _branch, baseRef, baseRemoteUrl) =>
+        detectGitHubPrTarget(cwd, baseRef, undefined, baseRemoteUrl),
       captureCandidate: openCandidateCapture({
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
