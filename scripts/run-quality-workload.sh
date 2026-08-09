@@ -37,7 +37,7 @@ if [[ -s "${BY_CAPACITY_LOCK_ACQUIRED_AT_FILE:-}" ]]; then
 fi
 
 start_child() {
-    setsid --wait "$@" &
+    setsid env --default-signal=INT,TERM "$@" &
     child_pids+=("$!")
 }
 

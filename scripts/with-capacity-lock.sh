@@ -80,7 +80,7 @@ fi
 export BY_CAPACITY_LOCK_HELD=1
 
 set +e
-setsid "$@" 9>&- &
+setsid env --default-signal=INT,TERM "$@" 9>&- &
 child_pid=$!
 wait "$child_pid"
 status=$?
