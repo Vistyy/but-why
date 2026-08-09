@@ -34,7 +34,12 @@ import type {
 } from "./taskReviewStore.js";
 import type { TaskReviewToolingFailureRecord } from "./taskReviewTooling.js";
 import { taskReviewToolingFailureRecord } from "./taskReviewTooling.js";
-import { createTaskReviewWorkspace, taskReviewTempRefName } from "./taskReviewWorkspace.js";
+import {
+  createTaskReviewWorkspace,
+  type TaskReviewWorkspaceInput,
+  type TaskReviewWorkspaceResult,
+  taskReviewTempRefName,
+} from "./taskReviewWorkspace.js";
 
 export type MainCheckoutHeadResult =
   | { readonly ok: true; readonly commit: string }
@@ -57,6 +62,9 @@ export type TaskSubmissionDependencies = {
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
   readonly readGlobalConfig: (globalConfigPath: string) => TaskGlobalConfigReadResult;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
+  readonly createWorkspace?: (
+    input: TaskReviewWorkspaceInput<TaskReviewPhaseResult, RepositoryStorageError>,
+  ) => Effect.Effect<TaskReviewWorkspaceResult<TaskReviewPhaseResult>, RepositoryStorageError>;
 };
 
 export type TaskSubmitResult =
@@ -172,10 +180,8 @@ const submitTask = (
     const copyFiles: readonly string[] = [];
     const prepare = taskReviewPrepareConfig(repoConfig.config.prepare);
     const agentEnvironment = repoAgentEnvironment(repoConfig.config);
-    const workspace = yield* createTaskReviewWorkspace<
-      TaskReviewPhaseResult,
-      RepositoryStorageError
-    >({
+    const createWorkspace = dependencies.createWorkspace ?? createTaskReviewWorkspace;
+    const workspace = yield* createWorkspace({
       repoRoot: dependencies.mainCheckoutRoot,
       reviewId,
       submittedSha: head.commit,
@@ -228,11 +234,16 @@ const submitTask = (
 
     if (!workspace.ok) {
       const toolingError = workspace.toolingError;
-      if (toolingError.operationName === "cleanup_disposable_workspace") {
+      const cleanupFailed =
+        toolingError.cleanupResult.worktree === "failed" ||
+        toolingError.cleanupResult.tempRef === "failed";
+      if (cleanupFailed) {
+        const operationName = "cleanup_disposable_workspace";
+        const errorMessage = `Disposable workspace cleanup failed after ${toolingError.operationName}: ${toolingError.errorMessage}`;
         yield* dependencies.persistence.recordCompletionFailure({
           reviewId,
-          operationName: toolingError.operationName,
-          errorMessage: toolingError.errorMessage,
+          operationName,
+          errorMessage,
           now: input.now,
         });
         const completionFailure = yield* dependencies.persistence.getCompletionFailure(reviewId);
@@ -242,8 +253,8 @@ const submitTask = (
           reviewId,
           completionFailure: completionFailure ?? {
             reviewId,
-            operationName: toolingError.operationName,
-            errorMessage: toolingError.errorMessage,
+            operationName,
+            errorMessage,
             createdAt: input.now,
           },
         };

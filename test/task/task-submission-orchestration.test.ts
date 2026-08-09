@@ -119,6 +119,7 @@ const submissionDependencies = (
       | { readonly ok: true; readonly instructions: string }
       | { readonly ok: false; readonly message: string };
     readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
+    readonly createWorkspace?: TaskSubmissionDependencies["createWorkspace"];
     readonly executionLock?: ExecutionLock;
     readonly persistence: TaskReviewPersistence;
   },
@@ -151,6 +152,7 @@ const submissionDependencies = (
     ? {}
     : { readRepoInstructionsFileAtCommit: input.readRepoInstructionsFileAtCommit }),
   reviewerAgentRuntime: input.reviewerAgentRuntime,
+  ...(input.createWorkspace === undefined ? {} : { createWorkspace: input.createWorkspace }),
 });
 
 describe("Task Submission orchestration", () => {
@@ -462,6 +464,58 @@ describe("Task Submission orchestration", () => {
                 outcome: "tooling_failed",
               },
             );
+          }),
+        );
+      }),
+    60_000,
+  );
+
+  it.scoped(
+    "keeps the Review active when setup and cleanup both fail",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: passingReviewer([]),
+                persistence: reviews,
+                createWorkspace: (input) =>
+                  Effect.succeed({
+                    ok: false,
+                    toolingError: {
+                      operationName: "create_sandcastle_worktree",
+                      tempRefName: `refs/but-why/task-reviews/${input.reviewId}/review`,
+                      submittedSha: input.submittedSha,
+                      worktreePath: "/leaked-worktree",
+                      errorMessage: "setup failed",
+                      cleanupResult: { worktree: "failed", tempRef: "removed" },
+                    },
+                  }),
+              }),
+            );
+
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+
+            expect(result).toMatchObject({
+              ok: false,
+              code: "review_cleanup_pending",
+              completionFailure: {
+                operationName: "cleanup_disposable_workspace",
+                errorMessage:
+                  "Disposable workspace cleanup failed after create_sandcastle_worktree: setup failed",
+              },
+            });
+            if (result.ok || result.code !== "review_cleanup_pending") {
+              throw new Error("unexpected cleanup result");
+            }
+            expect(yield* reviews.getActiveByReviewId(result.reviewId)).toBeDefined();
+            expect(
+              yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1")),
+            ).toBeUndefined();
           }),
         );
       }),
