@@ -244,8 +244,8 @@ const startOrReuse = (
       LIMIT 1
     `;
     const existing = reusable[0];
-    const existingReusable = existing === undefined ? undefined : decodeReusableReview(existing);
-    if (existingReusable !== undefined) {
+    if (existing !== undefined) {
+      const existingReusable = yield* decodeReusableReview(existing);
       return {
         ok: true as const,
         reused: true as const,
@@ -332,8 +332,8 @@ const checkReuse = (
       LIMIT 1
     `;
     const row = rows[0];
-    const reusable = row === undefined ? undefined : decodeReusableReview(row);
-    if (reusable === undefined) return { reused: false as const };
+    if (row === undefined) return { reused: false as const };
+    const reusable = yield* decodeReusableReview(row);
     return {
       reused: true as const,
       reviewId: reusable.id,
@@ -349,22 +349,37 @@ type ReusableTaskReviewRow = {
 };
 
 // A Review is reusable only when its stored proposal snapshot decodes and
-// itself produces the stored proposal key, so malformed or inconsistent
-// persisted evidence never approves a different proposal through reuse.
+// itself produces the stored proposal key. A matched row whose snapshot is
+// malformed or inconsistent is corrupt persisted evidence and must surface as
+// a persisted-data failure rather than silently behave as no reuse.
 const decodeReusableReview = (
   row: ReusableTaskReviewRow,
-): { readonly id: string; readonly outcome: "passed" | "blocked" } | undefined => {
-  try {
-    const proposal = decodePersistedTaskReviewProposal(JSON.parse(row.proposalSnapshot));
-    if (proposalKeyOf(proposal) !== row.proposalKey) return undefined;
-    return {
-      id: row.id,
-      outcome: row.outcome === "passed" ? "passed" : "blocked",
-    };
-  } catch {
-    return undefined;
-  }
-};
+): Effect.Effect<
+  { readonly id: string; readonly outcome: "passed" | "blocked" },
+  RepositoryPersistedDataInvalid
+> =>
+  Effect.try({
+    try: () => {
+      const proposal = decodePersistedTaskReviewProposal(JSON.parse(row.proposalSnapshot));
+      if (proposalKeyOf(proposal) !== row.proposalKey) {
+        throw new RepositoryPersistedDataInvalid({
+          operationName: "check_task_review_reuse",
+          cause: "Task Review proposal snapshot does not produce its stored key",
+        });
+      }
+      return {
+        id: row.id,
+        outcome: row.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
+      };
+    },
+    catch: (cause) =>
+      cause instanceof RepositoryPersistedDataInvalid
+        ? cause
+        : new RepositoryPersistedDataInvalid({
+            operationName: "check_task_review_reuse",
+            cause,
+          }),
+  });
 
 const applyReuse = (
   sql: SqlClient.SqlClient,

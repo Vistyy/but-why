@@ -1136,7 +1136,7 @@ describe("Task Submission orchestration", () => {
               reason: "Submission process stopped",
               now,
             });
-            expect(result).toEqual({ ok: true, status: "abandoned" });
+            expect(result).toEqual({ ok: true, status: "abandoned", taskId: "BY-1" });
 
             expect(existsSync(worktreePath)).toBe(false);
             const tempRef = runTestProcess(

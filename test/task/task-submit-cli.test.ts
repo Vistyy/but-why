@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -10,6 +10,7 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import { SandcastleToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
@@ -348,6 +349,92 @@ describe("by task submission CLI", () => {
           operationName: "abandon_task_review_transcripts",
         });
         expect(reviewShow.nextAction).toContain("Abandon with");
+
+        // A New Task with an Active Review suggests abandonment, not submission.
+        const taskShown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+        expect(taskShown.status).toBe(0);
+        const taskShow = JSON.parse(taskShown.stdout) as { readonly nextAction?: string };
+        expect(taskShow.nextAction).toContain("Active Task Review");
+        expect(taskShow.nextAction).toContain("by task-review abandon");
+
+        // After the broken session storage is repaired, abandonment succeeds and
+        // reports a fresh-submission recovery action.
+        rmSync(join(root, ".git", "but-why", "BY-1", "task_review", "reviewer-sessions"), {
+          recursive: true,
+          force: true,
+        });
+        const recovered = yield* runByInProcessEffect(
+          root,
+          [
+            "--json",
+            "task-review",
+            "abandon",
+            failed.error.reviewId,
+            "--reason",
+            "Repair after indexing failure",
+          ],
+          secondNow,
+        );
+        expect(recovered.status).toBe(0);
+        expect(JSON.parse(recovered.stdout)).toMatchObject({
+          status: "abandoned",
+          nextAction: "Run `by task submit BY-1` to start a fresh Task Review.",
+        });
+      }),
+    60_000,
+  );
+
+  it.effect(
+    "shows recovery actions for a completed Tooling Failure Review",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* createInitializedTask();
+        const failing: ReviewerAgentRuntime = {
+          review: () =>
+            Effect.sync(
+              (): ReviewerAgentResult => ({
+                ok: false,
+                failure: new SandcastleToolingFailed({
+                  operationName: "run_reviewer_agent",
+                  message: "reviewer process failed",
+                }),
+                sessionUsability: "unknown",
+                attempts: 1,
+                stdout: "",
+              }),
+            ),
+        };
+        const submitted = yield* runByInProcessEffect(
+          root,
+          ["--json", "task", "submit", "BY-1"],
+          firstNow,
+          { reviewerAgentRuntime: failing },
+        );
+        expect(submitted.status).toBe(0);
+        const result = JSON.parse(submitted.stdout) as {
+          readonly review: { readonly id: string; readonly outcome: string };
+        };
+        expect(result.review.outcome).toBe("tooling_failed");
+
+        const shown = yield* runByInProcessEffect(root, [
+          "--json",
+          "task-review",
+          "show",
+          result.review.id,
+        ]);
+        expect(shown.status).toBe(0);
+        const reviewShow = JSON.parse(shown.stdout) as {
+          readonly review: { readonly state: string; readonly outcome: string };
+          readonly nextAction?: string;
+        };
+        expect(reviewShow.review.state).toBe("complete");
+        expect(reviewShow.review.outcome).toBe("tooling_failed");
+        expect(reviewShow.nextAction).toContain("by task submit BY-1");
+
+        const listed = yield* runByInProcessEffect(root, ["--json", "task", "reviews", "BY-1"]);
+        expect(listed.status).toBe(0);
+        const history = JSON.parse(listed.stdout) as { readonly nextAction?: string };
+        expect(history.nextAction).toContain("by task submit BY-1");
       }),
     60_000,
   );

@@ -38,7 +38,14 @@ export const runAbandonCommand = (
     .pipe(
       Effect.map((result) =>
         result.ok
-          ? success(result)
+          ? success(
+              result.status === "abandoned" && result.taskId !== undefined
+                ? {
+                    ...result,
+                    nextAction: `Run \`by task submit ${result.taskId}\` to start a fresh Task Review.`,
+                  }
+                : result,
+            )
           : result.status === "not_found"
             ? reviewNotFound(command.reviewId)
             : runtimeError({

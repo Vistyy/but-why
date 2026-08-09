@@ -77,7 +77,11 @@ export const runTaskShowCommand = (
         },
         ...(review === null || Object.keys(review).length === 0 ? {} : { taskReview: review }),
         ...(task.state === "new"
-          ? { nextAction: `by task submit ${task.id}` }
+          ? reviewSummary?.active === undefined
+            ? { nextAction: `by task submit ${task.id}` }
+            : {
+                nextAction: `Active Task Review ${reviewSummary.active.reviewId} is in progress. Abandon with \`by task-review abandon ${reviewSummary.active.reviewId} --reason <reason>\` if its Submission process stopped.`,
+              }
           : task.state === "todo"
             ? { nextAction: `by change start --task ${task.id}` }
             : {}),

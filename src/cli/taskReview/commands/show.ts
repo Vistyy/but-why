@@ -91,11 +91,15 @@ export const runShowCommand = (
                           ? `Task ${review.taskId} is approved.`
                           : `Fix the Findings, then run \`by task submit ${review.taskId}\`.`,
                     }
-                  : review.state === "running"
+                  : review.state === "complete" && review.outcome === "tooling_failed"
                     ? {
-                        nextAction: `Abandon with \`by task-review abandon ${review.id} --reason <reason>\` if its Submission process stopped.`,
+                        nextAction: `Tooling failed. Retry with \`by task submit ${review.taskId}\`.`,
                       }
-                    : {}),
+                    : review.state === "running"
+                      ? {
+                          nextAction: `Abandon with \`by task-review abandon ${review.id} --reason <reason>\` if its Submission process stopped.`,
+                        }
+                      : {}),
               }),
             ),
           ),

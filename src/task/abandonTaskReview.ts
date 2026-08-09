@@ -17,7 +17,11 @@ export type AbandonTaskReview = {
 };
 
 export type AbandonTaskReviewResult =
-  | { readonly ok: true; readonly status: "abandoned" | "already_complete" }
+  | {
+      readonly ok: true;
+      readonly status: "abandoned" | "already_complete";
+      readonly taskId?: PublicTaskId;
+    }
   | {
       readonly ok: false;
       readonly status: "not_found" | "cleanup_failed" | "submission_in_progress";
@@ -57,6 +61,7 @@ export const openAbandonTaskReview = (input: {
                   ? {
                       ok: true as const,
                       status: "already_complete" as const,
+                      taskId: context.taskId,
                     }
                   : {
                       ok: false as const,
@@ -91,7 +96,7 @@ const abandonWhileLocked = (
     }
     const active = yield* input.persistence.getActiveByReviewId(command.reviewId);
     if (active === undefined) {
-      return { ok: true as const, status: "already_complete" as const };
+      return { ok: true as const, status: "already_complete" as const, taskId: context.taskId };
     }
 
     const tempRefName = context.tempRefName ?? taskReviewTempRefName(command.reviewId);
@@ -153,5 +158,5 @@ const abandonWhileLocked = (
       errorMessage: command.reason,
       now: command.now,
     });
-    return { ok: true as const, status: "abandoned" as const };
+    return { ok: true as const, status: "abandoned" as const, taskId: context.taskId };
   });

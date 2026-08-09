@@ -31,10 +31,23 @@ export const runReviewsCommand = (
             Effect.map((reviews) =>
               reviews.length === 0
                 ? success({ taskId: taskId.taskId, reviews: [] })
-                : success({
-                    taskId: taskId.taskId,
-                    reviews: reviews.map((review) => reviewSummary(review)),
-                  }),
+                : (() => {
+                    const latest = reviews[reviews.length - 1];
+                    const needsRetry =
+                      latest !== undefined &&
+                      task.state === "new" &&
+                      latest.state === "complete" &&
+                      latest.outcome === "tooling_failed";
+                    return success({
+                      taskId: taskId.taskId,
+                      reviews: reviews.map((review) => reviewSummary(review)),
+                      ...(needsRetry
+                        ? {
+                            nextAction: `Tooling failed. Retry with \`by task submit ${taskId.taskId}\`.`,
+                          }
+                        : {}),
+                    });
+                  })(),
             ),
             Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
           ),

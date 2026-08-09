@@ -798,10 +798,20 @@ it.scoped("rejects reuse and reads when the stored proposal snapshot mismatches 
       // Reads decode the proposal at the owning boundary and reject the mismatch.
       expect(yield* Effect.isFailure(reviews.getReviewById("review-snapshot-key"))).toBe(true);
 
-      // Reuse fast paths decode the stored snapshot and verify it produces its
-      // own key, so the mismatched Review is never treated as reusable.
-      const checked = yield* reviews.checkReuse(task.id);
-      expect(checked).toEqual({ reused: false });
+      // Reuse fast paths decode the stored snapshot and surface corrupt evidence
+      // as a persisted-data failure instead of silently behaving as no reuse.
+      expect(yield* Effect.isFailure(reviews.checkReuse(task.id))).toBe(true);
+      expect(
+        yield* Effect.isFailure(
+          reviews.startOrReuse({
+            taskId: task.id,
+            baseCommit,
+            policy,
+            reviewId: "review-snapshot-key",
+            now: thirdNow,
+          }),
+        ),
+      ).toBe(true);
 
       // The direct apply guard still rejects an inconsistent Review.
       const applied = yield* reviews.applyReuse({
