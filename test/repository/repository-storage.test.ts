@@ -3972,9 +3972,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(25);
+              expect(migrations.length).toBe(26);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 25 }, (_, index) => index + 1),
+                Array.from({ length: 26 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -4070,7 +4070,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 25,
+              migrationCount: 26,
             });
           } finally {
             if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
