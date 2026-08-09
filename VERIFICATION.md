@@ -26,8 +26,9 @@
 - Trusted But Why Executable selection requires a focused real-process sentinel from a linked worktree until first-release executable selection replaces the Source Checkout Guard.
 - Package, public documentation, structural-tooling, and temporary test-operation checks have their own workflow owners.
   Do not misclassify them as product-risk evidence.
-- Complete-workload scheduling uses the explicit complete-only file registry in `test/suiteSchedule.ts`, which `vitest.config.ts` applies to the complete and routine suites.
-  Scheduling never derives evidence from a filename suffix.
+- `just quality` is the only repository-wide blocking quality command.
+  It runs each blocking static check, the build, and one ordinary unfiltered Vitest invocation that discovers every maintained test.
+  Coverage and health remain advisory and do not own blocking tests.
 - Evidence with a known intermittent failure cannot remain blocking.
 - Retain the shared capacity lock and the three-worker Vitest limit.
   The final three-workload measurement at the migrated portfolio revision retained the lock because the unlocked one-worker scenario made each active quality execution more than twice as slow, and the unlocked two- and three-worker scenarios failed retained evidence with five-second timeouts.

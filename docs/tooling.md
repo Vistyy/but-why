@@ -27,7 +27,7 @@ Use Just recipes instead of direct package-manager commands for repository workf
 
 - `just check` checks Just formatting and the configured Biome formatter, lint rules, and `organizeImports` assist in one source scan without modifying files.
 - `just fix` applies Just formatting, Biome formatting, safe lint fixes, and the `organizeImports` assist without user interaction.
-- `just test <focused-path-or-selection>` runs focused tests without the complete-workload lock.
+- `just test <focused-path-or-selection>` runs focused tests without the shared capacity lock.
 - `just typecheck` runs the TypeScript checker.
 - `just lint` runs Biome linting only.
 - `just format` applies Biome formatting only.
@@ -35,8 +35,7 @@ Use Just recipes instead of direct package-manager commands for repository workf
 - `just docs-check` validates links and anchors in tracked and non-ignored Markdown files.
 - `just ast-grep-check` checks structural TypeScript contracts.
 - `just fallow-check` checks dead code and named architecture contracts with coverage.
-- `just quality` runs the blocking routine test, static-check, and build workflow, including the `just check` source-style policy.
-- `just full-quality` runs the complete selected test suite with the same blocking checks.
+- `just quality` runs each blocking static check, the build, and one ordinary unfiltered Vitest invocation that discovers every maintained test.
 
 ### Source-style policy
 
@@ -51,7 +50,7 @@ Change Submit owns the configured blocking Check and review phases.
 Do not duplicate those broad checks manually during Change implementation.
 Use focused tests and focused static checks while implementing.
 
-Complete quality, test, and coverage workloads wait for the repository capacity lock.
+`just quality` and unselected test and coverage workloads wait for the repository capacity lock.
 The supervising runner alone owns the capacity-lock descriptor, so workload descendants cannot retain capacity after the supervisor exits.
 On interruption, the runner preserves the conventional exit status, makes a bounded best-effort cleanup attempt within its controlled process boundary, and waits for its direct supervised child.
 Descendants that daemonize, reparent, create a new session or process group, or create replacements during cleanup are outside this Bash supervision boundary.
