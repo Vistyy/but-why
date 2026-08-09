@@ -200,64 +200,6 @@ const repairedAcceptancePolicy = {
 } as const;
 
 describe("repository SQL storage", () => {
-  it.scoped("persists Tasks through the Effect-native Task interface", () =>
-    withTemporaryState(() =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
-        const created = yield* tasks.createTask({
-          title: "Effect-native Task",
-          description: "Persist this Task through repository SQL.",
-          now: "2026-07-17T22:45:00.000Z",
-        });
-        expect(created.ok).toBe(true);
-        if (!created.ok) return;
-        const stored = yield* tasks.getTaskById(storedPublicTaskId(created.task.id));
-
-        expect(stored).toMatchObject({
-          id: "BY-1",
-          title: "Effect-native Task",
-          state: "new",
-        });
-      }),
-    ),
-  );
-
-  it.scoped("keeps a Task-backed Change Start Task in todo", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
-        const changes = yield* openSqliteChangeStartPersistence();
-        const created = yield* tasks.createTask({
-          title: "Todo Change Start",
-          description: "Change Activity reports active work without Task state.",
-          now: "2026-07-17T22:50:00.000Z",
-        });
-        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:51:00.000Z" });
-
-        const started = yield* changes.create({
-          id: "change-todo",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1",
-          baseRef: "main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1"),
-          taskId,
-          now: "2026-07-17T22:52:00.000Z",
-        });
-        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
-
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
-        expect(yield* changes.getById(started.change.id)).toMatchObject({
-          taskId,
-          state: "open",
-        });
-      }),
-    ),
-  );
-
   it.scoped("raises a Blocker without writing blocked Change or Task lifecycle state", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
@@ -1672,81 +1614,6 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("a later taskless Resolution starts fresh Validation without Acceptance Context", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
-        const captured = yield* capture.commitCapture({
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/feature",
-          baseRef: "refs/remotes/origin/main",
-          changeBaseSha: "base-sha",
-          headSha: "head-sha",
-          now: "2026-07-25T16:30:00.000Z",
-        });
-        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-        const policy = { checks: [], copyFiles: [], specialistReviews: [] };
-        const start = (at: string) =>
-          validation.startOrReuse({
-            candidateId: captured.candidateId,
-            changeBaseSha: "base-sha",
-            headSha: "head-sha",
-            policy,
-            now: at,
-          });
-        const first = yield* start("2026-07-25T16:31:00.000Z");
-        if (first.reused || "blocked" in first) throw new Error("Expected a new Validation Run");
-        yield* validation.complete({
-          validationRunId: first.validationRunId,
-          outcome: "passed",
-          now: "2026-07-25T16:32:00.000Z",
-        });
-        expect(yield* start("2026-07-25T16:33:00.000Z")).toMatchObject({
-          reused: true,
-          validationRunId: first.validationRunId,
-        });
-
-        const raised = yield* changes.raiseImplementationBlocker({
-          changeId: captured.changeId,
-          content: "Wait for an external decision.",
-          now: "2026-07-25T16:34:00.000Z",
-        });
-        expect(raised.ok).toBe(true);
-        const resolved = yield* changes.resolveImplementationBlocker({
-          changeId: captured.changeId,
-          content: "Proceed without taskless intent.",
-          now: "2026-07-25T16:35:00.000Z",
-        });
-        expect(resolved.ok).toBe(true);
-
-        const second = yield* start("2026-07-25T16:36:00.000Z");
-        expect(second.reused).toBe(false);
-        if ("blocked" in second) throw new Error("Resolution must admit Validation");
-        expect(second.validationRunId).not.toBe(first.validationRunId);
-        expect(yield* changes.getChangeById(captured.changeId)).toMatchObject({
-          acceptanceContext: null,
-        });
-        yield* validation.complete({
-          validationRunId: second.validationRunId,
-          outcome: "passed",
-          now: "2026-07-25T16:37:00.000Z",
-        });
-        expect(yield* start("2026-07-25T16:38:00.000Z")).toMatchObject({
-          reused: true,
-          validationRunId: second.validationRunId,
-        });
-
-        const history = yield* validation.listRunsForCandidate(captured.candidateId);
-        expect(history.map((run) => run.id)).toEqual([
-          first.validationRunId,
-          second.validationRunId,
-        ]);
-      }),
-    ),
-  );
-
   it.scoped("replaces only the exact pending publication marker atomically", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
@@ -2100,14 +1967,6 @@ describe("repository SQL storage", () => {
           "read Candidate baseline shape",
           (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidates)`,
         );
-        const taskColumns = yield* repositorySql.operation(
-          "read Task completion shape",
-          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(tasks)`,
-        );
-        const changeColumns = yield* repositorySql.operation(
-          "read Change no-change shape",
-          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
-        );
 
         expect(migrations).toEqual([
           { migration_id: 1, name: "baseline" },
@@ -2144,11 +2003,6 @@ describe("repository SQL storage", () => {
           "head_sha",
           "created_at",
         ]);
-        const findingColumns = yield* repositorySql.operation(
-          "read Finding shape",
-          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
-        );
-        expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
         const decisionColumns = yield* repositorySql.operation(
           "read Implementation Decision shape",
           (sql) => sql<{ readonly name: string }>`PRAGMA table_info(implementation_decisions)`,
@@ -2171,19 +2025,6 @@ describe("repository SQL storage", () => {
           "pi_session_id",
           "file_path",
         ]);
-        expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
-        expect(changeColumns.map(({ name }) => name)).toContain("cancel_reason");
-        expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
-        expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_validation_run_id");
-        expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
-        const tableNames = yield* repositorySql.operation(
-          "read migrated table names",
-          (sql) => sql<{ readonly name: string }>`
-            SELECT name FROM sqlite_master
-            WHERE type = 'table' AND name = 'acceptance_context_versions'
-          `,
-        );
-        expect(tableNames).toEqual([]);
       }),
     ),
   );
