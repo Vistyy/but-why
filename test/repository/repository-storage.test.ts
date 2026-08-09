@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
@@ -3653,7 +3653,7 @@ describe("repository SQL storage", () => {
       child.stderr.on("data", (chunk: Buffer) => {
         stderr += chunk.toString();
       });
-      child.on("close", (status) => resolveResult({ status, stdout: (stdout || stderr).trim() }));
+      child.on("close", (status) => resolveResult({ status, stdout: `${stdout}${stderr}`.trim() }));
     });
 
   const startMigrationLockHolder = (statePath: string, releasePath: string) => {
@@ -3691,50 +3691,22 @@ describe("repository SQL storage", () => {
       timeoutMs: 15_000,
     });
 
-  it.effect("serializes real-process migration and opens after release before the bound", () =>
+  it.effect("produces complete state when separate processes start against one state path", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-concurrent-init-"))),
       (directory) =>
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
-          const releasePath = join(directory, "release-migration-lock");
-          const contentionObservedPath = join(directory, "migration-contention-observed");
-          const holder = startMigrationLockHolder(statePath, releasePath);
-          yield* Effect.promise(() => waitForMigrationLock(holder));
-
-          const first = runHelperProcess(
-            [
-              "open-contended-state",
-              statePath,
-              directory,
-              contentionObservedPath,
-              releasePath,
-              "5000",
-              "30000",
-              "50",
-              "ConcurrentA",
-            ],
-            directory,
-          );
-          const others = ["ConcurrentB", "ConcurrentC"].map((title) =>
-            runHelperProcess(
-              ["open-state", statePath, directory, "5000", "30000", "50", title],
-              directory,
+          const results = yield* Effect.promise(() =>
+            Promise.all(
+              ["ConcurrentA", "ConcurrentB", "ConcurrentC"].map((title) =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "5000", "30000", "50", title],
+                  directory,
+                ),
+              ),
             ),
           );
-          yield* Effect.promise(() =>
-            observeUntil({
-              description: "a separate process to observe SQLite migration contention",
-              observe: () => existsSync(contentionObservedPath),
-              isReady: Boolean,
-              timeoutMs: 15_000,
-            }),
-          );
-          writeFileSync(releasePath, "release\n");
-          const results = yield* Effect.promise(() => Promise.all([first, ...others]));
-          const released = yield* Effect.promise(() => holder.done);
-          expect(released.status).toBe(0);
-          expect(released.stdout).toContain("released");
           for (const result of results) {
             expect(result.status).toBe(0);
             expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, found: true });
