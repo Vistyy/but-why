@@ -69,7 +69,7 @@ start_child just build
 build_pid=${child_pids[-1]}
 wait_for_child "$build_pid" || status=1
 wait_for_child "$static_pid" || status=1
-if (( status == 0 && interrupted_status == 0 )); then
+if (( interrupted_status == 0 )); then
     start_child just test
     test_pid=${child_pids[-1]}
     wait_for_child "$test_pid" || status=1

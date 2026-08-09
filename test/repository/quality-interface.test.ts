@@ -404,9 +404,7 @@ describe("quality interface", () => {
     const invocations = readFileSync(invocationsFile, "utf8").trim().split("\n");
     expect(invocations.filter((invocation) => invocation === "static")).toHaveLength(1);
     expect(invocations.filter((invocation) => invocation === "build")).toHaveLength(1);
-    expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(
-      failure === "test" ? 1 : 0,
-    );
+    expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(1);
   });
 
   test("waits for unselected workloads while targeted tests remain unlocked", async () => {
@@ -584,7 +582,10 @@ describe("quality interface", () => {
     }
   });
 
-  test("interrupts quality with SIGTERM and releases capacity", async () => {
+  test.each([
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const)("interrupts quality with %s and releases capacity", async (signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -606,8 +607,8 @@ describe("quality interface", () => {
       await readProcessIdentity(descendantPidFile);
       const observer = startCapacityObserver(lockFile);
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
-      signalJust(quality, "SIGTERM");
-      expect((await quality.done).status).toBe(143);
+      signalJust(quality, signal);
+      expect((await quality.done).status).toBe(expectedStatus);
       expect(quality.output).toContain("quality interrupted after");
       expect(quality.output).toContain("rerun just quality to retry");
       expect(quality.output).not.toContain("quality completed in");
