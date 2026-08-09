@@ -278,7 +278,7 @@ describe("GitHub pull request gateway", () => {
                 : "other-head\trefs/heads/feature\n",
         };
       },
-      runGh: () => ({ ok: true, stdout: remoteHeadResponse("other-head") }),
+      runGh: () => ({ ok: true, stdout: remoteHeadResponse("b".repeat(40)) }),
     });
 
     expect(
@@ -293,7 +293,11 @@ describe("GitHub pull request gateway", () => {
         title: "Publish Candidate",
         body: "Validation facts",
       }),
-    ).toEqual({ ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: "other-head" });
+    ).toEqual({
+      ok: false,
+      code: "remote_head_mismatch",
+      observedRemoteHeadSha: "b".repeat(40),
+    });
     expect(gitCalls.map((args) => args[0])).toEqual(["rev-parse", "remote"]);
   });
 
@@ -379,6 +383,14 @@ describe("GitHub pull request gateway", () => {
       '{"data":{"repository":null}}',
       '{"data":{"repository":{"ref":{"name":"refs/heads/other","target":{"oid":"candidate-sha"}}}}}',
       '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{}}}}}',
+      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"invalid"}}}}}',
+      JSON.stringify({
+        data: {
+          repository: {
+            ref: { name: "refs/heads/feature", target: { oid: "f".repeat(2000) } },
+          },
+        },
+      }),
       '{"data":{"repository":{"ref":null}},"errors":[{"message":"unavailable"}]}',
       '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":"malformed"}',
       '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":[]}',

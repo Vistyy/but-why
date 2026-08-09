@@ -573,7 +573,13 @@ const initialRemoteHeadState = (
       kind: "unknown",
       evidence: evidence("remote_lookup", result, "response_parse_failure"),
     };
-  return { kind: "present", sha: target["oid"] };
+  const oid = target["oid"];
+  if (oid !== request.expectedHeadSha && !/^[0-9a-f]{40}$/u.test(oid))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  return { kind: "present", sha: oid };
 };
 
 type PushDestinationFailureReason =
