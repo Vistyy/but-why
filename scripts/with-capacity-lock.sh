@@ -80,7 +80,7 @@ fi
 export BY_CAPACITY_LOCK_HELD=1
 
 set +e
-setsid "$@" &
+setsid "$@" 9>&- &
 child_pid=$!
 wait "$child_pid"
 status=$?

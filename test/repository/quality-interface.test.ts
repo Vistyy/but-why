@@ -200,6 +200,14 @@ process.stdout.write("capacity acquired after descendant cleanup");`,
     identity,
   ]);
 
+const startCapacityObserver = (lockFile: string) =>
+  startRunner(lockFile, [
+    "capacity observer",
+    "sh",
+    "-c",
+    'printf "capacity acquired after supervisor exit"',
+  ]);
+
 const createWorkloadJustfile = (directory: string): void => {
   cpSync(join(repositoryRoot, "package.json"), join(directory, "package.json"));
   symlinkSync(join(repositoryRoot, "node_modules"), join(directory, "node_modules"), "dir");
@@ -440,7 +448,7 @@ describe("quality interface", () => {
     expect(succeeded.status).toBe(0);
   });
 
-  test("terminates interrupted workload descendants before releasing the lock", async () => {
+  test("makes a bounded best-effort attempt to terminate one controlled descendant", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -472,6 +480,46 @@ describe("quality interface", () => {
     }
   });
 
+  test("does not let an unsupported detached descendant retain capacity", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const workloadReadyFile = join(directory, "workload-ready");
+    const daemonReadyFile = join(directory, "daemon-ready");
+    const daemonPidFile = join(directory, "daemon-pid");
+    const holder = startRunner(lockFile, [
+      "complete test",
+      "sh",
+      "-c",
+      '(setsid sh -c \'trap "" INT TERM; printf "$$" > "$1"; printf ready > "$2"; while :; do sleep 1; done\' sh "$2" "$3" >/dev/null 2>&1 &); printf ready > "$1"; while :; do sleep 1; done',
+      "sh",
+      workloadReadyFile,
+      daemonPidFile,
+      daemonReadyFile,
+    ]);
+
+    await waitForFile(workloadReadyFile);
+    await waitForFile(daemonReadyFile);
+    const daemonIdentity = await readProcessIdentity(daemonPidFile);
+    const observer = startCapacityObserver(lockFile);
+
+    try {
+      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
+      holder.child.kill("SIGTERM");
+      expect((await holder.done).status).toBe(143);
+      const observation = await observer.done;
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after supervisor exit");
+      expect(processIdentity(Number(daemonIdentity.split(":", 1)[0]))).toBe(daemonIdentity);
+    } finally {
+      const daemonPid = Number(daemonIdentity.split(":", 1)[0]);
+      process.kill(daemonPid, "SIGKILL");
+      await waitForProcessExit(daemonIdentity);
+      await stopRunner(holder);
+      await stopRunner(observer);
+    }
+  });
+
   test("interrupts an actual unselected test workload with SIGINT and releases capacity", async () => {
     const signal = "SIGINT";
     const expectedStatus = 130;
@@ -487,16 +535,15 @@ describe("quality interface", () => {
 
     try {
       await waitForFile(readyFile);
-      const descendantIdentity = await readProcessIdentity(descendantPidFile);
-      const observer = startCleanupObserver(lockFile, descendantIdentity);
-      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
+      await readProcessIdentity(descendantPidFile);
+      const observer = startCapacityObserver(lockFile);
+      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
       expect(justProcess.output).toContain("rerun the same command to retry");
       const observation = await observer.done;
       expect(observation.status, observation.output).toBe(0);
-      expect(observation.output).toContain("capacity acquired after descendant cleanup");
-      await waitForProcessExit(descendantIdentity);
+      expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
       await stopJust(justProcess);
     }
@@ -524,9 +571,9 @@ describe("quality interface", () => {
 
     try {
       await waitForFile(readyFile);
-      const descendantIdentity = await readProcessIdentity(descendantPidFile);
-      const observer = startCleanupObserver(lockFile, descendantIdentity);
-      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
+      await readProcessIdentity(descendantPidFile);
+      const observer = startCapacityObserver(lockFile);
+      await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(quality, signal);
       expect((await quality.done).status).toBe(expectedStatus);
       expect(quality.output).toContain(`${qualityCommand} interrupted after`);
@@ -534,8 +581,7 @@ describe("quality interface", () => {
       expect(quality.output).not.toContain(`${qualityCommand} completed in`);
       const observation = await observer.done;
       expect(observation.status, observation.output).toBe(0);
-      expect(observation.output).toContain("capacity acquired after descendant cleanup");
-      await waitForProcessExit(descendantIdentity);
+      expect(observation.output).toContain("capacity acquired after supervisor exit");
     } finally {
       await stopJust(quality);
     }
