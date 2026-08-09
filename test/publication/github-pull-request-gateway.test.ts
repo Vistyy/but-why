@@ -380,6 +380,8 @@ describe("GitHub pull request gateway", () => {
       '{"data":{"repository":{"ref":{"name":"refs/heads/other","target":{"oid":"candidate-sha"}}}}}',
       '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{}}}}}',
       '{"data":{"repository":{"ref":null}},"errors":[{"message":"unavailable"}]}',
+      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":"malformed"}',
+      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":[]}',
     ];
     for (const stdout of responses) {
       const gitCalls: (readonly string[])[] = [];

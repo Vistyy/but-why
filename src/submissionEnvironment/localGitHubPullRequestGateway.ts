@@ -543,7 +543,7 @@ const initialRemoteHeadState = (
       evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
   const parsed = parseJson(result.stdout);
-  if (!isObjectRecord(parsed) || hasGraphqlErrors(parsed))
+  if (!isObjectRecord(parsed) || "errors" in parsed)
     return {
       kind: "unknown",
       evidence: evidence("remote_lookup", result, "response_parse_failure"),
