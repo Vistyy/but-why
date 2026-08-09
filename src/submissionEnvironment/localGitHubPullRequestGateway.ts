@@ -324,17 +324,23 @@ const deleteRemoteBranch = (
     `afterOid=${zeroSha}`,
   ]);
   if (!result.ok) return readAfterUncertainDeletion(runGh, input);
-  const parsed = parseJson(result.stdout) as
-    | {
-        readonly data?: { readonly updateRefs?: { readonly clientMutationId?: unknown } | null };
-        readonly errors?: readonly unknown[];
-      }
-    | undefined;
-  return parsed?.data?.updateRefs !== null &&
-    parsed?.data?.updateRefs !== undefined &&
-    !hasGraphqlErrors(parsed)
+  return decodeRemoteBranchDeletionResponse(parseJson(result.stdout))
     ? { state: "deleted" }
     : readAfterUncertainDeletion(runGh, input);
+};
+
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const decodeRemoteBranchDeletionResponse = (value: unknown): boolean => {
+  if (!isObjectRecord(value) || "errors" in value) return false;
+  const data = value["data"];
+  if (!isObjectRecord(data)) return false;
+  const updateRefs = data["updateRefs"];
+  if (!isObjectRecord(updateRefs) || !("clientMutationId" in updateRefs)) return false;
+  return (
+    updateRefs["clientMutationId"] === null || typeof updateRefs["clientMutationId"] === "string"
+  );
 };
 
 const hasGraphqlErrors = (value: unknown): boolean =>
