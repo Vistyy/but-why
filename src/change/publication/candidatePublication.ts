@@ -206,13 +206,13 @@ const createFailure = (
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
-  if (failure.code === "remote_response_lost" || failure.code === "remote_response_unusable")
-    return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
   if (
-    failure.code === "remote_rejected" ||
-    failure.code === "remote_head_mismatch" ||
-    failure.code === "remote_lookup_failed"
+    failure.code === "remote_response_lost" ||
+    failure.code === "remote_response_unusable" ||
+    failure.code === "remote_rejected"
   )
+    return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
+  if (failure.code === "remote_head_mismatch" || failure.code === "remote_lookup_failed")
     return retainFailure(dependencies, pending, failure);
   const code =
     failure.code === "local_head_mismatch" ? "current_head_mismatch" : "publication_tooling_failed";
@@ -371,7 +371,9 @@ const createRecoveryAttempt = (
       return yield* record(dependencies, input, headBranch, expectedHeadSha, created.pullRequest);
     if (
       !created.ok &&
-      (created.code === "remote_response_lost" || created.code === "remote_response_unusable")
+      (created.code === "remote_response_lost" ||
+        created.code === "remote_response_unusable" ||
+        created.code === "remote_rejected")
     )
       return yield* confirmCreation(
         dependencies,
@@ -724,6 +726,7 @@ const canRecoverUpdateFailure = (
 ): boolean =>
   failure === "remote_response_lost" ||
   failure === "remote_response_unusable" ||
+  failure === "remote_rejected" ||
   failure === "push_failed";
 
 const recoverUpdatedPullRequest = (

@@ -423,7 +423,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("records an uncertain update only after exact read-back agreement", () =>
+  it.scoped("records a rejected update with diagnostics only after exact read-back agreement", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
@@ -449,10 +449,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               remote = pullRequest(request.expectedHeadSha);
               return {
                 ok: false as const,
-                code: "remote_response_unusable" as const,
+                code: "remote_rejected" as const,
                 evidence: {
                   operation: "pull_request_update" as const,
-                  classification: "response_parse_failure" as const,
+                  classification: "rejected" as const,
+                  exitStatus: 1,
                 },
               };
             },
@@ -818,7 +819,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("recovers a created pull request after its response is lost", () =>
+  it.scoped("recovers a created pull request after a failed command with diagnostics", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const remotePullRequests: {
@@ -857,7 +858,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
                 headBranch: request.headBranch,
                 headSha: request.expectedHeadSha,
               });
-              return { ok: false, code: "remote_response_lost" };
+              return {
+                ok: false,
+                code: "remote_rejected",
+                evidence: {
+                  operation: "pull_request_creation",
+                  classification: "rejected",
+                  exitStatus: 1,
+                },
+              };
             },
             updatePullRequest: () => {
               throw new Error("Recovery must not update the pull request");
@@ -895,7 +904,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           github: {
             findPullRequests: () => [remote],
             getPullRequest: () => remote,
-            createPullRequest: () => ({ ok: false as const, code: "remote_rejected" as const }),
+            createPullRequest: () => ({
+              ok: false as const,
+              code: "remote_lookup_failed" as const,
+            }),
             updatePullRequest: () => ({ ok: true as const, pullRequest: remote }),
           },
         });
@@ -922,7 +934,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("retains the marker after a known recovery rejection", () =>
+  it.scoped("retains the marker after a rejected mutation and conflicting readback", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let creates = 0;
@@ -964,8 +976,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toMatchObject({
           ok: false,
-          code: "publication_tooling_failed",
+          code: "publication_creation_unconfirmed",
           evidence: { operation: "pull_request_creation", exitStatus: 422 },
+          recoveryEvidence: { operation: "remote_lookup", classification: "conflict" },
         });
         expect(creates).toBe(2);
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
@@ -1050,7 +1063,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           github: {
             findPullRequests: () => [oldPullRequest],
             getPullRequest: () => oldPullRequest,
-            createPullRequest: () => ({ ok: false as const, code: "remote_rejected" as const }),
+            createPullRequest: () => ({
+              ok: false as const,
+              code: "remote_lookup_failed" as const,
+            }),
             updatePullRequest: (request) => {
               updates += 1;
               return { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
@@ -1174,7 +1190,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({
           ok: false,
-          code: "publication_tooling_failed",
+          code: "publication_creation_unconfirmed",
         });
         const next = yield* nextCandidate(
           fixture,

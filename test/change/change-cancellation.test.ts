@@ -664,7 +664,7 @@ describe("Change cancellation", () => {
       );
   });
 
-  it.effect("leaves the lifecycle open when owned pull request closure fails", () => {
+  it.effect("leaves the lifecycle open and preserves close recovery evidence", () => {
     const events: string[] = [];
     const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
@@ -672,7 +672,15 @@ describe("Change cancellation", () => {
       task,
       change,
       pullRequest: pullRequest("open", false),
-      closePullRequest: { ok: false, code: "close_failed" },
+      closePullRequest: {
+        ok: false,
+        code: "close_failed",
+        evidence: {
+          operation: "pull_request_close",
+          classification: "rejected",
+          exitStatus: 1,
+        },
+      },
       events,
     });
 
@@ -684,6 +692,16 @@ describe("Change cancellation", () => {
             ok: false,
             code: "github_close_failed",
             taskId: publicTaskId(task.id),
+            evidence: {
+              operation: "pull_request_close",
+              classification: "rejected",
+              exitStatus: 1,
+            },
+            recoveryEvidence: {
+              operation: "remote_lookup",
+              classification: "conflict",
+              reason: "postcondition_mismatch",
+            },
           });
           expect(events).toEqual(["read-task", "read-change", "read-pr", "close-pr", "read-pr"]);
           return result;
