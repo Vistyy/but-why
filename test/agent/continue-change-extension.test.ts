@@ -516,6 +516,11 @@ describe("packaged Change Implement continuation extension", () => {
   });
 
   it.each([
+    [
+      "Change close reason",
+      snapshot({ change: { state: "closed", closeReason: "not-a-close-reason" } }),
+      undefined,
+    ],
     ["Candidate identity", snapshot({ currentCandidate: { id: "candidate-1" } }), undefined],
     ["Validation Run identity", snapshot({ currentValidationRun: {} }), undefined],
     ["non-negative Finding count", snapshot({ findingCount: -1 }), undefined],

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
+type ChangeCloseReason = "completed" | "cancelled";
 
 type JsonObject = Readonly<Record<string, unknown>>;
 
@@ -30,7 +31,7 @@ type BlockerResolution = JsonObject & {
 export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
-    readonly closeReason: string | null;
+    readonly closeReason: ChangeCloseReason | null;
   };
   readonly currentCandidate: CurrentCandidate | null;
   readonly currentValidationRun: CurrentValidationRun | null;
@@ -825,7 +826,8 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   return (
     isRecord(change) &&
     (recordValue(change, "state") === "open" || recordValue(change, "state") === "closed") &&
-    (typeof recordValue(change, "closeReason") === "string" ||
+    (recordValue(change, "closeReason") === "completed" ||
+      recordValue(change, "closeReason") === "cancelled" ||
       recordValue(change, "closeReason") === null) &&
     (candidate === null || isCandidate(candidate)) &&
     (validationRun === null || isValidationRun(validationRun)) &&
