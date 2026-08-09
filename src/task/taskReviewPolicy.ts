@@ -3,17 +3,17 @@ import { dirname } from "node:path";
 import { Effect, type ParseResult, Schema } from "effect";
 
 import type { AgentProfileResolutionError } from "../agent/agentProfileErrors.js";
-import { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../agent/agentProfiles.js";
+import { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
 import {
   contractDiagnostics,
   formatContractDiagnostics,
 } from "../contracts/contractDiagnostics.js";
-import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
+import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type TaskReviewPolicyError = AgentProfileResolutionError | GlobalConfigValidationFailed;

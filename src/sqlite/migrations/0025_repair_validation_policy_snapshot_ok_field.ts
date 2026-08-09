@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useLiteralKeys: TypeScript requires bracket access for decoded records.
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 
