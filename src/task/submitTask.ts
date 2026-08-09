@@ -276,11 +276,20 @@ const submitTask = (
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
-    const phase = workspace.activeWorkspaceResult;
-    if (phase !== undefined && phase.toolingFailure !== undefined) {
+    const phase =
+      workspace.activeWorkspaceResult ??
+      ({
+        outcome: "tooling_failed",
+        toolingFailure: taskReviewToolingFailureRecord({
+          errorKind: "infrastructure_tooling_failed",
+          operationName: "run_task_review",
+          errorMessage: "Task Review completed without a result.",
+        }),
+      } satisfies TaskReviewPhaseResult);
+    if (phase.outcome === "tooling_failed") {
       const completed = yield* dependencies.persistence.complete({
         reviewId,
-        outcome: "tooling_failed",
+        outcome: phase.outcome,
         toolingFailure: phase.toolingFailure,
         now: input.now,
       });
@@ -290,34 +299,21 @@ const submitTask = (
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
-    const findings = phase?.findings ?? [];
-    const outcome = phase?.outcome ?? "blocked";
     const completed = yield* dependencies.persistence.complete(
-      outcome === "passed"
-        ? { reviewId, outcome, now: input.now }
-        : findings[0] === undefined
-          ? {
-              reviewId,
-              outcome: "tooling_failed",
-              toolingFailure: taskReviewToolingFailureRecord({
-                errorKind: "infrastructure_tooling_failed",
-                operationName: "run_task_review",
-                errorMessage: "Task Review completed without a result.",
-              }),
-              now: input.now,
-            }
-          : { reviewId, outcome, findings: [findings[0], ...findings.slice(1)], now: input.now },
+      phase.outcome === "passed"
+        ? { reviewId, outcome: phase.outcome, now: input.now }
+        : { reviewId, outcome: phase.outcome, findings: phase.findings, now: input.now },
     );
     if (!completed.ok) {
       return { ok: false as const, code: "submission_in_progress" as const };
     }
     return {
       ok: true as const,
-      status: outcome,
+      status: phase.outcome,
       reviewId,
       baseCommit: head.commit,
       task: completed.task,
-      ...(findings.length === 0 ? {} : { findings }),
+      ...(phase.outcome === "passed" ? {} : { findings: phase.findings }),
     };
   });
 
@@ -364,11 +360,15 @@ const taskReviewPrepareConfig = (
         timeoutSeconds: prepare.timeoutSeconds ?? defaultTaskReviewPrepareTimeoutSeconds,
       };
 
-type TaskReviewPhaseResult = {
-  readonly outcome: "passed" | "blocked";
-  readonly findings: readonly Omit<TaskReviewFinding, "createdAt">[];
-  readonly toolingFailure?: TaskReviewToolingFailureRecord;
-};
+type TaskReviewFindingInput = Omit<TaskReviewFinding, "createdAt">;
+
+type TaskReviewPhaseResult =
+  | { readonly outcome: "passed" }
+  | {
+      readonly outcome: "blocked";
+      readonly findings: readonly [TaskReviewFindingInput, ...TaskReviewFindingInput[]];
+    }
+  | { readonly outcome: "tooling_failed"; readonly toolingFailure: TaskReviewToolingFailureRecord };
 
 const runTaskReviewPhases = (input: {
   readonly reviewId: string;
@@ -403,16 +403,14 @@ const runTaskReviewPhases = (input: {
       }).pipe(Effect.either);
       if (Either.isLeft(prepareAttempt)) {
         return {
-          outcome: "blocked" as const,
-          findings: [],
+          outcome: "tooling_failed" as const,
           toolingFailure: prepareAttempt.left,
         };
       }
       const prepare = prepareAttempt.right;
       if (prepare.exitCode !== 0) {
         return {
-          outcome: "blocked" as const,
-          findings: [],
+          outcome: "tooling_failed" as const,
           toolingFailure: taskReviewToolingFailureRecord({
             errorKind: "prepare_command_execution_tooling_failed",
             operationName: "run_task_review_prepare",
@@ -438,8 +436,7 @@ const runTaskReviewPhases = (input: {
     });
     if (!result.ok) {
       return {
-        outcome: "blocked" as const,
-        findings: [],
+        outcome: "tooling_failed" as const,
         toolingFailure: taskReviewToolingFailureRecord({
           errorKind:
             result.failure._tag === "ReviewerOutputContractFailed"
@@ -454,9 +451,10 @@ const runTaskReviewPhases = (input: {
       };
     }
     const findings = reviewerOutputToFindings(input.reviewId, result.report);
+    if (findings[0] === undefined) return { outcome: "passed" as const };
     return {
-      outcome: findings.length === 0 ? "passed" : "blocked",
-      findings,
+      outcome: "blocked" as const,
+      findings: [findings[0], ...findings.slice(1)],
     };
   });
 

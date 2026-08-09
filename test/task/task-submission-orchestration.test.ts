@@ -522,6 +522,64 @@ describe("Task Submission orchestration", () => {
     60_000,
   );
 
+  it.scoped(
+    "reports and persists Tooling Failure when the workspace returns no phase result",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: passingReviewer([]),
+                persistence: reviews,
+                createWorkspace: (input) =>
+                  Effect.succeed({
+                    ok: true,
+                    setup: {
+                      reviewId: input.reviewId,
+                      tempRefName: `refs/but-why/task-reviews/${input.reviewId}/review`,
+                      submittedSha: input.submittedSha,
+                      worktreeHead: input.submittedSha,
+                      cleanupWorktree: "not_created",
+                      cleanupTempRef: "not_created",
+                      createdAt: now,
+                    },
+                  }),
+              }),
+            );
+
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+
+            expect(result).toMatchObject({
+              ok: true,
+              status: "tooling_failed",
+              task: { state: "new" },
+              toolingFailures: [
+                {
+                  errorKind: "infrastructure_tooling_failed",
+                  operationName: "run_task_review",
+                  errorMessage: "Task Review completed without a result.",
+                },
+              ],
+            });
+            if (!result.ok || result.status !== "tooling_failed") {
+              throw new Error("unexpected missing-result outcome");
+            }
+            expect(yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"))).toMatchObject(
+              {
+                id: result.reviewId,
+                outcome: "tooling_failed",
+              },
+            );
+          }),
+        );
+      }),
+    60_000,
+  );
+
   it.scoped("reports an unavailable main checkout before any workspace work", () =>
     Effect.gen(function* () {
       const root = yield* prepareInitializedTask();
