@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -6,24 +5,22 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { publicTaskId } from "../../src/task/taskId.js";
-import {
-  commitButWhyConfigAndRecordDefault,
-  createGitRepo,
-  runByInProcessEffect,
-} from "../support/by-cli.js";
+import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   captureCandidateFixture,
   closeChangeFixture,
-  completeChangeFixture,
+  completeValidationRunFixture,
   createChangeFixture,
+  createFindingFixture,
+  createImplementationBlockerFixture,
   createInspectionRepository,
+  createTaskFixture,
+  createToolingFailureFixture,
+  createValidationRunFixture,
   recordImplementationDecisionFixture,
-  withValidationPersistence,
+  resolveImplementationBlockerFixture,
+  runInspectionCommand,
 } from "../support/changeInspectionFixture.js";
 import {
   cloneInitializedTestRepository,
@@ -49,24 +46,15 @@ afterAll(() => {
 
 const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
 
+// Retained evidence owners after broad workflow setup was removed:
+// - Change Submit Candidate selection: change-submit-orchestration.test.ts.
+// - Validation and Finding writers: candidate-validation-inspection.test.ts and
+//   candidate-acceptance-review.test.ts.
+// - Submit result and structured storage-error output: change-submit-errors.test.ts and
+//   storage-error-mapping.test.ts.
+// This file retains the real-Git inference and policy-source sentinels because those Claims
+// include Git identity and exact Change Base and Candidate policy authority.
 describe("Change inspection CLI", () => {
-  it.effect("reports unavailable shared state before Change Submit accesses a Change", () =>
-    Effect.gen(function* () {
-      const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, [
-        "--json",
-        "change",
-        "submit",
-        randomUUID(),
-      ]);
-
-      expect(result.status).toBe(1);
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "state_store_unavailable" },
-      });
-    }),
-  );
-
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
@@ -125,18 +113,18 @@ describe("Change inspection CLI", () => {
       const newer = yield* createChangeFixture(root, "refs/heads/newer", secondNow);
       yield* closeChangeFixture(root, newer.id, "cancelled", secondNow);
 
-      const defaultResult = yield* runByInProcessEffect(
+      const defaultResult = yield* runInspectionCommand(
         root,
         ["--json", "change", "list"],
         commandNow,
       );
-      const allResult = yield* runByInProcessEffect(
+      const allResult = yield* runInspectionCommand(
         root,
         ["--json", "change", "list", "--all"],
         commandNow,
       );
-      const openShown = yield* runByInProcessEffect(root, ["--json", "change", "show", older.id]);
-      const closedShown = yield* runByInProcessEffect(root, ["--json", "change", "show", newer.id]);
+      const openShown = yield* runInspectionCommand(root, ["--json", "change", "show", older.id]);
+      const closedShown = yield* runInspectionCommand(root, ["--json", "change", "show", newer.id]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({
         changes: [
@@ -198,8 +186,8 @@ describe("Change inspection CLI", () => {
         }),
       );
 
-      const json = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
-      const toon = yield* runByInProcessEffect(root, ["change", "show", change.id]);
+      const json = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
+      const toon = yield* runInspectionCommand(root, ["change", "show", change.id]);
 
       expect(json.status).toBe(1);
       expect(json.stderr).toBe("");
@@ -231,88 +219,52 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       const firstCandidate = yield* captureCandidateFixture(
         root,
         change.id,
-        "refs/heads/history",
         "first-head",
         firstNow,
       );
       const secondCandidate = yield* captureCandidateFixture(
         root,
         change.id,
-        "refs/heads/history",
         "second-head",
         secondNow,
       );
-      const olderCandidateRun = yield* withValidationPersistence(root, (persistence) =>
-        persistence.startOrReuse({
-          candidateId: firstCandidate.id,
-          headSha: firstCandidate.headSha,
-          policy: { checks: [], copyFiles: [] },
-          now: commandNow,
-        }),
-      );
-      if (olderCandidateRun.reused) throw new Error("Expected new Validation Run");
-      if ("blocked" in olderCandidateRun) throw new Error("Expected new Validation Run");
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.complete({
-          validationRunId: olderCandidateRun.validationRunId,
-          outcome: "passed",
-          now: commandNow,
-        }),
-      );
-      const newerRun = yield* withValidationPersistence(root, (persistence) =>
-        persistence.startOrReuse({
-          candidateId: secondCandidate.id,
-          headSha: secondCandidate.headSha,
-          policy: { checks: [], copyFiles: [] },
-          now: secondNow,
-        }),
-      );
-      if (newerRun.reused) throw new Error("Expected new Validation Run");
-      if ("blocked" in newerRun) throw new Error("Expected new Validation Run");
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.recordCheckRound({
-          validationRunId: newerRun.validationRunId,
-          producer: "types",
-          roundNumber: 1,
-          roundStatus: "failed",
-          artifactRecords: [],
-          finding: {
-            id: `${newerRun.validationRunId}-F1`,
-            validationRunId: newerRun.validationRunId,
-            phase: "checks",
-            producer: "types",
-            title: "Check failed: types",
-            description: "Type checking failed.",
-            evidence: "exitCode: 1",
-            files: ["src/main.ts"],
-            artifactRefs: [],
-          },
-          now: commandNow,
-        }),
-      );
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.recordToolingFailure({
-          validationRunId: newerRun.validationRunId,
-          errorKind: "validation_workspace_setup_failed",
-          operationName: "cleanup_validation_worktree",
-          errorMessage: "Could not remove worktree.",
-          now: commandNow,
-        }),
-      );
-      const findings = yield* runByInProcessEffect(root, [
+      const olderCandidateRun = yield* createValidationRunFixture(root, {
+        changeId: change.id,
+        candidateId: firstCandidate.id,
+        state: "complete",
+        outcome: "passed",
+        createdAt: commandNow,
+        updatedAt: commandNow,
+      });
+      const newerRun = yield* createValidationRunFixture(root, {
+        changeId: change.id,
+        candidateId: secondCandidate.id,
+        state: "running",
+        outcome: null,
+        createdAt: secondNow,
+        updatedAt: secondNow,
+      });
+      yield* createFindingFixture(root, {
+        id: `${newerRun.validationRunId}-F1`,
+        validationRunId: newerRun.validationRunId,
+        createdAt: commandNow,
+      });
+      yield* createToolingFailureFixture(root, newerRun.validationRunId, commandNow);
+      const findings = yield* runInspectionCommand(root, [
         "--json",
         "change",
         "findings",
         change.id,
       ]);
-      const history = yield* runByInProcessEffect(root, [
+      const history = yield* runInspectionCommand(root, [
         "--json",
         "change",
         "validation-runs",
         change.id,
       ]);
-      const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
+      const shown = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
 
+      expect(findings.stdout).not.toContain('"severity"');
       expect(JSON.parse(findings.stdout)).toMatchObject({
         change: { id: change.id },
         candidate: { id: secondCandidate.id },
@@ -360,31 +312,6 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         validationRunCommand: `by validation-run show ${newerRun.validationRunId}`,
       });
       expect(JSON.parse(shown.stdout).currentValidationRun.policy).toBeUndefined();
-    }),
-  );
-
-  it.effect("keeps an unchanged taskless Change open with explicit cancellation guidance", () =>
-    Effect.gen(function* () {
-      const root = yield* initializedRepoCopy();
-      commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], firstNow);
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "submit", change.change.id],
-        firstNow,
-      );
-
-      expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({
-        changeId: change.change.id,
-        status: "nothing_to_submit",
-        help: [
-          "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
-          `Run \`by change cancel ${change.change.id} --reason "<reason>"\` to cancel this unchanged Change.`,
-        ],
-      });
     }),
   );
 
@@ -469,14 +396,14 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           rationale: "Match the one-line Choice contract.",
           now: commandNow,
         });
-        const listed = yield* runByInProcessEffect(root, [
+        const listed = yield* runInspectionCommand(root, [
           "--json",
           "change",
           "decision",
           "list",
           change.id,
         ]);
-        const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
+        const shown = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
 
         expect(JSON.parse(listed.stdout)).toMatchObject({
           changeId: change.id,
@@ -509,14 +436,14 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       Effect.gen(function* () {
         const root = createInspectionRepository();
         const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
-        const missing = yield* runByInProcessEffect(root, [
+        const missing = yield* runInspectionCommand(root, [
           "--json",
           "change",
           "decision",
           "add",
           change.id,
         ]);
-        const empty = yield* runByInProcessEffect(root, [
+        const empty = yield* runInspectionCommand(root, [
           "--json",
           "change",
           "decision",
@@ -527,7 +454,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           "--rationale",
           "A reason",
         ]);
-        const emptyRationale = yield* runByInProcessEffect(root, [
+        const emptyRationale = yield* runInspectionCommand(root, [
           "--json",
           "change",
           "decision",
@@ -538,14 +465,14 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           "--rationale",
           "",
         ]);
-        const help = yield* runByInProcessEffect(root, ["change", "decision", "add", "--help"]);
-        const blockerHelp = yield* runByInProcessEffect(root, [
+        const help = yield* runInspectionCommand(root, ["change", "decision", "add", "--help"]);
+        const blockerHelp = yield* runInspectionCommand(root, [
           "change",
           "blocker",
           "raise",
           "--help",
         ]);
-        const multiline = yield* runByInProcessEffect(root, [
+        const multiline = yield* runInspectionCommand(root, [
           "--json",
           "change",
           "decision",
@@ -595,149 +522,23 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       }),
   );
 
-  it.effect(
-    "submits a reviewer Finding through public Change Submit and both inspection views",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* initializedRepoCopy();
-        writeFileSync(
-          join(root, ".but-why", "config.json"),
-          `${JSON.stringify({ taskPrefix: "BY", validation: { checks: [{ id: "quality", command: "true" }] } }, null, 2)}\n`,
-        );
-        commitButWhyConfigAndRecordDefault(root);
-        yield* withTestRepository(
-          root,
-          Effect.gen(function* () {
-            const tasks = yield* openSqliteTaskPersistence("BY");
-            const created = yield* tasks.createTask({
-              title: "Public reviewer Finding",
-              description: "Exercise the public reviewer submission seam.",
-              now: firstNow,
-            });
-            if (!created.ok) throw new Error(created.code);
-            const approved = yield* tasks.approveTask({
-              taskId: publicTaskId("BY-1"),
-              now: secondNow,
-            });
-            if (!approved.ok) throw new Error(approved.code);
-          }),
-        );
-        const started = yield* runByInProcessEffect(root, [
-          "--json",
-          "change",
-          "start",
-          "--task",
-          "BY-1",
-        ]);
-        const startedView = JSON.parse(started.stdout) as {
-          readonly change: { readonly id: string };
-          readonly worktreePath: string;
-        };
-        const changeId = startedView.change.id;
-        writeFileSync(join(startedView.worktreePath, "reviewed.txt"), "reviewed\n");
-        runTestProcessOrThrow("git", ["add", "reviewed.txt"], { cwd: startedView.worktreePath });
-        runTestProcessOrThrow("git", ["commit", "-m", "Add reviewed file"], {
-          cwd: startedView.worktreePath,
-        });
-        writeFileSync(
-          join(root, ".test-global-config.json"),
-          `${JSON.stringify(
-            {
-              defaultAgentProfile: { scope: "global", name: "test" },
-              agentProfiles: {
-                test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
-              },
-            },
-            null,
-            2,
-          )}\n`,
-        );
-        const reviewerAgentRuntime: ReviewerAgentRuntime = {
-          review: () =>
-            Effect.succeed({
-              ok: true as const,
-              report: {
-                findings: [
-                  {
-                    title: "Public reviewer mismatch",
-                    description: "The fake reviewer reports one material mismatch.",
-                    evidence: "The composed public submission returned this Finding.",
-                    files: ["reviewed.txt"],
-                    artifactRefs: [],
-                  },
-                ],
-              },
-              attempts: 1,
-              stdout: "fake reviewer output",
-            }),
-        };
-        const submitted = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "submit", changeId],
-          commandNow,
-          { reviewerAgentRuntime },
-        );
-        expect(submitted.status, submitted.stdout).toBe(1);
-        const findings = yield* runByInProcessEffect(root, [
-          "--json",
-          "change",
-          "findings",
-          changeId,
-        ]);
-        const findingsView = JSON.parse(findings.stdout) as {
-          readonly validationRun: { readonly id: string } | null;
-        };
-        expect(
-          findingsView.validationRun,
-          `${submitted.stdout}\n${findings.stdout}`,
-        ).not.toBeNull();
-        const validationRun = findingsView.validationRun?.id ?? "";
-        const shown = yield* runByInProcessEffect(root, [
-          "--json",
-          "validation-run",
-          "show",
-          validationRun,
-        ]);
-
-        expect(submitted.status).toBe(1);
-        expect(JSON.parse(findings.stdout).findings).toContainEqual(
-          expect.objectContaining({ title: "Public reviewer mismatch", files: ["reviewed.txt"] }),
-        );
-        expect(findings.stdout).not.toContain('"severity"');
-        expect(JSON.parse(shown.stdout).findings).toContainEqual(
-          expect.objectContaining({
-            evidence: "The composed public submission returned this Finding.",
-          }),
-        );
-        expect(shown.stdout).not.toContain('"severity"');
-      }),
-  );
-
   it.effect("projects linked Change progress through Task inspection", () =>
     Effect.gen(function* () {
       const root = createInspectionRepository();
-      yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
-          const created = yield* tasks.createTask({
-            title: "Task-backed Change",
-            description: "Inspect progress",
-            now: firstNow,
-          });
-          if (!created.ok) throw new Error(created.code);
-          const approved = yield* tasks.approveTask({
-            taskId: publicTaskId("BY-1"),
-            now: secondNow,
-          });
-          if (!approved.ok) throw new Error(approved.code);
-        }),
-      );
+      yield* createTaskFixture(root, {
+        id: "BY-1",
+        numericId: 1,
+        title: "Task-backed Change",
+        description: "Inspect progress",
+        state: "todo",
+        createdAt: firstNow,
+        updatedAt: secondNow,
+      });
 
       const branch = "refs/heads/projection";
       const change = yield* createChangeFixture(root, branch, firstNow, { taskId: "BY-1" });
       const changeId = change.id;
-      const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      const shown = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
 
       expect(shown.status).toBe(0);
       expect(JSON.parse(shown.stdout)).toMatchObject({
@@ -752,51 +553,51 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("state");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("readiness");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("activeBlocker");
-      const toonShown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+      const toonShown = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
       expect(toonShown.stdout).toContain(`id: ${changeId}`);
       expect(toonShown.stdout).toContain("activity: implementing");
       expect(toonShown.stdout).not.toContain("startable");
       expect(toonShown.stdout).not.toContain("readiness");
       expect(toonShown.stdout).not.toContain("activeBlocker");
 
-      yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const changes = yield* openSqliteChangePersistence();
-          const raised = yield* changes.raiseImplementationBlocker({
-            changeId,
-            content: "Wait for an external decision.",
-            now: commandNow,
-          });
-          if (!raised.ok) throw new Error(raised.code);
-        }),
-      );
-      const blocked = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      yield* createImplementationBlockerFixture(root, changeId, {
+        reportedAt: firstNow,
+        resolvedAt: secondNow,
+        resolutionContent: "The earlier issue was resolved.",
+      });
+      const activeBlocker = yield* createImplementationBlockerFixture(root, changeId, {
+        reportedAt: commandNow,
+      });
+      const blocked = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
       expect(JSON.parse(blocked.stdout).task.change).toEqual({
         id: changeId,
         activity: "blocked",
       });
-      const blockedList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
+      const blockedList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
       expect(
         JSON.parse(blockedList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "blocked" });
-      yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const changes = yield* openSqliteChangePersistence();
-          const resolved = yield* changes.resolveImplementationBlocker({
-            changeId,
-            content: "Proceed with the accepted implementation.",
-            now: commandNow,
-          });
-          if (!resolved.ok) throw new Error(resolved.code);
-        }),
-      );
+      const blockerHistory = yield* runInspectionCommand(root, [
+        "--json",
+        "change",
+        "blocker",
+        "list",
+        changeId,
+      ]);
+      expect(JSON.parse(blockerHistory.stdout)).toMatchObject({
+        changeId,
+        active: { id: activeBlocker.id },
+        blockers: [
+          { sequence: 1, resolvedAt: secondNow },
+          { sequence: 2, id: activeBlocker.id, resolvedAt: null },
+        ],
+      });
+      yield* resolveImplementationBlockerFixture(root, activeBlocker.id, commandNow);
 
       expect(
-        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"])).stdout)
+        JSON.parse((yield* runInspectionCommand(root, ["--json", "task", "list", "--all"])).stdout)
           .tasks,
       ).toContainEqual(
         expect.objectContaining({
@@ -805,71 +606,62 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         }),
       );
 
-      const candidate = yield* captureCandidateFixture(
-        root,
+      const candidate = yield* captureCandidateFixture(root, changeId, "projection-head", firstNow);
+      const activeValidation = yield* createValidationRunFixture(root, {
         changeId,
-        branch,
-        "projection-head",
-        firstNow,
-      );
-      const activeValidation = yield* withValidationPersistence(root, (persistence) =>
-        persistence.startOrReuse({
-          candidateId: candidate.id,
-          headSha: candidate.headSha,
-          policy: { checks: [], copyFiles: [] },
-          now: commandNow,
-        }),
-      );
-      if (activeValidation.reused) throw new Error("Expected an active Validation Run");
-      if ("blocked" in activeValidation) throw new Error("Expected an active Validation Run");
-      const validating = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+        candidateId: candidate.id,
+        state: "running",
+        outcome: null,
+        createdAt: commandNow,
+        updatedAt: commandNow,
+      });
+      const validating = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
       expect(JSON.parse(validating.stdout).task.change).toEqual({
         id: changeId,
         activity: "validating",
       });
-      const validatingList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
+      const validatingList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
       expect(
         JSON.parse(validatingList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "validating" });
 
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.complete({
-          validationRunId: activeValidation.validationRunId,
-          outcome: "passed",
-          now: commandNow,
-        }),
+      yield* completeValidationRunFixture(
+        root,
+        activeValidation.validationRunId,
+        "passed",
+        commandNow,
       );
-      const ready = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      const ready = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
       expect(JSON.parse(ready.stdout).task.change).toEqual({
         id: changeId,
         activity: "ready",
       });
-      const readyList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
+      const readyList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
       expect(
         JSON.parse(readyList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "ready" });
       expect(
-        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
+        JSON.parse((yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"])).stdout)
           .task.state,
       ).toBe("todo");
 
-      yield* completeChangeFixture(root, changeId, "projection-head", commandNow);
-      const completed = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
+      yield* closeChangeFixture(root, changeId, "completed", commandNow);
+      const completed = yield* runInspectionCommand(root, ["--json", "change", "show", changeId]);
       expect(JSON.parse(completed.stdout)).toMatchObject({
         change: { state: "closed", closeReason: "completed" },
         cleanup: { state: "pending", blockingReason: null },
       });
-      const closedTask = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      const closedTask = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
       expect(JSON.parse(closedTask.stdout).task).toMatchObject({
         state: "done",
         change: { id: changeId },
       });
       expect(JSON.parse(closedTask.stdout).task.change).not.toHaveProperty("activity");
-      const closedList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
+      const closedList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
       expect(
         JSON.parse(closedList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",

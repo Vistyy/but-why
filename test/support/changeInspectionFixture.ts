@@ -1,32 +1,71 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect } from "effect";
 
-import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
-import { createGitRepo } from "./by-cli.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
+import { createTestWorkspace } from "./testWorkspace.js";
 
-// Change inspection evidence uses direct persisted Change, Candidate, and Validation Run
-// fixtures in a real SQLite Shared Repository State. Real Git setup remains only where the
-// claim needs Git identity or policy-source authority.
+// These fixtures persist only the rows that Change inspection reads.
+// The inspection tests use real SQLite for schema constraints, decoding, ordering, and counts.
 export const createInspectionRepository = (): string => {
-  const root = createGitRepo();
+  const root = createTestWorkspace();
+  mkdirSync(join(root, ".git", "but-why"), { recursive: true });
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(
     join(root, ".but-why", "config.json"),
     `${JSON.stringify({ taskPrefix: "BY" }, null, 2)}\n`,
   );
-  mkdirSync(join(root, ".git", "but-why"), { recursive: true });
+  const fakeGitDirectory = join(root, ".inspection-bin");
+  mkdirSync(fakeGitDirectory);
+  const fakeGit = join(fakeGitDirectory, "git");
+  writeFileSync(
+    fakeGit,
+    `#!/usr/bin/env bash
+set -eu
+root=$(pwd -P)
+case "$*" in
+  "rev-parse --path-format=absolute --show-toplevel --git-common-dir")
+    printf '%s\\n%s\\n' "$root" "$root/.git"
+    ;;
+  "worktree list --porcelain -z")
+    printf 'worktree %s\\0HEAD inspection-head\\0branch refs/heads/inspection\\0\\0' "$root"
+    ;;
+  "rev-parse --symbolic-full-name HEAD")
+    printf 'refs/heads/inspection\\n'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+`,
+  );
+  chmodSync(fakeGit, 0o755);
   return root;
 };
+
+export const runInspectionCommand = (
+  root: string,
+  args: readonly string[],
+  now = "2026-06-30T12:00:00.000Z",
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const inheritedPath = process.env.PATH;
+      process.env.PATH = `${join(root, ".inspection-bin")}:${inheritedPath ?? ""}`;
+      return inheritedPath;
+    }),
+    () => runByInProcessEffect(root, args, now),
+    (inheritedPath) =>
+      Effect.sync(() => {
+        if (inheritedPath === undefined) delete process.env.PATH;
+        else process.env.PATH = inheritedPath;
+      }),
+  );
 
 export type CreateChangeInspectionFixtureOptions = {
   readonly taskId?: string;
@@ -34,6 +73,36 @@ export type CreateChangeInspectionFixtureOptions = {
   readonly worktreePath?: string | null;
   readonly startingCommit?: string | null;
 };
+
+export const createTaskFixture = (
+  root: string,
+  input: {
+    readonly id: string;
+    readonly numericId: number;
+    readonly title: string;
+    readonly description: string;
+    readonly state: "new" | "todo" | "done" | "cancelled";
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  },
+): Effect.Effect<void, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Task inspection fixture",
+        (sql) => sql`
+          INSERT INTO tasks (
+            id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+          ) VALUES (
+            ${input.id}, ${input.numericId}, ${input.title}, ${input.description}, ${input.state},
+            NULL, ${input.createdAt}, ${input.updatedAt}
+          )
+        `,
+      );
+    }),
+  );
 
 export const createChangeFixture = (
   root: string,
@@ -86,31 +155,160 @@ export const closeChangeFixture = (
           WHERE id = ${changeId}
         `,
       );
+      if (reason === "completed") {
+        yield* repository.operation(
+          "complete linked Task inspection fixture",
+          (sql) => sql`
+            UPDATE tasks
+            SET state = 'done', updated_at = ${closedAt}
+            WHERE id = (SELECT task_id FROM changes WHERE id = ${changeId})
+          `,
+        );
+      }
     }),
   );
 
 export const captureCandidateFixture = (
   root: string,
   changeId: string,
-  branchRef: string,
   headSha: string,
   capturedAt: string,
 ): Effect.Effect<{ readonly id: string; readonly headSha: string }, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const capture = yield* openSqliteCandidateCapturePersistence();
-      const result = yield* capture.commitCapture({
-        repositoryCommonDirectory: join(root, ".git"),
-        branchRef,
-        expectedChangeId: changeId,
-        baseRef: "refs/remotes/origin/main",
-        changeBaseSha: "target-sha",
-        headSha,
-        now: capturedAt,
-      });
-      if (!result.ok) throw new Error(result.code);
-      return { id: result.candidateId, headSha };
+      const id = randomUUID();
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Candidate inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+          VALUES (${id}, ${changeId}, 'target-sha', ${headSha}, ${capturedAt})
+        `,
+      );
+      return { id, headSha };
+    }),
+  );
+
+export const createValidationRunFixture = (
+  root: string,
+  input: {
+    readonly changeId: string;
+    readonly candidateId: string;
+    readonly state: "running" | "complete";
+    readonly outcome: "passed" | "blocked" | "tooling_failed" | null;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  },
+): Effect.Effect<
+  { readonly id: string; readonly validationRunId: string },
+  RepositoryStorageError
+> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const id = randomUUID();
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Validation Run inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidate_validation_runs (
+            id, candidate_id, policy_snapshot, implementation_decisions,
+            latest_resolved_blocker_id, state, outcome, created_at, updated_at
+          ) VALUES (
+            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [], copyFiles: [] })}, '[]',
+            NULL, ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
+          )
+        `,
+      );
+      if (input.state === "running") {
+        yield* repository.operation(
+          "create active Validation Run inspection fixture",
+          (sql) => sql`
+            INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
+            VALUES (${input.changeId}, ${id}, ${input.createdAt})
+          `,
+        );
+      }
+      return { id, validationRunId: id };
+    }),
+  );
+
+export const completeValidationRunFixture = (
+  root: string,
+  validationRunId: string,
+  outcome: "passed" | "blocked" | "tooling_failed",
+  updatedAt: string,
+): Effect.Effect<void, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "complete Validation Run inspection fixture",
+        (sql) => sql`
+          UPDATE candidate_validation_runs
+          SET state = 'complete', outcome = ${outcome}, updated_at = ${updatedAt}
+          WHERE id = ${validationRunId}
+        `,
+      );
+      yield* repository.operation(
+        "remove active Validation Run inspection fixture",
+        (sql) => sql`
+          DELETE FROM active_validation_runs WHERE validation_run_id = ${validationRunId}
+        `,
+      );
+    }),
+  );
+
+export const createFindingFixture = (
+  root: string,
+  input: {
+    readonly id: string;
+    readonly validationRunId: string;
+    readonly createdAt: string;
+  },
+): Effect.Effect<void, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Finding inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidate_validation_findings (
+            id, validation_run_id, phase, producer, title, description,
+            evidence, files, artifact_refs, created_at, updated_at
+          ) VALUES (
+            ${input.id}, ${input.validationRunId}, 'checks', 'types', 'Check failed: types',
+            'Type checking failed.', 'exitCode: 1', '["src/main.ts"]', '[]',
+            ${input.createdAt}, ${input.createdAt}
+          )
+        `,
+      );
+    }),
+  );
+
+export const createToolingFailureFixture = (
+  root: string,
+  validationRunId: string,
+  createdAt: string,
+): Effect.Effect<void, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Validation Tooling Failure inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidate_validation_tooling_failures (
+            validation_run_id, error_kind, operation_name, error_message, created_at
+          ) VALUES (
+            ${validationRunId}, 'validation_workspace_setup_failed',
+            'cleanup_validation_worktree', 'Could not remove worktree.', ${createdAt}
+          )
+        `,
+      );
     }),
   );
 
@@ -118,85 +316,74 @@ export const recordImplementationDecisionFixture = (
   root: string,
   changeId: string,
   input: { readonly choice: string; readonly rationale: string; readonly now: string },
-): Effect.Effect<ImplementationDecision, RepositoryStorageError> =>
+): Effect.Effect<{ readonly id: string }, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const changes = yield* openSqliteChangePersistence();
-      const result = yield* changes.recordImplementationDecision({
-        changeId,
-        choice: input.choice,
-        rationale: input.rationale,
-        now: input.now,
-      });
-      if (!result.ok) throw new Error(result.code);
-      return result.decision;
+      const id = randomUUID();
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Implementation Decision inspection fixture",
+        (sql) => sql`
+          INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
+          VALUES (${id}, ${changeId}, ${input.now}, ${input.choice}, ${input.rationale})
+        `,
+      );
+      return { id };
     }),
   );
 
-export const completeChangeFixture = (
+export const createImplementationBlockerFixture = (
   root: string,
   changeId: string,
-  headSha: string,
-  now: string,
+  input: {
+    readonly reportedAt: string;
+    readonly resolvedAt?: string;
+    readonly resolutionContent?: string;
+  },
+): Effect.Effect<{ readonly id: string }, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const id = randomUUID();
+      const repository = yield* RepositorySql;
+      const resolutionId = input.resolvedAt === undefined ? null : randomUUID();
+      yield* repository.operation(
+        "create Implementation Blocker inspection fixture",
+        (sql) => sql`
+          INSERT INTO implementation_blockers (
+            id, change_id, reported_at, content, resolved_at,
+            resolution_id, resolution_recorded_at, resolution_content
+          ) VALUES (
+            ${id}, ${changeId}, ${input.reportedAt}, 'Wait for an external decision.',
+            ${input.resolvedAt ?? null}, ${resolutionId}, ${input.resolvedAt ?? null},
+            ${input.resolutionContent ?? null}
+          )
+        `,
+      );
+      return { id };
+    }),
+  );
+
+export const resolveImplementationBlockerFixture = (
+  root: string,
+  blockerId: string,
+  resolvedAt: string,
 ): Effect.Effect<void, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const changes = yield* openSqliteChangePersistence();
-      const change = yield* changes.getChangeById(changeId);
-      if (change === undefined) throw new Error("Change disappeared");
-      const target = {
-        owner: "acme",
-        repo: "widgets",
-        baseBranch: "main",
-        remoteName: "origin",
-      };
-      const headBranch = change.branchRef.replace(/^refs\/heads\//, "");
-      const publication = {
-        changeId,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
-        changeBaseSha: "base",
-        now,
-      };
-      const begun = yield* changes.beginPublication(publication);
-      if (!begun.ok) throw new Error(begun.code);
-      const recorded = yield* changes.recordPublishedPullRequest({
-        ...publication,
-        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-      });
-      if (!recorded.ok) throw new Error(recorded.code);
-      const result = yield* changes.completeMergedChange({
-        changeId,
-        now,
-        observed: {
-          repository: { owner: target.owner, repo: target.repo },
-          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-          baseBranch: target.baseBranch,
-          headBranch,
-          mergedHeadSha: publication.expectedHeadSha,
-          candidateId: publication.candidateId,
-          validationRunId: publication.validationRunId,
-          expectedHeadSha: publication.expectedHeadSha,
-        },
-      });
-      if (!result.ok) throw new Error(result.code);
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "resolve Implementation Blocker inspection fixture",
+        (sql) => sql`
+          UPDATE implementation_blockers
+          SET resolved_at = ${resolvedAt},
+              resolution_id = ${randomUUID()},
+              resolution_recorded_at = ${resolvedAt},
+              resolution_content = 'Proceed with the accepted implementation.'
+          WHERE id = ${blockerId}
+        `,
+      );
     }),
-  );
-
-export const withValidationPersistence = <A, E>(
-  root: string,
-  use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
-): Effect.Effect<A, E | RepositoryStorageError> =>
-  Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
-    Effect.provide(
-      repositorySqlLayer({
-        statePath: join(root, ".git", "but-why", "state.sqlite"),
-        commonDirectory: join(root, ".git"),
-      }),
-    ),
   );
