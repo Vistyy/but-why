@@ -545,6 +545,27 @@ describe("Candidate Specialist Review phase", () => {
             (item) => item.title,
           ),
         ).toEqual(["Durable Specialist Finding"]);
+
+        git(repo, "commit", "--allow-empty", "-m", "later Specialist successor");
+        const laterSuccessor = yield* Effect.suspend(() =>
+          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:10:00.000Z" }),
+        );
+        if (!laterSuccessor.ok) throw new Error(`Candidate capture failed: ${laterSuccessor.code}`);
+        const laterReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed(success()),
+        );
+        const later = yield* Effect.suspend(() =>
+          runPersisted(
+            laterSuccessor,
+            [policy("standards")],
+            { review: laterReview },
+            "2026-07-15T10:10:00.000Z",
+          ),
+        );
+
+        expect(later.outcome).toBe("passed");
+        expect(laterReview).toHaveBeenCalledTimes(1);
+        expect(laterReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
       }),
     15_000,
   );
