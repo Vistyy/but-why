@@ -8,7 +8,10 @@ import {
   runtimeError,
   success,
 } from "../../../cliResults.js";
+import type { TaskState } from "../../../task/lifecycle.js";
 import { loadTaskReviewInspection } from "../../../task/loadTaskReviewInspection.js";
+import type { PublicTaskId } from "../../../task/taskId.js";
+import type { TaskReviewOutcome } from "../../../task/taskReview.js";
 import type { TaskCommandEnvironment } from "../../task/taskCliSupport.js";
 
 const reviewNotFound = (reviewId: string): CliResult =>
@@ -45,14 +48,10 @@ export const runAbandonCommand = (
     .pipe(
       Effect.map((result) =>
         result.ok
-          ? success(
-              result.status === "abandoned"
-                ? {
-                    ...result,
-                    nextAction: `by task submit ${result.task.id}`,
-                  }
-                : result,
-            )
+          ? success({
+              ...result,
+              nextAction: taskReviewNextAction(result.task, result.outcome),
+            })
           : result.status === "not_found"
             ? reviewNotFound(command.reviewId)
             : runtimeError({
@@ -75,4 +74,17 @@ export const runAbandonCommand = (
       ),
       Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
     );
+};
+
+const taskReviewNextAction = (
+  task: { readonly id: PublicTaskId; readonly state: TaskState },
+  outcome: TaskReviewOutcome,
+): string => {
+  if (task.state === "new") {
+    if (outcome === "passed") return `by task approve ${task.id}`;
+    if (outcome === "blocked") return `by task context draft ${task.id}`;
+    return `by task submit ${task.id}`;
+  }
+  if (task.state === "todo") return `by change start --task ${task.id}`;
+  return `by task show ${task.id}`;
 };

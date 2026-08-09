@@ -6,7 +6,9 @@ import {
   deleteDisposableWorkspaceRef,
   removeDisposableWorktree,
 } from "../disposableWorkspace/disposableWorkspaceGit.js";
+import type { TaskState } from "./lifecycle.js";
 import type { PublicTaskId } from "./taskId.js";
+import type { TaskReviewAbandonmentContext, TaskReviewOutcome } from "./taskReview.js";
 import type { TaskReviewPersistence } from "./taskReviewStore.js";
 import { taskReviewTempRefName } from "./taskReviewWorkspace.js";
 
@@ -31,7 +33,8 @@ export type AbandonTaskReviewResult =
       readonly ok: true;
       readonly status: "already_complete";
       readonly reviewId: string;
-      readonly taskId: PublicTaskId;
+      readonly outcome: TaskReviewOutcome;
+      readonly task: { readonly id: PublicTaskId; readonly state: TaskState };
     }
   | {
       readonly ok: false;
@@ -65,15 +68,10 @@ export const openAbandonTaskReview = (input: {
         })
         .pipe(
           Effect.catchTag("ExecutionLockUnavailable", () =>
-            input.persistence.getActiveByReviewId(command.reviewId).pipe(
-              Effect.map((active) =>
-                active === undefined
-                  ? {
-                      ok: true as const,
-                      status: "already_complete" as const,
-                      reviewId: command.reviewId,
-                      taskId: context.taskId,
-                    }
+            input.persistence.getAbandonmentContext(command.reviewId).pipe(
+              Effect.map((current) =>
+                current?.reviewState === "complete"
+                  ? alreadyCompleteResult(current)
                   : {
                       ok: false as const,
                       status: "submission_in_progress" as const,
@@ -104,13 +102,18 @@ const abandonWhileLocked = (
         cleanup: { worktree: "not_created", tempRef: "not_created" },
       };
     }
+    if (context.reviewState === "complete") return alreadyCompleteResult(context);
     const active = yield* input.persistence.getActiveByReviewId(command.reviewId);
     if (active === undefined) {
+      // The abandonment context decoder requires every running Review to own its
+      // exact Active marker, so this can only be a concurrent persistence change.
+      const current = yield* input.persistence.getAbandonmentContext(command.reviewId);
+      if (current?.reviewState === "complete") return alreadyCompleteResult(current);
       return {
-        ok: true as const,
-        status: "already_complete" as const,
+        ok: false as const,
+        status: "submission_in_progress" as const,
         reviewId: command.reviewId,
-        taskId: context.taskId,
+        cleanup: { worktree: "not_created", tempRef: "not_created" },
       };
     }
 
@@ -161,3 +164,13 @@ const abandonWhileLocked = (
       cleanup,
     };
   });
+
+const alreadyCompleteResult = (
+  context: TaskReviewAbandonmentContext & { readonly reviewState: "complete" },
+): AbandonTaskReviewResult => ({
+  ok: true,
+  status: "already_complete",
+  reviewId: context.reviewId,
+  outcome: context.outcome,
+  task: { id: context.taskId, state: context.taskState },
+});

@@ -133,6 +133,24 @@ describe("by task submission CLI", () => {
         expect(result.nextAction).toBe("by task approve BY-1");
         expect(reviewInputs).toHaveLength(1);
 
+        const repeatedAbandonment = yield* runByInProcessEffect(root, [
+          "--json",
+          "task-review",
+          "abandon",
+          result.review.id,
+          "--reason",
+          "Submission process status was uncertain",
+        ]);
+        expect(repeatedAbandonment.status).toBe(0);
+        expect(JSON.parse(repeatedAbandonment.stdout)).toEqual({
+          ok: true,
+          status: "already_complete",
+          reviewId: result.review.id,
+          outcome: "passed",
+          task: { id: "BY-1", state: "new" },
+          nextAction: "by task approve BY-1",
+        });
+
         const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
         expect(shown.status).toBe(0);
         const show = JSON.parse(shown.stdout) as {

@@ -821,6 +821,20 @@ describe("Task Submission orchestration", () => {
               state: "complete",
               outcome: "tooling_failed",
             });
+
+            expect(
+              yield* abandon.abandon({
+                reviewId: "review-abandon",
+                reason: "Repeated recovery request",
+                now,
+              }),
+            ).toEqual({
+              ok: true,
+              status: "already_complete",
+              reviewId: "review-abandon",
+              outcome: "tooling_failed",
+              task: { id: "BY-1", state: "new" },
+            });
           }),
         );
       }),

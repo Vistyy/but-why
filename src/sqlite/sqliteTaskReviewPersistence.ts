@@ -5,6 +5,7 @@ import { Effect, Schema } from "effect";
 
 import { nonBlankStringSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { isTaskState } from "../task/lifecycle.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import {
   decodePersistedTaskReviewDependencyEvidence,
@@ -333,18 +334,40 @@ const mapActiveTaskReview = (
   return { taskId: storedPublicTaskId(row.taskId), reviewId: row.reviewId };
 };
 
+const decodeActiveTaskReview = (
+  row: ActiveTaskReviewRow,
+): Effect.Effect<ActiveTaskReview, RepositoryPersistedDataInvalid> =>
+  Effect.try({
+    try: () => ({
+      taskId: storedPublicTaskId(row.taskId),
+      reviewId: Schema.decodeUnknownSync(nonBlankStringSchema)(row.reviewId),
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Active Task Review",
+        cause,
+      }),
+  });
+
 const getAbandonmentContext = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.map(
     sql<TaskReviewAbandonmentContextRow>`
       SELECT review.id AS reviewId,
         review.task_id AS taskId,
+        review.state AS reviewState,
+        review.outcome,
+        task.state AS taskState,
         review.base_commit AS submittedSha,
         setup.temp_ref_name AS tempRefName,
         setup.worktree_path AS worktreePath,
         setup.cleanup_worktree AS cleanupWorktree,
-        setup.cleanup_temp_ref AS cleanupTempRef
+        setup.cleanup_temp_ref AS cleanupTempRef,
+        active.task_id AS activeTaskId,
+        active.review_id AS activeReviewId
       FROM task_reviews AS review
+      JOIN tasks AS task ON task.id = review.task_id
       LEFT JOIN task_review_workspace_setups AS setup ON setup.review_id = review.id
+      LEFT JOIN active_task_reviews AS active ON active.review_id = review.id
       WHERE review.id = ${reviewId}
     `,
     (rows) => rows[0],
@@ -355,19 +378,40 @@ const decodeAbandonmentContextOptional = (
 ): Effect.Effect<TaskReviewAbandonmentContext | undefined, RepositoryPersistedDataInvalid> => {
   if (row === undefined) return Effect.succeed(undefined);
   return Effect.try({
-    try: (): TaskReviewAbandonmentContext => ({
-      reviewId: Schema.decodeUnknownSync(nonBlankStringSchema)(row.reviewId),
-      taskId: storedPublicTaskId(row.taskId),
-      submittedSha: Schema.decodeUnknownSync(nonBlankStringSchema)(row.submittedSha),
-      ...(row.tempRefName === null
-        ? {}
-        : { tempRefName: Schema.decodeUnknownSync(nonBlankStringSchema)(row.tempRefName) }),
-      ...(row.worktreePath === null
-        ? {}
-        : { worktreePath: Schema.decodeUnknownSync(nonBlankStringSchema)(row.worktreePath) }),
-      cleanupWorktree: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupWorktree),
-      cleanupTempRef: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupTempRef),
-    }),
+    try: (): TaskReviewAbandonmentContext => {
+      const reviewId = Schema.decodeUnknownSync(nonBlankStringSchema)(row.reviewId);
+      const taskId = storedPublicTaskId(row.taskId);
+      const reviewState = Schema.decodeUnknownSync(taskReviewStateSchema)(row.reviewState);
+      const outcome = Schema.decodeUnknownSync(taskReviewOutcomeSchema)(row.outcome);
+      if (!isTaskState(row.taskState)) throw new Error("Task Review Task has an invalid state");
+      const hasExactActiveMarker = row.activeTaskId === taskId && row.activeReviewId === reviewId;
+      if (
+        (reviewState === "running" && (!hasExactActiveMarker || outcome !== null)) ||
+        (reviewState === "complete" &&
+          (row.activeTaskId !== null || row.activeReviewId !== null || outcome === null))
+      ) {
+        throw new Error("Task Review state, outcome, and Active Review marker do not agree");
+      }
+      const context = {
+        reviewId,
+        taskId,
+        taskState: row.taskState,
+        submittedSha: Schema.decodeUnknownSync(nonBlankStringSchema)(row.submittedSha),
+        ...(row.tempRefName === null
+          ? {}
+          : { tempRefName: Schema.decodeUnknownSync(nonBlankStringSchema)(row.tempRefName) }),
+        ...(row.worktreePath === null
+          ? {}
+          : { worktreePath: Schema.decodeUnknownSync(nonBlankStringSchema)(row.worktreePath) }),
+        cleanupWorktree: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(
+          row.cleanupWorktree,
+        ),
+        cleanupTempRef: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupTempRef),
+      };
+      if (reviewState === "running") return { ...context, reviewState, outcome: null };
+      if (outcome === null) throw new Error("Complete Task Review has no outcome");
+      return { ...context, reviewState, outcome };
+    },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({
         operationName: "decode Task Review abandonment context",
@@ -390,11 +434,41 @@ const validateStoredTaskReviewEvidence = (
       WHERE task_id = ${taskId}
       ORDER BY created_at, id
     `;
+    const activeRows = yield* sql<ActiveTaskReviewRow>`
+      SELECT task_id AS taskId, review_id AS reviewId
+      FROM active_task_reviews
+      WHERE task_id = ${taskId}
+        OR review_id IN (SELECT id FROM task_reviews WHERE task_id = ${taskId})
+    `;
+    const activeReviews = yield* Effect.forEach(activeRows, decodeActiveTaskReview);
+    const reviewIds = new Set(rows.map((row) => row.id));
+    if (
+      activeReviews.some((active) => active.taskId !== taskId || !reviewIds.has(active.reviewId))
+    ) {
+      return yield* invalidData(
+        "validate stored Task Review evidence",
+        `Task ${taskId} has an Active Review marker that does not match its Review history`,
+      );
+    }
     yield* Effect.forEach(
       rows,
       (row) =>
         Effect.gen(function* () {
           const review = yield* decodeReview(row);
+          const matchingActiveReviews = activeReviews.filter(
+            (active) => active.reviewId === review.id,
+          );
+          if (
+            (review.state === "running" &&
+              (matchingActiveReviews.length !== 1 || review.outcome !== null)) ||
+            (review.state === "complete" &&
+              (matchingActiveReviews.length !== 0 || review.outcome === null))
+          ) {
+            return yield* invalidData(
+              "validate stored Task Review evidence",
+              `Task Review ${review.id} state does not match its Active Review marker`,
+            );
+          }
           const findings = yield* listFindings(sql, review.id).pipe(
             Effect.flatMap((findingRows) => Effect.forEach(findingRows, decodeFinding)),
           );
@@ -711,9 +785,14 @@ type TaskReviewCompletionFailureRow = {
 type TaskReviewAbandonmentContextRow = {
   readonly reviewId: string;
   readonly taskId: string;
+  readonly reviewState: string;
+  readonly outcome: string | null;
+  readonly taskState: string;
   readonly submittedSha: string;
   readonly tempRefName: string | null;
   readonly worktreePath: string | null;
   readonly cleanupWorktree: TaskReviewAbandonmentContext["cleanupWorktree"];
   readonly cleanupTempRef: TaskReviewAbandonmentContext["cleanupTempRef"];
+  readonly activeTaskId: string | null;
+  readonly activeReviewId: string | null;
 };

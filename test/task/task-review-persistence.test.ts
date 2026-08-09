@@ -661,6 +661,49 @@ it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
   ),
 );
 
+it.scoped("rejects an orphaned running Review before another admission", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Orphaned running Review", firstNow);
+      const started = yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-orphaned",
+        now: firstNow,
+      });
+      if (!started.ok) throw new Error("start failed");
+
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "orphan running Task Review",
+        (sql) => sql`DELETE FROM active_task_reviews WHERE review_id = 'review-orphaned'`,
+      );
+
+      const attempted = yield* Effect.either(
+        reviews.start({
+          taskId: task.id,
+          baseCommit,
+          policy,
+          reviewId: "review-must-not-compete",
+          now: secondNow,
+        }),
+      );
+      expect(attempted).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+      const rows = yield* repository.operation(
+        "count Task Reviews after orphan rejection",
+        (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM task_reviews`,
+      );
+      expect(rows[0]?.count).toBe(1);
+    }),
+  ),
+);
+
 it.scoped("rejects malformed persisted Review evidence before another admission", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
