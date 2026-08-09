@@ -7,7 +7,7 @@ import { describe, vi } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   CandidateValidation,
-  type ValidateAcceptanceContextCandidateInput,
+  type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
@@ -386,7 +386,7 @@ const validateCandidate = (
 
 const validateAcceptanceContextCandidate = (
   validation: ReturnType<typeof candidateValidationForTest>,
-  input: ValidateAcceptanceContextCandidateInput,
+  input: Parameters<CandidateValidationService["validateAcceptanceContextCandidate"]>[0],
 ) =>
   Effect.gen(function* () {
     const service = yield* CandidateValidation;

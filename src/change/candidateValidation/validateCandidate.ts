@@ -62,7 +62,7 @@ export type ValidateCandidateInput = {
   readonly now: string;
 };
 
-export type ValidateAcceptanceContextCandidateInput = {
+type ValidateAcceptanceContextCandidateInput = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
