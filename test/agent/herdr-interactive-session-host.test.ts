@@ -21,7 +21,7 @@ const emptyAgents = (): { readonly ok: true; readonly stdout: string } => ({
 const openedWorktree = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
   stdout:
-    '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","future_field":true},"already_open":false,"future_field":true}}',
+    '{"result":{"type":"worktree_opened","worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1","branch":null,"future_field":true},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123","future_field":true},"future_field":true},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","future_field":true},"already_open":false,"future_field":true}}',
 });
 
 const input = {
@@ -239,7 +239,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":null},{"path":"/detached-two"},{"path":"/workspace/change-123","branch":"change-123","future_field":true}],"future_field":true}}',
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":"other"},{"path":"/workspace/change-123","branch":null,"future_field":true}],"future_field":true}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
@@ -331,6 +331,90 @@ describe("Herdr Interactive Session Host", () => {
       ok: false,
       code: "launch_indeterminate",
     });
+  });
+
+  it.each([
+    [
+      "a missing worktree",
+      '{"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "the wrong worktree path",
+      '{"worktree":{"path":"/workspace/other","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a missing workspace",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a missing workspace worktree",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1"},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "the wrong workspace checkout path",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/other"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "an empty workspace identifier",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":""},"workspace":{"workspace_id":"","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":""},"root_pane":{"pane_id":"pane-1","workspace_id":"","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a mismatched worktree workspace",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-2"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a missing tab",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "an empty tab identifier",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":""},"already_open":false}',
+    ],
+    [
+      "a tab in another workspace",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-2"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a missing root pane",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"already_open":false}',
+    ],
+    [
+      "an empty root-pane identifier",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a root pane in another workspace",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-2","tab_id":"tab-1"},"already_open":false}',
+    ],
+    [
+      "a root pane in another tab",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-2"},"already_open":false}',
+    ],
+    [
+      "a missing already-open flag",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"}}',
+    ],
+    [
+      "a malformed already-open flag",
+      '{"worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1"},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123"}},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1"},"already_open":"false"}',
+    ],
+  ])("rejects worktree-open output with %s before starting or prompting", async (_description, body) => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      return {
+        ok: true,
+        stdout: `{"result":{"type":"worktree_opened",${body.slice(1)}}`,
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+    });
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "start")).toBe(false);
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "prompt")).toBe(false);
   });
 
   it("does not retry a malformed agent-pane-busy error envelope", async () => {
