@@ -12,8 +12,6 @@ export type DisposableWorkspace = {
   readonly worktreePath: string;
 };
 
-export type DisposableWorkspaceRunResult = unknown;
-
 export type DisposableWorkspaceSetup = {
   readonly workspaceRef: string;
   readonly tempRefName: string;

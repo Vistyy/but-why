@@ -3,69 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CleanupState } from "../validationRun/cleanup.js";
 
-const zeroSha = "0000000000000000000000000000000000000000";
 const validationGitOperationTimeoutMs = 30_000;
-
-export const ensureValidationTempRef = (
-  repoRoot: string,
-  tempRefName: string,
-  submittedSha: string,
-): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
-  const existing = git(repoRoot, ["rev-parse", "--verify", `${tempRefName}^{commit}`]);
-
-  if (existing.ok) {
-    const existingSha = existing.stdout.trim();
-
-    if (existingSha === submittedSha) {
-      return { ok: true };
-    }
-
-    return {
-      ok: false,
-      message: `Validation temp ref ${tempRefName} already points to ${existingSha}, not ${submittedSha}.`,
-    };
-  }
-
-  const created = git(repoRoot, ["update-ref", "--no-deref", tempRefName, submittedSha, zeroSha]);
-
-  if (created.ok) {
-    return { ok: true };
-  }
-
-  const raced = git(repoRoot, ["rev-parse", "--verify", `${tempRefName}^{commit}`]);
-
-  if (raced.ok && raced.stdout.trim() === submittedSha) {
-    return { ok: true };
-  }
-
-  return { ok: false, message: created.message };
-};
-
-export const inspectExistingWorktree = (
-  worktreePath: string,
-):
-  | { readonly exists: false }
-  | {
-      readonly exists: true;
-      readonly branch: string | undefined;
-      readonly head: string | undefined;
-      readonly dirty: boolean;
-    } => {
-  if (!existsSync(worktreePath)) {
-    return { exists: false };
-  }
-
-  const branch = git(worktreePath, ["rev-parse", "--symbolic-full-name", "HEAD"]);
-  const head = git(worktreePath, ["rev-parse", "HEAD"]);
-  const status = git(worktreePath, ["status", "--porcelain=v1"]);
-
-  return {
-    exists: true,
-    branch: branch.ok ? branch.stdout.trim() : undefined,
-    head: head.ok ? head.stdout.trim() : undefined,
-    dirty: !status.ok || status.stdout.trim().length > 0,
-  };
-};
 
 export const removeValidationWorktree = (repoRoot: string, worktreePath: string): boolean => {
   git(repoRoot, ["worktree", "remove", "--force", worktreePath]);

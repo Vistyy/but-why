@@ -33,7 +33,7 @@ id: sandcastle-factories-belong-to-workspace
 valid:
   - import type { Sandbox } from "@ai-hero/sandcastle";
   - import { pi, type Sandbox } from "@ai-hero/sandcastle";
-  - createValidationWorkspace(input)
+  - runDisposableExactCommitWorkspace(input)
 invalid:
   - import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";
   - import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";

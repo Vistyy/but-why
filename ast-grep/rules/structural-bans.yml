@@ -45,11 +45,11 @@ rule:
 id: sandcastle-factories-belong-to-workspace
 language: TypeScript
 severity: error
-message: Do not load Sandcastle workspace factories outside src/change/validation/createValidationWorkspace.ts because workspace creation owns sandbox lifecycle; use createValidationWorkspace.
+message: Do not load Sandcastle workspace factories outside src/disposableWorkspace/runDisposableExactCommitWorkspace.ts because the disposable workspace Adapter owns sandbox lifecycle; use runDisposableExactCommitWorkspace.
 files:
   - src/**/*.ts
 ignores:
-  - src/change/validation/createValidationWorkspace.ts
+  - src/disposableWorkspace/runDisposableExactCommitWorkspace.ts
 rule:
   any:
     - all:
