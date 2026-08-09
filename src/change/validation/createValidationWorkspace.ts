@@ -158,6 +158,7 @@ const validationOperation = (operationName: string): string => {
 
 const validationErrorMessage = (message: string): string =>
   message
+    .replace("Disposable workspace ref", "Validation temp ref")
     .replace("Allowlisted workspace file", "Allowlisted validation workspace file")
     .replace(
       "Disposable worktree already exists for a different workspace reference",
