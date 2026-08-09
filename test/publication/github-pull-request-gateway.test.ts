@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { localGitHubPullRequestGateway } from "../../src/submissionEnvironment/localGitHubPullRequestGateway.js";
 
+const remoteHeadResponse = (sha?: string): string =>
+  JSON.stringify({
+    data: {
+      repository: {
+        ref: sha === undefined ? null : { name: "refs/heads/feature", target: { oid: sha } },
+      },
+    },
+  });
+
 describe("GitHub pull request gateway", () => {
   it("pushes the exact Candidate SHA before creating the pull request", () => {
     const gitCalls: (readonly string[])[] = [];
@@ -24,7 +33,9 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+            args[1] === "graphql"
+              ? remoteHeadResponse()
+              : '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -56,14 +67,6 @@ describe("GitHub pull request gateway", () => {
       ["remote", "get-url", "--push", "--all", "origin"],
       [
         "-c",
-        "url.https://github.com/acme/widgets.git.insteadOf=https://github.com/acme/widgets.git",
-        "ls-remote",
-        "--heads",
-        "https://github.com/acme/widgets.git",
-        "refs/heads/feature",
-      ],
-      [
-        "-c",
         "url.https://github.com/acme/widgets.git.pushInsteadOf=https://github.com/acme/widgets.git",
         "push",
         "--force-with-lease=refs/heads/feature:",
@@ -71,21 +74,21 @@ describe("GitHub pull request gateway", () => {
         "candidate-sha:refs/heads/feature",
       ],
     ]);
-    expect(ghCalls).toEqual([
-      [
-        "api",
-        "--method",
-        "POST",
-        "repos/acme/widgets/pulls",
-        "-f",
-        "title=Publish Candidate",
-        "-f",
-        "head=feature",
-        "-f",
-        "base=main",
-        "-f",
-        "body=Validation facts",
-      ],
+    expect(ghCalls).toHaveLength(2);
+    expect(ghCalls[0]).toContain("qualifiedName=refs/heads/feature");
+    expect(ghCalls[1]).toEqual([
+      "api",
+      "--method",
+      "POST",
+      "repos/acme/widgets/pulls",
+      "-f",
+      "title=Publish Candidate",
+      "-f",
+      "head=feature",
+      "-f",
+      "base=main",
+      "-f",
+      "body=Validation facts",
     ]);
   });
 
@@ -275,9 +278,7 @@ describe("GitHub pull request gateway", () => {
                 : "other-head\trefs/heads/feature\n",
         };
       },
-      runGh: () => {
-        throw new Error("Must not create a PR from an existing remote head");
-      },
+      runGh: () => ({ ok: true, stdout: remoteHeadResponse("other-head") }),
     });
 
     expect(
@@ -293,11 +294,7 @@ describe("GitHub pull request gateway", () => {
         body: "Validation facts",
       }),
     ).toEqual({ ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: "other-head" });
-    expect(gitCalls.map((args) => (args.includes("ls-remote") ? "ls-remote" : args[0]))).toEqual([
-      "rev-parse",
-      "remote",
-      "ls-remote",
-    ]);
+    expect(gitCalls.map((args) => args[0])).toEqual(["rev-parse", "remote"]);
   });
 
   it("checks the local branch immediately before pushing an exact Candidate", () => {
@@ -354,7 +351,7 @@ describe("GitHub pull request gateway", () => {
           return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
         return { ok: false, status: 128, stderr: "remote unavailable" };
       },
-      runGh: () => ({ ok: true, stdout: "" }),
+      runGh: () => ({ ok: false, status: 1, stderr: "remote unavailable" }),
     });
     expect(
       gateway.createPullRequest({
@@ -375,6 +372,54 @@ describe("GitHub pull request gateway", () => {
     });
   });
 
+  it("treats malformed GitHub branch facts as unavailable without publication mutation", () => {
+    const responses = [
+      "not-json",
+      "{}",
+      '{"data":{"repository":null}}',
+      '{"data":{"repository":{"ref":{"name":"refs/heads/other","target":{"oid":"candidate-sha"}}}}}',
+      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{}}}}}',
+      '{"data":{"repository":{"ref":null}},"errors":[{"message":"unavailable"}]}',
+    ];
+    for (const stdout of responses) {
+      const gitCalls: (readonly string[])[] = [];
+      let ghCalls = 0;
+      const gateway = localGitHubPullRequestGateway({
+        runGit: (args) => {
+          gitCalls.push(args);
+          return {
+            ok: true,
+            stdout:
+              args[0] === "rev-parse" ? "candidate-sha\n" : "https://github.com/acme/widgets.git\n",
+          };
+        },
+        runGh: () => {
+          ghCalls += 1;
+          return { ok: true, stdout };
+        },
+      });
+      expect(
+        gateway.createPullRequest({
+          owner: "acme",
+          repo: "widgets",
+          remoteName: "origin",
+          baseBranch: "main",
+          headBranch: "feature",
+          branchRef: "refs/heads/feature",
+          expectedHeadSha: "candidate-sha",
+          title: "Publish",
+          body: "Body",
+        }),
+      ).toMatchObject({
+        ok: false,
+        code: "remote_lookup_failed",
+        evidence: { operation: "remote_lookup", classification: "response_parse_failure" },
+      });
+      expect(gitCalls.map((args) => args[0])).toEqual(["rev-parse", "remote"]);
+      expect(ghCalls).toBe(1);
+    }
+  });
+
   it("accepts an exact existing remote branch during recovery without pushing again", () => {
     const gitCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({
@@ -390,10 +435,12 @@ describe("GitHub pull request gateway", () => {
                 : "candidate-sha\trefs/heads/feature\n",
         };
       },
-      runGh: () => ({
+      runGh: (args) => ({
         ok: true,
         stdout:
-          '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+          args[1] === "graphql"
+            ? remoteHeadResponse("candidate-sha")
+            : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
       }),
     });
     expect(
@@ -410,11 +457,7 @@ describe("GitHub pull request gateway", () => {
         body: "Body",
       }),
     ).toMatchObject({ ok: true });
-    expect(gitCalls.map((args) => (args.includes("ls-remote") ? "ls-remote" : args[0]))).toEqual([
-      "rev-parse",
-      "remote",
-      "ls-remote",
-    ]);
+    expect(gitCalls.map((args) => args[0])).toEqual(["rev-parse", "remote"]);
   });
 
   it("preserves failed local head preflight evidence for create and update", () => {
@@ -461,7 +504,7 @@ describe("GitHub pull request gateway", () => {
           stderr: "Authorization: SUPERSECRET",
         };
       },
-      runGh: () => ({ ok: true, stdout: "" }),
+      runGh: () => ({ ok: true, stdout: remoteHeadResponse() }),
     });
     expect(
       gateway.createPullRequest({
@@ -584,7 +627,8 @@ describe("GitHub pull request gateway", () => {
                 ? "https://github.com/acme/widgets.git\n"
                 : "",
         }),
-        runGh: () => response,
+        runGh: (args) =>
+          args[1] === "graphql" ? { ok: true, stdout: remoteHeadResponse() } : response,
       });
       expect(gateway.createPullRequest(request)).toMatchObject({
         ok: false,
@@ -890,7 +934,7 @@ describe("GitHub pull request gateway", () => {
     expect(unavailable.readRemoteBranchHead?.(input)).toEqual({ state: "unavailable" });
   });
 
-  it("returns bounded redacted evidence for a rejected creation", () => {
+  it("returns normalized safe evidence for a rejected creation", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => ({
         ok: true,
@@ -909,7 +953,7 @@ describe("GitHub pull request gateway", () => {
               stdout: "token=SECRET",
               stderr: "Authorization:\nBearer SECRET",
             }
-          : { ok: true, stdout: "" },
+          : { ok: true, stdout: remoteHeadResponse() },
     });
     const result = gateway.createPullRequest({
       owner: "acme",

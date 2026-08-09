@@ -379,7 +379,7 @@ const createPullRequest = (
   }
   const destination = resolvePushDestination(runGit, request);
   if (!destination.ok) return destination.failure;
-  const remoteHead = initialRemoteHeadState(runGit, request, destination.url);
+  const remoteHead = initialRemoteHeadState(runGh, request);
   if (remoteHead.kind === "unknown")
     return {
       ok: false,
@@ -517,37 +517,63 @@ const hasExpectedLocalHead = (
 };
 
 const initialRemoteHeadState = (
-  runGit: PublicationCommandRunner,
+  runGh: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
-  destination: string,
 ): {
   readonly kind: "missing" | "present" | "unknown";
   readonly sha?: string;
   readonly evidence?: ReturnType<typeof evidence>;
 } => {
-  const remoteHead = runGit([
-    "-c",
-    `url.${destination}.insteadOf=${destination}`,
-    "ls-remote",
-    "--heads",
-    destination,
-    `refs/heads/${request.headBranch}`,
+  const qualifiedName = `refs/heads/${request.headBranch}`;
+  const result = runGh([
+    "api",
+    "graphql",
+    "-f",
+    `query=${remoteBranchQuery}`,
+    "-f",
+    `owner=${request.owner}`,
+    "-f",
+    `repo=${request.repo}`,
+    "-f",
+    `qualifiedName=${qualifiedName}`,
   ]);
-  if (!remoteHead.ok)
+  if (!result.ok)
     return {
       kind: "unknown",
-      evidence: evidence(
-        "remote_lookup",
-        remoteHead,
-        remoteHead.status === undefined &&
-          remoteHead.stdout === undefined &&
-          remoteHead.stderr === undefined
-          ? "unavailable"
-          : "rejected",
-      ),
+      evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
-  const sha = remoteHead.stdout.trim().split(/\s+/)[0] ?? "";
-  return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
+  const parsed = parseJson(result.stdout);
+  if (!isObjectRecord(parsed) || hasGraphqlErrors(parsed))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const data = parsed["data"];
+  if (!isObjectRecord(data))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const repository = data["repository"];
+  if (!isObjectRecord(repository))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const ref = repository["ref"];
+  if (ref === null) return { kind: "missing" };
+  if (!isObjectRecord(ref) || ref["name"] !== qualifiedName)
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const target = ref["target"];
+  if (!isObjectRecord(target) || typeof target["oid"] !== "string")
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  return { kind: "present", sha: target["oid"] };
 };
 
 type PushDestinationFailureReason =
