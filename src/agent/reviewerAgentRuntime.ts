@@ -21,12 +21,12 @@ import {
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { piResourceFlags } from "./piRuntime.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
-import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
 export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecutionFailed")<{
   readonly operationName: string;
   readonly message: string;
   readonly diagnostics?: readonly ContractDiagnostic[];
+  readonly correctionPrompt?: string;
 }> {}
 
 export type ReviewerOutputDecoder<Output> = (
@@ -37,6 +37,7 @@ export type ReviewerRuntimeFailure = {
   readonly operationName: string;
   readonly message: string;
   readonly diagnostics?: readonly ContractDiagnostic[];
+  readonly correctionPrompt?: string;
 };
 
 export type ReviewerAgentRuntime<Output = unknown> = {
@@ -198,7 +199,7 @@ const reviewWithPi = <Output>(
       }
       attempts += 1;
       const corrected = yield* Effect.either(
-        runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(failure))),
+        runSandbox(() => resume(failure.correctionPrompt ?? failure.message)),
       );
       if (corrected._tag === "Left") {
         restoreSession();

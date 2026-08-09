@@ -9,6 +9,7 @@ import {
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import {
+  buildReviewerOutputCorrectionPrompt,
   buildReviewerRevisionPrompt,
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
@@ -281,6 +282,7 @@ const runSpecialist = (
                   operationName: failure.operationName,
                   message: failure.message,
                   diagnostics: failure.diagnostics,
+                  correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
                 }),
             ),
           ),

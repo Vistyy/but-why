@@ -9,6 +9,7 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import {
   buildAcceptanceReviewerPrompt,
+  buildReviewerOutputCorrectionPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -253,6 +254,7 @@ const runAcceptanceReviewPhaseImpl = (
                   operationName: failure.operationName,
                   message: failure.message,
                   diagnostics: failure.diagnostics,
+                  correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
                 }),
             ),
           ),

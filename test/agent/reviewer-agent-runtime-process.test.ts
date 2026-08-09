@@ -10,6 +10,7 @@ import {
   piReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
 
 const decodeEmptyFindings = (output: unknown) =>
@@ -20,6 +21,7 @@ const decodeEmptyFindings = (output: unknown) =>
           operationName: failure.operationName,
           message: failure.message,
           diagnostics: failure.diagnostics,
+          correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
         }),
     ),
   );
