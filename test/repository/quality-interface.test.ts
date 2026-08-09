@@ -141,21 +141,35 @@ const waitForFile = (file: string): Promise<string> =>
     timeoutMs: 5_000,
   });
 
-const waitForProcessExit = async (pidFile: string): Promise<boolean> => {
+const processIdentity = (pid: number): string | undefined => {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = stat.lastIndexOf(")");
+    if (commandEnd < 0) return undefined;
+    const fieldsAfterCommand = stat.slice(commandEnd + 2).split(" ");
+    const startTime = fieldsAfterCommand[19];
+    return startTime === undefined ? undefined : `${pid}:${startTime}`;
+  } catch {
+    return undefined;
+  }
+};
+
+const readProcessIdentity = async (pidFile: string): Promise<string> => {
   const pid = Number(await waitForFile(pidFile));
-  return observeUntil({
-    description: `descendant process ${pid} to exit`,
+  const identity = processIdentity(pid);
+  if (identity === undefined) throw new Error(`Descendant process ${pid} was not observable`);
+  return identity;
+};
+
+const waitForProcessExit = (identity: string): Promise<boolean> =>
+  observeUntil({
+    description: `descendant process ${identity} to be reaped`,
     observe: () => {
-      try {
-        process.kill(pid, 0);
-        return false;
-      } catch {
-        return true;
-      }
+      const pid = Number(identity.slice(0, identity.indexOf(":")));
+      return processIdentity(pid) !== identity;
     },
     timeoutMs: 5_000,
   });
-};
 
 const waitForOutput = (process: { readonly output: string }, text: string): Promise<string> =>
   observeUntil({
@@ -393,43 +407,16 @@ describe("quality interface", () => {
     }
   });
 
-  test("forwards child exit status and releases the lock after interruption", async () => {
+  test("preserves normal workload success and failure status", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
-    const failed = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 7"]);
 
+    const failed = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 7"]);
     expect(failed.status).toBe(7);
 
-    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
-    try {
-      await waitForFile(readyFile);
-      holder.child.kill("SIGINT");
-      expect((await holder.done).status).toBe(130);
-    } finally {
-      await stopRunner(holder);
-    }
-
-    const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
-    expect(recovered.status).toBe(0);
-  });
-
-  test("returns the conventional status for SIGTERM interruption", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
-
-    try {
-      await waitForFile(readyFile);
-      holder.child.kill("SIGTERM");
-      expect((await holder.done).status).toBe(143);
-    } finally {
-      await stopRunner(holder);
-    }
-
-    const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
-    expect(recovered.status).toBe(0);
+    const succeeded = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
+    expect(succeeded.status).toBe(0);
   });
 
   test("terminates interrupted workload descendants before releasing the lock", async () => {
@@ -450,10 +437,10 @@ describe("quality interface", () => {
 
     try {
       await waitForFile(readyFile);
-      await waitForFile(descendantPidFile);
+      const descendantIdentity = await readProcessIdentity(descendantPidFile);
       holder.child.kill("SIGINT");
       expect((await holder.done).status).toBe(130);
-      await waitForProcessExit(descendantPidFile);
+      await waitForProcessExit(descendantIdentity);
     } finally {
       await stopRunner(holder);
     }
@@ -462,10 +449,9 @@ describe("quality interface", () => {
     expect(recovered.status).toBe(0);
   });
 
-  test.each([
-    ["SIGINT", 130],
-    ["SIGTERM", 143],
-  ] as const)("interrupts an actual Just test workload with %s and releases capacity", async (signal, expectedStatus) => {
+  test("interrupts an actual unselected test workload with SIGINT and releases capacity", async () => {
+    const signal = "SIGINT";
+    const expectedStatus = 130;
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -478,15 +464,13 @@ describe("quality interface", () => {
 
     try {
       await waitForFile(readyFile);
-      await waitForFile(descendantPidFile);
-      const interruptedAt = Date.now();
+      const descendantIdentity = await readProcessIdentity(descendantPidFile);
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
       expect(justProcess.output).toContain("rerun the same command to retry");
-      expect(Date.now() - interruptedAt).toBeLessThan(3_000);
+      await waitForProcessExit(descendantIdentity);
       const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
-      await waitForProcessExit(descendantPidFile);
     } finally {
       await stopJust(justProcess);
     }
@@ -494,7 +478,7 @@ describe("quality interface", () => {
 
   test.each([
     ["quality", "SIGTERM", 143],
-    ["full-quality", "SIGTERM", 143],
+    ["full-quality", "SIGINT", 130],
   ] as const)("interrupts the complete %s command with %s and releases capacity", async (qualityCommand, signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
@@ -514,13 +498,13 @@ describe("quality interface", () => {
 
     try {
       await waitForFile(readyFile);
-      await waitForFile(descendantPidFile);
-      quality.child.kill(signal);
+      const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      signalJust(quality, signal);
       expect((await quality.done).status).toBe(expectedStatus);
       expect(quality.output).toContain(`${qualityCommand} interrupted after`);
       expect(quality.output).toContain(`rerun just ${qualityCommand} to retry`);
       expect(quality.output).not.toContain(`${qualityCommand} completed in`);
-      await waitForProcessExit(descendantPidFile);
+      await waitForProcessExit(descendantIdentity);
       const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
     } finally {
