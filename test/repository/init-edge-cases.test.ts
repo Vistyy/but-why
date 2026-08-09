@@ -181,6 +181,23 @@ help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, th
   it.effect("reports state_store_unavailable when Shared Repository State cannot be opened", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
+      mkdirSync(join(root, ".git", "but-why", "state.sqlite"), { recursive: true });
+
+      const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe(`error:
+  code: state_store_unavailable
+  message: Shared But Why? state is unavailable.
+help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."
+`);
+    }),
+  );
+
+  it.effect("reports state_store_unavailable when Shared Repository State migration fails", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
       const statePath = join(root, ".git", "but-why", "state.sqlite");
       mkdirSync(join(root, ".git", "but-why"), { recursive: true });
       writeFileSync(statePath, "not sqlite");
