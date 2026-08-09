@@ -728,6 +728,27 @@ it.scoped("completion requires the Active Review marker and rejects passing Find
       expect(completed).toEqual({ ok: false, code: "review_not_active" });
       expect(yield* tasks.getTaskById(missingMarker.id)).toMatchObject({ state: "new" });
 
+      const mutation = yield* Effect.either(
+        tasks.updateTaskContext({
+          taskId: missingMarker.id,
+          title: "Must remain unchanged",
+          description: "An orphaned running Review is malformed persisted data.",
+          now: secondNow,
+        }),
+      );
+      expect(mutation).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+
+      yield* transitionTaskToTodo(missingMarker.id, secondNow);
+      const changes = yield* openSqliteChangeStartPersistence();
+      const changeStart = yield* Effect.either(changes.prepareTask(missingMarker.id));
+      expect(changeStart).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+
       const passingFindings = yield* createTask(tasks, "Passing with findings", firstNow);
       yield* reviews.start({
         taskId: passingFindings.id,

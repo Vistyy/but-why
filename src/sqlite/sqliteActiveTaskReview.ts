@@ -28,6 +28,15 @@ export const readValidatedActiveTaskReviewForTask = (
       FROM active_task_reviews AS active
       LEFT JOIN task_reviews AS review ON review.id = active.review_id
       WHERE active.task_id = ${taskId} OR review.task_id = ${taskId}
+      UNION ALL
+      SELECT NULL AS markerTaskId, review.id AS reviewId,
+        review.task_id AS reviewTaskId, review.state AS reviewState,
+        review.outcome AS reviewOutcome
+      FROM task_reviews AS review
+      WHERE review.task_id = ${taskId} AND review.state = 'running'
+        AND NOT EXISTS (
+          SELECT 1 FROM active_task_reviews AS active WHERE active.review_id = review.id
+        )
     `;
     if (rows.length === 0) return undefined;
     if (rows.length !== 1) {
