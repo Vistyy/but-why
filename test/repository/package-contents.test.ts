@@ -9,8 +9,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect } from "vitest";
 
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
@@ -213,31 +214,32 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
-  it("loads installed continuation assets and reports invalid or missing extensions truthfully", async () => {
-    const { installedPackage, installedRoot: installed } = prepared;
-    expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
-      "continue-change",
-    );
-    const repository = createGitRepo();
-    mkdirSync(join(repository, ".git", "but-why"), { recursive: true });
-    mkdirSync(join(repository, ".but-why"));
-    writeFileSync(join(repository, ".but-why", "config.json"), '{"taskPrefix":"BY"}\n');
-    const change = await Effect.runPromise(
-      createChangeImplementFixture(repository, {
-        managedRepoConfig: {
-          taskPrefix: "BY",
-          agentEnvironment: { command: ["nix", "develop", "-c"] },
-        },
-      }),
-    );
-    const tools = createTestWorkspace();
-    writeFileSync(
-      join(tools, "gh"),
-      '#!/usr/bin/env sh\nif [ "$1" = "repo" ] && [ "$2" = "view" ]; then printf \'{\\"defaultBranchRef\\":{\\"name\\":\\"main\\"}}\\n\'; exit 0; fi\nexit 1\n',
-    );
-    writeFileSync(
-      join(tools, "herdr"),
-      `#!/usr/bin/env sh
+  it.effect(
+    "loads installed continuation assets and reports invalid or missing extensions truthfully",
+    () =>
+      Effect.gen(function* () {
+        const { installedPackage, installedRoot: installed } = prepared;
+        expect(
+          readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8"),
+        ).toContain("continue-change");
+        const repository = createGitRepo();
+        mkdirSync(join(repository, ".git", "but-why"), { recursive: true });
+        mkdirSync(join(repository, ".but-why"));
+        writeFileSync(join(repository, ".but-why", "config.json"), '{"taskPrefix":"BY"}\n');
+        const change = yield* createChangeImplementFixture(repository, {
+          managedRepoConfig: {
+            taskPrefix: "BY",
+            agentEnvironment: { command: ["nix", "develop", "-c"] },
+          },
+        });
+        const tools = createTestWorkspace();
+        writeFileSync(
+          join(tools, "gh"),
+          '#!/usr/bin/env sh\nif [ "$1" = "repo" ] && [ "$2" = "view" ]; then printf \'{\\"defaultBranchRef\\":{\\"name\\":\\"main\\"}}\\n\'; exit 0; fi\nexit 1\n',
+        );
+        writeFileSync(
+          join(tools, "herdr"),
+          `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
   if [ -f "$BY_FAKE_CAPTURE.started" ]; then
     printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
@@ -263,91 +265,93 @@ if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
 fi
 exit 1
 `,
-    );
-    chmodSync(join(tools, "gh"), 0o755);
-    chmodSync(join(tools, "herdr"), 0o755);
-    const bin = join(installed, "node_modules", ".bin", "by");
-    const env = {
-      // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
-      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
-      BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
-    };
-    const isolatedHome = createTestWorkspace();
-    mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
-    writeFileSync(
-      join(isolatedHome, ".config", "but-why", "config.json"),
-      `${JSON.stringify({
-        defaultAgentProfile: { scope: "global", name: "test" },
-        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
-      })}\n`,
-    );
-    const implement = runTestProcess(bin, ["--json", "change", "implement", change.id], {
-      cwd: repository,
-      env: {
-        ...env,
-        BY_FAKE_WORKTREE: change.worktreePath,
-        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
-      },
-      isolatedHome,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
-    const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
-    const extension = join(installedPackage, "extensions/continue-change.ts");
-    const commandGuidance = join(
-      installedPackage,
-      "docs/public/skills/but-why/references/command-guidance.md",
-    );
-    const implementationInstructions = join(
-      installedPackage,
-      "docs/public/skills/but-why/references/implement-change.md",
-    );
-    expect(startArgs).toContain(extension);
-    expect(startArgs).toContain(commandGuidance);
-    expect(startArgs).toContain(implementationInstructions);
-    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain("Change identity:");
+        );
+        chmodSync(join(tools, "gh"), 0o755);
+        chmodSync(join(tools, "herdr"), 0o755);
+        const bin = join(installed, "node_modules", ".bin", "by");
+        const env = {
+          // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
+          PATH: `${tools}:${process.env["PATH"] ?? ""}`,
+          BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
+        };
+        const isolatedHome = createTestWorkspace();
+        mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
+        writeFileSync(
+          join(isolatedHome, ".config", "but-why", "config.json"),
+          `${JSON.stringify({
+            defaultAgentProfile: { scope: "global", name: "test" },
+            agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+          })}\n`,
+        );
+        const implement = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+          cwd: repository,
+          env: {
+            ...env,
+            BY_FAKE_WORKTREE: change.worktreePath,
+            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+          },
+          isolatedHome,
+          timeout: packageProcessTimeoutMs,
+        });
+        expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
+        const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
+        const extension = join(installedPackage, "extensions/continue-change.ts");
+        const commandGuidance = join(
+          installedPackage,
+          "docs/public/skills/but-why/references/command-guidance.md",
+        );
+        const implementationInstructions = join(
+          installedPackage,
+          "docs/public/skills/but-why/references/implement-change.md",
+        );
+        expect(startArgs).toContain(extension);
+        expect(startArgs).toContain(commandGuidance);
+        expect(startArgs).toContain(implementationInstructions);
+        expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain("Change identity:");
 
-    writeFileSync(extension, "export default 42;\n");
-    rmSync(env.BY_FAKE_CAPTURE);
-    const invalidExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
-      cwd: repository,
-      env: {
-        ...env,
-        BY_FAKE_WORKTREE: change.worktreePath,
-        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
-      },
-      isolatedHome,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(invalidExtension.status).toBe(1);
-    expect(JSON.parse(invalidExtension.stdout)).toMatchObject({
-      error: {
-        code: "launch_failed",
-        message: expect.stringContaining(
-          "Required trusted continuation extension failed preflight",
-        ),
-      },
-    });
-    expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
+        writeFileSync(extension, "export default 42;\n");
+        rmSync(env.BY_FAKE_CAPTURE);
+        const invalidExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+          cwd: repository,
+          env: {
+            ...env,
+            BY_FAKE_WORKTREE: change.worktreePath,
+            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+          },
+          isolatedHome,
+          timeout: packageProcessTimeoutMs,
+        });
+        expect(invalidExtension.status).toBe(1);
+        expect(JSON.parse(invalidExtension.stdout)).toMatchObject({
+          error: {
+            code: "launch_failed",
+            message: expect.stringContaining(
+              "Required trusted continuation extension failed preflight",
+            ),
+          },
+        });
+        expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
 
-    rmSync(extension);
-    const missingExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
-      cwd: repository,
-      env: {
-        ...env,
-        BY_FAKE_WORKTREE: change.worktreePath,
-        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
-      },
-      isolatedHome,
-      timeout: packageProcessTimeoutMs,
-    });
-    expect(missingExtension.status).toBe(1);
-    expect(JSON.parse(missingExtension.stdout)).toMatchObject({
-      error: {
-        code: "launch_failed",
-        message: expect.stringContaining("Required trusted continuation extension is missing"),
-      },
-    });
-    expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
-  }, 120_000);
+        rmSync(extension);
+        const missingExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+          cwd: repository,
+          env: {
+            ...env,
+            BY_FAKE_WORKTREE: change.worktreePath,
+            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+          },
+          isolatedHome,
+          timeout: packageProcessTimeoutMs,
+        });
+        expect(missingExtension.status).toBe(1);
+        expect(JSON.parse(missingExtension.stdout)).toMatchObject({
+          error: {
+            code: "launch_failed",
+            message: expect.stringContaining("Required trusted continuation extension is missing"),
+          },
+        });
+        expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
+      }),
+    120_000,
+  );
 });
