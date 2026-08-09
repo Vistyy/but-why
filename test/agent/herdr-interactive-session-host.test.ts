@@ -15,13 +15,13 @@ const systemPromptPaths = [
 
 const emptyAgents = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
-  stdout: '{"result":{"type":"agent_list","agents":[]}}',
+  stdout: '{"result":{"type":"agent_list","agents":[],"future_field":true}}',
 });
 
 const openedWorktree = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
   stdout:
-    '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1"},"already_open":false}}',
+    '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","future_field":true},"already_open":false,"future_field":true}}',
 });
 
 const input = {
@@ -42,10 +42,14 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
       if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
       if (args[0] === "agent" && args[1] === "start") {
-        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"},"future_field":true}}',
+        };
       }
       if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_prompted","future_field":true}}' };
       }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
@@ -115,7 +119,10 @@ describe("Herdr Interactive Session Host", () => {
               '{"error":{"code":"agent_pane_busy","message":"pane shell is still starting"}}',
           };
         }
-        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
+        return {
+          ok: true,
+          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+        };
       }
       if (args[0] === "agent" && args[1] === "prompt") {
         return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
@@ -172,7 +179,10 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
       if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
       if (args[0] === "agent" && args[1] === "start") {
-        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
+        return {
+          ok: true,
+          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+        };
       }
       if (args[0] === "agent" && args[1] === "prompt") {
         return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
@@ -213,6 +223,130 @@ describe("Herdr Interactive Session Host", () => {
         "--no-context-files",
       ]),
     );
+  });
+
+  it("accepts a worktree-list confirmation with unknown fields after an uncertain open", async () => {
+    const commands: string[][] = [];
+    let openAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree" && args[1] === "open") {
+        openAttempts += 1;
+        return openAttempts === 1 ? { ok: false, message: "response lost" } : openedWorktree();
+      }
+      if (args[0] === "worktree" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":null},{"path":"/detached-two"},{"path":"/workspace/change-123","branch":"change-123","future_field":true}],"future_field":true}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "start") {
+        return {
+          ok: true,
+          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "prompt") {
+        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toEqual({
+      ok: true,
+      host: "herdr",
+      status: "started",
+    });
+    expect(commands.filter((args) => args[0] === "worktree" && args[1] === "open")).toHaveLength(2);
+  });
+
+  it("does not confirm a worktree from a list containing an entry without a path", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent") return emptyAgents();
+      if (args[0] === "worktree" && args[1] === "open") {
+        return { ok: false, message: "response lost" };
+      }
+      return {
+        ok: true,
+        stdout:
+          '{"result":{"type":"worktree_list","worktrees":[{"branch":null},{"path":"/workspace/change-123","branch":"change-123"}]}}',
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+    });
+    expect(commands.filter((args) => args[0] === "worktree" && args[1] === "open")).toHaveLength(1);
+  });
+
+  it.each([
+    ["invalid JSON syntax", "{"],
+    ["an array response", "[]"],
+    ["an array result", '{"result":[]}'],
+    ["the wrong family", '{"result":{"type":"worktree_list","agents":[]}}'],
+    ["a missing required field", '{"result":{"type":"agent_list"}}'],
+    [
+      "a malformed agent",
+      '{"result":{"type":"agent_list","agents":[{"cwd":"/workspace/change-123","pane_id":"pane-1"}]}}',
+    ],
+  ])("does not affirm existing session state from %s", async (_description, stdout) => {
+    const execute: HerdrCommandExecutor = async () => ({ ok: true, stdout });
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+    });
+  });
+
+  it.each([
+    [
+      "worktree_opened",
+      '{"result":{"type":"worktree_opened","workspace":{},"root_pane":{"pane_id":"pane-1"}}}',
+    ],
+    ["agent_started", '{"result":{"type":"agent_started","agent":{"terminal_id":[]}}}'],
+    ["agent_prompted", '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}'],
+  ])("does not affirm a malformed %s mutation response", async (family, malformed) => {
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") {
+        return family === "worktree_opened" ? { ok: true, stdout: malformed } : openedWorktree();
+      }
+      if (args[0] === "agent" && args[1] === "start") {
+        return family === "agent_started"
+          ? { ok: true, stdout: malformed }
+          : {
+              ok: true,
+              stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+            };
+      }
+      return { ok: true, stdout: malformed };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+    });
+  });
+
+  it("does not retry a malformed agent-pane-busy error envelope", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") return openedWorktree();
+      return { ok: false, message: '{"error":[]}' };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+    });
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(1);
   });
 
   it("does not start or prompt another agent when the named session is active", async () => {
@@ -297,7 +431,10 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
       if (args[0] === "worktree") return openedWorktree();
       if (args[0] === "agent" && args[1] === "start") {
-        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
+        return {
+          ok: true,
+          stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
+        };
       }
       if (args[0] === "agent" && args[1] === "prompt") {
         return { ok: false, message: "response lost" };

@@ -113,7 +113,7 @@ fi
 if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
   printf '%s\\n' "$@" > "$BY_FAKE_CAPTURE.args"
   : > "$BY_FAKE_CAPTURE.started"
-  printf '{"result":{"type":"agent_started","terminal_id":"terminal"}}\\n'
+  printf '{"result":{"type":"agent_started","agent":{"terminal_id":"terminal"}}}\\n'
   exit 0
 fi
 if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
