@@ -27,6 +27,7 @@ The source hierarchy follows these owners:
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
+- `src/disposableWorkspace/` owns disposable exact-commit workspace creation, identity verification, interruption cleanup registration, and cleanup.
 - `src/sqlite/` owns SQLite persistence Adapters.
 - `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 

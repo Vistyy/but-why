@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -176,6 +176,8 @@ describe("Candidate validation", () => {
         const first = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
         expect(first.ok).toBe(true);
         if (!first.ok) return;
+        writeFileSync(join(candidateCheckout, "candidate.txt"), "dirty canonical content\n");
+        writeFileSync(join(candidateCheckout, "dirty-only.txt"), "canonical checkout only\n");
 
         const prepare = `gitdir="$(git rev-parse --git-dir)"; printf P >> "${callLog}"; printf prepared > "$gitdir/.but-why-prepared"`;
         const validationPolicy = (headSha: string, content: string) => ({
@@ -183,7 +185,7 @@ describe("Candidate validation", () => {
           checks: [
             {
               id: "prepared",
-              command: `test "$(git rev-parse HEAD)" = "${headSha}" && test "$(cat candidate.txt)" = "${content}" && test -f "$(git rev-parse --git-dir)/.but-why-prepared" && printf C >> "${callLog}"`,
+              command: `test "$(git rev-parse HEAD)" = "${headSha}" && test "$(cat candidate.txt)" = "${content}" && test ! -e dirty-only.txt && test -f "$(git rev-parse --git-dir)/.but-why-prepared" && printf C >> "${callLog}"`,
               timeoutSeconds: 1,
             },
           ],
@@ -209,7 +211,14 @@ describe("Candidate validation", () => {
         if (!firstResult.ok) throw new Error("Expected a passed first Validation Run");
         expect(readFileSync(callLog, "utf8")).toBe("PC");
         expect(review).toHaveBeenCalledOnce();
+        expect(readFileSync(join(candidateCheckout, "candidate.txt"), "utf8")).toBe(
+          "dirty canonical content\n",
+        );
+        expect(readFileSync(join(candidateCheckout, "dirty-only.txt"), "utf8")).toBe(
+          "canonical checkout only\n",
+        );
 
+        rmSync(join(candidateCheckout, "dirty-only.txt"));
         writeFileSync(join(candidateCheckout, "candidate.txt"), "second\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "second candidate");
