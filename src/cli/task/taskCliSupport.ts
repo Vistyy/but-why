@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import type { CliResult } from "../../cliResults.js";
@@ -15,12 +16,16 @@ import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 
+export type TaskIdCommand = { readonly taskId: string };
+
 export type TaskCommandEnvironment = {
   readonly cwd: string;
+  readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 };
 
 export const withTasks = (

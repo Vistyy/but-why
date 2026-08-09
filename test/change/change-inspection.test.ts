@@ -30,6 +30,7 @@ import {
   createInitializedRepo,
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -615,11 +616,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
               now: firstNow,
             });
             if (!created.ok) throw new Error(created.code);
-            const approved = yield* tasks.approveTask({
-              taskId: publicTaskId("BY-1"),
-              now: secondNow,
-            });
-            if (!approved.ok) throw new Error(approved.code);
+            yield* transitionTaskToTodo(publicTaskId("BY-1"), secondNow);
           }),
         );
         const started = yield* runByInProcessEffect(root, [
@@ -726,11 +723,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
             now: firstNow,
           });
           if (!created.ok) throw new Error(created.code);
-          const approved = yield* tasks.approveTask({
-            taskId: publicTaskId("BY-1"),
-            now: secondNow,
-          });
-          if (!approved.ok) throw new Error(approved.code);
+          yield* transitionTaskToTodo(publicTaskId("BY-1"), secondNow);
         }),
       );
 

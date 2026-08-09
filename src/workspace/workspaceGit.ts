@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import type { CleanupState } from "../validationRun/cleanup.js";
+import { join, resolve } from "node:path";
+
+export type CleanupState = "removed" | "not_created" | "failed";
 
 const zeroSha = "0000000000000000000000000000000000000000";
-const validationGitOperationTimeoutMs = 30_000;
+const disposableWorkspaceGitOperationTimeoutMs = 30_000;
 
-export const ensureValidationTempRef = (
+export const disposableWorktreePath = (repoRoot: string, tempRefName: string): string =>
+  join(repoRoot, ".sandcastle", "worktrees", tempRefName.replaceAll("/", "-"));
+
+export const ensureDisposableTempRef = (
   repoRoot: string,
   tempRefName: string,
   submittedSha: string,
@@ -22,7 +26,7 @@ export const ensureValidationTempRef = (
 
     return {
       ok: false,
-      message: `Validation temp ref ${tempRefName} already points to ${existingSha}, not ${submittedSha}.`,
+      message: `Disposable workspace temp ref ${tempRefName} already points to ${existingSha}, not ${submittedSha}.`,
     };
   }
 
@@ -41,7 +45,7 @@ export const ensureValidationTempRef = (
   return { ok: false, message: created.message };
 };
 
-export const inspectExistingWorktree = (
+export const inspectDisposableWorktree = (
   worktreePath: string,
 ):
   | { readonly exists: false }
@@ -67,13 +71,13 @@ export const inspectExistingWorktree = (
   };
 };
 
-export const removeValidationWorktree = (repoRoot: string, worktreePath: string): boolean => {
+export const removeDisposableWorktree = (repoRoot: string, worktreePath: string): boolean => {
   git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
 
-  return isValidationWorktreeRemoved(repoRoot, worktreePath);
+  return isDisposableWorktreeRemoved(repoRoot, worktreePath);
 };
 
-export const isValidationWorktreeRemoved = (repoRoot: string, worktreePath: string): boolean => {
+export const isDisposableWorktreeRemoved = (repoRoot: string, worktreePath: string): boolean => {
   if (existsSync(worktreePath)) return false;
 
   const worktrees = git(repoRoot, ["worktree", "list", "--porcelain"]);
@@ -88,7 +92,7 @@ const worktreePaths = (porcelain: string): readonly string[] =>
     .filter((line) => line.startsWith("worktree "))
     .map((line) => resolve(line.slice("worktree ".length)));
 
-export const deleteValidationTempRef = (repoRoot: string, tempRefName: string): CleanupState => {
+export const deleteDisposableTempRef = (repoRoot: string, tempRefName: string): CleanupState => {
   const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
 
   if (result.ok) {
@@ -115,7 +119,7 @@ const git = (cwd: string, args: readonly string[]): GitResult => {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: validationGitOperationTimeoutMs,
+    timeout: disposableWorkspaceGitOperationTimeoutMs,
   });
 
   if (result.status === 0) {

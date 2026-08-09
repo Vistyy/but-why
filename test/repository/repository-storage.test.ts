@@ -51,6 +51,7 @@ import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { repoRoot } from "../support/by-cli.js";
 import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const migrationCount = Effect.gen(function* () {
@@ -213,7 +214,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-raise-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -264,7 +265,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-duplicate-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -316,7 +317,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-published-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -390,7 +391,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:03:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-resolve-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -527,7 +528,7 @@ describe("repository SQL storage", () => {
           });
           if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
           const taskId = storedPublicTaskId(created.task.id);
-          yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+          yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
           const started = yield* starts.create({
             id: "change-cancel-atomic",
             repositoryCommonDirectory: input.commonDirectory,
@@ -585,7 +586,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-stale-evidence",
           repositoryCommonDirectory: input.commonDirectory,
@@ -684,7 +685,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-newer-publication",
           repositoryCommonDirectory: input.commonDirectory,
@@ -790,7 +791,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* transitionTaskToTodo(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-atomic-completion",
           repositoryCommonDirectory: input.commonDirectory,
@@ -1731,7 +1732,15 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+              yield* sql`DROP TABLE IF EXISTS task_reviews`;
+              yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+              yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+              yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+              yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+              yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+              yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+              yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -1994,6 +2003,7 @@ describe("repository SQL storage", () => {
           { migration_id: 23, name: "restrict_lifecycle_states" },
           { migration_id: 24, name: "remove_task_comments" },
           { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
+          { migration_id: 26, name: "task_reviews" },
         ]);
         expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -2247,7 +2257,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2494,7 +2512,15 @@ describe("repository SQL storage", () => {
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
             yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (22, 23, 24, 25)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (22, 23, 24, 25, 26)`;
+            yield* sql`DROP TABLE IF EXISTS task_reviews`;
+            yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+            yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+            yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+            yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+            yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+            yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+            yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
           }),
         );
 
@@ -2593,7 +2619,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2669,7 +2703,15 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2737,7 +2779,15 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -2993,7 +3043,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3052,7 +3110,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3151,7 +3217,15 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                    yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                    yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                    yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                   }),
                 );
               }).pipe(
@@ -3257,7 +3331,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3342,7 +3424,15 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DROP TABLE IF EXISTS task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS active_task_reviews`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_findings`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
+                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3622,8 +3712,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(25);
-          expect(yield* readMigrationCount).toBe(25);
+          expect(yield* readMigrationCount).toBe(26);
+          expect(yield* readMigrationCount).toBe(26);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3723,9 +3813,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(25);
+              expect(migrations.length).toBe(26);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 25 }, (_, index) => index + 1),
+                Array.from({ length: 26 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -3751,46 +3841,49 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.effect("returns state_store_unavailable after a bounded wait while migration stays busy", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-contention-"))),
-      (directory) =>
-        Effect.gen(function* () {
-          const statePath = join(directory, "state.sqlite");
-          const holder = startMigrationLockHolder(statePath, 2_500);
-          try {
-            yield* Effect.promise(() => waitForMigrationLock(holder));
+  it.effect(
+    "returns state_store_unavailable after a bounded wait while migration stays busy",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-contention-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            const holder = startMigrationLockHolder(statePath, 2_500);
+            try {
+              yield* Effect.promise(() => waitForMigrationLock(holder));
 
-            const contended = yield* Effect.promise(() =>
-              runHelperProcess(
-                ["open-state", statePath, directory, "150", "400", "20", "Contended"],
-                directory,
-              ),
-            );
-            expect(contended.status).toBe(1);
-            expect(JSON.parse(contended.stdout)).toMatchObject({
-              ok: false,
-              error: { _tag: "RepositoryStateUnavailable" },
-            });
+              const contended = yield* Effect.promise(() =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "150", "400", "20", "Contended"],
+                  directory,
+                ),
+              );
+              expect(contended.status).toBe(1);
+              expect(JSON.parse(contended.stdout)).toMatchObject({
+                ok: false,
+                error: { _tag: "RepositoryStateUnavailable" },
+              });
 
-            const released = yield* Effect.promise(() => holder.done);
-            expect(released.status).toBe(0);
-            expect(released.stdout).toContain("released");
+              const released = yield* Effect.promise(() => holder.done);
+              expect(released.status).toBe(0);
+              expect(released.stdout).toContain("released");
 
-            const recovered = yield* Effect.promise(() =>
-              runHelperProcess(
-                ["open-state", statePath, directory, "5000", "30000", "50", "Recovery"],
-                directory,
-              ),
-            );
-            expect(recovered.status).toBe(0);
-            expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, found: true });
-          } finally {
-            if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
-          }
-        }),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
+              const recovered = yield* Effect.promise(() =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "5000", "30000", "50", "Recovery"],
+                  directory,
+                ),
+              );
+              expect(recovered.status).toBe(0);
+              expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, found: true });
+            } finally {
+              if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
+            }
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
+    60_000,
   );
 
   it.effect("opens an already-current Shared Repository State without migration coordination", () =>
@@ -3821,7 +3914,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 25,
+              migrationCount: 26,
             });
           } finally {
             if (holder.child.exitCode === null) holder.child.kill("SIGTERM");

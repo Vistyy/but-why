@@ -12,7 +12,6 @@ import type {
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
-  ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
   CreateTaskInput,
@@ -38,8 +37,6 @@ export const openSqliteTaskPersistence = (
     getTaskById: (taskId) => repository.operation("read Task", (sql) => getTaskById(sql, taskId)),
     getTaskContextById: (taskId) =>
       repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
-    approveTask: (input) =>
-      repository.transactionImmediate("approve Task", (sql) => approveTask(sql, input)),
     updateTaskContext: (input) =>
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
@@ -246,26 +243,15 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     } satisfies TaskContext;
   });
 
-const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
-  Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state === "todo") return { ok: true as const, changed: false, task: current };
-    if (current.state !== "new") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
-    }
-    yield* sql`UPDATE tasks SET state = 'todo', updated_at = ${input.now} WHERE id = ${input.taskId}`;
-    const updated = yield* getTaskById(sql, input.taskId);
-    if (updated === undefined) return yield* invalidData("approve Task", "Task disappeared");
-    return { ok: true as const, changed: true, task: updated };
-  });
-
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
   Effect.gen(function* () {
     const current = yield* getTaskById(sql, input.taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+    }
+    if (yield* taskReviewActive(sql, input.taskId)) {
+      return { ok: false as const, code: "task_review_active" as const };
     }
     yield* sql`
       UPDATE tasks SET title = ${input.title}, description = ${input.description},
@@ -291,6 +277,9 @@ const cancelTask = (
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state === "done") return { ok: false as const, code: "task_already_done" as const };
     if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
+    if (yield* taskReviewActive(sql, input.taskId)) {
+      return { ok: false as const, code: "task_review_active" as const };
+    }
     yield* sql`
       UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
       WHERE id = ${input.taskId}
@@ -309,6 +298,9 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
     if (!taskDependenciesAreEditable(current.state)) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
+    if (yield* taskReviewActive(sql, taskId)) {
+      return { ok: false as const, code: "task_review_active" as const };
+    }
     const linked = yield* sql<{ readonly id: string }>`
       SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
     `;
@@ -317,6 +309,14 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
     }
     return { ok: true as const, task: current };
   });
+
+const taskReviewActive = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.map(
+    sql<{ readonly reviewId: string }>`
+      SELECT review_id AS reviewId FROM active_task_reviews WHERE task_id = ${taskId} LIMIT 1
+    `,
+    (rows) => rows.length > 0,
+  );
 
 type DependencyValidationResult = {
   readonly ok: false;

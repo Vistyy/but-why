@@ -68,8 +68,14 @@ const acceptanceReviewConfigSchema = Schema.Struct({
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
+const taskReviewConfigSchema = Schema.Struct({
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
+  instructionsFile: Schema.optional(repoRelativePathSchema),
+});
+
 const repoReviewConfigSchema = Schema.Struct({
   acceptance: Schema.optional(acceptanceReviewConfigSchema),
+  task: Schema.optional(taskReviewConfigSchema),
   specialists: Schema.optional(Schema.Array(configNameSchema)),
 });
 

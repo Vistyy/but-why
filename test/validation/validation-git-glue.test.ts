@@ -2,23 +2,23 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { isValidationWorktreeRemoved } from "../../src/change/validation/validationGitGlue.js";
+import { isDisposableWorktreeRemoved } from "../../src/workspace/workspaceGit.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-describe("Validation Workspace Git cleanup verification", () => {
+describe("Disposable Workspace Git cleanup verification", () => {
   it("requires both filesystem absence and exact Git registration absence", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "validation-worktree");
 
     git(repository, "worktree", "add", "--detach", worktreePath, "main");
-    expect(isValidationWorktreeRemoved(repository, worktreePath)).toBe(false);
+    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(false);
 
     rmSync(worktreePath, { recursive: true, force: true });
-    expect(isValidationWorktreeRemoved(repository, worktreePath)).toBe(false);
+    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(false);
 
     git(repository, "worktree", "remove", "--force", worktreePath);
-    expect(isValidationWorktreeRemoved(repository, worktreePath)).toBe(true);
+    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(true);
   });
 });
 

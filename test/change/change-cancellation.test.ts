@@ -17,6 +17,7 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
+import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cancellation", () => {
@@ -40,7 +41,7 @@ describe("Change cancellation", () => {
             "task.md",
           ])).status,
         ).toBe(0);
-        expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
+        yield* transitionTaskToTodoForRepo(root, "BY-1");
         const started = yield* runByInProcessEffect(root, [
           "--json",
           "change",
@@ -97,7 +98,7 @@ describe("Change cancellation", () => {
           "task.md",
         ])).status,
       ).toBe(0);
-      expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
+      yield* transitionTaskToTodoForRepo(root, "BY-1");
       const started = yield* runByInProcessEffect(root, [
         "--json",
         "change",

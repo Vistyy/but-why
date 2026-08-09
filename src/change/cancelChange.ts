@@ -57,6 +57,7 @@ export type TaskCancellationResult =
         | "task_not_found"
         | "change_not_found"
         | "task_already_done"
+        | "task_review_active"
         | "change_already_completed"
         | "github_pull_request_unavailable"
         | "owned_pull_request_mismatch"

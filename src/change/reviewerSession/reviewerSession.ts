@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+// fallow-ignore-file duplicate-export -- delegation layer for the neutral reviewer session helpers
 
 import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
@@ -10,6 +8,12 @@ import {
   previousFindingsPrompt,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import {
+  reviewerSessionFingerprint as neutralReviewerSessionFingerprint,
+  reviewerSessionsPath as neutralReviewerSessionsPath,
+  reviewerSessionsProducerRoot as neutralReviewerSessionsProducerRoot,
+  reviewerSessionsOwnerRoot,
+} from "../../reviewerSession/sessionFiles.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
@@ -50,27 +54,22 @@ export type ReviewerSessionStore = {
 export type ReviewerContinuity = "fresh" | "resumed" | "restarted";
 
 export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): string =>
-  createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  neutralReviewerSessionFingerprint(identity);
 
 export const reviewerSessionsPath = (
   sessionStorageRoot: string,
   changeId: string,
   producer: string,
-): string => {
-  const path = join(sessionStorageRoot, changeId, producer, "reviewer-sessions");
-  mkdirSync(path, { recursive: true, mode: 0o700 });
-  chmodSync(path, 0o700);
-  return path;
-};
+): string => neutralReviewerSessionsPath(sessionStorageRoot, changeId, producer);
 
 export const reviewerSessionsProducerRoot = (
   sessionStorageRoot: string,
   changeId: string,
   producer: string,
-): string => join(sessionStorageRoot, changeId, producer);
+): string => neutralReviewerSessionsProducerRoot(sessionStorageRoot, changeId, producer);
 
 export const reviewerSessionsChangeRoot = (sessionStorageRoot: string, changeId: string): string =>
-  join(sessionStorageRoot, changeId);
+  reviewerSessionsOwnerRoot(sessionStorageRoot, changeId);
 
 export const continuationPrompt = (input: {
   readonly candidate: {

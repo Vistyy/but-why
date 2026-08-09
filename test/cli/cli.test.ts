@@ -28,11 +28,14 @@ const expectedCommandPaths = [
   "task dependencies clear",
   "task list",
   "task show",
-  "task approve",
+  "task submit",
+  "task reviews",
   "task context",
   "task context draft",
   "task context apply",
   "task cancel",
+  "task-review show",
+  "task-review abandon",
   "change start",
   "change prepare",
   "change list",
@@ -407,6 +410,7 @@ validationSetup:
         .pipe(
           Effect.tap((rows) => {
             expect(rows).toEqual([
+              { name: "active_task_reviews" },
               { name: "active_validation_runs" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
@@ -423,6 +427,13 @@ validationSetup:
               { name: "reviewer_transcripts" },
               { name: "shared_state_identity" },
               { name: "task_dependencies" },
+              { name: "task_review_completion_failures" },
+              { name: "task_review_findings" },
+              { name: "task_review_sessions" },
+              { name: "task_review_tooling_failures" },
+              { name: "task_review_transcripts" },
+              { name: "task_review_workspace_setups" },
+              { name: "task_reviews" },
               { name: "tasks" },
             ]);
           }),
@@ -488,6 +499,7 @@ validationSetup:
         { migration_id: 23, name: "restrict_lifecycle_states" },
         { migration_id: 24, name: "remove_task_comments" },
         { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
+        { migration_id: 26, name: "task_reviews" },
       ]);
     }),
   );
