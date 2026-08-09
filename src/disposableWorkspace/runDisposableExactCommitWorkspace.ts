@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import { Effect, Ref, type Scope } from "effect";
+import type {
+  DisposableWorkspace,
+  DisposableWorkspaceCleanupResult,
+  DisposableWorkspaceError,
+  DisposableWorkspaceSetup,
+} from "./disposableWorkspace.js";
 import {
   deleteDisposableWorkspaceRef,
   ensureDisposableWorkspaceRef,
@@ -12,12 +18,6 @@ import {
   removeDisposableWorktree,
 } from "./disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "./disposableWorkspacePath.js";
-import type {
-  DisposableWorkspace,
-  DisposableWorkspaceCleanupResult,
-  DisposableWorkspaceError,
-  DisposableWorkspaceSetup,
-} from "./disposableWorkspace.js";
 
 export type RunDisposableExactCommitWorkspaceInput<Error> = {
   readonly repoRoot: string;
