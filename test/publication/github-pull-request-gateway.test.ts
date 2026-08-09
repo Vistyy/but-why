@@ -6,7 +6,10 @@ const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({
     data: {
       repository: {
-        ref: sha === undefined ? null : { name: "refs/heads/feature", target: { oid: sha } },
+        ref:
+          sha === undefined
+            ? null
+            : { name: "feature", prefix: "refs/heads/", target: { oid: sha } },
       },
     },
   });
@@ -381,19 +384,24 @@ describe("GitHub pull request gateway", () => {
       "not-json",
       "{}",
       '{"data":{"repository":null}}',
-      '{"data":{"repository":{"ref":{"name":"refs/heads/other","target":{"oid":"candidate-sha"}}}}}',
-      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{}}}}}',
-      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"invalid"}}}}}',
+      '{"data":{"repository":{"ref":{"name":"other","prefix":"refs/heads/","target":{"oid":"candidate-sha"}}}}}',
+      '{"data":{"repository":{"ref":{"name":"feature","target":{"oid":"candidate-sha"}}}}}',
+      '{"data":{"repository":{"ref":{"name":"feature","prefix":"refs/heads/","target":{}}}}}',
+      '{"data":{"repository":{"ref":{"name":"feature","prefix":"refs/heads/","target":{"oid":"invalid"}}}}}',
       JSON.stringify({
         data: {
           repository: {
-            ref: { name: "refs/heads/feature", target: { oid: "f".repeat(2000) } },
+            ref: {
+              name: "feature",
+              prefix: "refs/heads/",
+              target: { oid: "f".repeat(2000) },
+            },
           },
         },
       }),
       '{"data":{"repository":{"ref":null}},"errors":[{"message":"unavailable"}]}',
-      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":"malformed"}',
-      '{"data":{"repository":{"ref":{"name":"refs/heads/feature","target":{"oid":"candidate-sha"}}}},"errors":[]}',
+      '{"data":{"repository":{"ref":{"name":"feature","prefix":"refs/heads/","target":{"oid":"candidate-sha"}}}},"errors":"malformed"}',
+      '{"data":{"repository":{"ref":{"name":"feature","prefix":"refs/heads/","target":{"oid":"candidate-sha"}}}},"errors":[]}',
     ];
     for (const stdout of responses) {
       const gitCalls: (readonly string[])[] = [];

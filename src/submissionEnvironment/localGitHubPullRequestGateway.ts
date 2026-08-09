@@ -192,6 +192,16 @@ const remoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName
   }
 }`;
 
+const publicationRemoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName: String!) {
+  repository(owner: $owner, name: $repo) {
+    ref(qualifiedName: $qualifiedName) {
+      name
+      prefix
+      target { oid }
+    }
+  }
+}`;
+
 const remoteBranchDeletionMutation = `mutation($repositoryId: ID!, $name: GitRefname!, $beforeOid: GitObjectID!, $afterOid: GitObjectID!) {
   updateRefs(input: {
     repositoryId: $repositoryId
@@ -529,7 +539,7 @@ const initialRemoteHeadState = (
     "api",
     "graphql",
     "-f",
-    `query=${remoteBranchQuery}`,
+    `query=${publicationRemoteBranchQuery}`,
     "-f",
     `owner=${request.owner}`,
     "-f",
@@ -562,7 +572,7 @@ const initialRemoteHeadState = (
     };
   const ref = repository["ref"];
   if (ref === null) return { kind: "missing" };
-  if (!isObjectRecord(ref) || ref["name"] !== qualifiedName)
+  if (!isObjectRecord(ref) || ref["name"] !== request.headBranch || ref["prefix"] !== "refs/heads/")
     return {
       kind: "unknown",
       evidence: evidence("remote_lookup", result, "response_parse_failure"),

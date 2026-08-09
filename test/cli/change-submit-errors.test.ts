@@ -89,6 +89,40 @@ describe("Change Submit validation-policy errors", () => {
     }
   });
 
+  it("gives destination-specific recovery guidance", () => {
+    expect(
+      submitResult(
+        {
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: {
+            operation: "push_destination",
+            classification: "rejected",
+            reason: "repository_mismatch",
+            destinationOwner: "other",
+            destinationRepo: "widgets",
+          },
+        },
+        "change-1",
+      ),
+    ).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "publication_tooling_failed",
+          message: "The selected publication remote has no safe push destination.",
+          evidence: {
+            operation: "push_destination",
+            reason: "repository_mismatch",
+          },
+        },
+        help: [
+          "Correct the selected publication remote's effective push destination, then retry Submit.",
+        ],
+      },
+    });
+  });
+
   it("serializes an exact validation-policy rejection with supplied message and help", () => {
     const result = submitResult(
       {
