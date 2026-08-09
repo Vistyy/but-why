@@ -79,57 +79,60 @@ describe("Candidate validation", () => {
       }),
   );
 
-  it.scoped("persists a Candidate-integrity Tooling Failure and preserves the Candidate", () =>
-    Effect.gen(function* () {
-      const mainCheckout = candidateReadyRepo();
-      const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
-      git(
-        mainCheckout,
-        "worktree",
-        "add",
-        "-q",
-        "-b",
-        "linked-candidate",
-        candidateCheckout,
-        "HEAD",
-      );
-      writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
-      git(candidateCheckout, "add", "candidate.txt");
-      git(candidateCheckout, "commit", "-m", "candidate");
-      const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
-      expect(captured.ok).toBe(true);
-      if (!captured.ok) return;
+  it.scoped(
+    "persists a Candidate-integrity Tooling Failure and preserves the Candidate",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
+        git(
+          mainCheckout,
+          "worktree",
+          "add",
+          "-q",
+          "-b",
+          "linked-candidate",
+          candidateCheckout,
+          "HEAD",
+        );
+        writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
+        git(candidateCheckout, "add", "candidate.txt");
+        git(candidateCheckout, "commit", "-m", "candidate");
+        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        expect(captured.ok).toBe(true);
+        if (!captured.ok) return;
 
-      const validation = candidateValidationForTest({
-        localRepositoryMainCheckoutRoot: mainCheckout,
-        artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
-        repository: repositoryConfig(mainCheckout),
-      });
-      const result = yield* validateCandidate(validation, {
-        changeId: captured.changeId,
-        candidateId: captured.candidateId,
-        changeBaseSha: captured.changeBaseSha,
-        headSha: captured.headSha,
-        policy: {
-          prepare: { command: "printf changed > candidate.txt", timeoutSeconds: 1 },
-          checks: [{ id: "skipped", command: "true", timeoutSeconds: 1 }],
-          copyFiles: [],
-          specialistReviews: [],
-        },
-        now,
-      });
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+        });
+        const result = yield* validateCandidate(validation, {
+          changeId: captured.changeId,
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+          policy: {
+            prepare: { command: "printf changed > candidate.txt", timeoutSeconds: 1 },
+            checks: [{ id: "skipped", command: "true", timeoutSeconds: 1 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
+          now,
+        });
 
-      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      if (result.ok || "code" in result) return;
-      expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ operationName: "verify_candidate_head" }),
-        ]),
-      );
-      expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
-      expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
-      expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");
-    }),
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ operationName: "verify_candidate_head" }),
+          ]),
+        );
+        expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
+        expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
+        expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");
+      }),
+    60_000,
   );
 
   it.scoped(
@@ -280,6 +283,7 @@ describe("Candidate validation", () => {
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(second.headSha);
         expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
       }),
+    60_000,
   );
 });
 

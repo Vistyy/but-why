@@ -265,6 +265,26 @@ const submitTask = (
         }),
     });
 
+    // Persist the final workspace cleanup result captured after scoped cleanup
+    // on every terminal path, replacing the provisional not_created admission
+    // record so recovery always carries the exact cleanup outcome.
+    yield* dependencies.persistence.recordWorkspaceSetup(
+      workspace.ok
+        ? { ...workspace.setup, createdAt: input.now }
+        : {
+            reviewId,
+            tempRefName: workspace.toolingError.tempRefName,
+            submittedSha: workspace.toolingError.submittedSha,
+            worktreeHead: workspace.toolingError.submittedSha,
+            ...(workspace.toolingError.worktreePath === undefined
+              ? {}
+              : { worktreePath: workspace.toolingError.worktreePath }),
+            cleanupWorktree: workspace.toolingError.cleanupResult.worktree,
+            cleanupTempRef: workspace.toolingError.cleanupResult.tempRef,
+            createdAt: input.now,
+          },
+    );
+
     if (!workspace.ok) {
       const toolingError = workspace.toolingError;
       if (toolingError.operationName === "cleanup_disposable_workspace") {
@@ -319,13 +339,6 @@ const submitTask = (
       });
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
-
-    // Persist the final workspace cleanup result captured after scoped cleanup,
-    // replacing the provisional not_created admission record.
-    yield* dependencies.persistence.recordWorkspaceSetup({
-      ...workspace.setup,
-      createdAt: input.now,
-    });
 
     const indexed = yield* indexTaskReviewTranscripts(dependencies.persistence, {
       taskId: input.taskId,

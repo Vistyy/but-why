@@ -349,8 +349,10 @@ const applyReuse = (
       readonly state: string;
       readonly outcome: string | null;
       readonly proposalKey: string;
+      readonly proposalSnapshot: string;
     }>`
-      SELECT task_id AS taskId, state, outcome, proposal_key AS proposalKey
+      SELECT task_id AS taskId, state, outcome, proposal_key AS proposalKey,
+        proposal_snapshot AS proposalSnapshot
       FROM task_reviews WHERE id = ${input.reviewId}
     `;
     const review = reviews[0];
@@ -359,8 +361,20 @@ const applyReuse = (
     }
     // Apply only an exact completed judgment. The matching outcome and proposal
     // are revalidated here because the Task Context and direct Task Dependency
-    // set can change between the reuse fast-path and this transaction.
+    // set can change between the reuse fast-path and this transaction, and the
+    // stored proposal snapshot must itself produce the matching key.
     if (review.state !== "complete" || review.outcome !== input.outcome) {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
+    let storedProposalKey: string;
+    try {
+      storedProposalKey = proposalKeyOf(
+        decodePersistedTaskReviewProposal(JSON.parse(review.proposalSnapshot)),
+      );
+    } catch {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
+    if (storedProposalKey !== review.proposalKey) {
       return { ok: false as const, code: "task_state_changed" as const };
     }
     const taskId = storedPublicTaskId(review.taskId);
@@ -435,15 +449,16 @@ const complete = (
       // are mutually exclusive lifecycle outcomes.
       return { ok: false as const, code: "passed_with_findings" as const };
     }
-    // Completion must apply to the exact Review that owns the Active marker, so
-    // a stale or corrupted running Review cannot approve without its marker.
+    const taskId = storedPublicTaskId(review.taskId);
+    // Completion must apply to the exact Review that owns the Active marker for
+    // the same Task, so a stale or corrupted running Review cannot approve.
     const active = yield* sql<{ readonly reviewId: string }>`
-      SELECT review_id AS reviewId FROM active_task_reviews WHERE review_id = ${input.reviewId}
+      SELECT review_id AS reviewId FROM active_task_reviews
+      WHERE review_id = ${input.reviewId} AND task_id = ${taskId}
     `;
     if (active[0] === undefined) {
       return { ok: false as const, code: "review_not_active" as const };
     }
-    const taskId = storedPublicTaskId(review.taskId);
 
     if (input.outcome === "passed") {
       const transitioned = yield* sql<{ readonly id: string }>`
@@ -711,19 +726,32 @@ const decodeReview = (
   row: TaskReviewRow,
 ): Effect.Effect<TaskReviewRecord, RepositoryPersistedDataInvalid> =>
   Effect.try({
-    try: (): TaskReviewRecord => ({
-      id: row.id,
-      taskId: storedPublicTaskId(row.taskId),
-      proposal: decodeProposal(row.proposalSnapshot),
-      baseCommit: row.baseCommit,
-      policy: decodePolicy(row.policySnapshot),
-      state: Schema.decodeUnknownSync(taskReviewStateSchema)(row.state),
-      outcome: Schema.decodeUnknownSync(taskReviewOutcomeSchema)(row.outcome),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    }),
+    try: (): TaskReviewRecord => {
+      const proposal = decodeProposal(row.proposalSnapshot);
+      if (proposalKeyOf(proposal) !== row.proposalKey) {
+        throw new Error("Task Review proposal snapshot does not match its stored proposal key");
+      }
+      return {
+        id: row.id,
+        taskId: storedPublicTaskId(row.taskId),
+        proposal,
+        baseCommit: row.baseCommit,
+        policy: decodePolicy(row.policySnapshot),
+        state: Schema.decodeUnknownSync(taskReviewStateSchema)(row.state),
+        outcome: Schema.decodeUnknownSync(taskReviewOutcomeSchema)(row.outcome),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({ operationName: "decode Task Review", cause }),
+  });
+
+const proposalKeyOf = (proposal: TaskReviewProposal): string =>
+  JSON.stringify({
+    title: proposal.title,
+    description: proposal.description,
+    dependencyIds: proposal.dependencies.map((dependency) => dependency.taskId),
   });
 
 const decodeProposal = (value: string): TaskReviewProposal =>

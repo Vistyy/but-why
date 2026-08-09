@@ -716,6 +716,12 @@ describe("Task Submission orchestration", () => {
             const recorded = yield* reviews.getReviewById(result.reviewId);
             expect(recorded).toMatchObject({ state: "complete", outcome: "tooling_failed" });
             expect(yield* reviews.listToolingFailures(result.reviewId)).toHaveLength(1);
+
+            // The final cleanup result is persisted even on the tooling-failure
+            // path, so recovery carries the exact cleanup outcome.
+            const setup = yield* reviews.getAbandonmentContext(result.reviewId);
+            expect(setup?.cleanupWorktree).toBe("removed");
+            expect(setup?.cleanupTempRef).toBe("removed");
           }),
         );
       }),

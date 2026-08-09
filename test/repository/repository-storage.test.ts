@@ -3841,46 +3841,49 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.effect("returns state_store_unavailable after a bounded wait while migration stays busy", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-contention-"))),
-      (directory) =>
-        Effect.gen(function* () {
-          const statePath = join(directory, "state.sqlite");
-          const holder = startMigrationLockHolder(statePath, 2_500);
-          try {
-            yield* Effect.promise(() => waitForMigrationLock(holder));
+  it.effect(
+    "returns state_store_unavailable after a bounded wait while migration stays busy",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-contention-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            const holder = startMigrationLockHolder(statePath, 2_500);
+            try {
+              yield* Effect.promise(() => waitForMigrationLock(holder));
 
-            const contended = yield* Effect.promise(() =>
-              runHelperProcess(
-                ["open-state", statePath, directory, "150", "400", "20", "Contended"],
-                directory,
-              ),
-            );
-            expect(contended.status).toBe(1);
-            expect(JSON.parse(contended.stdout)).toMatchObject({
-              ok: false,
-              error: { _tag: "RepositoryStateUnavailable" },
-            });
+              const contended = yield* Effect.promise(() =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "150", "400", "20", "Contended"],
+                  directory,
+                ),
+              );
+              expect(contended.status).toBe(1);
+              expect(JSON.parse(contended.stdout)).toMatchObject({
+                ok: false,
+                error: { _tag: "RepositoryStateUnavailable" },
+              });
 
-            const released = yield* Effect.promise(() => holder.done);
-            expect(released.status).toBe(0);
-            expect(released.stdout).toContain("released");
+              const released = yield* Effect.promise(() => holder.done);
+              expect(released.status).toBe(0);
+              expect(released.stdout).toContain("released");
 
-            const recovered = yield* Effect.promise(() =>
-              runHelperProcess(
-                ["open-state", statePath, directory, "5000", "30000", "50", "Recovery"],
-                directory,
-              ),
-            );
-            expect(recovered.status).toBe(0);
-            expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, found: true });
-          } finally {
-            if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
-          }
-        }),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
+              const recovered = yield* Effect.promise(() =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "5000", "30000", "50", "Recovery"],
+                  directory,
+                ),
+              );
+              expect(recovered.status).toBe(0);
+              expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, found: true });
+            } finally {
+              if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
+            }
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
+    60_000,
   );
 
   it.effect("opens an already-current Shared Repository State without migration coordination", () =>

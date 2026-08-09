@@ -765,6 +765,100 @@ it.scoped("compare-and-set completion rejects a second completion and unknown re
   ),
 );
 
+it.scoped("rejects reuse and reads when the stored proposal snapshot mismatches its key", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Snapshot key", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-snapshot-key",
+        now: firstNow,
+      });
+      yield* reviews.complete({
+        reviewId: "review-snapshot-key",
+        outcome: "blocked",
+        now: secondNow,
+      });
+
+      const repository = yield* RepositorySql;
+      yield* repository.operation("corrupt proposal snapshot without its key", (sql) => {
+        const proposal = {
+          title: "Different snapshot title",
+          description: "Description: Snapshot key",
+          dependencies: [],
+        };
+        return sql`UPDATE task_reviews SET proposal_snapshot = ${JSON.stringify(proposal)}
+            WHERE id = 'review-snapshot-key'`;
+      });
+
+      // Reads decode the proposal at the owning boundary and reject the mismatch.
+      expect(yield* Effect.isFailure(reviews.getReviewById("review-snapshot-key"))).toBe(true);
+
+      // Reuse revalidates the stored snapshot against its key before applying.
+      const checked = yield* reviews.checkReuse(task.id);
+      expect(checked).toEqual({
+        reused: true,
+        reviewId: "review-snapshot-key",
+        outcome: "blocked",
+      });
+      const applied = yield* reviews.applyReuse({
+        reviewId: "review-snapshot-key",
+        outcome: "blocked",
+        now: thirdNow,
+      });
+      expect(applied).toEqual({ ok: false, code: "task_state_changed" });
+      expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
+    }),
+  ),
+);
+
+it.scoped("completion rejects an Active marker bound to a different Task", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const first = yield* createTask(tasks, "Marker first", firstNow);
+      const second = yield* createTask(tasks, "Marker second", firstNow);
+      const unmarked = yield* createTask(tasks, "Marker unmarked", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: first.id,
+        baseCommit,
+        policy,
+        reviewId: "review-marker-first",
+        now: firstNow,
+      });
+      yield* reviews.startOrReuse({
+        taskId: second.id,
+        baseCommit,
+        policy,
+        reviewId: "review-marker-second",
+        now: firstNow,
+      });
+
+      // Bind the first Review's Active marker to a Task that owns no marker.
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "rebind Active marker to another Task",
+        (sql) =>
+          sql`UPDATE active_task_reviews SET task_id = ${unmarked.id}
+            WHERE review_id = 'review-marker-first'`,
+      );
+
+      const completed = yield* reviews.complete({
+        reviewId: "review-marker-first",
+        outcome: "blocked",
+        now: secondNow,
+      });
+      expect(completed).toEqual({ ok: false, code: "review_not_active" });
+      expect(yield* tasks.getTaskById(first.id)).toMatchObject({ state: "new" });
+    }),
+  ),
+);
+
 it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
