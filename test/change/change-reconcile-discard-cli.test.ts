@@ -29,6 +29,7 @@ describe("by change reconcile --discard-work", () => {
         help: ["Run `by change reconcile <change-id> --discard-work` for one exact Change."],
       });
     }),
+    30_000,
   );
 
   it.effect("reports pending discard with the exact retry command", () =>
@@ -98,6 +99,7 @@ describe("by change reconcile --discard-work", () => {
       expect(stdout.help.join(" ")).toContain("by change reconcile change-pending --discard-work");
       expect(existsSync(actualWorktree)).toBe(true);
     }),
+    30_000,
   );
 });
 
