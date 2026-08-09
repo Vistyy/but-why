@@ -1293,9 +1293,10 @@ describe("repository SQL storage", () => {
               `;
             }),
         );
-        expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
-        ).toBeUndefined();
+        const malformedSnapshotError = yield* changes
+          .getPassingPublicationEvidence(captured.changeId, authority)
+          .pipe(Effect.flip);
+        expect(malformedSnapshotError).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "restore publication evidence reference",
           (sql) =>

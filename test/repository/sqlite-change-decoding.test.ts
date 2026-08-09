@@ -226,9 +226,32 @@ describe("SQLite Change decoding", () => {
         yield* expectPersistedDataInvalid(
           changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
         );
+        yield* repository.operation(
+          "inject malformed publication snapshots",
+          (sql) => sql`
+            UPDATE candidate_validation_runs
+            SET state = 'complete', policy_snapshot = '{"checks":"invalid"}'
+            WHERE id = 'owned-run'
+          `,
+        );
+        yield* expectPersistedDataInvalid(
+          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation(
+          "inject malformed Implementation Decision Snapshot",
+          (sql) => sql`
+            UPDATE candidate_validation_runs
+            SET policy_snapshot = '{"checks":[],"copyFiles":[],"specialistReviews":[]}',
+              implementation_decisions = '{}'
+            WHERE id = 'owned-run'
+          `,
+        );
+        yield* expectPersistedDataInvalid(
+          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+        );
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
-            yield* sql`UPDATE candidate_validation_runs SET state = 'complete' WHERE id = 'owned-run'`;
+            yield* sql`UPDATE candidate_validation_runs SET implementation_decisions = '[]' WHERE id = 'owned-run'`;
             yield* sql`
               INSERT INTO implementation_blockers (
                 id, change_id, reported_at, content, resolved_at, resolution_id,

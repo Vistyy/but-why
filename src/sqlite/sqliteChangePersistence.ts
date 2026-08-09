@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import {
   type ChangeCleanup,
@@ -23,10 +23,14 @@ import type {
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
+import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
+import {
+  decodeSqliteCandidateValidationPolicy,
+  encodeSqliteCandidateValidationPolicy,
+} from "./sqliteCandidateValidationPolicy.js";
 import {
   changeReadColumns,
   decodeChangeRow,
@@ -339,16 +343,22 @@ const getPassingPublicationEvidence = (
       if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
         throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
       }
+      const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
+      decodeSqliteCandidateValidationPolicy(policySnapshot);
+      const implementationDecisions = decodeStoredString(
+        row.implementationDecisions,
+        "Implementation Decision Snapshot",
+      );
+      Schema.decodeUnknownSync(Schema.parseJson(implementationDecisionSnapshotSchema), {
+        onExcessProperty: "error",
+      })(implementationDecisions);
       return {
         candidateId: decodeStoredString(row.candidateId, "publication Candidate ID"),
         validationRunId: decodeStoredString(row.validationRunId, "publication Validation Run ID"),
         changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
         headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
-        policySnapshot: decodeStoredString(row.policySnapshot, "Validation Policy Snapshot"),
-        implementationDecisions: decodeStoredString(
-          row.implementationDecisions,
-          "Implementation Decision Snapshot",
-        ),
+        policySnapshot,
+        implementationDecisions,
         state,
         outcome,
         latestResolvedBlockerId: decodeStoredNullableString(
