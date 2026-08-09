@@ -1,4 +1,4 @@
-import { chmodSync, writeFileSync } from "node:fs";
+import { cpSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -7,19 +7,15 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import {
   commitButWhyConfigAndRecordDefault,
+  repoRoot,
   runByInProcessEffect,
-  runByWithEnv,
 } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { runTestProcessOrThrow } from "../support/testProcess.js";
-import {
-  acquireTestWorkspace,
-  createTestWorkspace,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const mainCheckoutFailureProcessTimeoutMs = 10_000;
@@ -29,7 +25,18 @@ let readyRepositoryTemplate: string;
 beforeAll(() => {
   readyRepositoryTemplate = acquireTestWorkspace();
   const root = createInitializedRepo(readyRepositoryTemplate);
+  cpSync(join(repoRoot, "bin"), join(root, "bin"), { recursive: true });
+  cpSync(join(repoRoot, "package.json"), join(root, "package.json"));
+  cpSync(join(repoRoot, "justfile"), join(root, "justfile"));
   commitButWhyConfigAndRecordDefault(root);
+  runTestProcessOrThrow("git", ["add", "bin", "package.json", "justfile"], {
+    cwd: root,
+    timeout: mainCheckoutFailureProcessTimeoutMs,
+  });
+  runTestProcessOrThrow("git", ["commit", "-m", "Add source launcher"], {
+    cwd: root,
+    timeout: mainCheckoutFailureProcessTimeoutMs,
+  });
 });
 
 afterAll(() => {
@@ -57,42 +64,27 @@ describe("Change Implement canonical main checkout failures", () => {
           ["--json", "change", "show", change.change.id],
           now,
         );
-        const fakeGitDirectory = createTestWorkspace();
-        const fakeGitPath = join(fakeGitDirectory, "git");
-        const realGitPath = runTestProcessOrThrow("which", ["git"], {
-          cwd: root,
-          timeout: mainCheckoutFailureProcessTimeoutMs,
-        });
-        writeFileSync(
-          fakeGitPath,
-          `#!/bin/sh
-if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then
-  exit 1
-fi
-exec ${realGitPath} "$@"
-`,
-        );
-        chmodSync(fakeGitPath, 0o755);
+        const trustedExecutable = join(root, "bin/by");
+        rmSync(trustedExecutable);
 
         try {
-          // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-          const inheritedPath = process.env["PATH"] ?? "";
-          const result = runByWithEnv(
+          const result = runTestProcessOrThrowResult(
+            "just",
+            ["by", "--json", "change", "implement", change.change.id],
             linkedCheckout,
-            { PATH: `${fakeGitDirectory}:${inheritedPath}` },
-            "--json",
-            "change",
-            "implement",
-            change.change.id,
           );
 
           expect(result.status).toBe(1);
-          expect(JSON.parse(result.stdout)).toMatchObject({
+          expect(result.stderr).toBe("");
+          expect(JSON.parse(result.stdout)).toEqual({
             error: {
-              code: "main_checkout_unavailable",
-              message: "The Local Repository's canonical main checkout is unavailable.",
+              code: "trusted_executable_unavailable",
+              message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+              path: trustedExecutable,
             },
-            help: ["Restore the canonical main checkout, then retry the command."],
+            help: [
+              "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+            ],
           });
         } finally {
           runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
@@ -111,3 +103,12 @@ exec ${realGitPath} "$@"
     mainCheckoutFailureTestTimeoutMs,
   );
 });
+
+const runTestProcessOrThrowResult = (command: string, args: readonly string[], cwd: string) => {
+  const result = runTestProcess(command, args, {
+    cwd,
+    timeout: mainCheckoutFailureProcessTimeoutMs,
+  });
+  if (result.error !== undefined) throw result.error;
+  return result;
+};
