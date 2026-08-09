@@ -85,6 +85,5 @@ const taskReviewNextAction = (
     if (outcome === "blocked") return `by task context draft ${task.id}`;
     return `by task submit ${task.id}`;
   }
-  if (task.state === "todo") return `by change start --task ${task.id}`;
   return `by task show ${task.id}`;
 };

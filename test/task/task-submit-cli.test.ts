@@ -159,6 +159,24 @@ describe("by task submission CLI", () => {
         };
         expect(show.taskReview?.latest?.outcome).toBe("passed");
         expect(show.nextAction).toBe(`by task approve BY-1`);
+
+        const approved = yield* runByInProcessEffect(root, ["task", "approve", "BY-1"]);
+        expect(approved.status).toBe(0);
+        const afterApproval = yield* runByInProcessEffect(root, [
+          "--json",
+          "task-review",
+          "abandon",
+          result.review.id,
+          "--reason",
+          "Check completed Review after Task approval",
+        ]);
+        expect(afterApproval.status).toBe(0);
+        expect(JSON.parse(afterApproval.stdout)).toMatchObject({
+          status: "already_complete",
+          outcome: "passed",
+          task: { id: "BY-1", state: "todo" },
+          nextAction: "by task show BY-1",
+        });
       }),
     60_000,
   );
