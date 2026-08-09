@@ -91,7 +91,7 @@ const noPullRequestGateway = {
 
 describe("Change reconciliation discard boundary", () => {
   it.effect(
-    "forwards one-attempt discard authority for one exact terminal Change only",
+    "forwards one-attempt discard authority for dirty Managed Worktree and unique Repository Branch work",
     () =>
       withReconcileRepository((fixture) =>
         Effect.gen(function* () {
@@ -99,15 +99,18 @@ describe("Change reconciliation discard boundary", () => {
           const first = yield* createTerminalChange(fixture, "change-a");
           const second = yield* createTerminalChange(fixture, "change-b");
           const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
+          const cleanupDirtyManagedWorktreeAndUniqueBranch: ChangeCleanupOperation = (input) => {
+            cleanupInputs.push(input);
+            return input.discardWork === true
+              ? { state: "complete" }
+              : { state: "pending", blockingReason: "work_preserved" };
+          };
           const reconciliation = openChangeReconciliation({
             persistence: changes,
             github: noPullRequestGateway,
             cleanupTerminal: openTerminalCleanup({
               persistence: changes,
-              cleanup: (input) => {
-                cleanupInputs.push(input);
-                return { state: "complete" };
-              },
+              cleanup: cleanupDirtyManagedWorktreeAndUniqueBranch,
             }),
           });
 
