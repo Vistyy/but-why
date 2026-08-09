@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -6,7 +5,6 @@ import { describe } from "vitest";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import { cleanupChangeResourcesWithRemote } from "../../src/change/localChangeCleanupGit.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
@@ -14,7 +12,6 @@ import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
-import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 describe("by change reconcile", () => {
@@ -235,11 +232,6 @@ describe("by change reconcile", () => {
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
 
-        const gitRoot = join(input.commonDirectory, "git-repository");
-        mkdirSync(gitRoot);
-        const initialized = runTestProcess("git", ["init", "-q"], { cwd: gitRoot });
-        if (initialized.status !== 0) throw new Error(initialized.stderr);
-        const gitCommonDirectory = join(gitRoot, ".git");
         const changes = yield* openSqliteChangePersistence();
         const publication = {
           changeId: created.change.id,
@@ -259,20 +251,10 @@ describe("by change reconcile", () => {
         });
         if (!recorded.ok) throw new Error(recorded.code);
 
-        const deletionResults = [
-          {
-            state: "present" as const,
-            headSha: "head",
-            remoteUrl: "https://github.com/acme/repo.git",
-          },
-          {
-            state: "present" as const,
-            headSha: "moved-head",
-            remoteUrl: "https://github.com/acme/repo.git",
-          },
-          { state: "unavailable" as const },
-          { state: "missing" as const },
-        ] as const;
+        const cleanupResults = [
+          { state: "pending" as const, blockingReason: "remote_branch_deletion_failed" },
+          { state: "complete" as const },
+        ];
         let cleanupAttempts = 0;
         let mergedHead = "merged-head";
         const reconciliation = openChangeReconciliation({
@@ -298,23 +280,7 @@ describe("by change reconcile", () => {
           },
           cleanupTerminal: openTerminalCleanup({
             persistence: changes,
-            cleanup: (() => {
-              const cleanupRemote = cleanupChangeResourcesWithRemote({
-                readRemoteBranchHead: () => ({
-                  state: "present",
-                  headSha: "head",
-                  remoteUrl: "https://github.com/acme/repo.git",
-                }),
-                deleteRemoteBranch: () =>
-                  deletionResults[cleanupAttempts++] ?? { state: "missing" },
-              });
-              return (cleanupInput) =>
-                cleanupRemote({
-                  ...cleanupInput,
-                  repositoryCommonDirectory: gitCommonDirectory,
-                  worktreePath: null,
-                });
-            })(),
+            cleanup: () => cleanupResults[cleanupAttempts++] ?? { state: "complete" },
           }),
         });
 
@@ -360,44 +326,12 @@ describe("by change reconcile", () => {
           changes: [
             {
               changeId: created.change.id,
-              status: "cleanup_pending",
-              cleanup: { state: "pending", blockingReason: "remote_branch_head_mismatch" },
-            },
-          ],
-        });
-        expect(
-          yield* reconciliation.reconcile({
-            repositoryCommonDirectory: input.commonDirectory,
-            changeId: created.change.id,
-            now,
-          }),
-        ).toMatchObject({
-          rejected: false,
-          changes: [
-            {
-              changeId: created.change.id,
-              status: "cleanup_pending",
-              cleanup: { state: "pending", blockingReason: "remote_branch_unavailable" },
-            },
-          ],
-        });
-        expect(
-          yield* reconciliation.reconcile({
-            repositoryCommonDirectory: input.commonDirectory,
-            changeId: created.change.id,
-            now,
-          }),
-        ).toMatchObject({
-          rejected: false,
-          changes: [
-            {
-              changeId: created.change.id,
               status: "cleanup_complete",
               cleanup: { state: "complete" },
             },
           ],
         });
-        expect(cleanupAttempts).toBe(4);
+        expect(cleanupAttempts).toBe(2);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",

@@ -1,15 +1,15 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
+import {
+  deleteDisposableWorkspaceRef,
+  removeDisposableWorktree,
+} from "../disposableWorkspace/disposableWorkspaceGit.js";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
-import {
-  deleteValidationTempRef,
-  removeValidationWorktree,
-} from "./validation/validationGitGlue.js";
 import { validationTempRefName } from "./validation/validationWorkspacePath.js";
 
 export type LoadAbandonValidationRunResult =
@@ -50,9 +50,9 @@ export const loadAbandonValidationRun = (input: {
             workspaceCleanup: {
               tempRefName: validationTempRefName,
               removeWorktree: (worktreePath) =>
-                removeValidationWorktree(context.mainCheckoutRoot, worktreePath),
+                removeDisposableWorktree(context.mainCheckoutRoot, worktreePath),
               deleteTempRef: (tempRefName) =>
-                deleteValidationTempRef(context.mainCheckoutRoot, tempRefName),
+                deleteDisposableWorkspaceRef(context.mainCheckoutRoot, tempRefName),
             },
           }).abandon(command),
         ).pipe(Effect.provide(repositoryLayer)),

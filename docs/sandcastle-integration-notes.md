@@ -29,12 +29,12 @@ Sandboxing should be a separate execution-provider decision rather than another 
 
 | Current use | But Why ownership | Sandcastle contribution |
 | --- | --- | --- |
-| Validation Workspace lifecycle | Temporary ref, exact Candidate SHA, dirty-workspace recovery, setup evidence, cleanup result | Creates the Git worktree, copies allowlisted files, exposes its path, and closes it |
+| Validation Workspace lifecycle | Workspace policy, requested-commit verification, setup evidence, cleanup result, and Change error translation | Creates the Git worktree, copies allowlisted files, exposes its path, and closes it |
 | Preparation and Checks | Commands, ordering, findings, diagnostics, integrity checks | Runs shell commands through `Sandbox.exec()` |
 | Pi reviewer execution | Profiles, prompts, output contract, bounded same-session corrections, Reviewer Session identity, persistence, and evidence | Builds and runs the Pi process, parses its stream, and exposes session resume |
 | Process handle | Effect scope and cleanup policy | Provides `run()`, `exec()`, and `close()` on one handle |
 
-The main integration points are `src/change/validation/createValidationWorkspace.ts` and `src/agent/reviewerAgentRuntime.ts`.
+The main integration points are `src/disposableWorkspace/runDisposableExactCommitWorkspace.ts` for workspace lifecycle, `src/change/validation/createValidationWorkspace.ts` for Change policy and evidence translation, and `src/agent/reviewerAgentRuntime.ts` for reviewer execution.
 Validation phases receive only the small `exec` and `run` portions of Sandcastle's `Sandbox` type.
 This narrow use means replacement does not require a Validation Gate redesign.
 
@@ -130,7 +130,7 @@ A replacement must preserve exact Candidate binding, integrity checks, bounded c
 ## Validation Workspace cleanup limits
 
 But Why owns a finite 30-second limit for the original Sandcastle `Sandbox.close()` operation.
-The Git Adapter uses the same finite limit for worktree removal and registration verification.
+The disposable-workspace Git implementation uses the same finite limit for worktree removal and registration verification.
 The limit is longer than the former five-second limit so a clean workspace that Sandcastle removes slowly can still complete cleanup.
 
 The timeout does not cancel Sandcastle's promise.

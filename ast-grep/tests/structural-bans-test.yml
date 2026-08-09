@@ -33,7 +33,7 @@ id: sandcastle-factories-belong-to-workspace
 valid:
   - import type { Sandbox } from "@ai-hero/sandcastle";
   - import { pi, type Sandbox } from "@ai-hero/sandcastle";
-  - createValidationWorkspace(input)
+  - runDisposableExactCommitWorkspace(input)
 invalid:
   - import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";
   - import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
@@ -112,9 +112,9 @@ valid:
 invalid:
   - openHerdrInteractiveSessionHost(undefined)
 ---
-id: direct-sandcastle-helpers-belong-to-validation-workspace
+id: direct-sandcastle-helpers-belong-to-disposable-workspace
 valid:
-  - createValidationWorkspace(input)
+  - runDisposableExactCommitWorkspace(input)
 invalid:
   - import { createSandbox } from "@ai-hero/sandcastle";
   - import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
