@@ -54,6 +54,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     });
   }
   const sent: string[] = [];
+  const sendOptions: unknown[] = [];
   const notifications: string[] = [];
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: unknown = snapshot();
@@ -80,8 +81,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
         data,
       });
     },
-    sendUserMessage(message: string) {
+    sendUserMessage(message: string, options?: unknown) {
       sent.push(message);
+      sendOptions.push(options);
     },
     async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
@@ -123,6 +125,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       await handler("", context);
     },
     sent,
+    sendOptions,
     notifications,
     widgets,
     execCalls,
@@ -163,7 +166,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
       if (handler === undefined) throw new Error(`Missing ${event} handler`);
-      await handler(value, context);
+      return await handler(value, context);
     },
   };
 };
@@ -171,6 +174,58 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
 const result = (stdout: string) => ({ stdout, stderr: "", code: 0, killed: false });
 
 describe("packaged Change Implement continuation extension", () => {
+  it("blocks each first visible Submission, steers reassessment, and allows exactly one retry", async () => {
+    const harness = createHarness();
+    const submit = {
+      type: "tool_call",
+      toolCallId: "submit-1",
+      toolName: "bash",
+      input: { command: `git status && just by --json change submit ${changeId}` },
+    };
+
+    const first = await harness.emit("tool_call", submit);
+    expect(first).toMatchObject({ block: true });
+    expect(harness.sent).toEqual([
+      expect.stringContaining("complete Bash tool call before any part of it executed"),
+    ]);
+    expect(harness.sent[0]).toContain(
+      "review the complete Candidate against the complete accepted intent",
+    );
+    expect(harness.sent[0]).toContain(
+      "every accepted outcome, acceptance criterion, constraint, and verification requirement",
+    );
+    expect(harness.sent[0]).toContain("Correct every discrepancy you find");
+    expect(harness.sent[0]).toContain(
+      "rerun all required pre-Submission commands and retry the blocked Change Submit command",
+    );
+    expect(harness.sendOptions).toEqual([{ deliverAs: "steer" }]);
+
+    expect(
+      await harness.emit("tool_call", {
+        ...submit,
+        toolCallId: "unrelated-1",
+        input: {
+          command: `commands=(\n  # Keep ) in this comment\n  just by change submit ${changeId}\n)`,
+        },
+      }),
+    ).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-2" })).toBeUndefined();
+    expect(
+      await harness.emit("tool_call", {
+        ...submit,
+        toolCallId: "submit-3",
+        input: {
+          command: `just by change submit ${changeId}; just by change submit ${changeId}`,
+        },
+      }),
+    ).toMatchObject({ block: true });
+    expect(harness.sent).toHaveLength(2);
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-4" })).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-5" })).toMatchObject({
+      block: true,
+    });
+  });
+
   it("sends a state-specific turn for an unfinished Change", async () => {
     const harness = createHarness();
 

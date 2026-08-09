@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import {
+  isToolCallEventType,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type SessionEntry,
+} from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
 type ChangeCloseReason = "completed" | "cancelled";
@@ -122,6 +127,253 @@ const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]):
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
+const submitCommandPattern =
+  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+(?:--json\s+)?change\s+submit(?:\s|$)/gu;
+
+type ShellLineState = {
+  readonly quote: "'" | '"' | undefined;
+  readonly arithmeticDepth: number;
+};
+
+const hereDocumentDeclarations = (
+  line: string,
+  state: ShellLineState,
+): {
+  readonly declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }>;
+  readonly state: ShellLineState;
+} => {
+  const declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
+  let { quote, arithmeticDepth } = state;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === "(" && line[index + 1] === "(") {
+      arithmeticDepth += 1;
+      index += 1;
+      continue;
+    }
+    if (arithmeticDepth > 0 && character === ")" && line[index + 1] === ")") {
+      arithmeticDepth -= 1;
+      index += 1;
+      continue;
+    }
+    if (arithmeticDepth > 0) continue;
+    if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(line[index - 1] ?? ""))) break;
+    if (character !== "<" || line[index + 1] !== "<") continue;
+    let cursor = index + 2;
+    const stripTabs = line[cursor] === "-";
+    if (stripTabs) cursor += 1;
+    while (line[cursor] === " " || line[cursor] === "\t") cursor += 1;
+    let delimiter = "";
+    let delimiterQuote: "'" | '"' | undefined;
+    for (; cursor < line.length; cursor += 1) {
+      const delimiterCharacter = line[cursor] ?? "";
+      if (delimiterQuote !== undefined) {
+        if (delimiterCharacter === delimiterQuote) delimiterQuote = undefined;
+        else if (delimiterCharacter === "\\" && delimiterQuote === '"') {
+          cursor += 1;
+          delimiter += line[cursor] ?? "";
+        } else delimiter += delimiterCharacter;
+      } else if (delimiterCharacter === "'" || delimiterCharacter === '"') {
+        delimiterQuote = delimiterCharacter;
+      } else if (delimiterCharacter === "\\") {
+        cursor += 1;
+        delimiter += line[cursor] ?? "";
+      } else if (/[\s;|&()<>]/u.test(delimiterCharacter)) {
+        break;
+      } else {
+        delimiter += delimiterCharacter;
+      }
+    }
+    if (delimiter !== "") {
+      declarations.push({ delimiter, stripTabs });
+      index = cursor - 1;
+    }
+  }
+  return { declarations, state: { quote, arithmeticDepth } };
+};
+
+const withoutHereDocumentBodies = (command: string): string => {
+  const lines = command.split(/(?<=\n)/u);
+  const pending: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
+  let scanState: ShellLineState = { quote: undefined, arithmeticDepth: 0 };
+  return lines
+    .map((line) => {
+      const body = pending[0];
+      if (body !== undefined) {
+        const value = line.replace(/\n$/u, "");
+        if ((body.stripTabs ? value.replace(/^\t+/u, "") : value) === body.delimiter) {
+          pending.shift();
+        }
+        return line.endsWith("\n") ? `${" ".repeat(line.length - 1)}\n` : " ".repeat(line.length);
+      }
+      const scanned = hereDocumentDeclarations(line, scanState);
+      pending.push(...scanned.declarations);
+      scanState = scanned.state;
+      return line;
+    })
+    .join("");
+};
+
+const visibleShellText = (rawCommand: string): string => {
+  const command = withoutHereDocumentBodies(rawCommand);
+  let result = "";
+  let quote: "'" | '"' | undefined;
+  let comment = false;
+  let arrayDepth = 0;
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index] ?? "";
+    if (comment) {
+      if (character === "\n") {
+        comment = false;
+        result += character;
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+    if (arrayDepth > 0 && quote === undefined) {
+      if (
+        (character === "$" || character === "<" || character === ">") &&
+        command[index + 1] === "("
+      ) {
+        const closing = findCommandSubstitutionEnd(command, index + 2);
+        if (closing !== undefined) {
+          result += `( ${visibleShellText(command.slice(index + 2, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (character === "`") {
+        const closing = command.indexOf("`", index + 1);
+        if (closing !== -1) {
+          result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (character === "\\") {
+        result += " ".repeat(Math.min(2, command.length - index));
+        index += 1;
+        continue;
+      }
+      if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+        comment = true;
+      } else if (character === "'" || character === '"') quote = character;
+      else if (character === "(") arrayDepth += 1;
+      else if (character === ")") arrayDepth -= 1;
+      result += " ";
+      continue;
+    }
+    if (quote !== undefined) {
+      if (quote === '"' && character === "$" && command[index + 1] === "(") {
+        const closing = findCommandSubstitutionEnd(command, index + 2);
+        if (closing !== undefined) {
+          result += `( ${visibleShellText(command.slice(index + 2, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (quote === '"' && character === "`") {
+        const closing = command.indexOf("`", index + 1);
+        if (closing !== -1) {
+          result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (quote === '"' && character === "\\") {
+        result += " ".repeat(Math.min(2, command.length - index));
+        index += 1;
+      } else {
+        if (character === quote) quote = undefined;
+        result += " ";
+      }
+      continue;
+    }
+    if (character === "=" && command[index + 1] === "(") {
+      arrayDepth = 1;
+      result += "  ";
+      index += 1;
+    } else if (character === "`") {
+      const closing = command.indexOf("`", index + 1);
+      if (closing === -1) {
+        result += " ";
+      } else {
+        result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
+        index = closing;
+      }
+    } else if (character === "'" || character === '"') {
+      quote = character;
+      result += " ";
+    } else if (character === "\\") {
+      result += " ".repeat(Math.min(2, command.length - index));
+      index += 1;
+    } else if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+      comment = true;
+      result += " ";
+    } else {
+      result += character;
+    }
+  }
+  return result;
+};
+
+const findCommandSubstitutionEnd = (command: string, start: number): number | undefined => {
+  let depth = 1;
+  let quote: "'" | '"' | undefined;
+  let comment = false;
+  for (let index = start; index < command.length; index += 1) {
+    const character = command[index];
+    if (comment) {
+      if (character === "\n") comment = false;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === "#" && (index === start || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+      comment = true;
+    } else if (character === "(") depth += 1;
+    else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return undefined;
+};
+
+export const countVisibleChangeSubmits = (command: string): number =>
+  [...visibleShellText(command).matchAll(submitCommandPattern)].length;
+
+export const containsVisibleChangeSubmit = (command: string): boolean =>
+  countVisibleChangeSubmits(command) > 0;
+
+const submissionReassessmentMessage = [
+  "But Why blocked the complete Bash tool call before any part of it executed.",
+  "Before retrying Change Submission, review the complete Candidate against the complete accepted intent.",
+  "Check that every accepted outcome, acceptance criterion, constraint, and verification requirement is satisfied.",
+  "Correct every discrepancy you find.",
+  "Then rerun all required pre-Submission commands and retry the blocked Change Submit command.",
+].join(" ");
+
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   for (const entry of entries) {
     if (entry.type !== "message" || entry.message.role !== "user") continue;
@@ -216,6 +468,20 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
+  let submitAllowed = false;
+
+  pi.on("tool_call", (event) => {
+    if (!isToolCallEventType("bash", event)) return;
+    const submitCount = countVisibleChangeSubmits(event.input.command);
+    if (submitCount === 0) return;
+    if (submitAllowed && submitCount === 1) {
+      submitAllowed = false;
+      return;
+    }
+    submitAllowed = true;
+    pi.sendUserMessage(submissionReassessmentMessage, { deliverAs: "steer" });
+    return { block: true, reason: submissionReassessmentMessage };
+  });
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
