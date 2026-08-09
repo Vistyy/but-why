@@ -368,8 +368,10 @@ export const containsVisibleChangeSubmit = (command: string): boolean =>
 
 const submissionReassessmentMessage = [
   "But Why blocked the complete Bash tool call before any part of it executed.",
-  "Reassess the Candidate against the complete accepted intent.",
-  "Retry all required commands before Change Submission, including the blocked Change Submit command.",
+  "Before retrying Change Submission, review the complete Candidate against the complete accepted intent.",
+  "Check that every accepted outcome, acceptance criterion, constraint, and verification requirement is satisfied.",
+  "Correct every discrepancy you find.",
+  "Then rerun all required pre-Submission commands and retry the blocked Change Submit command.",
 ].join(" ");
 
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
