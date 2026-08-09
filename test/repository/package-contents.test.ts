@@ -23,6 +23,35 @@ import {
 } from "../support/testWorkspace.js";
 
 const packageProcessTimeoutMs = 30_000;
+const expectedLazyCommandModules = [
+  "./cli/task/commands/dependencies.js",
+  "./cli/task/commands/contextDraft.js",
+  "./cli/task/commands/contextApply.js",
+  "./cli/task/commands/context.js",
+  "./cli/task/commands/create.js",
+  "./cli/task/commands/list.js",
+  "./cli/task/commands/show.js",
+  "./cli/task/commands/approve.js",
+  "./cli/task/commands/cancel.js",
+  "./cli/change/decision.js",
+  "./cli/change/blocker.js",
+  "./cli/change/start.js",
+  "./cli/change/prepare.js",
+  "./cli/change/list.js",
+  "./cli/change/show.js",
+  "./cli/change/findings.js",
+  "./cli/change/validationRuns.js",
+  "./cli/change/submit.js",
+  "./cli/change/cancel.js",
+  "./cli/change/reconcile.js",
+  "./cli/change/implement.js",
+  "./cli/validationRun/show.js",
+  "./cli/validationRun/abandon.js",
+  "./cli/validationRun/artifact.js",
+  "./cli/initCli.js",
+  "./cli/snapshot.js",
+  "./cli/task/dashboard.js",
+] as const;
 
 type PackedPackageMetadata = {
   readonly id: string;
@@ -196,10 +225,16 @@ describe("release package boundary", () => {
         if (target !== undefined) staticEntryQueue.push(join(dirname(current), target));
       }
     }
+    const declaredSource = readFileSync(join(prepared.root, "src/cliCommandTree.ts"), "utf8");
+    const declaredTargets = [...declaredSource.matchAll(/import\("(\.\/cli\/[^"?]+)"\)/g)].flatMap(
+      ([, target]) => (target === undefined ? [] : [target]),
+    );
+    expect([...new Set(declaredTargets)].sort()).toEqual([...expectedLazyCommandModules].sort());
+
     const dynamicTargets = [...entrySource.matchAll(/import\([`"](\.\/[^`"]+)[`"]\)/g)].flatMap(
       ([, target]) => (target === undefined ? [] : [target]),
     );
-    expect(dynamicTargets.length).toBeGreaterThan(10);
+    expect(dynamicTargets).toHaveLength(declaredTargets.length);
     const dynamicTargetFiles = new Set(
       dynamicTargets.map((target) => join(prepared.root, "dist", target.slice(2))),
     );
