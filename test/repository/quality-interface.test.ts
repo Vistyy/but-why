@@ -179,6 +179,27 @@ const waitForOutput = (process: { readonly output: string }, text: string): Prom
     timeoutMs: 5_000,
   });
 
+const startCleanupObserver = (lockFile: string, identity: string) =>
+  startRunner(lockFile, [
+    "cleanup observer",
+    process.execPath,
+    "-e",
+    `const fs = require("node:fs");
+const identity = process.argv[1];
+const separator = identity.indexOf(":");
+const pid = identity.slice(0, separator);
+let observed;
+try {
+  const stat = fs.readFileSync(\`/proc/\${pid}/stat\`, "utf8");
+  const commandEnd = stat.lastIndexOf(")");
+  const fields = commandEnd < 0 ? [] : stat.slice(commandEnd + 2).split(" ");
+  observed = fields[19] === undefined ? undefined : \`\${pid}:\${fields[19]}\`;
+} catch {}
+if (observed === identity) process.exit(9);
+process.stdout.write("capacity acquired after descendant cleanup");`,
+    identity,
+  ]);
+
 const createWorkloadJustfile = (directory: string): void => {
   cpSync(join(repositoryRoot, "package.json"), join(directory, "package.json"));
   symlinkSync(join(repositoryRoot, "node_modules"), join(directory, "node_modules"), "dir");
@@ -438,15 +459,18 @@ describe("quality interface", () => {
     try {
       await waitForFile(readyFile);
       const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       holder.child.kill("SIGINT");
       expect((await holder.done).status).toBe(130);
+      const observation = await observer.done;
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after descendant cleanup");
       await waitForProcessExit(descendantIdentity);
     } finally {
       await stopRunner(holder);
     }
 
-    const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
-    expect(recovered.status).toBe(0);
   });
 
   test("interrupts an actual unselected test workload with SIGINT and releases capacity", async () => {
@@ -465,12 +489,15 @@ describe("quality interface", () => {
     try {
       await waitForFile(readyFile);
       const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
       expect(justProcess.output).toContain("rerun the same command to retry");
+      const observation = await observer.done;
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after descendant cleanup");
       await waitForProcessExit(descendantIdentity);
-      const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
-      expect(recovered.status).toBe(0);
     } finally {
       await stopJust(justProcess);
     }
@@ -499,14 +526,17 @@ describe("quality interface", () => {
     try {
       await waitForFile(readyFile);
       const descendantIdentity = await readProcessIdentity(descendantPidFile);
+      const observer = startCleanupObserver(lockFile, descendantIdentity);
+      await waitForOutput(observer, "waiting: cleanup observer is waiting for capacity");
       signalJust(quality, signal);
       expect((await quality.done).status).toBe(expectedStatus);
       expect(quality.output).toContain(`${qualityCommand} interrupted after`);
       expect(quality.output).toContain(`rerun just ${qualityCommand} to retry`);
       expect(quality.output).not.toContain(`${qualityCommand} completed in`);
+      const observation = await observer.done;
+      expect(observation.status, observation.output).toBe(0);
+      expect(observation.output).toContain("capacity acquired after descendant cleanup");
       await waitForProcessExit(descendantIdentity);
-      const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
-      expect(recovered.status).toBe(0);
     } finally {
       await stopJust(quality);
     }
