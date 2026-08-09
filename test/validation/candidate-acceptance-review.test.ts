@@ -23,13 +23,13 @@ import type {
 import { reviewerSessionsPath } from "../../src/change/reviewerSession/reviewerSession.js";
 import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import {
-  ReviewerOutputContractFailed,
   SandcastleToolingFailed,
   validationToolingFailureRecord,
 } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { ReviewerOutputContractFailed } from "../../src/contracts/reviewerOutputContractFailure.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {

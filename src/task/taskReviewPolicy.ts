@@ -4,7 +4,6 @@ import { Effect, type ParseResult, Schema } from "effect";
 
 import type { AgentProfileResolutionError } from "../agent/agentProfileErrors.js";
 import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../agent/agentProfiles.js";
-import { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
 import {
   contractDiagnostics,
@@ -13,6 +12,7 @@ import {
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
+import { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type TaskReviewPolicyError = AgentProfileResolutionError | GlobalConfigValidationFailed;

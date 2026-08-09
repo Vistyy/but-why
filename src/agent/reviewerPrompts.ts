@@ -1,9 +1,9 @@
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
+import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 
 const reviewerExecutionInstructions = [

@@ -16,11 +16,11 @@ import {
   SandcastleToolingFailed,
   type ValidationToolingFailure,
 } from "../change/validation/validationToolingFailures.js";
-import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../contracts/reviewerOutput.js";
+import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import {
   type AgentEnvironmentCommand,
   prependAgentEnvironment,
