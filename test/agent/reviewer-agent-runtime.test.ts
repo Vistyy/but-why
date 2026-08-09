@@ -7,6 +7,10 @@ import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
 
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  decodeReviewerOutputContract,
+  validateReviewerArtifactRefs,
+} from "../../src/contracts/reviewerOutput.js";
 
 const profile = {
   agentProfile: "review",
@@ -390,6 +394,38 @@ describe("Pi reviewer agent runtime", () => {
       });
       expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
       expect(attempts).toBe(1);
+    }),
+  );
+
+  it.effect("retries when an injected output contract rejects an Artifact reference", () =>
+    Effect.gen(function* () {
+      const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      const resume = vi.fn(() => Promise.resolve(corrected));
+      const dangling = runResult(
+        '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
+        resume,
+      );
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run: () => Promise.resolve(dangling) } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        outputContract: (input) =>
+          decodeReviewerOutputContract(input).pipe(
+            Effect.flatMap((output) =>
+              validateReviewerArtifactRefs({
+                ...input,
+                validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+                availableArtifactRefs: [],
+                output,
+              }),
+            ),
+          ),
+        prompt: "Review the Candidate.",
+        profile,
+      });
+
+      expect(result).toMatchObject({ ok: true, attempts: 2, report: { findings: [] } });
+      expect(resume).toHaveBeenCalledWith(expect.stringContaining("does not resolve"));
     }),
   );
 

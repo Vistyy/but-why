@@ -29,14 +29,17 @@ import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
 export type ReviewerAgentRuntime<Report = ReviewerOutput> = {
-  readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult<Report>>;
+  readonly review: (
+    input: ReviewerAgentInput<Report>,
+  ) => Effect.Effect<ReviewerAgentResult<Report>>;
 };
 
 export type ReviewerSessionUsability = "unusable" | "unknown";
 
-export type ReviewerAgentInput = {
+export type ReviewerAgentInput<Report = ReviewerOutput> = {
   readonly sandbox: Pick<Sandbox, "run">;
   readonly reviewer: string;
+  readonly outputContract?: ReviewerOutputContract<Report>;
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd?: string;
@@ -65,15 +68,15 @@ export type ReviewerAgentResult<Report = ReviewerOutput> =
       readonly sessionFilePath?: string;
     };
 
-type ReviewerOutputDecoder<Report> = (input: {
+export type ReviewerOutputContract<Report> = (input: {
   readonly reviewer: string;
   readonly attempts: number;
   readonly output: unknown;
 }) => Effect.Effect<Report, ReviewerOutputContractFailed>;
 
 const reviewWithPi = <Report>(
-  input: ReviewerAgentInput,
-  decodeOutput: ReviewerOutputDecoder<Report>,
+  input: ReviewerAgentInput<Report>,
+  decodeOutput: ReviewerOutputContract<Report>,
 ): Effect.Effect<ReviewerAgentResult<Report>> =>
   Effect.gen(function* () {
     const sessionSnapshot =
@@ -138,7 +141,7 @@ const reviewWithPi = <Report>(
       );
       if (recovered._tag === "Right") {
         const decoded = yield* Effect.either(
-          validateRunResult(input, decodeOutput, recovered.right, 1),
+          validateRunResult(input, input.outputContract ?? decodeOutput, recovered.right, 1),
         );
         if (decoded._tag === "Right") {
           restoreSession();
@@ -165,7 +168,9 @@ const reviewWithPi = <Report>(
     }
 
     let current = initial.right;
-    let validation = yield* Effect.either(validateRunResult(input, decodeOutput, current, 1));
+    let validation = yield* Effect.either(
+      validateRunResult(input, input.outputContract ?? decodeOutput, current, 1),
+    );
     if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
       return {
@@ -200,7 +205,9 @@ const reviewWithPi = <Report>(
         return sandcastleFailure(corrected.left, attempts, current.stdout);
       }
       current = corrected.right;
-      validation = yield* Effect.either(validateRunResult(input, decodeOutput, current, attempts));
+      validation = yield* Effect.either(
+        validateRunResult(input, input.outputContract ?? decodeOutput, current, attempts),
+      );
     }
     if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
@@ -224,7 +231,7 @@ const reviewWithPi = <Report>(
   });
 
 export const piReviewerAgentRuntimeFor = <Report>(
-  decodeOutput: ReviewerOutputDecoder<Report>,
+  decodeOutput: ReviewerOutputContract<Report>,
 ): ReviewerAgentRuntime<Report> => ({
   review: (input) => reviewWithPi(input, decodeOutput),
 });
@@ -274,8 +281,8 @@ const isolatedPiReviewerAgent = (
 };
 
 const validateRunResult = <Report>(
-  input: ReviewerAgentInput,
-  decodeOutput: ReviewerOutputDecoder<Report>,
+  input: ReviewerAgentInput<Report>,
+  decodeOutput: ReviewerOutputContract<Report>,
   result: SandboxRunResult,
   attempts: number,
 ) =>

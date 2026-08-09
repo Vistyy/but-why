@@ -52,7 +52,7 @@ const taggedReviewerOutput = (value: unknown): string =>
   `<reviewer-output>${JSON.stringify(value)}</reviewer-output>`;
 
 const passingReviewer = (
-  reviewInputs: ReviewerAgentInput[],
+  reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[],
 ): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
     Effect.sync((): ReviewerAgentResult => {
@@ -164,7 +164,7 @@ describe("Task Submission orchestration", () => {
           Effect.gen(function* () {
             const tasks = yield* openSqliteTaskPersistence("BY");
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const reviewInputs: ReviewerAgentInput[] = [];
+            const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
             const submission = openTaskSubmission(
               submissionDependencies(root, {
                 reviewerAgentRuntime: passingReviewer(reviewInputs),
@@ -311,7 +311,7 @@ describe("Task Submission orchestration", () => {
           root,
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const reviewInputs: ReviewerAgentInput[] = [];
+            const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
             const headReads = { count: 0 };
             const blockedReviewer: ReviewerAgentRuntime<TaskReviewReviewerOutput> = {
               review: (input) =>
@@ -475,7 +475,7 @@ describe("Task Submission orchestration", () => {
         root,
         Effect.gen(function* () {
           const reviews = yield* openSqliteTaskReviewPersistence();
-          const reviewInputs: ReviewerAgentInput[] = [];
+          const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
           const submission = openTaskSubmission(
             submissionDependencies(root, {
               reviewerAgentRuntime: passingReviewer(reviewInputs),
@@ -500,7 +500,7 @@ describe("Task Submission orchestration", () => {
         root,
         Effect.gen(function* () {
           const reviews = yield* openSqliteTaskReviewPersistence();
-          const reviewInputs: ReviewerAgentInput[] = [];
+          const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
           const submission = openTaskSubmission(
             submissionDependencies(root, {
               reviewerAgentRuntime: passingReviewer(reviewInputs),

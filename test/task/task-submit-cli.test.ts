@@ -24,7 +24,7 @@ const taggedReviewerOutput = (value: unknown): string =>
   `<reviewer-output>${JSON.stringify(value)}</reviewer-output>`;
 
 const reviewerThatPasses = (
-  reviewInputs: ReviewerAgentInput[],
+  reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[],
 ): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
     Effect.sync((): ReviewerAgentResult<TaskReviewReviewerOutput> => {
@@ -39,7 +39,7 @@ const reviewerThatPasses = (
 });
 
 const reviewerThatBlocks = (
-  reviewInputs: ReviewerAgentInput[],
+  reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[],
 ): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
     Effect.sync((): ReviewerAgentResult<TaskReviewReviewerOutput> => {
@@ -107,7 +107,7 @@ describe("by task submission CLI", () => {
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
-        const reviewInputs: ReviewerAgentInput[] = [];
+        const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
         const submitted = yield* runByInProcessEffect(
           root,
           ["--json", "task", "submit", "BY-1"],
@@ -149,7 +149,7 @@ describe("by task submission CLI", () => {
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
-        const reviewInputs: ReviewerAgentInput[] = [];
+        const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
         const submitted = yield* runByInProcessEffect(
           root,
           ["--json", "task", "submit", "BY-1"],
@@ -182,7 +182,7 @@ describe("by task submission CLI", () => {
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
-        const reviewInputs: ReviewerAgentInput[] = [];
+        const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
         const first = yield* runByInProcessEffect(
           root,
           ["--json", "task", "submit", "BY-1"],
@@ -216,7 +216,7 @@ describe("by task submission CLI", () => {
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
-        const reviewInputs: ReviewerAgentInput[] = [];
+        const reviewInputs: ReviewerAgentInput<TaskReviewReviewerOutput>[] = [];
         const submitted = yield* runByInProcessEffect(
           root,
           ["--json", "task", "submit", "BY-1"],

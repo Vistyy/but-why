@@ -2,20 +2,17 @@ import { chmodSync, readdirSync, statSync } from "node:fs";
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
-} from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
   buildAcceptanceReviewerPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
+  decodeReviewerOutputContract,
   type ReviewerOutput,
   validateReviewerArtifactRefs,
 } from "../../contracts/reviewerOutput.js";
-import type { ReviewerOutputContractFailed } from "../../contracts/reviewerOutputContractFailure.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
@@ -189,53 +186,51 @@ const runAcceptanceReviewPhaseImpl = (
             ? undefined
             : "identity_mismatch";
     let reviewCalls = 0;
-    const review = (
-      resumeSession?: string,
-    ): Effect.Effect<ReviewerAgentResult, ReviewerOutputContractFailed> => {
+    const review = (resumeSession?: string) => {
       reviewCalls += 1;
-      return Effect.gen(function* () {
-        const result = yield* input.runtime.review({
-          sandbox: input.sandbox,
-          reviewer: "acceptance",
-          prompt:
-            compatible && resumeSession !== undefined
-              ? continuationPrompt({
-                  candidate: input.candidate,
-                  acceptanceContext: input.acceptanceContext,
-                  implementationDecisions: input.implementationDecisions ?? [],
-                  ...(input.blockerHistory === undefined
-                    ? {}
-                    : { blockerHistory: input.blockerHistory }),
-                  availableArtifactRefs,
-                  previousFindings: earlierFindings,
-                })
-              : prompt,
-          profile: input.policy.profile,
-          commandCwd: input.commandCwd,
-          ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-          ...(input.agentEnvironment === undefined
-            ? {}
-            : { agentEnvironment: input.agentEnvironment }),
-          ...(input.sessionStorageRoot === undefined
-            ? {}
-            : {
-                sessionStorageRoot: reviewerSessionsPath(
-                  input.sessionStorageRoot,
-                  identity.changeId,
-                  identity.producer,
-                ),
+      return input.runtime.review({
+        sandbox: input.sandbox,
+        reviewer: "acceptance",
+        outputContract: (decoderInput) =>
+          decodeReviewerOutputContract(decoderInput).pipe(
+            Effect.flatMap((output) =>
+              validateReviewerArtifactRefs({
+                ...decoderInput,
+                validationRunId: input.validationRunId,
+                availableArtifactRefs,
+                output,
               }),
-          ...(resumeSession === undefined ? {} : { resumeSession }),
-        });
-        if (!result.ok) return result;
-        const report = yield* validateReviewerArtifactRefs({
-          reviewer: "acceptance",
-          attempts: result.attempts,
-          validationRunId: input.validationRunId,
-          availableArtifactRefs,
-          output: result.report,
-        });
-        return { ...result, report };
+            ),
+          ),
+        prompt:
+          compatible && resumeSession !== undefined
+            ? continuationPrompt({
+                candidate: input.candidate,
+                acceptanceContext: input.acceptanceContext,
+                implementationDecisions: input.implementationDecisions ?? [],
+                ...(input.blockerHistory === undefined
+                  ? {}
+                  : { blockerHistory: input.blockerHistory }),
+                availableArtifactRefs,
+                previousFindings: earlierFindings,
+              })
+            : prompt,
+        profile: input.policy.profile,
+        commandCwd: input.commandCwd,
+        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+        ...(input.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: input.agentEnvironment }),
+        ...(input.sessionStorageRoot === undefined
+          ? {}
+          : {
+              sessionStorageRoot: reviewerSessionsPath(
+                input.sessionStorageRoot,
+                identity.changeId,
+                identity.producer,
+              ),
+            }),
+        ...(resumeSession === undefined ? {} : { resumeSession }),
       });
     };
     let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
