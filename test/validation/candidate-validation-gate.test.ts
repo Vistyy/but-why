@@ -12,6 +12,11 @@ const specialistsPassed = {
   reviewerEvidence: [],
   toolingFailures: [],
 };
+const record = <A>(calls: string[], phase: string, result: A) =>
+  Effect.sync(() => {
+    calls.push(phase);
+    return result;
+  });
 
 describe("Candidate Validation Gate", () => {
   it.effect("omits Acceptance Review for a taskless Candidate", () =>
@@ -19,8 +24,8 @@ describe("Candidate Validation Gate", () => {
       const calls: string[] = [];
 
       const result = yield* runCandidateValidationGate({
-        checks: () => Effect.sync(() => (calls.push("checks"), passed)),
-        specialistReviews: () => Effect.sync(() => (calls.push("specialists"), specialistsPassed)),
+        checks: () => record(calls, "checks", passed),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
       });
 
       expect(result).toEqual({ outcome: "passed", toolingFailures: [] });
@@ -32,22 +37,20 @@ describe("Candidate Validation Gate", () => {
     Effect.gen(function* () {
       const prepareCalls: string[] = [];
       const prepareResult = yield* runCandidateValidationGate({
-        prepare: () => Effect.sync(() => (prepareCalls.push("prepare"), blocked)),
-        checks: () => Effect.sync(() => (prepareCalls.push("checks"), passed)),
-        acceptanceReview: () => Effect.sync(() => (prepareCalls.push("acceptance"), passed)),
-        specialistReviews: () =>
-          Effect.sync(() => (prepareCalls.push("specialists"), specialistsPassed)),
+        prepare: () => record(prepareCalls, "prepare", blocked),
+        checks: () => record(prepareCalls, "checks", passed),
+        acceptanceReview: () => record(prepareCalls, "acceptance", passed),
+        specialistReviews: () => record(prepareCalls, "specialists", specialistsPassed),
       });
       expect(prepareResult.outcome).toBe("blocked");
       expect(prepareCalls).toEqual(["prepare"]);
 
       const checkCalls: string[] = [];
       const checkResult = yield* runCandidateValidationGate({
-        prepare: () => Effect.sync(() => (checkCalls.push("prepare"), passed)),
-        checks: () => Effect.sync(() => (checkCalls.push("checks"), blocked)),
-        acceptanceReview: () => Effect.sync(() => (checkCalls.push("acceptance"), passed)),
-        specialistReviews: () =>
-          Effect.sync(() => (checkCalls.push("specialists"), specialistsPassed)),
+        prepare: () => record(checkCalls, "prepare", passed),
+        checks: () => record(checkCalls, "checks", blocked),
+        acceptanceReview: () => record(checkCalls, "acceptance", passed),
+        specialistReviews: () => record(checkCalls, "specialists", specialistsPassed),
       });
       expect(checkResult.outcome).toBe("blocked");
       expect(checkCalls).toEqual(["prepare", "checks"]);
@@ -59,9 +62,9 @@ describe("Candidate Validation Gate", () => {
       const calls: string[] = [];
 
       const blockedResult = yield* runCandidateValidationGate({
-        checks: () => Effect.sync(() => (calls.push("checks"), passed)),
-        acceptanceReview: () => Effect.sync(() => (calls.push("acceptance"), blocked)),
-        specialistReviews: () => Effect.sync(() => (calls.push("specialists"), specialistsPassed)),
+        checks: () => record(calls, "checks", passed),
+        acceptanceReview: () => record(calls, "acceptance", blocked),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
       });
 
       expect(blockedResult.outcome).toBe("blocked");
@@ -73,13 +76,13 @@ describe("Candidate Validation Gate", () => {
         message: "Acceptance Review tooling failed.",
       });
       const failedResult = yield* runCandidateValidationGate({
-        checks: () => Effect.sync(() => (calls.push("checks"), passed)),
+        checks: () => record(calls, "checks", passed),
         acceptanceReview: () =>
           Effect.sync(() => {
             calls.push("acceptance");
             return { findings: 0 as const, toolingFailure: failure };
           }),
-        specialistReviews: () => Effect.sync(() => (calls.push("specialists"), specialistsPassed)),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
       });
 
       expect(failedResult).toMatchObject({

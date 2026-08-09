@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { SpecialistReviewerContinuityEvidence } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
 
 type FindingResult = {
@@ -20,7 +20,7 @@ type SpecialistReviewResult = FindingResult & {
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
-export type CandidateValidationGatePhases = {
+type CandidateValidationGatePhases = {
   readonly prepare?: () => Effect.Effect<
     FindingResult,
     ValidationToolingFailure | RepositoryStorageError
@@ -39,7 +39,7 @@ export type CandidateValidationGatePhases = {
   >;
 };
 
-export type CandidateValidationGateResult = {
+type CandidateValidationGateResult = {
   readonly outcome: CandidateValidationOutcome;
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
