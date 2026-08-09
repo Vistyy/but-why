@@ -6,13 +6,13 @@ import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import { Effect, Ref, type Scope } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import {
+  type CleanupState,
   deleteDisposableTempRef,
   disposableWorktreePath,
   ensureDisposableTempRef,
   inspectDisposableWorktree,
   isDisposableWorktreeRemoved,
   removeDisposableWorktree,
-  type CleanupState,
 } from "./workspaceGit.js";
 
 export type DisposableWorkspaceCleanupResult = {

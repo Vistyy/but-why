@@ -4,8 +4,8 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
-import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";

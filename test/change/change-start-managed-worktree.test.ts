@@ -17,13 +17,13 @@ import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
-import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
+import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,

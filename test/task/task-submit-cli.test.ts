@@ -7,13 +7,13 @@ import { describe } from "vitest";
 
 import type {
   ReviewerAgentInput,
-  ReviewerAgentRuntime,
   ReviewerAgentResult,
+  ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import {
-  runByInProcessEffect,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
+  runByInProcessEffect,
 } from "../support/by-cli.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";

@@ -7,8 +7,8 @@ import { describe } from "vitest";
 
 import type {
   ReviewerAgentInput,
-  ReviewerAgentRuntime,
   ReviewerAgentResult,
+  ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import { SandcastleToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
@@ -23,8 +23,8 @@ import {
   type TaskSubmissionDependencies,
   type TaskSubmitResult,
 } from "../../src/task/submitTask.js";
-import type { TaskReviewPersistence } from "../../src/task/taskReviewStore.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { TaskReviewPersistence } from "../../src/task/taskReviewStore.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,

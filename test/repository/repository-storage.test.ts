@@ -48,10 +48,10 @@ import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeS
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../../src/task/taskId.js";
-import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { repoRoot } from "../support/by-cli.js";
 import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const migrationCount = Effect.gen(function* () {

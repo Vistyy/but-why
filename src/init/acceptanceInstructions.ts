@@ -1,4 +1,4 @@
-import { readInstructionsFile, type InstructionsReadResult } from "./instructionsFile.js";
+import { type InstructionsReadResult, readInstructionsFile } from "./instructionsFile.js";
 
 export type AcceptanceInstructionsReadResult = InstructionsReadResult;
 

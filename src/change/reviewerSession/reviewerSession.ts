@@ -10,9 +10,9 @@ import {
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   reviewerSessionFingerprint as neutralReviewerSessionFingerprint,
-  reviewerSessionsOwnerRoot,
   reviewerSessionsPath as neutralReviewerSessionsPath,
   reviewerSessionsProducerRoot as neutralReviewerSessionsProducerRoot,
+  reviewerSessionsOwnerRoot,
 } from "../../reviewerSession/sessionFiles.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";

@@ -1,9 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-
-import * as SqlClient from "@effect/sql/SqlClient";
+import { join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
+import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 

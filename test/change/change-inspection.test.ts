@@ -23,8 +23,8 @@ import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { withTestRepository } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 

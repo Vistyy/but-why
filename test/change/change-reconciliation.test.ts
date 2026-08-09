@@ -13,8 +13,8 @@ import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersis
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-07-24T10:00:00.000Z";

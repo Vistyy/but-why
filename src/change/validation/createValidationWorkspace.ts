@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
-  createDisposableWorkspace,
   type ActiveDisposableWorkspace,
   type CreateDisposableWorkspaceResult,
+  createDisposableWorkspace,
   type DisposableWorkspaceSetup,
   type DisposableWorkspaceToolingError,
 } from "../../workspace/disposableWorkspace.js";
