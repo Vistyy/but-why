@@ -38,7 +38,7 @@ describe("GitHub pull request gateway", () => {
           stdout:
             args[1] === "graphql"
               ? remoteHeadResponse()
-              : '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+              : '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -60,6 +60,9 @@ describe("GitHub pull request gateway", () => {
       pullRequest: {
         number: 42,
         url: "https://github.com/acme/widgets/pull/42",
+        repository: { owner: "acme", repo: "widgets" },
+        state: "open",
+        merged: false,
         baseBranch: "main",
         headBranch: "feature",
         headSha: "candidate-sha",
@@ -116,7 +119,7 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"not-a-url","base":{"ref":"main"},"head":{"ref":"feature","sha":"previous-candidate-sha"}}',
+            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"not-a-url","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"previous-candidate-sha"}}',
         };
       },
     });
@@ -224,6 +227,68 @@ describe("GitHub pull request gateway", () => {
     });
   });
 
+  it("rejects incomplete list, get, create, update, and close responses at the gateway", () => {
+    const incomplete = JSON.stringify({
+      number: 42,
+      url: "https://github.com/acme/widgets/pull/42",
+      state: "open",
+      merged: false,
+      base: { ref: "main" },
+      head: { ref: "feature", sha: "candidate-sha" },
+    });
+    const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+    const readGateway = localGitHubPullRequestGateway({
+      runGh: (args) => ({
+        ok: true,
+        stdout: args[1]?.includes("?") ? `[${incomplete}]` : incomplete,
+      }),
+    });
+    expect(readGateway.findPullRequests(target, "feature")).toBeUndefined();
+    expect(readGateway.getPullRequest(target, 42)).toBeUndefined();
+
+    const request = {
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    };
+    const mutationGateway = localGitHubPullRequestGateway({
+      runGit: (args) => ({
+        ok: true,
+        stdout:
+          args[0] === "rev-parse"
+            ? "candidate-sha\n"
+            : args[0] === "remote"
+              ? "https://github.com/acme/widgets.git\n"
+              : "",
+      }),
+      runGh: (args) =>
+        args[1] === "graphql"
+          ? { ok: true, stdout: remoteHeadResponse() }
+          : { ok: true, stdout: incomplete },
+    });
+    expect(mutationGateway.createPullRequest(request)).toMatchObject({
+      ok: false,
+      code: "remote_response_unusable",
+    });
+    expect(
+      mutationGateway.updatePullRequest({
+        ...request,
+        number: 42,
+        expectedCurrentHeadSha: "previous-candidate-sha",
+      }),
+    ).toMatchObject({ ok: false, code: "remote_response_unusable" });
+    expect(mutationGateway.closePullRequest?.({ target, number: 42 })).toMatchObject({
+      ok: false,
+      code: "close_failed",
+    });
+  });
+
   it("closes an owned pull request through GitHub", () => {
     const ghCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({
@@ -232,7 +297,7 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","state":"closed","merged":false,"base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","state":"closed","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -263,7 +328,11 @@ describe("GitHub pull request gateway", () => {
         target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
         number: 42,
       }),
-    ).toEqual({ ok: false, code: "close_failed" });
+    ).toMatchObject({
+      ok: false,
+      code: "close_failed",
+      evidence: { operation: "pull_request_close", classification: "lost_response" },
+    });
   });
 
   it("rejects an existing remote head before initial publication", () => {
@@ -462,7 +531,7 @@ describe("GitHub pull request gateway", () => {
         stdout:
           args[1] === "graphql"
             ? remoteHeadResponse("candidate-sha")
-            : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+            : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
       }),
     });
     expect(

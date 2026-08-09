@@ -40,7 +40,8 @@ const evidence = (
     | "push_destination"
     | "branch_push"
     | "pull_request_creation"
-    | "pull_request_update",
+    | "pull_request_update"
+    | "pull_request_close",
   result: PublicationCommandResult,
   classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable",
   _parseFailure?: string,
@@ -94,6 +95,7 @@ export const localGitHubPullRequestGateway = (
           lastFailureEvidence = evidence("remote_lookup", command, classification, parseFailure);
         },
       );
+      if (result !== undefined) lastFailureEvidence = undefined;
       return result;
     },
     closePullRequest: (input) => closePullRequest(runGh, input),
@@ -173,10 +175,22 @@ const closePullRequest = (
     "-f",
     "state=closed",
   ]);
-  if (!result.ok) return { ok: false, code: "close_failed" };
+  if (!result.ok) {
+    const lost =
+      result.status === undefined && result.stdout === undefined && result.stderr === undefined;
+    return {
+      ok: false,
+      code: "close_failed",
+      evidence: evidence("pull_request_close", result, lost ? "lost_response" : "rejected"),
+    };
+  }
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "close_failed" }
+    ? {
+        ok: false,
+        code: "close_failed",
+        evidence: evidence("pull_request_close", result, "response_parse_failure"),
+      }
     : { ok: true, pullRequest };
 };
 
@@ -747,20 +761,6 @@ const runCommand = (
       };
 };
 
-type GitHubPullRequestJson = {
-  readonly number?: unknown;
-  readonly url?: unknown;
-  readonly html_url?: unknown;
-  readonly state?: unknown;
-  readonly merged?: unknown;
-  readonly merged_at?: unknown;
-  readonly base?: {
-    readonly ref?: unknown;
-    readonly repo?: { readonly owner?: { readonly login?: unknown }; readonly name?: unknown };
-  };
-  readonly head?: { readonly ref?: unknown; readonly sha?: unknown };
-};
-
 const parsePullRequestList = (value: string): readonly GitHubPullRequest[] | undefined => {
   const parsed = parseJson(value);
   if (!Array.isArray(parsed)) return undefined;
@@ -774,46 +774,56 @@ const parsePullRequest = (value: string): GitHubPullRequest | undefined =>
   parsePullRequestObject(parseJson(value));
 
 const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const pullRequest = value as GitHubPullRequestJson;
-  const url = selectPullRequestUrl(pullRequest);
+  if (!isObjectRecord(value)) return undefined;
+  const base = isObjectRecord(value["base"]) ? value["base"] : undefined;
+  const head = isObjectRecord(value["head"]) ? value["head"] : undefined;
+  const url = selectPullRequestUrl(value);
+  const number = value["number"];
+  const repository = repositoryIdentity(base?.["repo"]);
+  const state =
+    value["state"] === "open" || value["state"] === "closed" ? value["state"] : undefined;
+  const merged =
+    typeof value["merged"] === "boolean"
+      ? value["merged"]
+      : value["merged_at"] === null
+        ? false
+        : typeof value["merged_at"] === "string" && value["merged_at"].length > 0
+          ? true
+          : undefined;
   if (
-    typeof pullRequest.number !== "number" ||
+    typeof number !== "number" ||
+    !Number.isSafeInteger(number) ||
+    number <= 0 ||
     url === undefined ||
-    typeof pullRequest.base?.ref !== "string" ||
-    typeof pullRequest.head?.ref !== "string" ||
-    typeof pullRequest.head?.sha !== "string"
+    repository === undefined ||
+    state === undefined ||
+    merged === undefined ||
+    typeof base?.["ref"] !== "string" ||
+    base["ref"].length === 0 ||
+    typeof head?.["ref"] !== "string" ||
+    head["ref"].length === 0 ||
+    typeof head["sha"] !== "string" ||
+    head["sha"].length === 0
   ) {
     return undefined;
   }
-  const repository = repositoryIdentity(pullRequest.base.repo);
-  const state =
-    pullRequest.state === "open" || pullRequest.state === "closed" ? pullRequest.state : undefined;
-  const merged =
-    typeof pullRequest.merged === "boolean"
-      ? pullRequest.merged
-      : pullRequest.merged_at === null
-        ? false
-        : typeof pullRequest.merged_at === "string"
-          ? true
-          : undefined;
   return {
-    number: pullRequest.number,
+    number,
     url,
-    baseBranch: pullRequest.base.ref,
-    headBranch: pullRequest.head.ref,
-    headSha: pullRequest.head.sha,
-    ...(state === undefined ? {} : { state }),
-    ...(merged === undefined ? {} : { merged }),
-    ...(repository === undefined ? {} : { repository }),
+    repository,
+    state,
+    merged,
+    baseBranch: base["ref"],
+    headBranch: head["ref"],
+    headSha: head["sha"],
   };
 };
 
-const selectPullRequestUrl = (pullRequest: GitHubPullRequestJson): string | undefined =>
-  validHttpUrl(pullRequest.html_url)
-    ? pullRequest.html_url
-    : validHttpUrl(pullRequest.url)
-      ? pullRequest.url
+const selectPullRequestUrl = (pullRequest: Record<string, unknown>): string | undefined =>
+  validHttpUrl(pullRequest["html_url"])
+    ? pullRequest["html_url"]
+    : validHttpUrl(pullRequest["url"])
+      ? pullRequest["url"]
       : undefined;
 
 const validHttpUrl = (value: unknown): value is string => {
@@ -827,11 +837,18 @@ const validHttpUrl = (value: unknown): value is string => {
 };
 
 const repositoryIdentity = (
-  value: { readonly owner?: { readonly login?: unknown }; readonly name?: unknown } | undefined,
-): { readonly owner: string; readonly repo: string } | undefined =>
-  typeof value?.owner?.login === "string" && typeof value.name === "string"
-    ? { owner: value.owner.login, repo: value.name }
+  value: unknown,
+): { readonly owner: string; readonly repo: string } | undefined => {
+  if (!isObjectRecord(value) || !isObjectRecord(value["owner"])) return undefined;
+  const owner = value["owner"]["login"];
+  const repo = value["name"];
+  return typeof owner === "string" &&
+    owner.length > 0 &&
+    typeof repo === "string" &&
+    repo.length > 0
+    ? { owner, repo }
     : undefined;
+};
 
 const parseJson = (value: string): unknown => {
   try {

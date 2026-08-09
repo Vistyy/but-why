@@ -63,7 +63,13 @@ export const changeCancelResult = (result: ChangeCancellationResult): CliResult 
     return runtimeError({
       code: result.code,
       message: "The owned pull request could not be closed, so the Change remains open.",
-      details: { changeId: result.changeId },
+      details: {
+        changeId: result.changeId,
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+        ...(result.recoveryEvidence === undefined
+          ? {}
+          : { recoveryEvidence: result.recoveryEvidence }),
+      },
       help: ["Resolve the GitHub issue, then retry Change Cancel."],
     });
   }

@@ -109,22 +109,6 @@ describe("owned pull request classifier", () => {
       pullRequest: fact,
     });
   });
-
-  it.each([
-    {
-      name: "missing state",
-      fact: ({ state: _state, ...value }: GitHubPullRequest) => value,
-    },
-    {
-      name: "missing merged fact",
-      fact: ({ merged: _merged, ...value }: GitHubPullRequest) => value,
-    },
-  ])("reports unavailable facts when $name", ({ fact }) => {
-    expect(classifyOwnedPullRequest(publication, fact(observed()))).toEqual({
-      kind: "unavailable",
-      reason: "pull_request_facts_unavailable",
-    });
-  });
 });
 
 describe("owned pull request observation", () => {
@@ -168,6 +152,21 @@ describe("owned pull request observation", () => {
     expect(
       observeOwnedPullRequest({ getPullRequest: () => undefined }, change(publication)),
     ).toEqual({ kind: "unavailable", reason: "pull_request_unavailable" });
+  });
+
+  it("classifies malformed owned pull request facts as unavailable, never mismatch", () => {
+    expect(
+      observeOwnedPullRequest(
+        {
+          getPullRequest: () => undefined,
+          getLastFailureEvidence: () => ({
+            operation: "remote_lookup",
+            classification: "response_parse_failure",
+          }),
+        },
+        change(publication),
+      ),
+    ).toEqual({ kind: "unavailable", reason: "pull_request_facts_unavailable" });
   });
 
   it("classifies an unreadable owned pull request as unavailable, never not owned", () => {

@@ -120,6 +120,7 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: PublishCandidateFailureCode;
       readonly evidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly recoveryEvidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
       readonly observedRemoteHeadSha?: string;
     }
