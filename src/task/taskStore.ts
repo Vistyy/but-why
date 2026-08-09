@@ -50,6 +50,17 @@ export type ListTasksResult = {
   readonly total: number;
 };
 
+export type ApproveTaskInput = {
+  readonly taskId: PublicTaskId;
+  readonly now: string;
+};
+
+export type TaskApprovalResult =
+  | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
+  | { readonly ok: false; readonly code: "task_review_active" };
+
 export type UpdateTaskContextInput = {
   readonly taskId: PublicTaskId;
   readonly title: string;

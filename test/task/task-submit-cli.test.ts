@@ -212,7 +212,7 @@ describe("by task submission CLI", () => {
   );
 
   it.effect(
-    "reuses the newest matching completed Review without another Review run",
+    "starts a fresh Review after a completed Review",
     () =>
       Effect.gen(function* () {
         const root = yield* createInitializedTask();
@@ -234,11 +234,13 @@ describe("by task submission CLI", () => {
         );
         expect(second.status).toBe(0);
         const result = JSON.parse(second.stdout) as {
-          readonly review: { readonly reused?: boolean; readonly outcome: string };
+          readonly review: { readonly id: string; readonly outcome: string };
         };
-        expect(result.review.reused).toBe(true);
+        expect(result.review.id).not.toBe(
+          (JSON.parse(first.stdout) as { review: { id: string } }).review.id,
+        );
         expect(result.review.outcome).toBe("blocked");
-        expect(reviewInputs).toHaveLength(1);
+        expect(reviewInputs).toHaveLength(2);
       }),
     60_000,
   );

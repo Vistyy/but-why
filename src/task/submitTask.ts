@@ -85,13 +85,6 @@ export type TaskSubmissionDependencies = {
 export type TaskSubmitResult =
   | {
       readonly ok: true;
-      readonly status: "reused";
-      readonly reviewId: string;
-      readonly outcome: "passed" | "blocked";
-      readonly task: TaskReviewTaskFact;
-    }
-  | {
-      readonly ok: true;
       readonly status: "passed" | "blocked";
       readonly reviewId: string;
       readonly baseCommit: string;
@@ -148,11 +141,6 @@ const submitTask = (
   input: { readonly taskId: PublicTaskId; readonly now: string },
 ): Effect.Effect<TaskSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const reuse = yield* dependencies.persistence.checkReuse(input.taskId);
-    if (reuse.reused) {
-      return yield* applyReuseResult(dependencies.persistence, input, reuse);
-    }
-
     const head = dependencies.readMainCheckoutHead(dependencies.mainCheckoutRoot);
     if (!head.ok) return { ok: false as const, code: "main_checkout_unavailable" as const };
 
@@ -211,7 +199,7 @@ const submitTask = (
     });
     if (!started.ok) return startedError(started);
     if (started.reused) {
-      return yield* applyReuseResult(dependencies.persistence, input, started);
+      return yield* Effect.dieMessage("Fresh Task Review admission unexpectedly reused a result");
     }
 
     const prior = yield* dependencies.persistence.latestApplicableReviewForTask(input.taskId);
@@ -383,32 +371,6 @@ const submitTask = (
       baseCommit: head.commit,
       task: completed.task,
       ...(findings.length === 0 ? {} : { findings }),
-    };
-  });
-
-const applyReuseResult = (
-  persistence: TaskReviewPersistence,
-  input: { readonly taskId: PublicTaskId; readonly now: string },
-  started: { readonly reviewId: string; readonly outcome: "passed" | "blocked" },
-): Effect.Effect<TaskSubmitResult, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const applied = yield* persistence.applyReuse({
-      reviewId: started.reviewId,
-      outcome: started.outcome,
-      now: input.now,
-    });
-    if (!applied.ok) {
-      if (applied.code === "task_not_found") {
-        return { ok: false as const, code: "task_not_found" as const };
-      }
-      return { ok: false as const, code: "submission_in_progress" as const };
-    }
-    return {
-      ok: true as const,
-      status: "reused" as const,
-      reviewId: started.reviewId,
-      outcome: started.outcome,
-      task: applied.task,
     };
   });
 

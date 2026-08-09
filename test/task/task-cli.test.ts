@@ -69,6 +69,27 @@ help[1]: Run \`by task list\` to see open tasks.
       }),
   );
 
+  it.effect("keeps direct Task approval available during the expansion stage", () =>
+    Effect.gen(function* () {
+      const task = taskRecord({ state: "todo", updatedAt: secondNow });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "approve", "BY-1"],
+        secondNow,
+        {
+          taskUseCases: fakeTaskUseCases({
+            approveTask: () => ({ ok: true, changed: true, task }),
+          }),
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("state: todo");
+      expect(result.stdout).toContain("changed: true");
+    }),
+  );
+
   it.effect("does not consume a Task ID when validation fails before insert", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();

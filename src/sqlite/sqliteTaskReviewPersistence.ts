@@ -232,28 +232,6 @@ const startOrReuse = (
       dependencyIds: proposal.dependencies.map((dependency) => dependency.taskId),
     });
 
-    const reusable = yield* sql<ReusableTaskReviewRow>`
-      SELECT id, outcome, proposal_snapshot AS proposalSnapshot,
-        proposal_key AS proposalKey
-      FROM task_reviews
-      WHERE task_id = ${input.taskId}
-        AND state = 'complete'
-        AND outcome IN ('passed', 'blocked')
-        AND proposal_key = ${proposalKey}
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `;
-    const existing = reusable[0];
-    if (existing !== undefined) {
-      const existingReusable = yield* decodeReusableReview(existing);
-      return {
-        ok: true as const,
-        reused: true as const,
-        reviewId: existingReusable.id,
-        outcome: existingReusable.outcome,
-      };
-    }
-
     const active = yield* sql<{ readonly reviewId: string }>`
       SELECT review_id AS reviewId FROM active_task_reviews WHERE task_id = ${input.taskId}
     `;

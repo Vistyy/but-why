@@ -180,7 +180,7 @@ describe("Task Submission orchestration", () => {
               baseCommit: git(root, "rev-parse", "HEAD"),
               task: { id: "BY-1", state: "todo" },
             });
-            if (!result.ok || result.status === "reused" || result.status === "tooling_failed") {
+            if (!result.ok || result.status === "tooling_failed") {
               throw new Error("unexpected result");
             }
 
@@ -280,7 +280,7 @@ describe("Task Submission orchestration", () => {
               status: "blocked",
               task: { id: "BY-1", state: "new" },
             });
-            if (!result.ok || result.status === "reused" || result.status === "tooling_failed") {
+            if (!result.ok || result.status === "tooling_failed") {
               throw new Error("unexpected result");
             }
             expect(result.findings).toEqual([
@@ -302,7 +302,7 @@ describe("Task Submission orchestration", () => {
   );
 
   it.scoped(
-    "reuses a completed blocked Review before any repository work",
+    "starts a fresh Review after a completed blocked Review",
     () =>
       Effect.gen(function* () {
         const root = yield* prepareInitializedTask();
@@ -359,9 +359,9 @@ describe("Task Submission orchestration", () => {
               taskId: publicTaskId("BY-1"),
               now: secondNow,
             });
-            expect(second).toMatchObject({ ok: true, status: "reused" });
-            expect(headReads.count).toBe(1);
-            expect(reviewInputs).toHaveLength(1);
+            expect(second).toMatchObject({ ok: true, status: "blocked" });
+            expect(headReads.count).toBe(2);
+            expect(reviewInputs).toHaveLength(2);
           }),
         );
       }),
@@ -1049,7 +1049,7 @@ describe("Task Submission orchestration", () => {
 
             const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
             expect(result).toMatchObject({ ok: true, status: "blocked" });
-            if (!result.ok || result.status === "reused" || result.status === "tooling_failed") {
+            if (!result.ok || result.status === "tooling_failed") {
               throw new Error("unexpected result");
             }
             const evidence = JSON.parse(result.findings?.[0]?.description ?? "{}") as {

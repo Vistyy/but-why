@@ -12,6 +12,7 @@ import type {
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
+  ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
   CreateTaskInput,
@@ -37,6 +38,8 @@ export const openSqliteTaskPersistence = (
     getTaskById: (taskId) => repository.operation("read Task", (sql) => getTaskById(sql, taskId)),
     getTaskContextById: (taskId) =>
       repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
+    approveTask: (input) =>
+      repository.transactionImmediate("approve Task", (sql) => approveTask(sql, input)),
     updateTaskContext: (input) =>
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
@@ -241,6 +244,23 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       ...task,
       ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
     } satisfies TaskContext;
+  });
+
+const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, input.taskId);
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (current.state === "todo") return { ok: true as const, changed: false, task: current };
+    if (current.state !== "new") {
+      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+    }
+    if (yield* hasActiveTaskReview(sql, input.taskId)) {
+      return { ok: false as const, code: "task_review_active" as const };
+    }
+    yield* sql`UPDATE tasks SET state = 'todo', updated_at = ${input.now} WHERE id = ${input.taskId}`;
+    const updated = yield* getTaskById(sql, input.taskId);
+    if (updated === undefined) return yield* invalidData("approve Task", "Task disappeared");
+    return { ok: true as const, changed: true, task: updated };
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>

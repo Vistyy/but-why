@@ -353,7 +353,7 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
   ),
 );
 
-it.scoped("reuses the newest matching completed Review and returns before repository work", () =>
+it.scoped("starts a fresh Review when a matching completed Review exists", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
@@ -416,9 +416,21 @@ it.scoped("reuses the newest matching completed Review and returns before reposi
       });
       expect(started).toEqual({
         ok: true,
-        reused: true,
-        reviewId: "review-second",
-        outcome: "blocked",
+        reused: false,
+        reviewId: "review-never-used",
+        proposal: {
+          title: "Reuse",
+          description: "Description: Reuse",
+          dependencies: [
+            {
+              taskId: prerequisite.id,
+              title: "Prerequisite",
+              description: "Description: Prerequisite",
+              state: "new",
+              dependencyIds: [],
+            },
+          ],
+        },
       });
     }),
   ),

@@ -222,6 +222,17 @@ const taskShowCommand = withCliHandler(
       Effect.flatMap(({ runTaskShowCommand }) => runTaskShowCommand(taskId(values), environment)),
     ),
 );
+const taskApproveCommand = withCliHandler(
+  leaf("approve", "Approve a New Task directly during the Task Review expansion stage.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/approve.js")).pipe(
+      Effect.flatMap(({ runApproveCommand }) =>
+        runApproveCommand({ taskId: requiredString(values, "taskId") }, environment),
+      ),
+    ),
+);
 const taskSubmitCommand = withCliHandler(
   leaf("submit", "Run one synchronous Task Review and submit an unlinked New Task for approval.", {
     taskId: taskIdArgument,
@@ -262,6 +273,7 @@ taskCommand = group(
     taskDependenciesCommand,
     taskListCommand,
     taskShowCommand,
+    taskApproveCommand,
     taskSubmitCommand,
     taskReviewsCommand,
     taskContextCommand,

@@ -112,16 +112,6 @@ const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {
         });
     }
   }
-  if (result.status === "reused") {
-    return success({
-      review: {
-        id: result.reviewId,
-        outcome: result.outcome,
-        reused: true,
-        task: { id: result.task.id, state: result.task.state },
-      },
-    });
-  }
   if (result.status === "tooling_failed") {
     return success({
       review: {
