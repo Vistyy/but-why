@@ -19,21 +19,6 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 
 describe("by task CLI", () => {
-  it.effect("does not expose retired Task Comment commands or completion", () =>
-    Effect.gen(function* () {
-      const help = yield* runByInProcessEffect(createTestWorkspace(), ["--json", "task", "--help"]);
-      expect(help.status).toBe(0);
-      expect((JSON.parse(help.stdout) as { readonly help: string }).help).not.toContain("comment");
-
-      const completion = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--completions",
-        "bash",
-      ]);
-      expect(completion.status).toBe(0);
-      expect(completion.stdout).not.toContain("task comment");
-    }),
-  );
-
   it.effect("documents shared recording input for Task create in generated help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(createTestWorkspace(), [

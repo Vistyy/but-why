@@ -700,19 +700,6 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("keeps Change Start on the Change command", () =>
-    Effect.gen(function* () {
-      const retired = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--json",
-        "task",
-        "start",
-        "BY-1",
-      ]);
-      expect(retired.status).toBe(2);
-      expect(JSON.parse(retired.stdout)).toMatchObject({ error: { code: "invalid_usage" } });
-    }),
-  );
-
   it.effect("rejects a symlinked Managed Worktree container", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

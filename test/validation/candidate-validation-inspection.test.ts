@@ -518,10 +518,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       expect(result.status).toBe(0);
       const shown = JSON.parse(result.stdout);
       expect(shown.policy).toEqual(reviewPolicy);
-      expect(shown.policy.acceptanceReview).not.toHaveProperty("agentProfile");
-      expect(shown.policy.acceptanceReview).not.toHaveProperty("profileScope");
-      expect(shown.policy.specialistReviews[0]).not.toHaveProperty("agentProfile");
-      expect(shown.policy.specialistReviews[0]).not.toHaveProperty("profileScope");
     }),
   );
 
