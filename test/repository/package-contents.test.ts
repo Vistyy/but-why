@@ -79,6 +79,18 @@ type PreparedPackage = {
   readonly manifest: PackageManifest;
 };
 
+const decodeSourceMapSources = (source: string): readonly string[] => {
+  const parsed: unknown = JSON.parse(source);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Generated source map must be an object");
+  }
+  const sources = Reflect.get(parsed, "sources");
+  if (!Array.isArray(sources) || !sources.every((entry) => typeof entry === "string")) {
+    throw new Error("Generated source map must contain string sources");
+  }
+  return sources;
+};
+
 const createPackageFixture = (packageRoot: string): void => {
   cpSync(join(repoRoot, "package.json"), join(packageRoot, "package.json"));
   cpSync(join(repoRoot, "README.md"), join(packageRoot, "README.md"));
@@ -146,7 +158,9 @@ describe("release package boundary", () => {
       installedRoot,
       installedPackage: join(installedRoot, "node_modules", "but-why"),
       metadata,
-      manifest: JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as PackageManifest,
+      manifest: JSON.parse(
+        readFileSync(join(installedRoot, "node_modules", "but-why", "package.json"), "utf8"),
+      ) as PackageManifest,
     };
   }, 120_000);
 
@@ -235,10 +249,29 @@ describe("release package boundary", () => {
       ([, target]) => (target === undefined ? [] : [target]),
     );
     expect(dynamicTargets).toHaveLength(declaredTargets.length);
+    const uniqueDynamicTargets = [...new Set(dynamicTargets)];
     const dynamicTargetFiles = new Set(
-      dynamicTargets.map((target) => join(prepared.root, "dist", target.slice(2))),
+      uniqueDynamicTargets.map((target) => join(prepared.root, "dist", target.slice(2))),
     );
     expect([...staticEntryFiles].every((file) => !dynamicTargetFiles.has(file))).toBe(true);
+    const targetSources = new Map(
+      uniqueDynamicTargets.map((target) => [
+        target,
+        decodeSourceMapSources(
+          readFileSync(join(prepared.root, "dist", `${target.slice(2)}.map`), "utf8"),
+        ),
+      ]),
+    );
+    const owningTargets = expectedLazyCommandModules.map((module) => {
+      const expectedSource = `../src/${module.slice(2, -3)}.ts`;
+      const owners = uniqueDynamicTargets.filter((target) =>
+        targetSources.get(target)?.includes(expectedSource),
+      );
+      expect(owners).toHaveLength(1);
+      return owners[0];
+    });
+    expect(new Set(owningTargets).size).toBe(expectedLazyCommandModules.length);
+
     const packedFiles = new Set(prepared.metadata.files.map((file) => file.path));
     expect(
       dynamicTargets.every(
