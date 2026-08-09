@@ -78,15 +78,16 @@ Fallow and ast-grep own their named structural contracts.
 `just health` produces advisory coverage, complexity, duplication, and code-health reports.
 Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
 
-## CLI loading verification
+## Release package verification
 
 The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.
 
-The release-package boundary test verifies the bundled entry graph and generated dynamic targets.
-See [`test/repository/cli-loading.test.ts`](../test/repository/cli-loading.test.ts).
-Run it with `just test test/repository/cli-loading.test.ts`.
-
-The package contract test owns the one real-process sentinel for the packaged CLI and extensions from an installed layout: it builds and installs the packed package, then proves the CLI loads and reports trusted continuation extension preflight and missing-extension failures through `by change implement`.
+The release package boundary test builds, packs, and installs one package fixture per invocation.
+Its packed-content owner verifies package metadata and the package allowlist.
+Its bundled-graph owner verifies lazy command loading and generated dynamic targets against the prepared built artifact.
+Its installed-runtime owner runs the packaged CLI from the installed layout and verifies trusted continuation asset loading and truthful missing or invalid extension failures.
 See [`test/repository/package-contents.test.ts`](../test/repository/package-contents.test.ts).
-The portable But Why skill test owns the model-visible skill's Pi discovery and authoritative operator workflow.
+Run it with `just test test/repository/package-contents.test.ts`.
+
+The portable But Why skill test remains the lead owner for the model-visible skill's Pi discovery, shipped references, and authoritative operator workflow without preparing another package.
 See [`test/repository/portable-but-why-skill.test.ts`](../test/repository/portable-but-why-skill.test.ts).
