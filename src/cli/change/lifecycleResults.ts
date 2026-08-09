@@ -30,6 +30,14 @@ export const startResult = (result: ChangeStartResult): CliResult => {
       help: ["Approve the Task before starting its Change."],
     });
   }
+  if (result.code === "task_review_active") {
+    return runtimeError({
+      code: result.code,
+      message: "The Task cannot start while its Task Review is active.",
+      details: { reviewId: result.reviewId },
+      help: ["Wait for the active Task Review to finish, then retry Change Start."],
+    });
+  }
   if (result.code === "requested_base_conflict") {
     return runtimeError({
       code: result.code,

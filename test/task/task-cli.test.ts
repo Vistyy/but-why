@@ -69,24 +69,68 @@ help[1]: Run \`by task list\` to see open tasks.
       }),
   );
 
-  it.effect("keeps direct Task approval available during the expansion stage", () =>
+  it.effect("maps approval success and unchanged approval to command output", () =>
     Effect.gen(function* () {
+      const root = createTestWorkspace();
       const task = taskRecord({ state: "todo", updatedAt: secondNow });
+      let call = 0;
+      const taskUseCases = fakeTaskUseCases({
+        approveTask: () => {
+          call += 1;
+          return { ok: true as const, changed: call === 1, task };
+        },
+      });
+
+      const firstApproval = yield* runByInProcessEffect(
+        root,
+        ["task", "approve", "BY-1"],
+        secondNow,
+        { taskUseCases },
+      );
+      const repeatedApproval = yield* runByInProcessEffect(
+        root,
+        ["task", "approve", "BY-1"],
+        thirdNow,
+        { taskUseCases },
+      );
+
+      expect(firstApproval.status).toBe(0);
+      expect(firstApproval.stderr).toBe("");
+      expect(firstApproval.stdout).toBe(`task:
+  id: BY-1
+  state: todo
+  changed: true
+  updatedAt: "${secondNow}"
+`);
+      expect(repeatedApproval.status).toBe(0);
+      expect(repeatedApproval.stderr).toBe("");
+      expect(repeatedApproval.stdout).toBe(`task:
+  id: BY-1
+  state: todo
+  changed: false
+  updatedAt: "${secondNow}"
+`);
+    }),
+  );
+
+  it.effect("maps rejected approval to the legal next action", () =>
+    Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
         ["task", "approve", "BY-1"],
-        secondNow,
+        thirdNow,
         {
           taskUseCases: fakeTaskUseCases({
-            approveTask: () => ({ ok: true, changed: true, task }),
+            approveTask: () => ({ ok: false, code: "invalid_task_state", state: "done" }),
           }),
         },
       );
 
-      expect(result.status).toBe(0);
+      expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("state: todo");
-      expect(result.stdout).toContain("changed: true");
+      expect(result.stdout).toContain("code: invalid_task_state");
+      expect(result.stdout).toContain("Cannot approve task BY-1 from state done");
+      expect(result.stdout).toContain("Task is already done.");
     }),
   );
 
@@ -639,7 +683,7 @@ contextCommand: by task context BY-1
     }),
   );
 
-  it.effect.each(["show", "context"])(
+  it.effect.each(["show", "context", "approve"])(
     "rejects non-local Task IDs before state access in %s",
     (command) =>
       Effect.gen(function* () {
@@ -667,13 +711,14 @@ contextCommand: by task context BY-1
       }),
   );
 
-  it.effect.each(["show", "context"])(
+  it.effect.each(["show", "context", "approve"])(
     "prints task_not_found for unknown Task IDs in %s",
     (command) =>
       Effect.gen(function* () {
         const taskUseCases = fakeTaskUseCases({
           getTaskById: () => undefined,
           getTaskContextById: () => undefined,
+          approveTask: () => ({ ok: false, code: "task_not_found" }),
         });
         const result = yield* runByInProcessEffect(
           createTestWorkspace(),

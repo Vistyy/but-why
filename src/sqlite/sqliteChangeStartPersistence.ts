@@ -76,6 +76,14 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
 
 const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
+    const activeReview = yield* readActiveTaskReview(sql, taskId);
+    if (activeReview !== undefined) {
+      return {
+        ok: false as const,
+        code: "task_review_active" as const,
+        reviewId: activeReview.reviewId,
+      };
+    }
     const existing = yield* getByTaskId(sql, taskId);
     if (existing !== undefined) {
       const task = yield* readTask(sql, taskId);
@@ -139,6 +147,14 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const task = yield* readTask(sql, taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
+    const activeReview = yield* readActiveTaskReview(sql, taskId);
+    if (activeReview !== undefined) {
+      return {
+        ok: false as const,
+        code: "task_review_active" as const,
+        reviewId: activeReview.reviewId,
+      };
+    }
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
@@ -157,6 +173,14 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.map(
     sql<TaskRow>`SELECT id, title, description, state FROM tasks WHERE id = ${taskId}`,
+    (rows) => rows[0],
+  );
+
+const readActiveTaskReview = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.map(
+    sql<{ readonly reviewId: string }>`
+      SELECT review_id AS reviewId FROM active_task_reviews WHERE task_id = ${taskId}
+    `,
     (rows) => rows[0],
   );
 

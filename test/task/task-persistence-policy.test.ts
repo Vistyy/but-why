@@ -34,6 +34,11 @@ it.scoped("preserves terminal Task policy", () => {
         );
         const contextBefore = yield* tasks.getTaskContextById(taskId);
 
+        expect(yield* tasks.approveTask({ taskId, now: thirdNow })).toEqual({
+          ok: false,
+          code: "invalid_task_state",
+          state,
+        });
         expect(
           yield* tasks.updateTaskContext({
             taskId,

@@ -160,6 +160,7 @@ describe("Change Start orchestration", () => {
       const failures: readonly ChangeStartEligibilityError[] = [
         { ok: false, code: "task_not_found" },
         { ok: false, code: "invalid_task_state", state: "new" },
+        { ok: false, code: "task_review_active", reviewId: "review-active" },
         {
           ok: false,
           code: "task_dependencies_unsatisfied",

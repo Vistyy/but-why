@@ -65,6 +65,22 @@ describe("Change lifecycle CLI results", () => {
     });
   });
 
+  it("renders an Active Task Review rejection", () => {
+    expect(
+      startResult({ ok: false, code: "task_review_active", reviewId: "review-active" }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "task_review_active",
+          message: "The Task cannot start while its Task Review is active.",
+          reviewId: "review-active",
+        },
+        help: ["Wait for the active Task Review to finish, then retry Change Start."],
+      },
+    });
+  });
+
   it("renders requested Change Base conflicts", () => {
     expect(
       startResult({

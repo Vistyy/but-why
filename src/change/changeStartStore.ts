@@ -26,6 +26,7 @@ export type CreateChangeStartInput = {
 export type ChangeStartEligibilityError =
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
+  | { readonly ok: false; readonly code: "task_review_active"; readonly reviewId: string }
   | {
       readonly ok: false;
       readonly code: "task_dependencies_unsatisfied";

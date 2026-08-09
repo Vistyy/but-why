@@ -1,10 +1,12 @@
+import { join } from "node:path";
+
 import { Effect } from "effect";
 
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 
-// Models a Task that was approved before Task Submission existed: a New Task is directly
-// transitioned to Todo in shared state without fabricating Task Review history.
-// Production code has no direct approval path; only tests use this setup seam.
+// Models a Task that was approved before Task Submission existed by transitioning it directly
+// to Todo in shared state without fabricating Task Review history.
+// Tests use this setup seam when direct approval behavior is not the subject under test.
 export const transitionTaskToTodo = (taskId: string, now: string) =>
   Effect.gen(function* () {
     const repository = yield* RepositorySql;
@@ -28,5 +30,3 @@ export const transitionTaskToTodoForRepo = (
     ),
     Effect.scoped,
   );
-
-import { join } from "node:path";

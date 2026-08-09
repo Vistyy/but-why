@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
@@ -327,6 +328,24 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
   ),
 );
 
+it.scoped("keeps direct Task approval available when no Review is active", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Direct approval", firstNow);
+
+      expect(yield* reviews.getActiveForTask(task.id)).toBeUndefined();
+      expect(yield* tasks.approveTask({ taskId: task.id, now: secondNow })).toMatchObject({
+        ok: true,
+        changed: true,
+        task: { id: task.id, state: "todo" },
+      });
+      expect(yield* reviews.latestCompletedReviewForTask(task.id)).toBeUndefined();
+    }),
+  ),
+);
+
 it.scoped("enforces one active Review per Task and rejects mutation and cancellation", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
@@ -375,6 +394,16 @@ it.scoped("enforces one active Review per Task and rejects mutation and cancella
       expect(
         yield* tasks.cancelTask({ taskId: task.id, reason: "Blocked cancel", now: secondNow }),
       ).toEqual({ ok: false, code: "task_review_active" });
+
+      // Simulate an out-of-band state change to establish that Change Start has
+      // its own Active Review guard rather than relying on the Task being New.
+      yield* transitionTaskToTodo(task.id, secondNow);
+      const changes = yield* openSqliteChangeStartPersistence();
+      expect(yield* changes.prepareTask(task.id)).toEqual({
+        ok: false,
+        code: "task_review_active",
+        reviewId: "review-active",
+      });
     }),
   ),
 );
@@ -598,14 +627,36 @@ it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
         state: "todo",
       });
 
-      const linked = yield* reviews.start({
+      const unknown = yield* reviews.start({
         taskId: publicTaskId("BY-404"),
         baseCommit,
         policy,
         reviewId: "review-missing",
         now: secondNow,
       });
-      expect(linked).toEqual({ ok: false, code: "task_not_found" });
+      expect(unknown).toEqual({ ok: false, code: "task_not_found" });
+
+      const linkedTask = yield* createTask(tasks, "Linked", secondNow);
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "link New Task to Change fixture",
+        (sql) => sql`
+          INSERT INTO changes (
+            id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at
+          ) VALUES (
+            'change-linked', '/repo/.git', 'refs/heads/linked', ${linkedTask.id},
+            'open', ${secondNow}, ${secondNow}
+          )
+        `,
+      );
+      const linked = yield* reviews.start({
+        taskId: linkedTask.id,
+        baseCommit,
+        policy,
+        reviewId: "review-linked",
+        now: secondNow,
+      });
+      expect(linked).toEqual({ ok: false, code: "task_linked_to_change" });
     }),
   ),
 );
