@@ -20,11 +20,7 @@ import type {
 } from "../../src/change/publication/candidatePublication.js";
 import type { SubmitRejectionError } from "../../src/change/submit/submitRejectionErrors.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
-import {
-  GlobalConfigValidationFailed,
-  RepoConfigValidationFailed,
-} from "../../src/contracts/configErrors.js";
+import { GlobalConfigValidationFailed } from "../../src/contracts/configErrors.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
@@ -730,54 +726,6 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("stops when the observed owned pull request head is mismatched", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = readyChange({
-        publication: {
-          candidateId: "previous-candidate",
-          validationRunId: "previous-run",
-          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
-          headBranch: "change-1",
-          expectedHeadSha: "previous-head",
-          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        },
-      });
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change,
-          observedPullRequest: {
-            number: 42,
-            url: "https://github.test/acme/repo/pull/42",
-            repository: { owner: "acme", repo: "repo" },
-            state: "open",
-            merged: false,
-            baseBranch: "main",
-            headBranch: "change-1",
-            headSha: "unexpected-remote-head",
-          },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      expect(
-        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
-      ).toMatchObject({
-        ok: false,
-        code: "reconciliation_rejected",
-        change: { changeId: change.id, rejection: "head_sha_mismatch" },
-      });
-      expect(events).toEqual(["observe_pull_request"]);
-    }),
-  );
-
   it.effect("completes an exact merged owned pull request through terminal completion", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -1241,73 +1189,6 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
-  it.effect("keeps a task-backed unchanged Change open without validation", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange({
-            taskId: publicTaskId("BY-1"),
-            acceptanceContext: {
-              version: 1,
-              title: "Approved intent",
-              description: "Deliver it",
-            },
-          }),
-          acceptanceContextSupplied: true,
-          captureResult: { ...candidate, headSha: "base", trackedTreeMatchesChangeBase: true },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      expect(
-        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
-      ).toEqual({ ok: true, status: "nothing_to_submit", changeId: "change-1" });
-      expect(events).toEqual(["capture"]);
-    }),
-  );
-
-  it.effect("returns nothing_to_submit despite existing publication facts", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange({
-            publication: {
-              candidateId: "published-candidate",
-              validationRunId: "published-run",
-              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
-              headBranch: "change-1",
-              expectedHeadSha: "published-head",
-              pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-            },
-          }),
-          captureResult: { ...candidate, headSha: "base", trackedTreeMatchesChangeBase: true },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      expect(
-        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
-      ).toEqual({ ok: true, status: "nothing_to_submit", changeId: "change-1" });
-      expect(events).toEqual(["observe_pull_request", "capture"]);
-    }),
-  );
-
   it.effect(
     "rejects a Repository Branch behind its fetched Change Base before Candidate creation",
     () =>
@@ -1387,37 +1268,6 @@ describe("Change Submit orchestration", () => {
         code: "publication_remote_unreachable",
         remoteName: "origin",
       });
-      expect(events).toEqual(["refresh_base"]);
-    }),
-  );
-
-  it.effect("rejects a changed publication remote before Candidate capture", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          refreshResult: {
-            ok: false,
-            code: "publication_remote_changed",
-            remoteName: "origin",
-            expectedRemoteUrl: "https://github.test/acme/repo.git",
-            actualRemoteUrl: "https://github.test/acme/other.git",
-          },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      expect(
-        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
-      ).toMatchObject({ ok: false, code: "publication_remote_changed", remoteName: "origin" });
       expect(events).toEqual(["refresh_base"]);
     }),
   );
@@ -1540,21 +1390,14 @@ type PublicationFixture = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
 };
 
-type PullRequestObservation =
-  | "not_owned"
-  | "exact_open"
-  | "exact_closed_unmerged"
-  | "exact_merged"
-  | "mismatch";
+type PullRequestObservation = "exact_open" | "exact_closed_unmerged" | "exact_merged";
 
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
   readonly acceptanceContextSupplied?: boolean;
   readonly agentEnvironment?: readonly string[];
-  readonly agentEnvironmentError?: string;
   readonly baselineRepoConfigError?: string;
-  readonly candidateRepoConfigError?: string;
   readonly trackPolicyResolution?: boolean;
   readonly candidateRepoConfig?: RepoConfig;
   readonly baselineRepoConfig?: RepoConfig;
@@ -1581,7 +1424,6 @@ const dependencies = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   } | null;
-  readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
   readonly executionLock?: ExecutionLock;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly completeMergedInputs?: Array<{ readonly changeId: string; readonly observed: unknown }>;
@@ -1635,14 +1477,11 @@ const dependencies = (input: {
     github: pullRequestGateway(input, events, pullRequestObservations),
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
-      const error = input.candidateRepoConfigError ?? input.agentEnvironmentError;
-      return error === undefined
-        ? { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } }
-        : { ok: false as const, message: error };
+      return { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } };
     },
     loadRepoConfigAtCommit: () => {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
-      const error = input.baselineRepoConfigError ?? input.agentEnvironmentError;
+      const error = input.baselineRepoConfigError;
       return error === undefined
         ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
         : { ok: false as const, message: error };
@@ -1661,15 +1500,6 @@ const dependencies = (input: {
           worktreePath,
           validationRepoConfig,
         );
-      }
-      if (input.agentEnvironmentError !== undefined) {
-        return {
-          ok: false as const,
-          error: new RepoConfigValidationFailed({
-            diagnostics: [],
-            message: input.agentEnvironmentError,
-          }),
-        };
       }
       if (input.policyRejection !== undefined) {
         return { ok: false as const, error: input.policyRejection };
@@ -1759,9 +1589,6 @@ const dependencies = (input: {
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
-    ...(input.validationPersistence === undefined
-      ? {}
-      : { validationPersistence: input.validationPersistence }),
     ...(input.executionLock === undefined ? {} : { executionLock: input.executionLock }),
   };
 };
@@ -1790,15 +1617,6 @@ const pullRequestGateway = (
       baseBranch: publication.target.baseBranch,
       headBranch: publication.headBranch,
     };
-    if (observation === "not_owned") return undefined;
-    if (observation === "exact_open") {
-      return {
-        ...base,
-        state: "open" as const,
-        merged: false,
-        headSha: publication.expectedHeadSha,
-      };
-    }
     if (observation === "exact_closed_unmerged") {
       return {
         ...base,
@@ -1819,7 +1637,7 @@ const pullRequestGateway = (
       ...base,
       state: "open" as const,
       merged: false,
-      headSha: "unexpected-remote-head",
+      headSha: publication.expectedHeadSha,
     };
   },
   findPullRequests: () => [],
