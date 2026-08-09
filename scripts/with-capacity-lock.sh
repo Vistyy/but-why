@@ -21,24 +21,29 @@ source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 
 child_pid=
 interrupted_status=0
+interruption_file=$(mktemp "${TMPDIR:-/tmp}/but-why-workload-interrupted.XXXXXX")
+export BY_CAPACITY_INTERRUPTION_FILE=$interruption_file
 terminate_child() {
     interrupted_status=$1
+    local signal=$2
+    printf '%s\n' "$interrupted_status" > "$interruption_file"
     if [[ -z "$child_pid" ]]; then
         return
     fi
 
-    process_tree_terminate "$child_pid"
+    process_tree_terminate "$child_pid" "$signal"
 }
 
 report_interruption() {
     echo "interrupted: $workload_class; rerun the same command to retry" >&2
 }
 
-trap 'terminate_child 130; report_interruption' INT
-trap 'terminate_child 143; report_interruption' TERM
+trap 'terminate_child 130 INT; report_interruption' INT
+trap 'terminate_child 143 TERM; report_interruption' TERM
 
 lock_owned=0
 cleanup() {
+    rm -f "$interruption_file"
     if (( lock_owned == 1 )); then
         rm -f "$status_file"
     fi
@@ -75,7 +80,7 @@ fi
 export BY_CAPACITY_LOCK_HELD=1
 
 set +e
-setsid "$@" &
+setsid env --default-signal=INT,TERM "$@" 9>&- &
 child_pid=$!
 wait "$child_pid"
 status=$?
