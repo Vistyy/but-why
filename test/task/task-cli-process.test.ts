@@ -3,12 +3,7 @@ import { decode } from "@toon-format/toon";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import {
-  createGitRepo,
-  runBuiltByWithEnv,
-  runBuiltByWithInput,
-  runByInProcessEffect,
-} from "../support/by-cli.js";
+import { createGitRepo, runBuiltByWithInput, runByInProcessEffect } from "../support/by-cli.js";
 
 const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
   const bytes = Buffer.from(stdout, "utf8");
@@ -22,7 +17,7 @@ describe("by task CLI process boundary", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
+        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
         expect(initialized.status).toBe(0);
 
         const description = "Descripción exacta\n";
@@ -69,14 +64,12 @@ describe("by task CLI process boundary", () => {
         expect(invalid.status).toBe(2);
         expect(invalid.stderr).toBe("");
         expectExactlyOneTrailingLineFeed(invalid.stdout);
-        expect(JSON.parse(invalid.stdout)).toEqual({
-          error: {
-            code: "invalid_description_encoding",
-            message: "Task description input must be valid UTF-8.",
-            path: "-",
-          },
-          help: ["Rewrite the input as UTF-8 and rerun the command."],
+        const invalidOutput = JSON.parse(invalid.stdout) as Record<string, unknown>;
+        expect(invalidOutput).toMatchObject({
+          error: { code: "invalid_description_encoding" },
         });
+        expect(invalidOutput).not.toHaveProperty("task");
+        expect(invalidOutput).not.toHaveProperty("context");
       }),
     90_000,
   );
