@@ -419,7 +419,10 @@ const prepareExistingWorktree = <Error>(
     state.worktreePath = state.expectedWorktreePath;
     const removed = adapters.removeWorktree(input.repoRoot, state.expectedWorktreePath);
 
-    if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
+    if (
+      !removed.ok &&
+      !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)
+    ) {
       yield* Ref.update(cleanupResult, (current) => ({ ...current, worktree: "failed" as const }));
       yield* Ref.update(cleanupDiagnostics, (current) => ({
         ...current,
