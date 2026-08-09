@@ -1,10 +1,12 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
+import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
@@ -321,7 +323,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       writeFileSync(
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "base", command: "false" }] } },
+          { taskPrefix: "BY", validation: { checks: [{ id: "base", command: "true" }] } },
           null,
           2,
         )}\n`,
@@ -336,7 +338,20 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       writeFileSync(
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "caller", command: "true" }] } },
+          {
+            taskPrefix: "BY",
+            validation: { checks: [{ id: "caller", command: "false" }] },
+            review: { specialists: ["caller"] },
+            reviewers: {
+              caller: {
+                instructionsFile: ".but-why/reviewers/caller.md",
+                agentProfile: { scope: "repo", name: "caller" },
+              },
+            },
+            agentProfiles: {
+              caller: { agentRuntime: "pi", runtimeConfig: { model: "caller/model" } },
+            },
+          },
           null,
           2,
         )}\n`,
@@ -344,10 +359,28 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       writeFileSync(
         join(change.worktreePath, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "managed", command: "true" }] } },
+          {
+            taskPrefix: "BY",
+            validation: { checks: [{ id: "managed", command: "false" }] },
+            review: { specialists: ["candidate"] },
+            reviewers: {
+              candidate: {
+                instructionsFile: ".but-why/reviewers/candidate.md",
+                agentProfile: { scope: "repo", name: "candidate" },
+              },
+            },
+            agentProfiles: {
+              candidate: { agentRuntime: "pi", runtimeConfig: { model: "candidate/model" } },
+            },
+          },
           null,
           2,
         )}\n`,
+      );
+      mkdirSync(join(change.worktreePath, ".but-why", "reviewers"), { recursive: true });
+      writeFileSync(
+        join(change.worktreePath, ".but-why", "reviewers", "candidate.md"),
+        "Review Candidate policy authority.\n",
       );
       runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], {
         cwd: change.worktreePath,
@@ -355,27 +388,55 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       runTestProcessOrThrow("git", ["config", "user.email", "but-why@example.test"], {
         cwd: change.worktreePath,
       });
-      runTestProcessOrThrow("git", ["add", ".but-why/config.json"], {
-        cwd: change.worktreePath,
-      });
-      runTestProcessOrThrow("git", ["commit", "-m", "Use Managed Worktree validation policy"], {
+      runTestProcessOrThrow(
+        "git",
+        ["add", ".but-why/config.json", ".but-why/reviewers/candidate.md"],
+        { cwd: change.worktreePath },
+      );
+      runTestProcessOrThrow("git", ["commit", "-m", "Use Candidate reviewer policy"], {
         cwd: change.worktreePath,
       });
 
+      const reviewedProfiles: string[] = [];
+      const reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput> = {
+        review: (input) =>
+          Effect.sync(() => {
+            reviewedProfiles.push(
+              `${input.reviewer}:${input.profile.agentProfile}:${input.profile.profile.runtimeConfig?.model ?? "<unset>"}`,
+            );
+            return {
+              ok: true as const,
+              report: {
+                findings: [
+                  {
+                    title: "Candidate reviewer selected",
+                    description: "The Candidate reviewer supplied this sentinel Finding.",
+                    evidence: "Candidate reviewer policy reached the reviewer runtime.",
+                    files: [".but-why/config.json"],
+                    artifactRefs: [],
+                  },
+                ],
+              },
+              attempts: 1,
+              stdout: "Candidate reviewer selected",
+            };
+          }),
+      };
       const result = yield* runByInProcessEffect(
         root,
         ["--json", "change", "submit", change.change.id],
         firstNow,
+        { reviewerAgentRuntime },
       );
       const output = JSON.parse(result.stdout) as {
-        readonly error: {
-          readonly code: string;
-        };
+        readonly error: { readonly code: string };
       };
 
       expect(result.status).toBe(1);
       expect(output.error.code).toBe("validation_findings");
-      expect(result.stdout).toContain("command: false");
+      expect(reviewedProfiles).toEqual(["candidate:candidate:candidate/model"]);
+      expect(result.stdout).toContain("Candidate reviewer selected");
+      expect(result.stdout).not.toContain("command: false");
       expect(result.stdout).not.toContain('"severity"');
     }),
   );
