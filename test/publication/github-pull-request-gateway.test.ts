@@ -520,6 +520,13 @@ describe("GitHub pull request gateway", () => {
         "destination_count",
       ],
       ["credentials", "https://user:SUPERSECRET@github.com/acme/widgets.git\n", "credentials"],
+      [
+        "query credential",
+        "https://github.com/acme/widgets.git?access_token=SUPERSECRET\n",
+        "malformed",
+      ],
+      ["fragment", "https://github.com/acme/widgets.git#SUPERSECRET\n", "malformed"],
+      ["port", "ssh://git@github.com:443/acme/widgets.git\n", "malformed"],
       ["mismatch", "git@github.com:other/widgets.git\n", "repository_mismatch"],
       ["malformed", "not a URL\n", "malformed"],
     ] as const;

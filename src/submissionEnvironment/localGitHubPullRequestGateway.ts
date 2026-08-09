@@ -633,7 +633,13 @@ const decodeGitHubPushDestination = (
   const isSsh = parsed.protocol === "ssh:" && parsed.username === "git";
   if (parsed.password !== "" || (!isHttps && !isSsh && parsed.username !== ""))
     return { ok: false, reason: "credentials" };
-  if (parsed.hostname.toLowerCase() !== "github.com" || (!isHttps && !isSsh))
+  if (
+    parsed.hostname.toLowerCase() !== "github.com" ||
+    (!isHttps && !isSsh) ||
+    parsed.port !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  )
     return { ok: false, reason: "malformed" };
   const parts = parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/");
   const owner = parts[0] ?? "";
