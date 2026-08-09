@@ -30,6 +30,7 @@ import {
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
@@ -116,7 +117,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     "routes taskless Specialists without Acceptance Context through Candidate Validation",
     () =>
       Effect.gen(function* () {
-        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed({
             ok: true as const,
             report: { findings: [] },
@@ -149,7 +150,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     "reviews the exact Candidate and immutable Acceptance Context after passing Checks",
     () =>
       Effect.gen(function* () {
-        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed({
             ok: true as const,
             report: { findings: [] },
@@ -195,7 +196,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   );
   it.scoped("does not start Acceptance after a Prepare or Check Finding", () =>
     Effect.gen(function* () {
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({ ok: true as const, report: { findings: [] }, attempts: 1, stdout: "" }),
       );
 
@@ -222,7 +223,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
   it.scoped("runs Repository Preparation and Checks before task-backed Acceptance Review", () =>
     Effect.gen(function* () {
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(({ commandCwd }) =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(({ commandCwd }) =>
         Effect.sync(() => {
           if (commandCwd === undefined) throw new Error("Acceptance Review has no workspace path.");
           const gitDir = git(commandCwd, "rev-parse", "--path-format=absolute", "--git-dir");
@@ -269,7 +270,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
   it.scoped("records a Candidate-integrity Tooling Failure after Acceptance Review", () =>
     Effect.gen(function* () {
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(({ commandCwd }) =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(({ commandCwd }) =>
         Effect.sync(() => {
           if (commandCwd === undefined) throw new Error("Acceptance Review has no workspace path.");
           writeFileSync(join(commandCwd, ".but-why", "config.json"), "{}");
@@ -381,7 +382,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   it.scoped("rechecks earlier Acceptance Findings after a blind successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier acceptance Finding");
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({
           ok: true,
           report: { findings: [earlierFinding] },
@@ -440,7 +441,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   it.scoped("rechecks earlier Acceptance Findings after a skipped successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier acceptance Finding");
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({
           ok: true,
           report: { findings: [earlierFinding] },
@@ -510,7 +511,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         diagnostics: [],
         message: "Intermediate output correction failed.",
       });
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({
           ok: true,
           report: { findings: [earlierFinding] },
@@ -581,7 +582,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         operationName: "run_reviewer_agent",
         message: "Temporary session telemetry is unavailable.",
       });
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
         input.resumeSession === undefined
           ? Effect.succeed({
               ok: true as const,
@@ -627,7 +628,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
             Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
         };
         const sessionStorageRoot = createTestWorkspace();
-        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           Effect.succeed({
             ok: true as const,
             report: { findings: [] },
@@ -664,7 +665,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           save: (record) => Effect.sync(() => sessions.set(record.changeId, record)),
           remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
         };
-        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           Effect.succeed({
             ok: true as const,
             report: { findings: [] },
@@ -716,7 +717,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "fresh review failed",
       });
       let calls = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() => {
         calls += 1;
         if (calls === 1)
           return Effect.succeed({
@@ -773,7 +774,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           operationName: "run_reviewer_agent",
           message: "provider detail hidden behind the runtime",
         });
-        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           input.resumeSession === undefined
             ? Effect.succeed({
                 ok: true as const,
@@ -825,7 +826,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           message: "provider detail hidden behind the runtime",
         });
         let freshCalls = 0;
-        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
           if (input.resumeSession !== undefined) {
             return Effect.succeed({
               ok: false as const,
@@ -888,7 +889,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         operationName: "run_reviewer_agent",
         message: "fresh review failed",
       });
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({
           ok: false as const,
           failure,
@@ -909,7 +910,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   it.scoped("clears earlier Acceptance Findings after a later clean report", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier acceptance Finding");
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
         Effect.succeed({
           ok: true,
           report: { findings: [earlierFinding] },
@@ -969,7 +970,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   it.scoped("rechecks earlier Specialist Findings after a blind successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier specialist Finding");
-      const reports: readonly ReviewerAgentResult[] = [
+      const reports: readonly ReviewerAgentResult<ReviewerOutput>[] = [
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
         {
           ok: true,
@@ -992,7 +993,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         },
       ];
       let reportIndex = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() => {
         const report = reports[reportIndex++];
         if (report === undefined) throw new Error("Unexpected review request.");
         return Effect.succeed(report);
@@ -1062,7 +1063,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         operationName: "run_reviewer_agent",
         message: "Specialist revision call failed.",
       });
-      const reports: readonly ReviewerAgentResult[] = [
+      const reports: readonly ReviewerAgentResult<ReviewerOutput>[] = [
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
         {
           ok: true,
@@ -1086,7 +1087,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         },
       ];
       let reportIndex = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() => {
         const report = reports[reportIndex++];
         if (report === undefined) throw new Error("Unexpected review request.");
         return Effect.succeed(report);
@@ -1152,7 +1153,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   it.scoped("rechecks earlier Specialist Findings after a skipped successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier specialist Finding");
-      const reports: readonly ReviewerAgentResult[] = [
+      const reports: readonly ReviewerAgentResult<ReviewerOutput>[] = [
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
         {
           ok: true,
@@ -1175,7 +1176,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         },
       ];
       let reportIndex = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() => {
         const report = reports[reportIndex++];
         if (report === undefined) throw new Error("Unexpected review request.");
         return Effect.succeed(report);
@@ -1225,7 +1226,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         diagnostics: [],
         message: "Intermediate specialist output correction failed.",
       });
-      const reports: readonly ReviewerAgentResult[] = [
+      const reports: readonly ReviewerAgentResult<ReviewerOutput>[] = [
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 1" },
         {
           ok: true,
@@ -1248,7 +1249,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "specialist 4" },
       ];
       let reportIndex = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() => {
         const report = reports[reportIndex++];
         if (report === undefined) throw new Error("Unexpected review request.");
         return Effect.succeed(report);
@@ -1298,7 +1299,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     "runs configured Specialists once and keeps trustworthy results in configured order",
     () =>
       Effect.gen(function* () {
-        const finding = (title: string): ReviewerAgentResult => ({
+        const finding = (title: string): ReviewerAgentResult<ReviewerOutput> => ({
           ok: true,
           report: {
             findings: [
@@ -1321,8 +1322,8 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           diagnostics: [],
           message: "Broken Specialist output.",
         });
-        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
-          const results: Record<string, ReviewerAgentResult> = {
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
+          const results: Record<string, ReviewerAgentResult<ReviewerOutput>> = {
             acceptance: { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
             zeta: finding("Zeta Finding"),
             broken: {
@@ -1358,9 +1359,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         ]);
         for (const [input] of review.mock.calls.slice(1)) {
           expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
-          expect(input.availableArtifactRefs).toEqual(
-            expect.arrayContaining([expect.stringContaining("/checks/quality/")]),
-          );
           expect(input.prompt).toContain(ready.captured.changeBaseSha);
           expect(input.prompt).toContain(ready.captured.headSha);
           expect(input.prompt).toContain(`${input.reviewer} review instructions`);
@@ -1474,7 +1472,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "Session resume failed: provider detail hidden behind the runtime",
       });
       let specialistCalls = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
         if (input.reviewer === "acceptance")
           return Effect.succeed({
             ok: true as const,
@@ -1559,7 +1557,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "fresh Specialist review failed",
       });
       let specialistCalls = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
         if (input.reviewer === "acceptance")
           return Effect.succeed({
             ok: true as const,
@@ -1616,7 +1614,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "Temporary failure classified as unknown",
       });
       let specialistCalls = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
         if (input.reviewer === "acceptance")
           return Effect.succeed({
             ok: true as const,
@@ -1676,7 +1674,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "alpha resumed session failure",
       });
       let alphaCalls = 0;
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
         if (input.reviewer === "acceptance")
           return Effect.succeed({
             ok: true as const,
@@ -1757,7 +1755,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         remove: (changeId, producer) =>
           Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
       };
-      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
         Effect.succeed({
           ok: true as const,
           report: { findings: [] },
@@ -1822,7 +1820,7 @@ type AcceptanceReadyRepo = {
   readonly repo: string;
   readonly captured: Captured;
   readonly validation: ReturnType<typeof candidateValidationForTest>;
-  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 };
@@ -2048,7 +2046,7 @@ const specialistSessionStore = (
 });
 
 const acceptanceReadyRepo = (
-  reviewerAgentRuntime: ReviewerAgentRuntime,
+  reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>,
   session?: {
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
