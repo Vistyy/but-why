@@ -200,6 +200,84 @@ const repairedAcceptancePolicy = {
 } as const;
 
 describe("repository SQL storage", () => {
+  it.scoped("persists, replaces, and clears Repository Preparation failure", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const task = yield* tasks.createTask({
+          title: "Persist exact accepted intent",
+          description: "Capture this approved Task description.",
+          now: "2026-07-17T22:48:00.000Z",
+        });
+        if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
+        const taskId = storedPublicTaskId(task.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:49:00.000Z" });
+
+        const starts = yield* openSqliteChangeStartPersistence();
+        const created = yield* starts.create({
+          id: "change-preparation-outcome",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/change-preparation-outcome",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "change-preparation-outcome"),
+          taskId,
+          prepare: { command: "prepare repository", timeoutSeconds: 17 },
+          now: "2026-07-17T22:50:00.000Z",
+        });
+        if (!created.ok) throw new Error(`Change Start failed: ${created.code}`);
+        expect(yield* starts.getById(created.change.id)).toMatchObject({
+          taskId,
+          acceptanceContext: {
+            version: 1,
+            title: "Persist exact accepted intent",
+            description: "Capture this approved Task description.",
+          },
+        });
+
+        const firstFailure = {
+          command: "prepare repository",
+          exitCode: 7,
+          timedOut: false,
+          stdout: "partial",
+          stderr: "failed",
+        };
+        yield* starts.recordPrepareOutcome(
+          created.change.id,
+          firstFailure,
+          "2026-07-17T22:51:00.000Z",
+        );
+        expect(yield* starts.getById(created.change.id)).toMatchObject({
+          id: created.change.id,
+          prepareFailure: firstFailure,
+        });
+
+        const retryFailure = {
+          ...firstFailure,
+          exitCode: 124,
+          timedOut: true,
+          stderr: "timed out",
+        };
+        yield* starts.recordPrepareOutcome(
+          created.change.id,
+          retryFailure,
+          "2026-07-17T22:52:00.000Z",
+        );
+        expect(yield* starts.getById(created.change.id)).toMatchObject({
+          id: created.change.id,
+          prepareFailure: retryFailure,
+        });
+
+        yield* starts.recordPrepareOutcome(created.change.id, null, "2026-07-17T22:53:00.000Z");
+        expect(yield* starts.getById(created.change.id)).toMatchObject({
+          id: created.change.id,
+          prepareFailure: null,
+        });
+      }),
+    ),
+  );
+
   it.scoped("raises a Blocker without writing blocked Change or Task lifecycle state", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
