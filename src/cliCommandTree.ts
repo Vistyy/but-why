@@ -252,7 +252,9 @@ const taskSubmitCommand = withCliHandler(
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
-      Effect.flatMap(({ runSubmitCommand }) => runSubmitCommand({ taskId: values.taskId }, environment)),
+      Effect.flatMap(({ runSubmitCommand }) =>
+        runSubmitCommand({ taskId: values.taskId }, environment),
+      ),
     ),
 );
 const taskCancelCommand = withCliHandler(

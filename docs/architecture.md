@@ -28,7 +28,6 @@ The source hierarchy follows these owners:
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
 - `src/workspace/` owns neutral disposable exact-commit workspace and Git mechanics shared by Validation and Task Review Adapters.
-- `src/reviewerSession/` owns neutral reviewer session-file and transcript mechanics shared by Change and Task Review Adapters.
 - `src/sqlite/` owns SQLite persistence Adapters.
 - `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 
