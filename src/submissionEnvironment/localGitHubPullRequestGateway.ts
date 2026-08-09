@@ -334,12 +334,15 @@ const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
 
 const decodeRemoteBranchDeletionResponse = (value: unknown): boolean => {
   if (!isObjectRecord(value) || hasGraphqlErrors(value)) return false;
-  if ("errors" in value && !Array.isArray(value.errors)) return false;
-  const data = value.data;
+  if ("errors" in value && !Array.isArray(value["errors"])) return false;
+  const data = value["data"];
   if (!isObjectRecord(data)) return false;
-  const updateRefs = data.updateRefs;
+  const updateRefs = data["updateRefs"];
   if (!isObjectRecord(updateRefs) || !("clientMutationId" in updateRefs)) return false;
-  return updateRefs.clientMutationId === null || typeof updateRefs.clientMutationId === "string";
+  return (
+    updateRefs["clientMutationId"] === null ||
+    typeof updateRefs["clientMutationId"] === "string"
+  );
 };
 
 const hasGraphqlErrors = (value: unknown): boolean =>
