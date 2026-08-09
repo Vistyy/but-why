@@ -112,9 +112,9 @@ valid:
 invalid:
   - openHerdrInteractiveSessionHost(undefined)
 ---
-id: direct-sandcastle-helpers-belong-to-validation-workspace
+id: direct-sandcastle-helpers-belong-to-disposable-workspace
 valid:
-  - createValidationWorkspace(input)
+  - runDisposableExactCommitWorkspace(input)
 invalid:
   - import { createSandbox } from "@ai-hero/sandcastle";
   - import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";

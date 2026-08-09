@@ -201,11 +201,11 @@ rule:
   any:
     - pattern: openHerdrInteractiveSessionHost($$$ARGS)
 ---
-# Validation workspace composition owns direct Sandcastle factories.
-id: direct-sandcastle-helpers-belong-to-validation-workspace
+# The disposable workspace Adapter owns direct Sandcastle factories.
+id: direct-sandcastle-helpers-belong-to-disposable-workspace
 language: TypeScript
 severity: error
-message: Do not use Sandcastle factories in tests because validation workspace composition owns Sandcastle setup; use the Candidate Validation seam for behavior variations.
+message: Do not use Sandcastle factories in tests because the disposable workspace Adapter owns Sandcastle setup; use runDisposableExactCommitWorkspace with test inputs for behavior variations.
 files:
   - test/**/*.ts
 rule:
