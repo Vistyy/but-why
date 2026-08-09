@@ -568,6 +568,37 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false, unchangedRestarts: 1 } });
   });
 
+  it("ignores persisted state for a different Change", async () => {
+    const harness = createHarness(sourceCwd, {
+      changeId: "11111111-1111-4111-8111-111111111111",
+      fingerprint: "other-change",
+      unchangedRestarts: 2,
+      paused: true,
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([expect.stringContaining(`Change ${changeId}`)]);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { changeId, paused: false } });
+  });
+
+  it("keeps opaque cleanup details out of continuation decisions", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setSnapshot(
+      snapshot({
+        change: { state: "closed", closeReason: "completed" },
+        cleanup: { state: "pending", blockingReason: { opaque: true } },
+      }),
+    );
+
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Change cleanup is needed"]);
+  });
+
   it("keeps unknown nested CLI data in the durable retry fingerprint", async () => {
     const harness = createHarness();
     harness.setSnapshot(snapshot({ pullRequest: { number: 12, opaque: { revision: 1 } } }));

@@ -9,9 +9,8 @@ type ChangeCloseReason = "completed" | "cancelled";
 
 type JsonObject = Readonly<Record<string, unknown>>;
 
-type ChangeCleanup = {
+type ChangeCleanup = JsonObject & {
   readonly state: "complete" | "pending";
-  readonly blockingReason: string | null;
 };
 
 type CurrentCandidate = JsonObject & {
@@ -323,6 +322,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       )
       .at(-1);
     if (!isPersistedState(latest?.data)) return;
+    if (changeId !== undefined && latest.data.changeId !== changeId) return;
     persisted = latest.data;
     changeId ??= latest.data.changeId;
   };
@@ -836,9 +836,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest"))) &&
     (cleanup === undefined ||
       (isRecord(cleanup) &&
-        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending") &&
-        (typeof recordValue(cleanup, "blockingReason") === "string" ||
-          recordValue(cleanup, "blockingReason") === null))) &&
+        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending"))) &&
     (publication === undefined ||
       publication === null ||
       (isRecord(publication) &&
