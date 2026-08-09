@@ -9,12 +9,11 @@ import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
+  type TaskIdCommand,
   taskNotFound,
   withTasks,
 } from "../taskCliSupport.js";
 import { taskApprovalStateHelp } from "../taskStateHelp.js";
-
-export type TaskIdCommand = { readonly taskId: string };
 
 export const runApproveCommand = (
   command: TaskIdCommand,

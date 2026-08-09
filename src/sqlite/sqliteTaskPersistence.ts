@@ -254,7 +254,7 @@ const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
     if (current.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
-    if (yield* hasActiveTaskReview(sql, input.taskId)) {
+    if (yield* taskReviewActive(sql, input.taskId)) {
       return { ok: false as const, code: "task_review_active" as const };
     }
     yield* sql`UPDATE tasks SET state = 'todo', updated_at = ${input.now} WHERE id = ${input.taskId}`;
