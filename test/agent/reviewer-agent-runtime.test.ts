@@ -616,12 +616,94 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
-  it.effect("fails tooling after one output correction", () =>
+  it.effect("accepts a corrected report on the third attempt", () =>
     Effect.gen(function* () {
-      const third = runResult("must not run");
-      const resumeAfterCorrection = vi.fn(() => Promise.resolve(third));
-      const second = runResult("invalid again", resumeAfterCorrection);
-      const first = runResult("invalid", () => Promise.resolve(second));
+      const third = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      const resumeSecond = vi.fn(() => Promise.resolve(third));
+      const second = runResult(
+        '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
+        resumeSecond,
+      );
+      const resumeFirst = vi.fn(() => Promise.resolve(second));
+      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
+      const run = vi.fn(() => Promise.resolve(first));
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        report: { findings: [] },
+        attempts: 3,
+        stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(resumeFirst).toHaveBeenCalledTimes(1);
+      expect(resumeSecond).toHaveBeenCalledTimes(1);
+      expect(resumeFirst).toHaveBeenCalledWith(expect.stringContaining("$: Expected"));
+      expect(resumeSecond).toHaveBeenCalledWith(
+        expect.stringContaining("findings: Expected ReadonlyArray"),
+      );
+    }),
+  );
+
+  it.effect("fails after three invalid outputs without a fourth invocation", () =>
+    Effect.gen(function* () {
+      const resumeThird = vi.fn(() => Promise.resolve(runResult("must not run")));
+      const third = runResult(
+        '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
+        resumeThird,
+      );
+      const resumeSecond = vi.fn(() => Promise.resolve(third));
+      const second = runResult(
+        '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
+        resumeSecond,
+      );
+      const resumeFirst = vi.fn(() => Promise.resolve(second));
+      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
+      const run = vi.fn(() => Promise.resolve(first));
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        attempts: 3,
+        failure: {
+          _tag: "ReviewerOutputContractFailed",
+          reviewer: "acceptance",
+          attempts: 3,
+        },
+        sessionUsability: "unknown",
+        stdout: '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(resumeFirst).toHaveBeenCalledTimes(1);
+      expect(resumeSecond).toHaveBeenCalledTimes(1);
+      expect(resumeThird).not.toHaveBeenCalled();
+      expect(resumeFirst).toHaveBeenCalledWith(expect.stringContaining("$: Expected"));
+      expect(resumeSecond).toHaveBeenCalledWith(
+        expect.stringContaining("findings: Expected ReadonlyArray"),
+      );
+    }),
+  );
+
+  it.effect("stops after a failed output correction invocation", () =>
+    Effect.gen(function* () {
+      const resumeFirst = vi.fn(() => Promise.reject(new Error("provider failed")));
+      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
@@ -636,13 +718,12 @@ describe("Pi reviewer agent runtime", () => {
       expect(result).toMatchObject({
         ok: false,
         attempts: 2,
-        failure: {
-          _tag: "ReviewerOutputContractFailed",
-          reviewer: "acceptance",
-          attempts: 2,
-        },
+        failure: { _tag: "SandcastleToolingFailed", message: "provider failed" },
+        sessionUsability: "unknown",
+        stdout: "<reviewer-output>not json</reviewer-output>",
       });
-      expect(resumeAfterCorrection).not.toHaveBeenCalled();
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(resumeFirst).toHaveBeenCalledTimes(1);
     }),
   );
 });

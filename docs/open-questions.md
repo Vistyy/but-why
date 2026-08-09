@@ -17,11 +17,6 @@ The suite is not a release requirement for the first manual workflow.
 Specialists run sequentially in v1.
 Reconsider parallel execution only after real-use evidence justifies workspace isolation, resource limits, failure collection, cancellation, and deterministic ordering.
 
-## Should Sandcastle own structured reviewer retries?
-
-V1 performs one local output-correction request because `Sandbox.run()` does not expose structured-output retry.
-If Sandcastle gains that capability, remove the local correction path and delegate the behavior.
-
 ## Where should disposable Validation Workspaces live?
 
 Sandcastle places each v1 Validation Workspace under the consumer repository at `.sandcastle/worktrees/`.
