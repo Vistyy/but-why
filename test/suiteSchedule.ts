@@ -1,4 +1,5 @@
 export const completeOnlyTestFiles = [
+  "test/agent/reviewer-agent-runtime-process.test.ts",
   "test/change/artifact-lifecycle.test.ts",
   "test/change/change-candidate-capture.test.ts",
   "test/change/change-cleanup-git.test.ts",
@@ -25,6 +26,7 @@ export const completeOnlyTestFiles = [
 ] as const;
 
 export const approvedCompleteOnlyTestFiles = [
+  "test/agent/reviewer-agent-runtime-process.test.ts",
   "test/change/change-implement-main-checkout-failure.test.ts",
 ] as const;
 
