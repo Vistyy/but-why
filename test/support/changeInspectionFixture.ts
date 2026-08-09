@@ -55,15 +55,17 @@ export const runInspectionCommand = (
 ) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
-      const inheritedPath = process.env.PATH;
-      process.env.PATH = `${join(root, ".inspection-bin")}:${inheritedPath ?? ""}`;
+      const { PATH: inheritedPath } = process.env;
+      Object.assign(process.env, {
+        PATH: `${join(root, ".inspection-bin")}:${inheritedPath ?? ""}`,
+      });
       return inheritedPath;
     }),
     () => runByInProcessEffect(root, args, now),
     (inheritedPath) =>
       Effect.sync(() => {
-        if (inheritedPath === undefined) delete process.env.PATH;
-        else process.env.PATH = inheritedPath;
+        if (inheritedPath === undefined) Reflect.deleteProperty(process.env, "PATH");
+        else Object.assign(process.env, { PATH: inheritedPath });
       }),
   );
 
