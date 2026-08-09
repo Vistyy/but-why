@@ -110,11 +110,39 @@ describe("Change Submit validation-policy errors", () => {
       stdout: {
         error: {
           code: "publication_tooling_failed",
-          message: "The selected publication remote has no safe push destination.",
+          message:
+            "Exactly one safe push destination could not be validated for the selected publication remote.",
           evidence: {
             operation: "push_destination",
             reason: "repository_mismatch",
           },
+        },
+        help: [
+          "Correct the selected publication remote's effective push destination, then retry Submit.",
+        ],
+      },
+    });
+
+    expect(
+      submitResult(
+        {
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: {
+            operation: "push_destination",
+            classification: "unavailable",
+            reason: "unavailable",
+          },
+        },
+        "change-1",
+      ),
+    ).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          message:
+            "Exactly one safe push destination could not be validated for the selected publication remote.",
+          evidence: { reason: "unavailable" },
         },
         help: [
           "Correct the selected publication remote's effective push destination, then retry Submit.",

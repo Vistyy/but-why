@@ -218,7 +218,8 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
   ) {
     return runtimeError({
       code: result.code,
-      message: "The selected publication remote has no safe push destination.",
+      message:
+        "Exactly one safe push destination could not be validated for the selected publication remote.",
       details: { changeId, evidence: result.evidence },
       help: [
         "Correct the selected publication remote's effective push destination, then retry Submit.",
