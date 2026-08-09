@@ -108,10 +108,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("does not record an incomplete pull request creation response", () =>
+  it.scoped("reads back a malformed pull request creation response without recording it", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
-        const { repository: _repository, ...incomplete } = pullRequest(fixture.captured.headSha);
+        let readbacks = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -120,9 +120,19 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
+            findPullRequests: () => {
+              readbacks += 1;
+              return [];
+            },
             getPullRequest: () => undefined,
-            createPullRequest: () => ({ ok: true, pullRequest: incomplete }),
+            createPullRequest: () => ({
+              ok: false,
+              code: "remote_response_unusable",
+              evidence: {
+                operation: "pull_request_creation",
+                classification: "response_parse_failure",
+              },
+            }),
             updatePullRequest: () => {
               throw new Error("Unexpected PR update");
             },
@@ -131,10 +141,17 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 
         expect(yield* publication.publish(input(fixture))).toMatchObject({
           ok: false,
-          code: "publication_remote_mismatch",
-          expectedRemoteHeadSha: fixture.captured.headSha,
-          observedRemoteHeadSha: fixture.captured.headSha,
+          code: "publication_creation_unconfirmed",
+          evidence: {
+            operation: "pull_request_creation",
+            classification: "response_parse_failure",
+          },
+          recoveryEvidence: {
+            operation: "remote_lookup",
+            classification: "conflict",
+          },
         });
+        expect(readbacks).toBe(1);
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
           publication: { pullRequest: null },
         });
@@ -430,7 +447,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             updatePullRequest: (request) => {
               updateCalls += 1;
               remote = pullRequest(request.expectedHeadSha);
-              return { ok: false as const, code: "remote_response_lost" as const };
+              return {
+                ok: false as const,
+                code: "remote_response_unusable" as const,
+                evidence: {
+                  operation: "pull_request_update" as const,
+                  classification: "response_parse_failure" as const,
+                },
+              };
             },
           },
         });
@@ -485,7 +509,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => {
               updateCalls += 1;
-              return { ok: false as const, code: "remote_response_lost" as const };
+              return {
+                ok: false as const,
+                code: "remote_response_lost" as const,
+                evidence: {
+                  operation: "pull_request_update" as const,
+                  classification: "lost_response" as const,
+                },
+              };
             },
           },
         });
@@ -504,7 +535,12 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             validationRunId: next.validationRunId,
             now: "2026-07-22T10:05:00.000Z",
           }),
-        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+        ).toMatchObject({
+          ok: false,
+          code: "publication_remote_mismatch",
+          evidence: { operation: "pull_request_update", classification: "lost_response" },
+          recoveryEvidence: { operation: "remote_lookup", classification: "conflict" },
+        });
         expect(updateCalls).toBe(1);
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
           publication: {
@@ -516,7 +552,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("returns a remote mismatch after three stale confirmation reads", () =>
+  it.scoped("returns a remote mismatch after one exact stale confirmation read", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
@@ -556,9 +592,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             validationRunId: next.validationRunId,
             now: "2026-07-22T10:05:00.000Z",
           }),
-        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
-        expect(confirmationReads).toBe(4);
-        expect(confirmationDelays).toEqual([100, 100, 100]);
+        ).toMatchObject({
+          ok: false,
+          code: "publication_remote_mismatch",
+          evidence: { operation: "pull_request_update", classification: "conflict" },
+          recoveryEvidence: { operation: "remote_lookup", classification: "conflict" },
+        });
+        expect(confirmationReads).toBe(2);
+        expect(confirmationDelays).toEqual([100]);
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
           publication: {
             candidateId: fixture.captured.candidateId,
@@ -673,7 +714,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
-        let remote: GitHubPullRequest = pullRequest(branchHead);
+        let remote: GitHubPullRequest | undefined = pullRequest(branchHead);
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -684,7 +725,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           github: {
             findPullRequests: () => [],
             getPullRequest: () => remote,
-            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            createPullRequest: () => ({ ok: true, pullRequest: pullRequest(branchHead) }),
             updatePullRequest: () => {
               throw new Error("Unavailable facts must not update the pull request");
             },
@@ -694,8 +735,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 
         const next = yield* nextCandidate(fixture, "Unavailable facts", "2026-07-22T10:05:00.000Z");
         branchHead = next.captured.headSha;
-        const { state: _state, ...withoutState } = pullRequest(next.captured.headSha);
-        remote = withoutState;
+        remote = undefined;
         expect(
           yield* publication.publish({
             ...input(fixture),

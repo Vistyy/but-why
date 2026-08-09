@@ -9,7 +9,10 @@ import {
 } from "../../src/change/cancelChange.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestMutationResult,
+} from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
 import {
@@ -321,7 +324,43 @@ describe("Change cancellation", () => {
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("code: github_close_failed");
       expect(result.stdout).toContain("Change remains open");
-      expect(events).toEqual(["read-pr", "close-pr"]);
+      expect(events).toEqual(["read-pr", "close-pr", "read-pr"]);
+    }),
+  );
+
+  it.effect("emits bounded close and recovery diagnostics in TOON and JSON", () =>
+    Effect.gen(function* () {
+      for (const json of [false, true]) {
+        const events: string[] = [];
+        const task = taskRecord("todo");
+        const dependencies = cancellationDependencies({
+          task,
+          change: changeRecord(null),
+          pullRequest: pullRequest("open", false),
+          closePullRequest: {
+            ok: false,
+            code: "close_failed",
+            evidence: {
+              operation: "pull_request_close",
+              classification: "response_parse_failure",
+            },
+          },
+          events,
+        });
+        const result = yield* runByInProcessEffect(
+          createTestWorkspace(),
+          [...(json ? ["--json"] : []), "change", "cancel", "change-1", "--reason", "Stop"],
+          now,
+          { cancellationUseCases: openCancellationUseCases(dependencies) },
+        );
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain(json ? '"evidence"' : "evidence:");
+        expect(result.stdout).toContain(json ? '"recoveryEvidence"' : "recoveryEvidence:");
+        expect(result.stdout).toContain("response_parse_failure");
+        expect(result.stdout).toContain("postcondition_mismatch");
+        expect(result.stdout).not.toContain("raw GitHub response");
+        if (json) expect(() => JSON.parse(result.stdout)).not.toThrow();
+      }
     }),
   );
 
@@ -578,6 +617,53 @@ describe("Change cancellation", () => {
       );
   });
 
+  it.effect("accepts an exact close readback without a duplicate close mutation", () => {
+    const events: string[] = [];
+    const task = taskRecord("todo");
+    const change = changeRecord(publicTaskId(task.id));
+    const base = cancellationDependencies({
+      task,
+      change,
+      pullRequest: pullRequest("open", false),
+      closePullRequest: { ok: false, code: "close_failed" },
+      events,
+    });
+    let reads = 0;
+    const dependencies = {
+      ...base,
+      github: {
+        ...base.github,
+        getPullRequest: () => {
+          events.push("read-pr");
+          reads += 1;
+          return reads === 1 ? pullRequest("open", false) : pullRequest("closed", false);
+        },
+      },
+    };
+
+    return openCancellationUseCases(dependencies)
+      .cancelTask({ taskId: publicTaskId(task.id), reason: "Stop", now })
+      .pipe(
+        Effect.map((result) => {
+          expect(result).toMatchObject({ ok: true, status: "cancelled" });
+          expect(dependencies.closePullRequestInputs).toHaveLength(1);
+          expect(events).toEqual([
+            "read-task",
+            "read-change",
+            "read-pr",
+            "close-pr",
+            "read-pr",
+            "cancel-change",
+            "cleanup",
+            "record-cleanup",
+            "remove-reviewer-sessions",
+            "read-task",
+          ]);
+          return result;
+        }),
+      );
+  });
+
   it.effect("leaves the lifecycle open when owned pull request closure fails", () => {
     const events: string[] = [];
     const task = taskRecord("todo");
@@ -599,7 +685,7 @@ describe("Change cancellation", () => {
             code: "github_close_failed",
             taskId: publicTaskId(task.id),
           });
-          expect(events).toEqual(["read-task", "read-change", "read-pr", "close-pr"]);
+          expect(events).toEqual(["read-task", "read-change", "read-pr", "close-pr", "read-pr"]);
           return result;
         }),
       );
@@ -699,9 +785,7 @@ const cancellationDependencies = (input: {
   readonly task: TaskRecord;
   readonly change: ChangeRecord;
   readonly pullRequest: GitHubPullRequest;
-  readonly closePullRequest?:
-    | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
-    | { readonly ok: false; readonly code: "close_failed" };
+  readonly closePullRequest?: GitHubPullRequestMutationResult;
   readonly cleanupResult?:
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
