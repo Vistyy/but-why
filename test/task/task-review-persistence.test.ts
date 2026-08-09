@@ -235,6 +235,22 @@ it.scoped("completes a passing Task Review atomically and leaves the Task New", 
       });
       if (!started.ok) throw new Error("start failed");
 
+      const provisionalCompletion = yield* Effect.either(
+        reviews.complete({
+          reviewId: "review-pass",
+          outcome: "passed",
+          now: secondNow,
+        }),
+      );
+      expect(provisionalCompletion).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+      expect(yield* reviews.getActiveForTask(task.id)).toEqual({
+        taskId: task.id,
+        reviewId: "review-pass",
+      });
+
       yield* recordRemovedWorkspace(reviews, "review-pass", secondNow);
       const completed = yield* reviews.complete({
         reviewId: "review-pass",

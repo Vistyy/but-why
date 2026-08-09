@@ -268,8 +268,9 @@ const complete = (
       workspace.tempRefName !== taskReviewTempRefName(input.reviewId) ||
       workspace.submittedSha !== review.baseCommit ||
       workspace.worktreeHead !== review.baseCommit ||
-      workspace.cleanupWorktree === "failed" ||
-      workspace.cleanupTempRef === "failed"
+      (input.outcome === "tooling_failed"
+        ? workspace.cleanupWorktree === "failed" || workspace.cleanupTempRef === "failed"
+        : workspace.cleanupWorktree !== "removed" || workspace.cleanupTempRef !== "removed")
     ) {
       return yield* invalidData(
         "complete Task Review",
@@ -530,7 +531,10 @@ const validateStoredTaskReviewEvidence = (
             workspace.submittedSha !== review.baseCommit ||
             workspace.worktreeHead !== review.baseCommit ||
             (review.state === "complete" &&
-              (workspace.cleanupWorktree === "failed" || workspace.cleanupTempRef === "failed"))
+              (review.outcome === "tooling_failed"
+                ? workspace.cleanupWorktree === "failed" || workspace.cleanupTempRef === "failed"
+                : workspace.cleanupWorktree !== "removed" ||
+                  workspace.cleanupTempRef !== "removed"))
           ) {
             return yield* invalidData(
               "validate stored Task Review evidence",

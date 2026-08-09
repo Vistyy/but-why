@@ -820,9 +820,12 @@ describe("Task Submission orchestration", () => {
               }).status,
             ).toBe(0);
             yield* repository.operation(
-              "restore Task Review worktree ownership",
+              "restore stale Task Review cleanup evidence",
               (sql) =>
-                sql`UPDATE task_review_workspace_setups SET worktree_path = ${worktreePath}
+                sql`UPDATE task_review_workspace_setups
+                  SET worktree_path = ${worktreePath},
+                    cleanup_worktree = 'removed',
+                    cleanup_temp_ref = 'removed'
                   WHERE review_id = 'review-abandon'`,
             );
 

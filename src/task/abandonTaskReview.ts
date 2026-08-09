@@ -132,19 +132,13 @@ const abandonWhileLocked = (
         }),
       );
     }
-    const tempRef =
-      context.cleanupTempRef === "removed"
-        ? "removed"
-        : deleteDisposableWorkspaceRef(input.repoRoot, tempRefName);
-    const worktreePath = context.worktreePath;
-    const worktree =
-      context.cleanupWorktree === "removed"
-        ? "removed"
-        : worktreePath === undefined
-          ? "failed"
-          : removeDisposableWorktree(input.repoRoot, worktreePath)
-            ? "removed"
-            : "failed";
+    // Reconcile both deterministic resources with Git on every attempt.
+    // Persisted cleanup states describe an earlier attempt and are not proof
+    // that the owned resources are still absent.
+    const tempRef = deleteDisposableWorkspaceRef(input.repoRoot, tempRefName);
+    const worktree = removeDisposableWorktree(input.repoRoot, expectedWorktreePath)
+      ? "removed"
+      : "failed";
     const cleanup = { worktree, tempRef } as const;
 
     if (worktree === "failed" || tempRef === "failed") {
