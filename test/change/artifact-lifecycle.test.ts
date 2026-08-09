@@ -7,7 +7,6 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
@@ -240,7 +239,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
             github: unusedGitHubGateway,
             cleanupTerminal: openTerminalCleanup({
               persistence: fixture.changes,
-              cleanup: (input) => cleanupChangeResources(input),
+              cleanup: () => ({ state: "complete" }),
               artifactLifecycle: openArtifactLifecycle({
                 persistence: fixture.validation,
                 artifactsRoot: fixture.artifactsRoot,
