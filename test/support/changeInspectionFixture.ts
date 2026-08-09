@@ -117,17 +117,40 @@ export const createChangeFixture = (
     Effect.gen(function* () {
       const id = randomUUID();
       const repository = yield* RepositorySql;
+      let acceptanceContext: string | null = null;
+      if (options.taskId !== undefined) {
+        const tasks = yield* repository.operation(
+          "read linked Task inspection fixture",
+          (sql) => sql<{ readonly title: string; readonly description: string }>`
+            SELECT title, description
+            FROM tasks
+            WHERE id = ${options.taskId}
+          `,
+        );
+        const task = tasks[0];
+        if (task === undefined) {
+          return yield* Effect.dieMessage(
+            `Linked Task inspection fixture ${options.taskId} does not exist.`,
+          );
+        }
+        acceptanceContext = JSON.stringify({
+          version: 1,
+          title: task.title,
+          description: task.description,
+        });
+      }
       yield* repository.operation(
         "create Change inspection fixture",
         (sql) => sql`
           INSERT INTO changes (
-            id, repository_common_directory, branch_ref, task_id, state,
+            id, repository_common_directory, branch_ref, task_id, acceptance_context, state,
             close_reason, created_at, updated_at, closed_at, base_ref,
             worktree_path, starting_commit
           ) VALUES (
-            ${id}, ${join(root, ".git")}, ${branchRef}, ${options.taskId ?? null}, 'open',
-            NULL, ${createdAt}, ${createdAt}, NULL, ${options.baseRef ?? null},
-            ${options.worktreePath ?? null}, ${options.startingCommit ?? null}
+            ${id}, ${join(root, ".git")}, ${branchRef}, ${options.taskId ?? null},
+            ${acceptanceContext}, 'open', NULL, ${createdAt}, ${createdAt}, NULL,
+            ${options.baseRef ?? null}, ${options.worktreePath ?? null},
+            ${options.startingCommit ?? null}
           )
         `,
       );
