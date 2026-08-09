@@ -20,13 +20,13 @@ import type {
 } from "../task/taskStore.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
+  type DecodedTaskGraph,
+  type DecodedTaskRow,
   decodePersisted,
   decodeStoredNullableString,
   decodeStoredSqlitePositiveInteger,
   decodeStoredString,
   decodeStoredTaskId,
-  type DecodedTaskGraph,
-  type DecodedTaskRow,
   readDecodedTaskGraph,
   taskDependencyFacts,
 } from "./sqliteTaskReadModel.js";
