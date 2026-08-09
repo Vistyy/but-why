@@ -48,6 +48,7 @@
 - `src/init/`: Local Repository initialization and repository-context Adapters.
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
+- `src/disposableWorkspace/`: disposable exact-commit workspace Adapter.
 - `src/sqlite/`: SQLite persistence Adapters.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
 

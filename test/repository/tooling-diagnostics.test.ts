@@ -61,7 +61,7 @@ describe("repository-authored blocking diagnostics", () => {
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
     [
-      "direct-sandcastle-helpers-belong-to-validation-workspace",
+      "direct-sandcastle-helpers-belong-to-disposable-workspace",
       "const sandbox = createSandbox();",
     ],
   ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
@@ -73,7 +73,7 @@ describe("repository-authored blocking diagnostics", () => {
       "process-test-helpers-belong-to-process-boundaries",
       "package-installation-belongs-to-package-contract",
       "live-agent-helper-belongs-to-test-host",
-      "direct-sandcastle-helpers-belong-to-validation-workspace",
+      "direct-sandcastle-helpers-belong-to-disposable-workspace",
     ].includes(ruleId)
       ? "test"
       : "src";
