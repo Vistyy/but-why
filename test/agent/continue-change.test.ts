@@ -119,6 +119,8 @@ describe("Change Implement continuation policy", () => {
     `printf '%s\\n' "\`just by change submit change-123\`"`,
     "printf '<<DATA'; just by change submit change-123",
     "cat <<END-MARKER\ntext\nEND-MARKER\njust by change submit change-123",
+    "echo $((1 << 2))\njust by change submit change-123",
+    "(( value = 1 << 2 ))\njust by change submit change-123",
   ])("detects a visible canonical Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });

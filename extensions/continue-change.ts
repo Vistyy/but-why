@@ -135,6 +135,7 @@ const hereDocumentDeclarations = (
 ): Array<{ readonly delimiter: string; readonly stripTabs: boolean }> => {
   const declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
   let quote: "'" | '"' | undefined;
+  let arithmeticDepth = 0;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
     if (character === "\\" && quote !== "'") {
@@ -149,6 +150,17 @@ const hereDocumentDeclarations = (
       quote = character;
       continue;
     }
+    if (character === "(" && line[index + 1] === "(") {
+      arithmeticDepth += 1;
+      index += 1;
+      continue;
+    }
+    if (arithmeticDepth > 0 && character === ")" && line[index + 1] === ")") {
+      arithmeticDepth -= 1;
+      index += 1;
+      continue;
+    }
+    if (arithmeticDepth > 0) continue;
     if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(line[index - 1] ?? ""))) break;
     if (character !== "<" || line[index + 1] !== "<") continue;
     let cursor = index + 2;
