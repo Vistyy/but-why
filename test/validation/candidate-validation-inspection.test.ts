@@ -176,7 +176,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
       const decision = {
         id: "decision-1",
-        changeId: "change-1",
+        changeId: fixture.changeId,
         sequence: 1,
         recordedAt: now,
         choice: "Keep rationale separate from intent",
