@@ -123,9 +123,7 @@ describe("portable But Why skill", () => {
     expect(skill).toContain("[Setup guidance](../../setup.md)");
     expect(existsSync(join(repoRoot, "docs/public/skills/but-why/../../setup.md"))).toBe(true);
     expect(
-      existsSync(
-        join(fixture, "docs/public/skills/but-why/references/task-verification.md"),
-      ),
+      existsSync(join(fixture, "docs/public/skills/but-why/references/task-verification.md")),
     ).toBe(true);
 
     const consumer = createTestWorkspace();
