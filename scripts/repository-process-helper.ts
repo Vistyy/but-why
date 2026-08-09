@@ -1,3 +1,5 @@
+import { existsSync, watch } from "node:fs";
+import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { Effect } from "effect";
@@ -9,9 +11,9 @@ import { storedPublicTaskId } from "../src/task/taskId.js";
 const usage = `Usage: repositoryProcessHelper.ts <hold-lock|open-state|open-read> ...
 
 Commands:
-  hold-lock <statePath> <holdMs>
+  hold-lock <statePath> <releasePath>
     Open <statePath>, create the migration ledger table, hold the SQLite migration
-    write lock for <holdMs> milliseconds, then roll back.
+    write lock until <releasePath> exists, then roll back.
   open-state <statePath> <commonDirectory> [busyTimeoutMs] [contentionTimeoutMs]
              [retryDelayMs] <title>
     Open Shared Repository State through the repository SQL layer and create and
@@ -132,7 +134,24 @@ const openRead = async (input: {
   return 0;
 };
 
-const holdLock = async (statePath: string, holdMs: number): Promise<number> => {
+const waitForRelease = (releasePath: string): Promise<void> =>
+  new Promise((resolve) => {
+    if (existsSync(releasePath)) {
+      resolve();
+      return;
+    }
+    const watcher = watch(dirname(releasePath), (_event, filename) => {
+      if (filename === undefined || !existsSync(releasePath)) return;
+      watcher.close();
+      resolve();
+    });
+    if (existsSync(releasePath)) {
+      watcher.close();
+      resolve();
+    }
+  });
+
+const holdLock = async (statePath: string, releasePath: string): Promise<number> => {
   const database = new DatabaseSync(statePath, { timeout: 2_000 });
   database.exec(`
     CREATE TABLE IF NOT EXISTS effect_sql_migrations (
@@ -145,16 +164,12 @@ const holdLock = async (statePath: string, holdMs: number): Promise<number> => {
   // claims and runs pending migrations.
   database.exec("BEGIN IMMEDIATE");
   process.stdout.write("locked\n");
-  await new Promise<void>((resolve) => {
-    setTimeout(() => {
-      // Roll back to release the write lock without leaving a committed claim row:
-      // a real crash or rollback leaves the ledger without the uncommitted claim.
-      database.exec("ROLLBACK");
-      database.close();
-      process.stdout.write("released\n");
-      resolve();
-    }, holdMs);
-  });
+  await waitForRelease(releasePath);
+  // Roll back to release the write lock without leaving a committed claim row:
+  // a real crash or rollback leaves the ledger without the uncommitted claim.
+  database.exec("ROLLBACK");
+  database.close();
+  process.stdout.write("released\n");
   return 0;
 };
 
@@ -162,12 +177,12 @@ const main = async (): Promise<number> => {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
     case "hold-lock": {
-      const [statePath, holdMsRaw] = rest;
-      if (statePath === undefined || holdMsRaw === undefined) {
+      const [statePath, releasePath] = rest;
+      if (statePath === undefined || releasePath === undefined) {
         process.stderr.write(usage + "\n");
         return 2;
       }
-      return await holdLock(statePath, Number(holdMsRaw));
+      return await holdLock(statePath, releasePath);
     }
     case "open-state": {
       const [statePath, commonDirectory, busyTimeoutMs, contentionTimeoutMs, retryDelayMs, title] =

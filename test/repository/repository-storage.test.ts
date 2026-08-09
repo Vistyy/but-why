@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
@@ -3656,11 +3656,11 @@ describe("repository SQL storage", () => {
       child.on("close", (status) => resolveResult({ status, stdout: `${stdout}${stderr}`.trim() }));
     });
 
-  const startMigrationLockHolder = (statePath: string, holdMs: number) => {
+  const startMigrationLockHolder = (statePath: string, releasePath: string) => {
     const child = startTestProcess(
       process.execPath,
-      ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, String(holdMs)],
-      { cwd: dirname(statePath), timeout: 30_000 },
+      ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, releasePath],
+      { cwd: dirname(statePath), timeout: 90_000 },
     );
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -3691,7 +3691,7 @@ describe("repository SQL storage", () => {
       timeoutMs: 15_000,
     });
 
-  it.effect("serializes Shared Repository State creation and migration across real processes", () =>
+  it.effect("produces complete state when separate processes start against one state path", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-concurrent-init-"))),
       (directory) =>
@@ -3757,7 +3757,8 @@ describe("repository SQL storage", () => {
       (directory) =>
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
-          const holder = startMigrationLockHolder(statePath, 2_500);
+          const releasePath = join(directory, "release-migration-lock");
+          const holder = startMigrationLockHolder(statePath, releasePath);
           try {
             yield* Effect.promise(() => waitForMigrationLock(holder));
 
@@ -3773,6 +3774,7 @@ describe("repository SQL storage", () => {
               error: { _tag: "RepositoryStateUnavailable" },
             });
 
+            writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);
             expect(released.status).toBe(0);
             expect(released.stdout).toContain("released");
@@ -3808,7 +3810,8 @@ describe("repository SQL storage", () => {
           expect(primed.status).toBe(0);
           expect(JSON.parse(primed.stdout)).toMatchObject({ ok: true, found: true });
 
-          const holder = startMigrationLockHolder(statePath, 2_500);
+          const releasePath = join(directory, "release-current-state-lock");
+          const holder = startMigrationLockHolder(statePath, releasePath);
           try {
             yield* Effect.promise(() => waitForMigrationLock(holder));
 
@@ -3823,6 +3826,9 @@ describe("repository SQL storage", () => {
               ok: true,
               migrationCount: 25,
             });
+            writeFileSync(releasePath, "release\n");
+            const released = yield* Effect.promise(() => holder.done);
+            expect(released.status).toBe(0);
           } finally {
             if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
           }
