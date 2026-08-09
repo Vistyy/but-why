@@ -8,8 +8,9 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 export const transitionTaskToTodo = (taskId: string, now: string) =>
   Effect.gen(function* () {
     const repository = yield* RepositorySql;
-    yield* repository.operation("transition Task to todo fixture", (sql) =>
-      sql`UPDATE tasks SET state = 'todo', updated_at = ${now} WHERE id = ${taskId}`,
+    yield* repository.operation(
+      "transition Task to todo fixture",
+      (sql) => sql`UPDATE tasks SET state = 'todo', updated_at = ${now} WHERE id = ${taskId}`,
     );
   });
 

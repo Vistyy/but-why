@@ -8,10 +8,10 @@ import { loadTaskReviewInspection } from "../../../task/loadTaskReviewInspection
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
+  type TaskIdCommand,
   taskNotFound,
   withTasks,
 } from "../taskCliSupport.js";
-import type { TaskIdCommand } from "./submit.js";
 
 export const runReviewsCommand = (
   command: TaskIdCommand,

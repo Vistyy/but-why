@@ -9,12 +9,9 @@ import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
 import { readInstructionsFile } from "../init/instructionsFile.js";
-import type {
-  TaskReviewFinding,
-  TaskReviewPolicySnapshot,
-  TaskReviewProposal,
-} from "./taskReview.js";
+import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
+// fallow-ignore-next-line unused-export -- public Task Reviewer policy error
 export class TaskReviewInstructionsInvalid extends Data.TaggedError(
   "TaskReviewInstructionsInvalid",
 )<{
@@ -174,10 +171,7 @@ export const reviewerOutputToFindings = (
     files: finding.files,
   }));
 
-export const taskReviewProposalPrompt = (proposal: TaskReviewProposal): string =>
-  JSON.stringify(proposal);
-
-export const defaultTaskReviewInstructions = [
+const defaultTaskReviewInstructions = [
   "You are the Task Reviewer for one unlinked New Task proposal.",
   "Review the exact presented Task Context and direct Task Dependencies against repository evidence in the disposable workspace.",
   "Own the judgment of whether this New Task should be approved and move to Todo.",

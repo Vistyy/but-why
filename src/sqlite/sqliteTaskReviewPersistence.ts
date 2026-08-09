@@ -12,6 +12,7 @@ import {
   type TaskReviewFinding,
   type TaskReviewPolicySnapshot,
   type TaskReviewProposal,
+  type TaskReviewAbandonmentContext,
   type TaskReviewProposalDependency,
   type TaskReviewRecord,
   type TaskReviewSessionRecord,
@@ -20,7 +21,7 @@ import {
 } from "../task/taskReview.js";
 import type {
   AbandonTaskReviewInput,
-  AbandonTaskReviewResult,
+  AbandonTaskReviewPersistenceResult,
   ActiveTaskReview,
   ApplyTaskReviewReuseResult,
   CheckTaskReviewReuseResult,
@@ -28,7 +29,6 @@ import type {
   CompleteTaskReviewResult,
   StartTaskReviewInput,
   StartTaskReviewResult,
-  TaskReviewAbandonmentContext,
   TaskReviewCompletionFailure,
   TaskReviewPersistence,
   TaskReviewTaskFact,
@@ -45,7 +45,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
     startOrReuse: (input) =>
       repository.transactionImmediate("start Task Review", (sql) => startOrReuse(sql, input)),
     checkReuse: (taskId) =>
-      repository.operation("check Task Review reuse", (sql) => checkReuse(sql, taskId)),
+      repository.transactionImmediate("check Task Review reuse", (sql) => checkReuse(sql, taskId)),
     applyReuse: (input) =>
       repository.transactionImmediate("apply Task Review reuse", (sql) => applyReuse(sql, input)),
     getTaskFact: (taskId) =>
@@ -189,7 +189,11 @@ const startOrReuse = (
   input: StartTaskReviewInput,
 ): Effect.Effect<StartTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const taskRows = yield* sql<{ readonly title: string; readonly description: string; readonly state: TaskState }>`
+    const taskRows = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+      readonly state: TaskState;
+    }>`
       SELECT title, description, state FROM tasks WHERE id = ${input.taskId}
     `;
     const task = taskRows[0];
@@ -278,36 +282,54 @@ const startOrReuse = (
 const checkReuse = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
-): Effect.Effect<CheckTaskReviewReuseResult, SqlError> =>
-  Effect.map(
-    sql<{ readonly id: string; readonly outcome: string }>`
-      SELECT review.id AS id, review.outcome AS outcome
-      FROM task_reviews AS review
-      JOIN tasks AS task ON task.id = review.task_id
-      WHERE review.task_id = ${taskId}
-        AND review.state = 'complete'
-        AND review.outcome IN ('passed', 'blocked')
-        AND task.state = 'new'
-        AND NOT EXISTS (
-          SELECT 1 FROM changes WHERE changes.task_id = ${taskId}
-        )
-      ORDER BY review.created_at DESC, review.id DESC
+): Effect.Effect<CheckTaskReviewReuseResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.gen(function* () {
+    const taskRows = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+      readonly state: TaskState;
+    }>`
+      SELECT title, description, state FROM tasks WHERE id = ${taskId}
+    `;
+    const task = taskRows[0];
+    if (task === undefined) return { reused: false as const };
+    if (task.state !== "new") return { reused: false as const };
+    const linked = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
+    `;
+    if (linked.length > 0) return { reused: false as const };
+
+    const dependencies = yield* readTaskReviewDependencies(sql, taskId);
+    const proposalKey = JSON.stringify({
+      title: task.title,
+      description: task.description,
+      dependencyIds: dependencies.map((dependency) => dependency.taskId),
+    });
+    const rows = yield* sql<{ readonly id: string; readonly outcome: string }>`
+      SELECT id, outcome FROM task_reviews
+      WHERE task_id = ${taskId}
+        AND state = 'complete'
+        AND outcome IN ('passed', 'blocked')
+        AND proposal_key = ${proposalKey}
+      ORDER BY created_at DESC, id DESC
       LIMIT 1
-    `,
-    (rows) => {
-      const row = rows[0];
-      if (row === undefined) return { reused: false as const };
-      return {
-        reused: true as const,
-        reviewId: row.id,
-        outcome: row.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
-      };
-    },
-  );
+    `;
+    const row = rows[0];
+    if (row === undefined) return { reused: false as const };
+    return {
+      reused: true as const,
+      reviewId: row.id,
+      outcome: row.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
+    };
+  });
 
 const applyReuse = (
   sql: SqlClient.SqlClient,
-  input: { readonly reviewId: string; readonly outcome: "passed" | "blocked"; readonly now: string },
+  input: {
+    readonly reviewId: string;
+    readonly outcome: "passed" | "blocked";
+    readonly now: string;
+  },
 ): Effect.Effect<ApplyTaskReviewReuseResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
     const reviews = yield* sql<{ readonly taskId: string; readonly state: string }>`
@@ -430,7 +452,9 @@ const getActiveByReviewId = (sql: SqlClient.SqlClient, reviewId: string) =>
     (rows) => mapActiveTaskReview(rows[0]),
   );
 
-const mapActiveTaskReview = (row: ActiveTaskReviewRow | undefined): ActiveTaskReview | undefined => {
+const mapActiveTaskReview = (
+  row: ActiveTaskReviewRow | undefined,
+): ActiveTaskReview | undefined => {
   if (row === undefined) return undefined;
   return { taskId: storedPublicTaskId(row.taskId), reviewId: row.reviewId };
 };
@@ -535,13 +559,19 @@ const getCompletionFailure = (sql: SqlClient.SqlClient, reviewId: string) =>
 const abandon = (
   sql: SqlClient.SqlClient,
   input: AbandonTaskReviewInput,
-): Effect.Effect<AbandonTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
+): Effect.Effect<AbandonTaskReviewPersistenceResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
     const reviewRows = yield* sql<{ readonly state: string }>`
       SELECT state FROM task_reviews WHERE id = ${input.reviewId}
     `;
     const review = reviewRows[0];
-    if (review === undefined) return { ok: false as const, status: "not_found" as const, reviewId: input.reviewId, cleanup: { worktree: "not_created", tempRef: "not_created" } };
+    if (review === undefined)
+      return {
+        ok: false as const,
+        status: "not_found" as const,
+        reviewId: input.reviewId,
+        cleanup: { worktree: "not_created", tempRef: "not_created" },
+      };
     if (review.state === "complete") {
       return { ok: true as const, status: "already_complete" as const };
     }
@@ -603,7 +633,9 @@ const listTaskReviewTranscripts = (sql: SqlClient.SqlClient, taskId: PublicTaskI
 const decodeReviewOptional = (row: TaskReviewRow | undefined) =>
   row === undefined ? Effect.succeed(undefined) : decodeReview(row);
 
-const decodeReview = (row: TaskReviewRow): Effect.Effect<TaskReviewRecord, RepositoryPersistedDataInvalid> =>
+const decodeReview = (
+  row: TaskReviewRow,
+): Effect.Effect<TaskReviewRecord, RepositoryPersistedDataInvalid> =>
   Effect.try({
     try: (): TaskReviewRecord => ({
       id: row.id,
@@ -646,30 +678,35 @@ const decodeFinding = (row: TaskReviewFindingRow) =>
 const readTaskReviewDependencies = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
-): Effect.Effect<readonly TaskReviewProposalDependency[], SqlError | RepositoryPersistedDataInvalid> =>
+): Effect.Effect<
+  readonly TaskReviewProposalDependency[],
+  SqlError | RepositoryPersistedDataInvalid
+> =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly taskId: string; readonly title: string; readonly state: TaskState }>`
+    const rows = yield* sql<{
+      readonly taskId: string;
+      readonly title: string;
+      readonly state: TaskState;
+    }>`
       SELECT tasks.id AS taskId, tasks.title, tasks.state
       FROM task_dependencies
       JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId}
       ORDER BY tasks.numeric_id ASC
     `;
-    return yield* Effect.forEach(
-      rows,
-      (row) =>
-        Effect.try({
-          try: (): TaskReviewProposalDependency => ({
-            taskId: storedPublicTaskId(row.taskId),
-            title: row.title,
-            state: row.state,
-          }),
-          catch: (cause) =>
-            new RepositoryPersistedDataInvalid({
-              operationName: "read Task Review dependencies",
-              cause,
-            }),
+    return yield* Effect.forEach(rows, (row) =>
+      Effect.try({
+        try: (): TaskReviewProposalDependency => ({
+          taskId: storedPublicTaskId(row.taskId),
+          title: row.title,
+          state: row.state,
         }),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "read Task Review dependencies",
+            cause,
+          }),
+      }),
     );
   });
 
@@ -685,10 +722,7 @@ type ActiveTaskReviewRow = {
   readonly taskId: string;
   readonly reviewId: string;
 };
-type TaskReviewRow = Omit<
-  TaskReviewRecord,
-  "taskId" | "proposal" | "policy"
-> & {
+type TaskReviewRow = Omit<TaskReviewRecord, "taskId" | "proposal" | "policy"> & {
   readonly taskId: string;
   readonly proposalSnapshot: string;
   readonly proposalKey: string;

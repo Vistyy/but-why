@@ -59,7 +59,7 @@ export type RepoConfigAtCommitResult =
   | { readonly ok: true; readonly config: RepoConfig }
   | { readonly ok: false; readonly message: string };
 
-export type GlobalConfigReadResult =
+export type TaskGlobalConfigReadResult =
   | { readonly ok: true; readonly config: GlobalConfig }
   | { readonly ok: false; readonly message: string };
 
@@ -71,7 +71,7 @@ export type TaskSubmissionDependencies = {
   readonly globalConfigPath: string;
   readonly readMainCheckoutHead: (cwd: string) => MainCheckoutHeadResult;
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
-  readonly readGlobalConfig: (globalConfigPath: string) => GlobalConfigReadResult;
+  readonly readGlobalConfig: (globalConfigPath: string) => TaskGlobalConfigReadResult;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
 };
 

@@ -183,9 +183,7 @@ const createDisposableWorkspaceWithAdapters = <R, E>(
       });
     }
 
-    const scopedSetup = Effect.scoped(
-      setupWorkspaceScope(input, state, adapters, cleanupResult),
-    );
+    const scopedSetup = Effect.scoped(setupWorkspaceScope(input, state, adapters, cleanupResult));
     const setupAttempt = yield* withInterruptedCleanupRecording(
       scopedSetup,
       input,

@@ -6,10 +6,7 @@ import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
-import {
-  deleteDisposableTempRef,
-  removeDisposableWorktree,
-} from "../workspace/workspaceGit.js";
+import { deleteDisposableTempRef, removeDisposableWorktree } from "../workspace/workspaceGit.js";
 import { validationTempRefName } from "./validation/validationWorkspacePath.js";
 
 export type LoadAbandonValidationRunResult =

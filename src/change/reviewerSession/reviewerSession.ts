@@ -1,3 +1,5 @@
+// fallow-ignore-file duplicate-export -- delegation layer for the neutral reviewer session helpers
+
 import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";

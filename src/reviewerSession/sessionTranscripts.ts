@@ -115,7 +115,7 @@ const collectReviewerSessionFiles = (root: string): readonly string[] | undefine
   return files;
 };
 
-export const extractPiSessionId = (filePath: string): string | undefined => {
+const extractPiSessionId = (filePath: string): string | undefined => {
   const headerId = sessionHeaderSessionId(filePath);
   if (headerId !== undefined) return headerId;
   const match = /^.+_([^_]+)\.jsonl$/u.exec(basename(filePath));

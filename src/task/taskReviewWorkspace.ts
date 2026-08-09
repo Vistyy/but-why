@@ -8,7 +8,6 @@ import {
   type DisposableWorkspaceToolingError,
 } from "../workspace/disposableWorkspace.js";
 import type { TaskReviewWorkspaceSetup } from "./taskReview.js";
-import type { TaskReviewToolingFailureRecord } from "./taskReviewTooling.js";
 
 export const taskReviewTempRefName = (reviewId: string): string =>
   `refs/but-why/task-reviews/${reviewId}/review`;
@@ -112,12 +111,4 @@ const toTaskReviewWorkspaceToolingError = (
   ...(toolingError.worktreePath === undefined ? {} : { worktreePath: toolingError.worktreePath }),
   errorMessage: toolingError.errorMessage,
   cleanupResult: toolingError.cleanupResult,
-});
-
-export const taskReviewWorkspaceToolingFailure = (
-  toolingError: TaskReviewWorkspaceToolingError,
-): TaskReviewToolingFailureRecord => ({
-  errorKind: "task_review_workspace_setup_failed",
-  operationName: toolingError.operationName,
-  errorMessage: toolingError.errorMessage,
 });

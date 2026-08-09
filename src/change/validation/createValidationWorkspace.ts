@@ -69,8 +69,7 @@ export const createValidationWorkspace = (
     ...(recordWorkspaceSetup === undefined
       ? {}
       : {
-          recordWorkspaceSetup: (setup) =>
-            recordWorkspaceSetup(toValidationWorkspaceSetup(setup)),
+          recordWorkspaceSetup: (setup) => recordWorkspaceSetup(toValidationWorkspaceSetup(setup)),
         }),
     ...(recordInterruptedCleanupResult === undefined
       ? {}
@@ -81,8 +80,7 @@ export const createValidationWorkspace = (
     ...(runInWorkspace === undefined
       ? {}
       : {
-          runInWorkspace: (workspace) =>
-            runInWorkspace(toActiveValidationWorkspace(workspace)),
+          runInWorkspace: (workspace) => runInWorkspace(toActiveValidationWorkspace(workspace)),
         }),
   }).pipe(
     Effect.map((result): CreateValidationWorkspaceResult => toValidationWorkspaceResult(result)),
@@ -109,9 +107,7 @@ const toActiveValidationWorkspace = (
   worktreePath: workspace.worktreePath,
 });
 
-const toValidationWorkspaceSetup = (
-  setup: DisposableWorkspaceSetup,
-): ValidationWorkspaceSetup => ({
+const toValidationWorkspaceSetup = (setup: DisposableWorkspaceSetup): ValidationWorkspaceSetup => ({
   validationRunId: setup.runId,
   tempRefName: setup.tempRefName,
   submittedSha: setup.submittedSha,
@@ -163,13 +159,25 @@ const validationOperationName = (operationName: string): string => {
 
 const validationErrorMessage = (message: string): string =>
   message
-    .replaceAll("Disposable workspace already exists for a different run:", "Validation worktree already exists for a different Validation Run:")
-    .replaceAll("Disposable workspace already exists for a different commit:", "Validation worktree already exists for a different commit:")
-    .replaceAll("Disposable workspace already exists with uncommitted changes:", "Validation worktree already exists with uncommitted changes:")
+    .replaceAll(
+      "Disposable workspace already exists for a different run:",
+      "Validation worktree already exists for a different Validation Run:",
+    )
+    .replaceAll(
+      "Disposable workspace already exists for a different commit:",
+      "Validation worktree already exists for a different commit:",
+    )
+    .replaceAll(
+      "Disposable workspace already exists with uncommitted changes:",
+      "Validation worktree already exists with uncommitted changes:",
+    )
     .replaceAll("Disposable workspace temp ref", "Validation temp ref")
     .replaceAll("Disposable workspace HEAD", "Validation worktree HEAD")
     .replaceAll("Disposable workspace removal failed.", "Validation worktree removal failed.")
-    .replaceAll("Allowlisted disposable workspace file is missing:", "Allowlisted validation workspace file is missing:")
+    .replaceAll(
+      "Allowlisted disposable workspace file is missing:",
+      "Allowlisted validation workspace file is missing:",
+    )
     .replaceAll(
       "Disposable workspace cleanup failed after successful setup.",
       "Validation workspace cleanup failed after successful setup.",

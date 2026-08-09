@@ -7,12 +7,8 @@ export const readAcceptanceInstructions = (path: string): AcceptanceInstructions
   if (result.ok) return result;
   return {
     ok: false,
-    message: result.message.replace(
-      "Instructions file is empty:",
-      "Acceptance instructions file is empty:",
-    ).replace(
-      "Could not read instructions file",
-      "Could not read Acceptance instructions file",
-    ),
+    message: result.message
+      .replace("Instructions file is empty:", "Acceptance instructions file is empty:")
+      .replace("Could not read instructions file", "Could not read Acceptance instructions file"),
   };
 };

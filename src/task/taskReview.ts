@@ -24,12 +24,6 @@ export type TaskReviewProposalKey = {
   readonly dependencyIds: readonly string[];
 };
 
-export const taskReviewProposalKey = (proposal: TaskReviewProposal): TaskReviewProposalKey => ({
-  title: proposal.title,
-  description: proposal.description,
-  dependencyIds: proposal.dependencies.map((dependency) => dependency.taskId),
-});
-
 export const taskReviewPolicySnapshotSchema = Schema.Struct({
   version: Schema.Literal(1),
   instructions: nonBlankStringSchema,

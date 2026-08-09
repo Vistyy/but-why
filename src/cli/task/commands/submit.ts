@@ -11,15 +11,13 @@ import {
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import { loadTaskSubmission } from "../../../task/loadTaskSubmission.js";
 import type { TaskSubmitResult } from "../../../task/submitTask.js";
-import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
+  type TaskIdCommand,
   taskNotFound,
   withTasks,
 } from "../taskCliSupport.js";
-
-export type TaskIdCommand = { readonly taskId: string };
 
 export const runSubmitCommand = (
   command: TaskIdCommand,
@@ -151,8 +149,4 @@ const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {
         }
       : {}),
   });
-};
-
-export type SubmitTaskIdInput = {
-  readonly taskId: PublicTaskId;
 };

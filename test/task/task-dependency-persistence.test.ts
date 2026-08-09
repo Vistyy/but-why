@@ -183,9 +183,7 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
   ),
 );
 
-const withTasks = <A, E>(
-  use: (tasks: TaskPersistence) => Effect.Effect<A, E, RepositorySql>,
-) => {
+const withTasks = <A, E>(use: (tasks: TaskPersistence) => Effect.Effect<A, E, RepositorySql>) => {
   return withTemporaryRepositoryState(() =>
     Effect.flatMap(openSqliteTaskPersistence("BY"), (tasks) => use(tasks)),
   );

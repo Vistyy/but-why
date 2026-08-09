@@ -4,6 +4,7 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { TaskState } from "./lifecycle.js";
 import type { PublicTaskId } from "./taskId.js";
 import type {
+  TaskReviewAbandonmentContext,
   TaskReviewFinding,
   TaskReviewOutcome,
   TaskReviewPolicySnapshot,
@@ -146,7 +147,9 @@ export type TaskReviewPersistence = {
   readonly getCompletionFailure: (
     reviewId: string,
   ) => StorageEffect<TaskReviewCompletionFailure | undefined>;
-  readonly abandon: (input: AbandonTaskReviewInput) => StorageEffect<AbandonTaskReviewResult>;
+  readonly abandon: (
+    input: AbandonTaskReviewInput,
+  ) => StorageEffect<AbandonTaskReviewPersistenceResult>;
   readonly getTaskReviewSession: (
     taskId: PublicTaskId,
     producer: string,
@@ -162,17 +165,7 @@ export type TaskReviewPersistence = {
   }) => StorageEffect<void>;
 };
 
-export type TaskReviewAbandonmentContext = {
-  readonly reviewId: string;
-  readonly taskId: PublicTaskId;
-  readonly submittedSha: string;
-  readonly tempRefName?: string;
-  readonly worktreePath?: string;
-  readonly cleanupWorktree: "removed" | "not_created" | "failed" | null;
-  readonly cleanupTempRef: "removed" | "not_created" | "failed" | null;
-};
-
-export type AbandonTaskReviewResult =
+export type AbandonTaskReviewPersistenceResult =
   | { readonly ok: true; readonly status: "abandoned" | "already_complete" }
   | {
       readonly ok: false;
