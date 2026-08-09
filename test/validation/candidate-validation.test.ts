@@ -126,6 +126,10 @@ describe("Candidate validation", () => {
 
         expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
         if (result.ok || "code" in result) return;
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "complete",
+          outcome: "tooling_failed",
+        });
         expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ operationName: "verify_candidate_head" }),

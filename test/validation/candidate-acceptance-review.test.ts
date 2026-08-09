@@ -194,6 +194,10 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "blocked",
+      });
       const findingColumns = yield* withTestRepository(
         ready.repo,
         Effect.gen(function* () {
