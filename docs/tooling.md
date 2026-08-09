@@ -52,7 +52,9 @@ Do not duplicate those broad checks manually during Change implementation.
 Use focused tests and focused static checks while implementing.
 
 Complete quality, test, and coverage workloads wait for the repository capacity lock.
-The runners supervise their process trees and preserve interruption exit codes after bounded cleanup.
+The supervising runner alone owns the capacity-lock descriptor, so workload descendants cannot retain capacity after the supervisor exits.
+On interruption, the runner preserves the conventional exit status, makes a bounded best-effort cleanup attempt within its controlled process boundary, and waits for its direct supervised child.
+Descendants that daemonize, reparent, create a new session or process group, or create replacements during cleanup are outside this Bash supervision boundary.
 Targeted test selections remain unlocked.
 
 ## Structural contracts
