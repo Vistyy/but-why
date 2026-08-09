@@ -234,7 +234,12 @@ describe("repository SQL storage", () => {
           prepareFailure: firstFailure,
         });
 
-        const retryFailure = { ...firstFailure, exitCode: 124, timedOut: true, stderr: "timed out" };
+        const retryFailure = {
+          ...firstFailure,
+          exitCode: 124,
+          timedOut: true,
+          stderr: "timed out",
+        };
         yield* starts.recordPrepareOutcome(
           created.change.id,
           retryFailure,
