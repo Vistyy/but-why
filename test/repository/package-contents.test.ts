@@ -210,6 +210,7 @@ describe("release package boundary", () => {
       "docs/public/skills/but-why/references/command-guidance.md",
       "docs/public/skills/but-why/references/implement-change.md",
       "docs/public/skills/but-why/references/operator-workflow.md",
+      "docs/public/skills/but-why/references/task-verification.md",
     ]) {
       expect(files).toContain(required);
     }
