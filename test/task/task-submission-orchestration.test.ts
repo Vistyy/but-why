@@ -1,6 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
@@ -10,18 +11,21 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import { piReviewerAgentRuntimeFor } from "../../src/agent/reviewerAgentRuntime.js";
 import { SandcastleToolingFailed } from "../../src/agent/reviewerExecutionFailure.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
-import { ReviewerOutputContractFailed } from "../../src/contracts/reviewerOutputContractFailure.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { openAbandonTaskReview } from "../../src/task/abandonTaskReview.js";
 import { openTaskSubmission, type TaskSubmissionDependencies } from "../../src/task/submitTask.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import type { TaskReviewReviewerOutput } from "../../src/task/taskReviewPolicy.js";
+import {
+  decodeTaskReviewRuntimeOutput,
+  type TaskReviewReviewerOutput,
+} from "../../src/task/taskReviewPolicy.js";
 import type { TaskReviewPersistence } from "../../src/task/taskReviewStore.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -185,8 +189,6 @@ describe("Task Submission orchestration", () => {
 
             expect(reviewInputs).toHaveLength(1);
             expect(reviewInputs[0]?.reviewer).toBe("task_review");
-            expect(reviewInputs[0]?.validationRunId).toBe(result.reviewId);
-            expect(reviewInputs[0]?.availableArtifactRefs).toEqual([]);
             expect(reviewInputs[0]?.prompt).toContain("Orchestrated proposal");
             expect(reviewInputs[0]?.prompt).toContain(
               "You are the Task Reviewer for one unlinked New Task proposal.",
@@ -420,21 +422,21 @@ describe("Task Submission orchestration", () => {
             expect(setup?.cleanupWorktree).toBe("removed");
             expect(setup?.cleanupTempRef).toBe("removed");
 
+            const productionRuntime = piReviewerAgentRuntimeFor(decodeTaskReviewRuntimeOutput);
+            const malformedRun: Pick<Sandbox, "run">["run"] = async () => ({
+              iterations: [],
+              stdout: "<reviewer-output>{malformed}</reviewer-output>",
+              commits: [],
+            });
             const malformedOutputSubmission = openTaskSubmission(
               submissionDependencies(root, {
-                reviewerAgentRuntime: failingReviewer({
-                  ok: false,
-                  failure: new ReviewerOutputContractFailed({
-                    operationName: "decode_task_reviewer_output",
-                    reviewer: "task_review",
-                    attempts: 3,
-                    diagnostics: [],
-                    message: "Task Reviewer output is malformed.",
-                  }),
-                  sessionUsability: "unknown",
-                  attempts: 3,
-                  stdout: "<reviewer-output>{malformed}</reviewer-output>",
-                }),
+                reviewerAgentRuntime: {
+                  review: (input) =>
+                    productionRuntime.review({
+                      ...input,
+                      sandbox: { run: malformedRun } as Pick<Sandbox, "run">,
+                    }),
+                },
                 persistence: reviews,
               }),
             );
@@ -450,9 +452,16 @@ describe("Task Submission orchestration", () => {
               expect.objectContaining({
                 errorKind: "reviewer_output_contract_failed",
                 operationName: "decode_task_reviewer_output",
-                errorMessage: "Task Reviewer output is malformed.",
               }),
             ]);
+            expect(malformed.task.state).toBe("new");
+            expect(yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"))).toMatchObject(
+              {
+                id: malformed.reviewId,
+                state: "complete",
+                outcome: "tooling_failed",
+              },
+            );
           }),
         );
       }),

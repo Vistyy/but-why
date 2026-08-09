@@ -84,18 +84,3 @@ export const decodeReviewerOutputContract = (
       });
     }),
   );
-
-export const decodeValidationReviewerOutput = (
-  input: DecodeReviewerOutputContractInput & {
-    readonly validationRunId: string;
-    readonly availableArtifactRefs: readonly string[];
-  },
-): Effect.Effect<ReviewerOutput, ReviewerOutputContractFailed> =>
-  decodeReviewerOutputContract(input).pipe(
-    Effect.flatMap((output) =>
-      validateReviewerArtifactRefs({
-        ...input,
-        output,
-      }),
-    ),
-  );

@@ -39,8 +39,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Judge only approved intent for the exact Candidate.",
         profile,
       });
@@ -70,8 +68,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "specialist:security",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -109,8 +105,6 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
           prompt: "Review the Candidate.",
           profile,
           commandCwd: workspace,
@@ -155,8 +149,6 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -192,8 +184,6 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -229,8 +219,6 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -279,8 +267,6 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -314,8 +300,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile: {
           ...profile,
@@ -354,8 +338,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile: {
           ...profile,
@@ -395,8 +377,6 @@ describe("Pi reviewer agent runtime", () => {
           },
         } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -410,31 +390,6 @@ describe("Pi reviewer agent runtime", () => {
       });
       expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
       expect(attempts).toBe(1);
-    }),
-  );
-
-  it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
-    Effect.gen(function* () {
-      const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      const resume = vi.fn(() => Promise.resolve(corrected));
-      const dangling = runResult(
-        '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
-        resume,
-      );
-
-      const result = yield* piReviewerAgentRuntime.review({
-        sandbox: {
-          run: () => Promise.resolve(dangling),
-        } as unknown as Pick<Sandbox, "run">,
-        reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
-        prompt: "Review the Candidate.",
-        profile,
-      });
-
-      expect(result).toMatchObject({ ok: true, attempts: 2, report: { findings: [] } });
-      expect(resume).toHaveBeenCalledWith(expect.stringContaining("does not resolve"));
     }),
   );
 
@@ -453,8 +408,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
       });
@@ -494,8 +447,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
       });
@@ -531,8 +482,6 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
       });

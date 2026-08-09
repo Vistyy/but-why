@@ -153,8 +153,6 @@ describe("Pi reviewer agent runtime process boundary", () => {
           const result = yield* piReviewerAgentRuntime.review({
             sandbox: { run } as unknown as Pick<Sandbox, "run">,
             reviewer: "acceptance",
-            validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-            availableArtifactRefs: [],
             prompt: "Review the Candidate.",
             profile,
           });

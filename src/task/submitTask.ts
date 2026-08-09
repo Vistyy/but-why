@@ -404,8 +404,6 @@ const runTaskReviewPhases = (input: {
     const result = yield* input.reviewerAgentRuntime.review({
       sandbox: input.sandbox,
       reviewer: "task_review",
-      validationRunId: input.reviewId,
-      availableArtifactRefs: [],
       prompt: buildTaskReviewerPrompt({
         reviewId: input.reviewId,
         baseCommit: input.baseCommit,

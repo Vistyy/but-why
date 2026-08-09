@@ -12,10 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
-import {
-  decodeValidationReviewerOutput,
-  type ReviewerOutput,
-} from "../contracts/reviewerOutput.js";
+import { decodeReviewerOutputContract, type ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import {
   type AgentEnvironmentCommand,
@@ -40,8 +37,6 @@ export type ReviewerSessionUsability = "unusable" | "unknown";
 export type ReviewerAgentInput = {
   readonly sandbox: Pick<Sandbox, "run">;
   readonly reviewer: string;
-  readonly validationRunId: string;
-  readonly availableArtifactRefs: readonly string[];
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd?: string;
@@ -74,8 +69,6 @@ type ReviewerOutputDecoder<Report> = (input: {
   readonly reviewer: string;
   readonly attempts: number;
   readonly output: unknown;
-  readonly validationRunId: string;
-  readonly availableArtifactRefs: readonly string[];
 }) => Effect.Effect<Report, ReviewerOutputContractFailed>;
 
 const reviewWithPi = <Report>(
@@ -236,7 +229,7 @@ export const piReviewerAgentRuntimeFor = <Report>(
   review: (input) => reviewWithPi(input, decodeOutput),
 });
 
-export const piReviewerAgentRuntime = piReviewerAgentRuntimeFor(decodeValidationReviewerOutput);
+export const piReviewerAgentRuntime = piReviewerAgentRuntimeFor(decodeReviewerOutputContract);
 
 const isolatedPiReviewerAgent = (
   profile: ResolvedPiAgentProfile,
@@ -290,8 +283,6 @@ const validateRunResult = <Report>(
     reviewer: input.reviewer,
     attempts,
     output: parseTaggedReviewerOutput(result.stdout),
-    validationRunId: input.validationRunId,
-    availableArtifactRefs: input.availableArtifactRefs,
   });
 
 const runSandbox = (

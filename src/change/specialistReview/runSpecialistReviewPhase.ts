@@ -14,7 +14,11 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
+import type { ReviewerOutputContractFailed } from "../../contracts/reviewerOutputContractFailure.js";
+import {
+  type ReviewerOutput,
+  validateReviewerArtifactRefs,
+} from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   type ReviewerContinuity,
@@ -217,43 +221,55 @@ const runSpecialist = (
             : "identity_mismatch";
 
     let reviewCalls = 0;
-    const review = (resumeSession?: string, reviewPrompt = prompt) => {
+    const review = (
+      resumeSession?: string,
+      reviewPrompt = prompt,
+    ): Effect.Effect<ReviewerAgentResult<ReviewerOutput>, ReviewerOutputContractFailed> => {
       reviewCalls += 1;
-      return input.runtime.review({
-        sandbox: input.sandbox,
-        reviewer: policy.id,
-        validationRunId: input.validationRunId,
-        availableArtifactRefs,
-        prompt:
-          compatible && resumeSession !== undefined && reviewPrompt === prompt
-            ? buildSpecialistContinuationPrompt({
-                specialist: policy.id,
-                instructions: policy.instructions,
-                validationRunId: input.validationRunId,
-                availableArtifactRefs,
-                candidate: input.candidate,
-                previousFindings: earlierFindings,
-                ...(input.acceptanceContext === undefined
-                  ? {}
-                  : { acceptanceContext: input.acceptanceContext }),
-              })
-            : reviewPrompt,
-        profile: policy.profile,
-        commandCwd: input.commandCwd,
-        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-        ...(input.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : {
-              sessionStorageRoot: reviewerSessionsPath(
-                input.sessionStorageRoot,
-                input.changeId,
-                policy.id,
-              ),
-            }),
-        ...(resumeSession === undefined ? {} : { resumeSession }),
+      return Effect.gen(function* () {
+        const result = yield* input.runtime.review({
+          sandbox: input.sandbox,
+          reviewer: policy.id,
+          prompt:
+            compatible && resumeSession !== undefined && reviewPrompt === prompt
+              ? buildSpecialistContinuationPrompt({
+                  specialist: policy.id,
+                  instructions: policy.instructions,
+                  validationRunId: input.validationRunId,
+                  availableArtifactRefs,
+                  candidate: input.candidate,
+                  previousFindings: earlierFindings,
+                  ...(input.acceptanceContext === undefined
+                    ? {}
+                    : { acceptanceContext: input.acceptanceContext }),
+                })
+              : reviewPrompt,
+          profile: policy.profile,
+          commandCwd: input.commandCwd,
+          ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+          ...(input.agentEnvironment === undefined
+            ? {}
+            : { agentEnvironment: input.agentEnvironment }),
+          ...(input.sessionStorageRoot === undefined
+            ? {}
+            : {
+                sessionStorageRoot: reviewerSessionsPath(
+                  input.sessionStorageRoot,
+                  input.changeId,
+                  policy.id,
+                ),
+              }),
+          ...(resumeSession === undefined ? {} : { resumeSession }),
+        });
+        if (!result.ok) return result;
+        const report = yield* validateReviewerArtifactRefs({
+          reviewer: policy.id,
+          attempts: result.attempts,
+          validationRunId: input.validationRunId,
+          availableArtifactRefs,
+          output: result.report,
+        });
+        return { ...result, report };
       });
     };
 
