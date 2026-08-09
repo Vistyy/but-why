@@ -282,7 +282,7 @@ describe("Candidate validation", () => {
   );
 
   it.scoped(
-    "runs the fixed task-backed Validation Gate in order in one exact-Candidate workspace",
+    "runs the fixed task-backed Validation Gate and hands a Specialist Finding to its outcome",
     () =>
       Effect.gen(function* () {
         const mainCheckout = candidateReadyRepo();
@@ -313,9 +313,22 @@ describe("Candidate validation", () => {
               }
               return {
                 ok: true as const,
-                report: { findings: [] },
+                report: {
+                  findings:
+                    reviewer === "standards"
+                      ? [
+                          {
+                            title: "Specialist Finding",
+                            description: "Specialist Finding description",
+                            evidence: "Specialist Finding evidence",
+                            files: [],
+                            artifactRefs: [],
+                          },
+                        ]
+                      : [],
+                },
                 attempts: 1,
-                stdout: `${reviewer} passed`,
+                stdout: `${reviewer} completed`,
               };
             }),
         );
@@ -354,7 +367,7 @@ describe("Candidate validation", () => {
           now,
         });
 
-        expect(result).toMatchObject({ ok: true, outcome: "passed", reused: false });
+        expect(result).toMatchObject({ ok: true, outcome: "blocked", reused: false });
         if (!result.ok) return;
         expect(readFileSync(callLog, "utf8")).toBe("PCAS");
         expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
@@ -364,13 +377,16 @@ describe("Candidate validation", () => {
         expect(new Set(reviewWorkspaces).size).toBe(1);
         expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
           state: "complete",
-          outcome: "passed",
+          outcome: "blocked",
         });
+        expect(yield* validation.listFindings(result.validationRunId)).toEqual([
+          expect.objectContaining({ producer: "standards", title: "Specialist Finding" }),
+        ]);
         expect(yield* validation.listRounds(result.validationRunId)).toEqual([
           { producer: "prepare", status: "passed" },
           { producer: "gate-check", status: "passed" },
           { producer: "acceptance", status: "passed" },
-          { producer: "standards", status: "passed" },
+          { producer: "standards", status: "failed" },
         ]);
         expect(git(mainCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
         expect(git(mainCheckout, "status", "--porcelain")).toBe("");
