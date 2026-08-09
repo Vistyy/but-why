@@ -1,12 +1,21 @@
 import { Effect } from "effect";
 import type { ReviewerAgentResult } from "../../agent/reviewerAgentRuntime.js";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
+import type { ReviewerContinuity } from "../reviewerSession/reviewerSession.js";
 import {
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { writeValidationRunArtifactFile } from "./artifactFiles.js";
 import type { ValidationPhase, ValidationRunArtifactRecord } from "./validationRun.js";
+
+export type ReviewerExecutionEvidence = {
+  readonly continuity: ReviewerContinuity;
+  readonly identityFingerprint: string;
+  readonly restartReason?: string;
+  readonly durationMs: number;
+  readonly reviewCalls: number;
+};
 
 export const writeReviewerArtifacts = (input: {
   readonly validationRunId: string;
@@ -15,7 +24,7 @@ export const writeReviewerArtifacts = (input: {
   readonly result: ReviewerAgentResult;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
-  readonly executionEvidence?: Record<string, unknown>;
+  readonly executionEvidence: ReviewerExecutionEvidence;
 }): Effect.Effect<
   readonly Omit<ValidationRunArtifactRecord, "createdAt">[],
   ValidationToolingFailure
@@ -32,7 +41,7 @@ export const writeReviewerArtifacts = (input: {
         },
         {
           fileName: "execution.json",
-          content: `${encodeReviewerWireValue({ attempts: input.result.attempts, ...(input.executionEvidence ?? {}) })}\n`,
+          content: `${encodeReviewerWireValue({ ...input.executionEvidence, attempts: input.result.attempts })}\n`,
         },
       ] as const;
 

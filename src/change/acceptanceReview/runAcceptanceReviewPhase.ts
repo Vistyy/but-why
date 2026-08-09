@@ -26,7 +26,10 @@ import {
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
+import {
+  type ReviewerExecutionEvidence,
+  writeReviewerArtifacts,
+} from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 
@@ -75,17 +78,9 @@ export type RunAcceptanceReviewPhaseInput = {
     input: RecordCandidateAcceptanceRoundInput,
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
-export type ReviewerContinuityEvidence = {
-  readonly continuity: ReviewerContinuity;
-  readonly identityFingerprint: string;
-  readonly durationMs: number;
-  readonly reviewCalls: number;
-  readonly restartReason?: string;
-};
-
 export type RunAcceptanceReviewPhaseResult = {
   readonly findings: 0 | 1;
-  readonly reviewerEvidence?: ReviewerContinuityEvidence;
+  readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
 
@@ -242,6 +237,13 @@ const runAcceptanceReviewPhaseImpl = (
     if (!sessionPermissionsOk && restartReason === undefined) {
       restartReason = "session_permissions_unavailable";
     }
+    const reviewerEvidence: ReviewerExecutionEvidence = {
+      continuity,
+      identityFingerprint: fingerprint,
+      ...(restartReason === undefined ? {} : { restartReason }),
+      durationMs: (yield* Clock.currentTimeMillis) - startedAt,
+      reviewCalls,
+    };
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,
@@ -249,13 +251,7 @@ const runAcceptanceReviewPhaseImpl = (
       result,
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      executionEvidence: {
-        continuity,
-        identityFingerprint: fingerprint,
-        ...(restartReason === undefined ? {} : { restartReason }),
-        durationMs: (yield* Clock.currentTimeMillis) - startedAt,
-        reviewCalls,
-      },
+      executionEvidence: reviewerEvidence,
     });
     const findings = result.ok
       ? result.report.findings.map((finding, index) => ({
@@ -277,13 +273,7 @@ const runAcceptanceReviewPhaseImpl = (
     if (!result.ok) {
       return {
         findings: 0,
-        reviewerEvidence: {
-          continuity,
-          identityFingerprint: fingerprint,
-          ...(restartReason === undefined ? {} : { restartReason }),
-          durationMs: (yield* Clock.currentTimeMillis) - startedAt,
-          reviewCalls,
-        },
+        reviewerEvidence,
         toolingFailure: result.failure,
       };
     }
@@ -297,13 +287,7 @@ const runAcceptanceReviewPhaseImpl = (
     }
     return {
       findings: findings.length === 0 ? 0 : 1,
-      reviewerEvidence: {
-        continuity,
-        identityFingerprint: fingerprint,
-        ...(restartReason === undefined ? {} : { restartReason }),
-        durationMs: (yield* Clock.currentTimeMillis) - startedAt,
-        reviewCalls,
-      },
+      reviewerEvidence,
     };
   });
 
