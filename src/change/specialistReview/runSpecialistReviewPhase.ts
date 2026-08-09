@@ -3,17 +3,24 @@ import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
 
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
+import {
+  type ReviewerAgentResult,
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import {
+  buildReviewerOutputCorrectionPrompt,
   buildReviewerRevisionPrompt,
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import {
+  decodeReviewerOutputContract,
+  type ReviewerOutput,
+  validateReviewerArtifactRefs,
+} from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   type ReviewerContinuity,
@@ -26,13 +33,50 @@ import {
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../validation/submitProgress.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  ReviewerOutputContractFailed,
+  SandcastleToolingFailed,
+  type ValidationToolingFailure,
+} from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
+
+const translateRuntimeResult = <Output>(
+  result: ReviewerAgentResult<Output>,
+  reviewer: string,
+):
+  | Extract<ReviewerAgentResult<Output>, { readonly ok: true }>
+  | (Omit<Extract<ReviewerAgentResult<Output>, { readonly ok: false }>, "failure"> & {
+      readonly failure: ValidationToolingFailure;
+    }) => {
+  if (result.ok) return result;
+  const failure: ValidationToolingFailure =
+    result.failure.operationName === "run_reviewer_agent"
+      ? new SandcastleToolingFailed({
+          operationName: result.failure.operationName,
+          message: result.failure.message,
+        })
+      : new ReviewerOutputContractFailed({
+          operationName: result.failure.operationName,
+          reviewer,
+          attempts: result.attempts,
+          diagnostics: result.failure.diagnostics ?? [],
+          message: result.failure.message,
+        });
+  return {
+    ok: false,
+    failure,
+    sessionUsability: result.sessionUsability,
+    attempts: result.attempts,
+    stdout: result.stdout,
+    ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
+    ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
+  };
+};
 
 export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;
@@ -45,7 +89,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly policies: readonly SpecialistReviewPolicy[];
   readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly runtime: ReviewerAgentRuntime;
+  readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -221,8 +265,27 @@ const runSpecialist = (
       return input.runtime.review({
         sandbox: input.sandbox,
         reviewer: policy.id,
-        validationRunId: input.validationRunId,
-        availableArtifactRefs,
+        decodeOutput: (output) =>
+          decodeReviewerOutputContract({ reviewer: policy.id, attempts: reviewCalls, output }).pipe(
+            Effect.flatMap((decoded) =>
+              validateReviewerArtifactRefs({
+                reviewer: policy.id,
+                attempts: reviewCalls,
+                validationRunId: input.validationRunId,
+                output: decoded,
+                availableArtifactRefs,
+              }),
+            ),
+            Effect.mapError(
+              (failure) =>
+                new ReviewerExecutionFailed({
+                  operationName: failure.operationName,
+                  message: failure.message,
+                  diagnostics: failure.diagnostics,
+                  correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
+                }),
+            ),
+          ),
         prompt:
           compatible && resumeSession !== undefined && reviewPrompt === prompt
             ? buildSpecialistContinuationPrompt({
@@ -256,25 +319,31 @@ const runSpecialist = (
       });
     };
 
-    let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
+    let provisional = translateRuntimeResult(
+      yield* review(compatible ? stored?.sessionReference : undefined),
+      policy.id,
+    );
     if (!provisional.ok && compatible && provisional.sessionUsability === "unusable") {
       continuity = "restarted";
       restartReason = "session_unusable";
       if (input.sessionStore !== undefined)
         yield* input.sessionStore.remove(input.changeId, policy.id);
-      provisional = yield* review();
+      provisional = translateRuntimeResult(yield* review(), policy.id);
     }
     yield* verifyIntegrity(input);
 
-    let result: ReviewerAgentResult = provisional;
+    let result = provisional;
     if (provisional.ok && earlierFindings.length > 0) {
-      result = yield* review(
-        provisional.sessionReference,
-        buildReviewerRevisionPrompt({
-          reviewPrompt: prompt,
-          provisionalReport: provisional.report,
-          earlierFindings,
-        }),
+      result = translateRuntimeResult(
+        yield* review(
+          provisional.sessionReference,
+          buildReviewerRevisionPrompt({
+            reviewPrompt: prompt,
+            provisionalReport: provisional.report,
+            earlierFindings,
+          }),
+        ),
+        policy.id,
       );
       yield* verifyIntegrity(input);
     }
