@@ -11,10 +11,7 @@ import type {
 import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 
 export const openArtifactLifecycle = (input: {
-  readonly persistence: Pick<
-    ChangeValidationPersistence,
-    "listCandidatesForChange" | "listRunsForCandidate"
-  >;
+  readonly persistence: Pick<ChangeValidationPersistence, "listRunIdsForChange">;
   readonly artifactsRoot: string;
 }): ArtifactLifecycleOwner => ({
   removeContent: (changeId) => removeChangeArtifactContent(input, changeId),
@@ -22,22 +19,16 @@ export const openArtifactLifecycle = (input: {
 
 const removeChangeArtifactContent = (
   dependencies: {
-    readonly persistence: Pick<
-      ChangeValidationPersistence,
-      "listCandidatesForChange" | "listRunsForCandidate"
-    >;
+    readonly persistence: Pick<ChangeValidationPersistence, "listRunIdsForChange">;
     readonly artifactsRoot: string;
   },
   changeId: string,
 ): Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const candidates = yield* dependencies.persistence.listCandidatesForChange(changeId);
-    const runs = yield* Effect.forEach(candidates, (candidate) =>
-      dependencies.persistence.listRunsForCandidate(candidate.id),
-    );
+    const runIds = yield* dependencies.persistence.listRunIdsForChange(changeId);
     let removed = true;
-    for (const run of runs.flat()) {
-      if (!removeValidationRunContent(dependencies.artifactsRoot, run.id)) removed = false;
+    for (const runId of runIds) {
+      if (!removeValidationRunContent(dependencies.artifactsRoot, runId)) removed = false;
     }
     return removed ? { ok: true } : { ok: false };
   });

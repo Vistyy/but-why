@@ -43,6 +43,10 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
       repository.operation("list Candidates for validation history", (sql) =>
         listCandidatesForChange(sql, changeId),
       ),
+    listRunIdsForChange: (changeId) =>
+      repository.operation("list Candidate Validation Run IDs", (sql) =>
+        listRunIdsForChange(sql, changeId),
+      ),
     startOrReuse: (input) =>
       repository.transactionImmediate("start Candidate Validation Run", (sql) =>
         startOrReuse(sql, input),
@@ -182,6 +186,19 @@ const listCandidatesForChange = (sql: SqlClient.SqlClient, changeId: string) =>
      ORDER BY created_at ASC, id ASC`,
     [changeId],
   );
+
+// Artifact Content cleanup selects only Validation Run identities through the
+// Candidate-to-Change relationship. It never reads or decodes Validation Policy
+// or Implementation Decision Snapshots, so an unsupported historical Snapshot
+// cannot block Terminal Cleanup while full Run reads stay strict.
+const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
+  sql<{ readonly id: string }>`
+    SELECT run.id
+    FROM candidate_validation_runs AS run
+    JOIN candidates AS candidate ON candidate.id = run.candidate_id
+    WHERE candidate.change_id = ${changeId}
+    ORDER BY run.created_at ASC, run.id ASC
+  `.pipe(Effect.map((rows) => rows.map((row) => row.id)));
 
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
   Effect.gen(function* () {

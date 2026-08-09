@@ -27,6 +27,7 @@ type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 export type ChangeValidationPersistence = {
   readonly getCandidateById: (candidateId: string) => StorageEffect<CandidateRecord | undefined>;
   readonly listCandidatesForChange: (changeId: string) => StorageEffect<readonly CandidateRecord[]>;
+  readonly listRunIdsForChange: (changeId: string) => StorageEffect<readonly string[]>;
   readonly startOrReuse: (
     input: StartCandidateValidationRunInput,
   ) => StorageEffect<StartCandidateValidationRunResult>;
