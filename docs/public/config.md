@@ -71,10 +71,8 @@ A complete example is:
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
 `validationWorkspace.copyFiles` is an optional list of local regular files copied into each Validation Workspace.
-`review` selects Acceptance Review, Specialists, and the Task Reviewer.
-`review.task.agentProfile` selects the Task Reviewer Agent Profile, resolved Repo Config before Global Config, then Global `defaultAgentProfile`.
-`review.task.instructionsFile` supplies an optional repo-local Task Reviewer instruction file.
-`reviewers` maps Specialist names to definitions; it never supplies Task Reviewer instructions.
+`review` selects Acceptance Review and Specialists.
+`reviewers` maps Specialist names to definitions.
 Each configured Specialist instruction file must positively define exactly one concern.
 It must state the concern's applicable authority, review lenses, materiality, and concern-specific exclusions.
 It must not duplicate or override But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, or output contract.
@@ -158,9 +156,9 @@ Configured instructions define the concern, but cannot override these common bou
 ## Task Review
 
 Task Submission runs one Task Reviewer for an unlinked New Task.
-Its Agent Profile resolves from Repo Config `review.task.agentProfile`, then Global Config, then Global `defaultAgentProfile`.
-Submission fails when no profile resolves; there is no built-in Task Reviewer Agent Profile.
-Its instructions resolve from Repo Config `review.task.instructionsFile`, then Global Config, then the built-in Task Reviewer instructions.
+Its Agent Profile resolves from Global `defaultAgentProfile`.
+Submission fails when no default profile resolves.
+It always uses the built-in Task Reviewer instructions.
 The built-in instructions require the strict Task Dependency definition and complete Task Verification Contract rules.
 Task Submission resolves the Task Reviewer policy from the Repo Config at the canonical-main-checkout `HEAD` commit.
 Configured Repository Preparation runs in the disposable Task Review workspace; automatic Validation Checks do not run.

@@ -58,7 +58,7 @@ describe("portable But Why skill", () => {
     expect(authorTasks).toContain(
       "Verify every recorded Task remains unapproved and has no Change through the returned state or the applicable inspection command.",
     );
-    expect(authorTasks).not.toContain("by task approve");
+    expect(workflow).toContain("by task approve <task-id>");
     expect(submitTask).toContain("by task submit <task-id>");
     expect(submitTask).toContain(
       "Do not start a Change or launch an Implementer Interactive Session",

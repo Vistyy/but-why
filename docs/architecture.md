@@ -104,7 +104,7 @@ Dirty worktrees, unique local commits, changed Remote Change Branches, unreadabl
 
 ## Task Review workflow
 
-An unlinked New Task can become Todo only through a completed passing Task Review of its exact proposal and repository evidence.
+An unlinked New Task can become Todo through a completed passing Task Review of its exact proposal and repository evidence or through temporary direct Task Approval during this expansion stage.
 Existing Todo Tasks remain approved without fabricated Task Review history.
 `by task submit <task-id>` accepts only an unlinked New Task.
 `by task approve <task-id>` remains available during this expansion stage.
@@ -119,10 +119,9 @@ Findings or Tooling Failure leave the Task New and permit a later ordinary submi
 Every ordinary submission starts a fresh Task Review.
 Completed-result reuse is not supported during this expansion stage.
 Per-Task execution locking, transactional admission, one-active-Review uniqueness, proposal rereading, mutation and cancellation guards, and compare-and-set completion preserve one exact reviewed proposal.
-Compatible usable Task Reviewer Sessions continue across later Reviews, and complete transcripts from every observed session file are indexed before completion or successful abandonment.
-Cleanup or transcript-indexing failure leaves the Review active, stores the latest failed operation and exact diagnostic, and does not change Task approval.
+Cleanup failure leaves the Review active, stores the latest failed operation and exact diagnostic, and does not change Task approval.
 `by task-review abandon <review-id>` records Tooling Failure and removes the Active Review only after cleanup and transcript indexing succeed.
-`by task reviews`, `by task-review show`, and the Task Review summary in `by task show` expose the result and valid next action.
+The Task Review summary in `by task show` exposes current state and the valid next action.
 
 ## Storage
 

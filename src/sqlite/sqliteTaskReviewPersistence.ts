@@ -15,9 +15,7 @@ import {
   type TaskReviewProposal,
   type TaskReviewProposalDependency,
   type TaskReviewRecord,
-  type TaskReviewSessionRecord,
   type TaskReviewToolingFailure,
-  type TaskReviewTranscript,
   taskReviewCleanupStateSchema,
   taskReviewOutcomeSchema,
   taskReviewPolicySnapshotSchema,
@@ -27,8 +25,6 @@ import type {
   AbandonTaskReviewInput,
   AbandonTaskReviewPersistenceResult,
   ActiveTaskReview,
-  ApplyTaskReviewReuseResult,
-  CheckTaskReviewReuseResult,
   CompleteTaskReviewInput,
   CompleteTaskReviewResult,
   StartTaskReviewInput,
@@ -48,10 +44,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   Effect.map(RepositorySql, (repository) => ({
     startOrReuse: (input) =>
       repository.transactionImmediate("start Task Review", (sql) => startOrReuse(sql, input)),
-    checkReuse: (taskId) =>
-      repository.transactionImmediate("check Task Review reuse", (sql) => checkReuse(sql, taskId)),
-    applyReuse: (input) =>
-      repository.transactionImmediate("apply Task Review reuse", (sql) => applyReuse(sql, input)),
     getTaskFact: (taskId) =>
       repository.operation("read Task Review Task fact", (sql) => getTaskFact(sql, taskId)),
     complete: (input) =>
@@ -151,49 +143,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         .pipe(Effect.flatMap(decodeCompletionFailureOptional)),
     abandon: (input) =>
       repository.transactionImmediate("abandon Task Review", (sql) => abandon(sql, input)),
-    getTaskReviewSession: (taskId, producer) =>
-      repository
-        .operation("read Task Review Session", (sql) => getTaskReviewSession(sql, taskId, producer))
-        .pipe(Effect.flatMap(decodeSessionRecordOptional)),
-    saveTaskReviewSession: (input) =>
-      repository.transactionImmediate("save Task Review Session", (sql) =>
-        Effect.asVoid(sql`
-          INSERT INTO task_review_sessions (task_id, producer, fingerprint, session_reference)
-          VALUES (${input.taskId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
-          ON CONFLICT (task_id, producer) DO UPDATE SET
-            fingerprint = excluded.fingerprint,
-            session_reference = excluded.session_reference
-        `),
-      ),
-    removeTaskReviewSession: (taskId, producer) =>
-      repository.transactionImmediate("remove Task Review Session", (sql) =>
-        Effect.asVoid(
-          sql`DELETE FROM task_review_sessions WHERE task_id = ${taskId} AND producer = ${producer}`,
-        ),
-      ),
-    listTaskReviewTranscripts: (taskId) =>
-      repository
-        .operation("list Task Review Transcripts", (sql) => listTaskReviewTranscripts(sql, taskId))
-        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeTranscriptRecord))),
-    recordTaskReviewTranscripts: (input) =>
-      repository.transactionImmediate("record Task Review Transcripts", (sql) =>
-        input.transcripts.length === 0
-          ? Effect.void
-          : Effect.asVoid(
-              sql`
-                INSERT INTO task_review_transcripts
-                ${sql.insert(
-                  input.transcripts.map((transcript) => ({
-                    task_id: input.taskId,
-                    producer: transcript.producer,
-                    pi_session_id: transcript.piSessionId,
-                    file_path: transcript.filePath,
-                  })),
-                )}
-                ON CONFLICT (task_id, producer, file_path) DO NOTHING
-              `,
-            ),
-      ),
   }));
 
 const startOrReuse = (
@@ -270,177 +219,6 @@ const startOrReuse = (
       `;
     }
     return { ok: true as const, reused: false as const, reviewId, proposal };
-  });
-
-const checkReuse = (
-  sql: SqlClient.SqlClient,
-  taskId: PublicTaskId,
-): Effect.Effect<CheckTaskReviewReuseResult, SqlError | RepositoryPersistedDataInvalid> =>
-  Effect.gen(function* () {
-    const taskRows = yield* sql<{
-      readonly title: string;
-      readonly description: string;
-      readonly state: TaskState;
-    }>`
-      SELECT title, description, state FROM tasks WHERE id = ${taskId}
-    `;
-    const task = taskRows[0];
-    if (task === undefined) return { reused: false as const };
-    if (task.state !== "new") return { reused: false as const };
-    const linked = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
-    `;
-    if (linked.length > 0) return { reused: false as const };
-
-    const dependencies = yield* readTaskReviewDependencies(sql, taskId);
-    const proposalKey = JSON.stringify({
-      title: task.title,
-      description: task.description,
-      dependencyIds: dependencies.map((dependency) => dependency.taskId),
-    });
-    const rows = yield* sql<ReusableTaskReviewRow>`
-      SELECT id, outcome, proposal_snapshot AS proposalSnapshot,
-        proposal_key AS proposalKey
-      FROM task_reviews
-      WHERE task_id = ${taskId}
-        AND state = 'complete'
-        AND outcome IN ('passed', 'blocked')
-        AND proposal_key = ${proposalKey}
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `;
-    const row = rows[0];
-    if (row === undefined) return { reused: false as const };
-    const reusable = yield* decodeReusableReview(row);
-    return {
-      reused: true as const,
-      reviewId: reusable.id,
-      outcome: reusable.outcome,
-    };
-  });
-
-type ReusableTaskReviewRow = {
-  readonly id: string;
-  readonly outcome: string;
-  readonly proposalSnapshot: string;
-  readonly proposalKey: string;
-};
-
-// A Review is reusable only when its stored proposal snapshot decodes and
-// itself produces the stored proposal key. A matched row whose snapshot is
-// malformed or inconsistent is corrupt persisted evidence and must surface as
-// a persisted-data failure rather than silently behave as no reuse.
-const decodeReusableReview = (
-  row: ReusableTaskReviewRow,
-): Effect.Effect<
-  { readonly id: string; readonly outcome: "passed" | "blocked" },
-  RepositoryPersistedDataInvalid
-> =>
-  Effect.try({
-    try: () => {
-      const proposal = decodePersistedTaskReviewProposal(JSON.parse(row.proposalSnapshot));
-      if (proposalKeyOf(proposal) !== row.proposalKey) {
-        throw new RepositoryPersistedDataInvalid({
-          operationName: "check_task_review_reuse",
-          cause: "Task Review proposal snapshot does not produce its stored key",
-        });
-      }
-      return {
-        id: row.id,
-        outcome: row.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
-      };
-    },
-    catch: (cause) =>
-      cause instanceof RepositoryPersistedDataInvalid
-        ? cause
-        : new RepositoryPersistedDataInvalid({
-            operationName: "check_task_review_reuse",
-            cause,
-          }),
-  });
-
-const applyReuse = (
-  sql: SqlClient.SqlClient,
-  input: {
-    readonly reviewId: string;
-    readonly outcome: "passed" | "blocked";
-    readonly now: string;
-  },
-): Effect.Effect<ApplyTaskReviewReuseResult, SqlError | RepositoryPersistedDataInvalid> =>
-  Effect.gen(function* () {
-    const reviews = yield* sql<{
-      readonly taskId: string;
-      readonly state: string;
-      readonly outcome: string | null;
-      readonly proposalKey: string;
-      readonly proposalSnapshot: string;
-    }>`
-      SELECT task_id AS taskId, state, outcome, proposal_key AS proposalKey,
-        proposal_snapshot AS proposalSnapshot
-      FROM task_reviews WHERE id = ${input.reviewId}
-    `;
-    const review = reviews[0];
-    if (review === undefined) {
-      return { ok: false as const, code: "review_not_found" as const };
-    }
-    // Apply only an exact completed judgment. The matching outcome and proposal
-    // are revalidated here because the Task Context and direct Task Dependency
-    // set can change between the reuse fast-path and this transaction, and the
-    // stored proposal snapshot must itself produce the matching key.
-    if (review.state !== "complete" || review.outcome !== input.outcome) {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    let storedProposalKey: string;
-    try {
-      storedProposalKey = proposalKeyOf(
-        decodePersistedTaskReviewProposal(JSON.parse(review.proposalSnapshot)),
-      );
-    } catch {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    if (storedProposalKey !== review.proposalKey) {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    const taskId = storedPublicTaskId(review.taskId);
-    const tasks = yield* sql<{
-      readonly title: string;
-      readonly description: string;
-      readonly state: TaskState;
-    }>`
-      SELECT title, description, state FROM tasks WHERE id = ${taskId}
-    `;
-    const task = tasks[0];
-    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state !== "new") {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    const linked = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
-    `;
-    if (linked.length > 0) {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    const dependencies = yield* readTaskReviewDependencies(sql, taskId);
-    const proposalKey = JSON.stringify({
-      title: task.title,
-      description: task.description,
-      dependencyIds: dependencies.map((dependency) => dependency.taskId),
-    });
-    if (proposalKey !== review.proposalKey) {
-      return { ok: false as const, code: "task_state_changed" as const };
-    }
-    if (input.outcome === "passed") {
-      const transitioned = yield* sql<{ readonly id: string }>`
-        UPDATE tasks SET state = 'todo', updated_at = ${input.now}
-        WHERE id = ${taskId} AND state = 'new'
-        RETURNING id
-      `;
-      if (transitioned.length !== 1) {
-        return { ok: false as const, code: "task_state_changed" as const };
-      }
-      return { ok: true as const, task: { id: taskId, state: "todo" } };
-    }
-    return { ok: true as const, task: { id: taskId, state: "new" } };
   });
 
 const getTaskFact = (
@@ -725,24 +503,6 @@ const abandon = (
     return { ok: true as const, status: "abandoned" as const };
   });
 
-const getTaskReviewSession = (sql: SqlClient.SqlClient, taskId: PublicTaskId, producer: string) =>
-  Effect.map(
-    sql<TaskReviewSessionRow>`
-      SELECT task_id AS taskId, producer, fingerprint, session_reference AS sessionReference
-      FROM task_review_sessions
-      WHERE task_id = ${taskId} AND producer = ${producer}
-    `,
-    (rows) => rows[0],
-  );
-
-const listTaskReviewTranscripts = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  sql<TaskReviewTranscriptRow>`
-    SELECT task_id AS taskId, producer, pi_session_id AS piSessionId, file_path AS filePath
-    FROM task_review_transcripts
-    WHERE task_id = ${taskId}
-    ORDER BY producer, file_path
-  `;
-
 const decodeReviewOptional = (row: TaskReviewRow | undefined) =>
   row === undefined ? Effect.succeed(undefined) : decodeReview(row);
 
@@ -845,44 +605,6 @@ const decodeCompletionFailureOptional = (
   });
 };
 
-const decodeSessionRecordOptional = (
-  row: TaskReviewSessionRow | undefined,
-): Effect.Effect<TaskReviewSessionRecord | undefined, RepositoryPersistedDataInvalid> => {
-  if (row === undefined) return Effect.succeed(undefined);
-  return Effect.try({
-    try: (): TaskReviewSessionRecord => ({
-      taskId: storedPublicTaskId(row.taskId),
-      producer: Schema.decodeUnknownSync(nonBlankStringSchema)(row.producer),
-      fingerprint: Schema.decodeUnknownSync(nonBlankStringSchema)(row.fingerprint),
-      // The domain stores an empty session reference when the runtime provides
-      // no usable session, and the continuation check treats it as incompatible.
-      sessionReference: Schema.decodeUnknownSync(Schema.String)(row.sessionReference),
-    }),
-    catch: (cause) =>
-      new RepositoryPersistedDataInvalid({
-        operationName: "decode Task Review Session",
-        cause,
-      }),
-  });
-};
-
-const decodeTranscriptRecord = (
-  row: TaskReviewTranscriptRow,
-): Effect.Effect<TaskReviewTranscript, RepositoryPersistedDataInvalid> =>
-  Effect.try({
-    try: (): TaskReviewTranscript => ({
-      taskId: storedPublicTaskId(row.taskId),
-      producer: Schema.decodeUnknownSync(nonBlankStringSchema)(row.producer),
-      piSessionId: Schema.decodeUnknownSync(nonBlankStringSchema)(row.piSessionId),
-      filePath: Schema.decodeUnknownSync(nonBlankStringSchema)(row.filePath),
-    }),
-    catch: (cause) =>
-      new RepositoryPersistedDataInvalid({
-        operationName: "decode Task Review transcript",
-        cause,
-      }),
-  });
-
 const readTaskReviewDependencies = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
@@ -980,16 +702,4 @@ type TaskReviewAbandonmentContextRow = {
   readonly worktreePath: string | null;
   readonly cleanupWorktree: TaskReviewAbandonmentContext["cleanupWorktree"];
   readonly cleanupTempRef: TaskReviewAbandonmentContext["cleanupTempRef"];
-};
-type TaskReviewSessionRow = {
-  readonly taskId: string;
-  readonly producer: string;
-  readonly fingerprint: string;
-  readonly sessionReference: string;
-};
-type TaskReviewTranscriptRow = {
-  readonly taskId: string;
-  readonly producer: string;
-  readonly piSessionId: string;
-  readonly filePath: string;
 };

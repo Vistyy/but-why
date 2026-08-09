@@ -78,24 +78,4 @@ export const taskReviewsMigration = Effect.gen(function* () {
       FOREIGN KEY (review_id) REFERENCES task_reviews(id)
     )
   `);
-  yield* sql.unsafe(`
-    CREATE TABLE task_review_sessions (
-      task_id TEXT NOT NULL,
-      producer TEXT NOT NULL,
-      fingerprint TEXT NOT NULL,
-      session_reference TEXT NOT NULL,
-      PRIMARY KEY (task_id, producer),
-      FOREIGN KEY (task_id) REFERENCES tasks(id)
-    )
-  `);
-  yield* sql.unsafe(`
-    CREATE TABLE task_review_transcripts (
-      task_id TEXT NOT NULL,
-      producer TEXT NOT NULL,
-      pi_session_id TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      PRIMARY KEY (task_id, producer, file_path),
-      FOREIGN KEY (task_id) REFERENCES tasks(id)
-    )
-  `);
 });

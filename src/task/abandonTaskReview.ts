@@ -5,7 +5,6 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import { deleteDisposableTempRef, removeDisposableWorktree } from "../workspace/workspaceGit.js";
 import type { PublicTaskId } from "./taskId.js";
 import type { TaskReviewPersistence } from "./taskReviewStore.js";
-import { indexTaskReviewTranscripts } from "./taskReviewTranscripts.js";
 import { taskReviewTempRefName } from "./taskReviewWorkspace.js";
 
 export type AbandonTaskReview = {
@@ -34,7 +33,6 @@ export const openAbandonTaskReview = (input: {
   readonly persistence: TaskReviewPersistence;
   readonly executionLock: ExecutionLock;
   readonly repoRoot: string;
-  readonly reviewerSessionsRoot: string;
 }): AbandonTaskReview => ({
   abandon: (command) =>
     Effect.gen(function* () {
@@ -80,7 +78,6 @@ const abandonWhileLocked = (
   input: {
     readonly persistence: TaskReviewPersistence;
     readonly repoRoot: string;
-    readonly reviewerSessionsRoot: string;
   },
   command: { readonly reviewId: string; readonly reason: string; readonly now: string },
 ): Effect.Effect<AbandonTaskReviewResult, RepositoryStorageError> =>
@@ -115,11 +112,6 @@ const abandonWhileLocked = (
             : "failed";
     const cleanup = { worktree, tempRef } as const;
 
-    const indexed = yield* indexTaskReviewTranscripts(input.persistence, {
-      taskId: context.taskId,
-      reviewerSessionsRoot: input.reviewerSessionsRoot,
-    });
-
     if (worktree === "failed" || tempRef === "failed") {
       yield* input.persistence.recordCompletionFailure({
         reviewId: command.reviewId,
@@ -135,22 +127,6 @@ const abandonWhileLocked = (
         cleanup,
       };
     }
-    if (!indexed.ok) {
-      yield* input.persistence.recordCompletionFailure({
-        reviewId: command.reviewId,
-        operationName: "abandon_task_review_transcripts",
-        errorMessage: indexed.reason,
-        now: command.now,
-      });
-      return {
-        ok: false as const,
-        status: "cleanup_failed" as const,
-        reviewId: command.reviewId,
-        taskId: context.taskId,
-        cleanup,
-      };
-    }
-
     yield* input.persistence.abandon({
       reviewId: command.reviewId,
       errorKind: "infrastructure_tooling_failed",

@@ -242,13 +242,6 @@ const taskSubmitCommand = withCliHandler(
       Effect.flatMap(({ runSubmitCommand }) => runSubmitCommand(taskId(values), environment)),
     ),
 );
-const taskReviewsCommand = withCliHandler(
-  leaf("reviews", "List Task Review history for a Task.", { taskId: taskIdArgument }),
-  (values, environment) =>
-    Effect.promise(() => import("./cli/task/commands/reviews.js")).pipe(
-      Effect.flatMap(({ runReviewsCommand }) => runReviewsCommand(taskId(values), environment)),
-    ),
-);
 const taskCancelCommand = withCliHandler(
   leaf("cancel", "Permanently cancel an unfinished Task.", {
     taskId: taskIdArgument,
@@ -275,7 +268,6 @@ taskCommand = group(
     taskShowCommand,
     taskApproveCommand,
     taskSubmitCommand,
-    taskReviewsCommand,
     taskContextCommand,
     taskCancelCommand,
   ],
@@ -283,17 +275,6 @@ taskCommand = group(
   () => generatedCommandUsage(taskCommand),
 );
 
-const taskReviewShowCommand = withCliHandler(
-  leaf("show", "Show one Task Review and its recorded evidence.", {
-    reviewId: Args.text({ name: "review-id" }),
-  }),
-  (values, environment) =>
-    Effect.promise(() => import("./cli/taskReview/commands/show.js")).pipe(
-      Effect.flatMap(({ runShowCommand }) =>
-        runShowCommand({ reviewId: requiredString(values, "reviewId") }, environment),
-      ),
-    ),
-);
 const taskReviewAbandonCommand = withCliHandler(
   leaf("abandon", "Explicitly abandon an interrupted Task Review.", {
     reviewId: Args.text({ name: "review-id" }),
@@ -315,8 +296,8 @@ const taskReviewAbandonCommand = withCliHandler(
 let taskReviewCommand: AnyCommand;
 taskReviewCommand = group(
   "task-review",
-  "Inspect and recover Task Reviews.",
-  [taskReviewShowCommand, taskReviewAbandonCommand],
+  "Recover interrupted Task Reviews.",
+  [taskReviewAbandonCommand],
   {},
   () => generatedCommandUsage(taskReviewCommand),
 );

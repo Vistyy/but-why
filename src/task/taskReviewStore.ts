@@ -10,9 +10,7 @@ import type {
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
   TaskReviewRecord,
-  TaskReviewSessionRecord,
   TaskReviewToolingFailure,
-  TaskReviewTranscript,
   TaskReviewWorkspaceSetup,
 } from "./taskReview.js";
 
@@ -47,17 +45,6 @@ export type StartTaskReviewResult =
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
   | { readonly ok: false; readonly code: "task_linked_to_change" }
   | { readonly ok: false; readonly code: "review_active"; readonly reviewId: string };
-
-export type CheckTaskReviewReuseResult =
-  | { readonly reused: true; readonly reviewId: string; readonly outcome: "passed" | "blocked" }
-  | { readonly reused: false };
-
-export type ApplyTaskReviewReuseResult =
-  | { readonly ok: true; readonly task: TaskReviewTaskFact }
-  | {
-      readonly ok: false;
-      readonly code: "review_not_found" | "task_not_found" | "task_state_changed";
-    };
 
 export type CompleteTaskReviewInput = {
   readonly reviewId: string;
@@ -119,12 +106,6 @@ export type ActiveTaskReview = {
 
 export type TaskReviewPersistence = {
   readonly startOrReuse: (input: StartTaskReviewInput) => StorageEffect<StartTaskReviewResult>;
-  readonly checkReuse: (taskId: PublicTaskId) => StorageEffect<CheckTaskReviewReuseResult>;
-  readonly applyReuse: (input: {
-    readonly reviewId: string;
-    readonly outcome: "passed" | "blocked";
-    readonly now: string;
-  }) => StorageEffect<ApplyTaskReviewReuseResult>;
   readonly getTaskFact: (taskId: PublicTaskId) => StorageEffect<TaskReviewTaskFact | undefined>;
   readonly complete: (input: CompleteTaskReviewInput) => StorageEffect<CompleteTaskReviewResult>;
   readonly getActiveForTask: (taskId: PublicTaskId) => StorageEffect<ActiveTaskReview | undefined>;
@@ -157,19 +138,6 @@ export type TaskReviewPersistence = {
   readonly abandon: (
     input: AbandonTaskReviewInput,
   ) => StorageEffect<AbandonTaskReviewPersistenceResult>;
-  readonly getTaskReviewSession: (
-    taskId: PublicTaskId,
-    producer: string,
-  ) => StorageEffect<TaskReviewSessionRecord | undefined>;
-  readonly saveTaskReviewSession: (input: TaskReviewSessionRecord) => StorageEffect<void>;
-  readonly removeTaskReviewSession: (taskId: PublicTaskId, producer: string) => StorageEffect<void>;
-  readonly listTaskReviewTranscripts: (
-    taskId: PublicTaskId,
-  ) => StorageEffect<readonly TaskReviewTranscript[]>;
-  readonly recordTaskReviewTranscripts: (input: {
-    readonly taskId: PublicTaskId;
-    readonly transcripts: readonly TaskReviewTranscript[];
-  }) => StorageEffect<void>;
 };
 
 export type AbandonTaskReviewPersistenceResult =

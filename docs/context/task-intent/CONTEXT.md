@@ -49,17 +49,18 @@ _Avoid_: Task Approval command, direct New-to-Todo mutation
 
 **Task Review**:
 The completed or active Review of one exact Task proposal against repository evidence by one Task Reviewer.
-A passing Review is the only supported path from New to Todo.
+A passing Review moves New to Todo, while direct Task Approval remains temporarily supported during this expansion stage.
 _Avoid_: Validation Run, Candidate validation, generic Review domain
 
 **Task Reviewer**:
-The resolved Repo-before-Global agent profile and instructions that judge Task proposals, with built-in instructions as fallback.
+The default Agent Profile with the built-in instructions that judges Task proposals.
 _Avoid_: Candidate Reviewer, Specialist Reviewer, generic reviewer framework
 
 **Task Approval**:
-The outcome of a completed passing Task Review for one exact Task proposal.
-Task Context and Task Dependencies become immutable at Task Approval, and the Task moves to Todo atomically with the Review.
-_Avoid_: Change Start, Implementation Authorization, direct approval command
+The approval represented by Todo.
+A passing Task Review grants Task Approval atomically, and direct Task Approval remains temporarily supported during this expansion stage.
+Task Context and Task Dependencies become immutable at Task Approval.
+_Avoid_: Change Start, Implementation Authorization
 
 **Task Lifecycle**:
 The user-facing progress of a Task through New, Todo, Done, or Cancelled.

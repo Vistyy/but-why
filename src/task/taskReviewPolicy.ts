@@ -1,6 +1,6 @@
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
-import { Data, type Effect, type ParseResult, Schema } from "effect";
+import { type Effect, type ParseResult, Schema } from "effect";
 
 import type { AgentProfileResolutionError } from "../agent/agentProfileErrors.js";
 import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../agent/agentProfiles.js";
@@ -8,24 +8,13 @@ import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js"
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
-import { type InstructionsReadResult, readInstructionsFile } from "../init/instructionsFile.js";
 import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
-// fallow-ignore-next-line unused-export -- public Task Reviewer policy error
-export class TaskReviewInstructionsInvalid extends Data.TaggedError(
-  "TaskReviewInstructionsInvalid",
-)<{
-  readonly message: string;
-}> {}
-
-export type TaskReviewPolicyError =
-  | AgentProfileResolutionError
-  | GlobalConfigValidationFailed
-  | TaskReviewInstructionsInvalid;
+export type TaskReviewPolicyError = AgentProfileResolutionError | GlobalConfigValidationFailed;
 
 export type TaskReviewPolicy = {
   readonly instructions: string;
-  readonly instructionsSource: "repo" | "global" | "built_in";
+  readonly instructionsSource: "built_in";
   readonly profile: ResolvedPiAgentProfile;
 };
 
@@ -34,20 +23,10 @@ export const resolveTaskReviewPolicy = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
-  readonly readRepoInstructionsFile?: (
-    repoRoot: string,
-    instructionsFile: string,
-  ) => InstructionsReadResult;
 }):
   | { readonly ok: true; readonly policy: TaskReviewPolicy }
   | { readonly ok: false; readonly error: TaskReviewPolicyError } => {
   const resolution = resolveAgentProfile({
-    ...(input.repoConfig.review?.task?.agentProfile === undefined
-      ? {}
-      : { repoSelection: input.repoConfig.review.task.agentProfile }),
-    ...(input.globalConfig.review?.task?.agentProfile === undefined
-      ? {}
-      : { globalSelection: input.globalConfig.review.task.agentProfile }),
     ...(input.globalConfig.defaultAgentProfile === undefined
       ? {}
       : { defaultSelection: input.globalConfig.defaultAgentProfile }),
@@ -61,67 +40,14 @@ export const resolveTaskReviewPolicy = (input: {
   });
 
   if (!resolution.ok) return resolution;
-  const instructions = resolveInstructions(input);
-  if (!instructions.ok) return instructions;
-
   return {
     ok: true,
     policy: {
-      instructions: instructions.instructions,
-      instructionsSource: instructions.instructionsSource,
+      instructions: defaultTaskReviewInstructions,
+      instructionsSource: "built_in",
       profile: resolution.resolved,
     },
   };
-};
-
-const resolveInstructions = (input: {
-  readonly repoConfig: RepoConfig;
-  readonly globalConfig: GlobalConfig;
-  readonly repoRoot: string;
-  readonly globalConfigPath: string;
-  readonly readRepoInstructionsFile?: (
-    repoRoot: string,
-    instructionsFile: string,
-  ) => InstructionsReadResult;
-}):
-  | (Pick<TaskReviewPolicy, "instructions" | "instructionsSource"> & { readonly ok: true })
-  | { readonly ok: false; readonly error: TaskReviewInstructionsInvalid } => {
-  const repoInstructionsFile = input.repoConfig.review?.task?.instructionsFile;
-  if (repoInstructionsFile !== undefined) {
-    const result =
-      input.readRepoInstructionsFile === undefined
-        ? readInstructionsFile(join(input.repoRoot, repoInstructionsFile))
-        : input.readRepoInstructionsFile(input.repoRoot, repoInstructionsFile);
-    return result.ok
-      ? { ok: true, instructions: result.instructions, instructionsSource: "repo" }
-      : { ok: false, error: new TaskReviewInstructionsInvalid({ message: result.message }) };
-  }
-
-  const globalInstructionsFile = input.globalConfig.review?.task?.instructionsFile;
-  if (globalInstructionsFile !== undefined) {
-    return readInstructions(
-      join(dirname(input.globalConfigPath), globalInstructionsFile),
-      "global",
-    );
-  }
-
-  return {
-    ok: true,
-    instructions: defaultTaskReviewInstructions,
-    instructionsSource: "built_in",
-  };
-};
-
-const readInstructions = (
-  path: string,
-  instructionsSource: "repo" | "global",
-):
-  | (Pick<TaskReviewPolicy, "instructions" | "instructionsSource"> & { readonly ok: true })
-  | { readonly ok: false; readonly error: TaskReviewInstructionsInvalid } => {
-  const result = readInstructionsFile(path);
-  return result.ok
-    ? { ok: true, instructions: result.instructions, instructionsSource }
-    : { ok: false, error: new TaskReviewInstructionsInvalid({ message: result.message }) };
 };
 
 export const taskReviewPolicySnapshot = (policy: TaskReviewPolicy): TaskReviewPolicySnapshot => ({

@@ -10,7 +10,14 @@ import {
 } from "../../../cliResults.js";
 import { loadTaskReviewInspection } from "../../../task/loadTaskReviewInspection.js";
 import type { TaskCommandEnvironment } from "../../task/taskCliSupport.js";
-import { reviewNotFound } from "./show.js";
+
+const reviewNotFound = (reviewId: string): CliResult =>
+  runtimeError({
+    code: "review_not_found",
+    message: `Task Review was not found: ${reviewId}`,
+    details: { reviewId },
+    help: ["Inspect the Task with `by task show <task-id>`."],
+  });
 
 export const runAbandonCommand = (
   command: { readonly reviewId: string; readonly reason: string },

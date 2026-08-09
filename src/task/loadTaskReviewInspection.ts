@@ -11,9 +11,7 @@ import type { PublicTaskId } from "./taskId.js";
 import type {
   TaskReviewFinding,
   TaskReviewRecord,
-  TaskReviewSessionRecord,
   TaskReviewToolingFailure,
-  TaskReviewTranscript,
 } from "./taskReview.js";
 import type {
   ActiveTaskReview,
@@ -47,13 +45,6 @@ export type TaskReviewInspection = {
   readonly completionFailure: (
     reviewId: string,
   ) => Effect.Effect<TaskReviewCompletionFailure | undefined, RepositoryStorageError>;
-  readonly session: (
-    taskId: PublicTaskId,
-    producer: string,
-  ) => Effect.Effect<TaskReviewSessionRecord | undefined, RepositoryStorageError>;
-  readonly transcripts: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<readonly TaskReviewTranscript[], RepositoryStorageError>;
   readonly abandon: (input: {
     readonly reviewId: string;
     readonly reason: string;
@@ -105,9 +96,6 @@ export const loadTaskReviewInspection = (input: {
         run((persistence) => persistence.listToolingFailures(reviewId)),
       completionFailure: (reviewId) =>
         run((persistence) => persistence.getCompletionFailure(reviewId)),
-      session: (taskId, producer) =>
-        run((persistence) => persistence.getTaskReviewSession(taskId, producer)),
-      transcripts: (taskId) => run((persistence) => persistence.listTaskReviewTranscripts(taskId)),
       abandon: (abandonInput) =>
         run((persistence) =>
           openAbandonTaskReview({
@@ -116,7 +104,6 @@ export const loadTaskReviewInspection = (input: {
               commonDirectory: context.commonDirectory,
             }),
             repoRoot: context.mainCheckoutRoot,
-            reviewerSessionsRoot: context.paths.operationalDir,
           }).abandon(abandonInput),
         ),
     },

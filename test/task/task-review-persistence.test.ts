@@ -189,8 +189,8 @@ it.scoped("clears a stored completion failure after successful completion or aba
       });
       yield* reviews.recordCompletionFailure({
         reviewId: "review-recovered-complete",
-        operationName: "index_task_review_transcripts",
-        errorMessage: "unreadable session",
+        operationName: "cleanup_disposable_workspace",
+        errorMessage: "workspace removal failed",
         now: firstNow,
       });
       yield* reviews.complete({
@@ -210,8 +210,8 @@ it.scoped("clears a stored completion failure after successful completion or aba
       });
       yield* reviews.recordCompletionFailure({
         reviewId: "review-recovered-abandon",
-        operationName: "index_task_review_transcripts",
-        errorMessage: "unreadable session",
+        operationName: "cleanup_disposable_workspace",
+        errorMessage: "workspace removal failed",
         now: secondNow,
       });
       yield* reviews.abandon({
@@ -351,249 +351,6 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
       ]);
     }),
   ),
-);
-
-it.scoped("starts a fresh Review when a matching completed Review exists", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const prerequisite = yield* createTask(tasks, "Prerequisite", firstNow);
-      const task = yield* createTask(tasks, "Reuse", firstNow);
-      yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-first",
-        now: firstNow,
-      });
-      yield* reviews.complete({ reviewId: "review-first", outcome: "blocked", now: secondNow });
-
-      // Change the proposal so the prior blocked Review no longer matches.
-      const edited = yield* tasks.editTaskDependencies({
-        taskId: task.id,
-        operation: "replace",
-        prerequisiteTaskIds: [prerequisite.id],
-      });
-      if (!edited.ok) throw new Error(edited.code);
-
-      const second = yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-second",
-        now: secondNow,
-      });
-      expect(second).toEqual({
-        ok: true,
-        reused: false,
-        reviewId: "review-second",
-        proposal: {
-          title: "Reuse",
-          description: "Description: Reuse",
-          dependencies: [
-            {
-              taskId: prerequisite.id,
-              title: "Prerequisite",
-              description: "Description: Prerequisite",
-              state: "new",
-              dependencyIds: [],
-            },
-          ],
-        },
-      });
-      yield* reviews.complete({ reviewId: "review-second", outcome: "blocked", now: thirdNow });
-
-      const checked = yield* reviews.checkReuse(task.id);
-      expect(checked).toEqual({ reused: true, reviewId: "review-second", outcome: "blocked" });
-
-      const started = yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-never-used",
-        now: thirdNow,
-      });
-      expect(started).toEqual({
-        ok: true,
-        reused: false,
-        reviewId: "review-never-used",
-        proposal: {
-          title: "Reuse",
-          description: "Description: Reuse",
-          dependencies: [
-            {
-              taskId: prerequisite.id,
-              title: "Prerequisite",
-              description: "Description: Prerequisite",
-              state: "new",
-              dependencyIds: [],
-            },
-          ],
-        },
-      });
-    }),
-  ),
-);
-
-it.scoped("rejects reuse for a changed proposal and starts a new Review", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const task = yield* createTask(tasks, "Original", firstNow);
-      yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-original",
-        now: firstNow,
-      });
-      yield* reviews.complete({ reviewId: "review-original", outcome: "blocked", now: secondNow });
-
-      const updated = yield* tasks.updateTaskContext({
-        taskId: task.id,
-        title: "Changed title",
-        description: "Changed description",
-        now: thirdNow,
-      });
-      expect(updated.ok).toBe(true);
-      if (!updated.ok) throw new Error(updated.code);
-
-      const started = yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-changed",
-        now: thirdNow,
-      });
-      expect(started).toMatchObject({ ok: true, reused: false, reviewId: "review-changed" });
-      if (!started.ok || started.reused) throw new Error("start failed");
-      expect(started.proposal.title).toBe("Changed title");
-    }),
-  ),
-);
-
-it.scoped("applyReuse revalidates the exact proposal and review facts atomically", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const task = yield* createTask(tasks, "Revalidate", firstNow);
-      const started = yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-revalidate",
-        now: firstNow,
-      });
-      if (!started.ok || started.reused) throw new Error("start failed");
-      yield* reviews.complete({
-        reviewId: "review-revalidate",
-        outcome: "blocked",
-        now: secondNow,
-      });
-
-      // A mutation between the reuse fast-path and this transaction changes the
-      // proposal, so applying the stale judgment must not approve the Task.
-      const edited = yield* tasks.updateTaskContext({
-        taskId: task.id,
-        title: "Changed after reuse check",
-        description: "Changed description",
-        now: thirdNow,
-      });
-      expect(edited.ok).toBe(true);
-      if (!edited.ok) throw new Error(edited.code);
-
-      const applied = yield* reviews.applyReuse({
-        reviewId: "review-revalidate",
-        outcome: "blocked",
-        now: thirdNow,
-      });
-      expect(applied).toEqual({ ok: false, code: "task_state_changed" });
-      expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
-
-      // A running Review cannot be applied, and a non-matching outcome cannot be applied.
-      const running = yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-running",
-        now: thirdNow,
-      });
-      if (!running.ok || running.reused) throw new Error("start failed");
-      expect(
-        yield* reviews.applyReuse({
-          reviewId: "review-running",
-          outcome: "blocked",
-          now: thirdNow,
-        }),
-      ).toEqual({ ok: false, code: "task_state_changed" });
-      expect(
-        yield* reviews.applyReuse({
-          reviewId: "review-revalidate",
-          outcome: "passed",
-          now: thirdNow,
-        }),
-      ).toEqual({ ok: false, code: "task_state_changed" });
-    }),
-  ),
-);
-
-it.scoped(
-  "applyReuse reports the post-update Task state for blocked reuse and refuses stale passed reuse",
-  () =>
-    withTemporaryRepositoryState(() =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
-        const reviews = yield* openSqliteTaskReviewPersistence();
-        const task = yield* createTask(tasks, "Applied state", firstNow);
-        yield* reviews.startOrReuse({
-          taskId: task.id,
-          baseCommit,
-          policy,
-          reviewId: "review-blocked-state",
-          now: firstNow,
-        });
-        yield* reviews.complete({
-          reviewId: "review-blocked-state",
-          outcome: "blocked",
-          now: secondNow,
-        });
-        expect(
-          yield* reviews.applyReuse({
-            reviewId: "review-blocked-state",
-            outcome: "blocked",
-            now: secondNow,
-          }),
-        ).toEqual({ ok: true, task: { id: task.id, state: "new" } });
-        expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
-
-        // A passing Review already moved the Task to Todo at completion, so a
-        // later reuse cannot apply it again to a still-New Task.
-        const secondTask = yield* createTask(tasks, "Applied passed state", secondNow);
-        yield* reviews.startOrReuse({
-          taskId: secondTask.id,
-          baseCommit,
-          policy,
-          reviewId: "review-passed-state",
-          now: secondNow,
-        });
-        yield* reviews.complete({
-          reviewId: "review-passed-state",
-          outcome: "passed",
-          now: thirdNow,
-        });
-        expect(yield* tasks.getTaskById(secondTask.id)).toMatchObject({ state: "todo" });
-        expect(
-          yield* reviews.applyReuse({
-            reviewId: "review-passed-state",
-            outcome: "passed",
-            now: thirdNow,
-          }),
-        ).toEqual({ ok: false, code: "task_state_changed" });
-      }),
-    ),
 );
 
 it.scoped("latestApplicableReviewForTask skips Tooling Failure and returns the prior outcome", () =>
@@ -777,66 +534,6 @@ it.scoped("compare-and-set completion rejects a second completion and unknown re
   ),
 );
 
-it.scoped("rejects reuse and reads when the stored proposal snapshot mismatches its key", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const task = yield* createTask(tasks, "Snapshot key", firstNow);
-      yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-snapshot-key",
-        now: firstNow,
-      });
-      yield* reviews.complete({
-        reviewId: "review-snapshot-key",
-        outcome: "blocked",
-        now: secondNow,
-      });
-
-      const repository = yield* RepositorySql;
-      yield* repository.operation("corrupt proposal snapshot without its key", (sql) => {
-        const proposal = {
-          title: "Different snapshot title",
-          description: "Description: Snapshot key",
-          dependencies: [],
-        };
-        return sql`UPDATE task_reviews SET proposal_snapshot = ${JSON.stringify(proposal)}
-            WHERE id = 'review-snapshot-key'`;
-      });
-
-      // Reads decode the proposal at the owning boundary and reject the mismatch.
-      expect(yield* Effect.isFailure(reviews.getReviewById("review-snapshot-key"))).toBe(true);
-
-      // Reuse fast paths decode the stored snapshot and surface corrupt evidence
-      // as a persisted-data failure instead of silently behaving as no reuse.
-      expect(yield* Effect.isFailure(reviews.checkReuse(task.id))).toBe(true);
-      expect(
-        yield* Effect.isFailure(
-          reviews.startOrReuse({
-            taskId: task.id,
-            baseCommit,
-            policy,
-            reviewId: "review-snapshot-key",
-            now: thirdNow,
-          }),
-        ),
-      ).toBe(true);
-
-      // The direct apply guard still rejects an inconsistent Review.
-      const applied = yield* reviews.applyReuse({
-        reviewId: "review-snapshot-key",
-        outcome: "blocked",
-        now: thirdNow,
-      });
-      expect(applied).toEqual({ ok: false, code: "task_state_changed" });
-      expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
-    }),
-  ),
-);
-
 it.scoped("completion rejects an Active marker bound to a different Task", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
@@ -987,23 +684,6 @@ it.scoped("rejects malformed persisted values at each owning boundary", () =>
         errorMessage: "Agent launch failed.",
         now: secondNow,
       });
-      yield* reviews.saveTaskReviewSession({
-        taskId: task.id,
-        producer: "task_review",
-        fingerprint: "fingerprint-1",
-        sessionReference: "session-1",
-      });
-      yield* reviews.recordTaskReviewTranscripts({
-        taskId: task.id,
-        transcripts: [
-          {
-            taskId: task.id,
-            producer: "task_review",
-            piSessionId: "session-1",
-            filePath: "sessions/task_review.jsonl",
-          },
-        ],
-      });
 
       const repository = yield* RepositorySql;
 
@@ -1079,18 +759,6 @@ it.scoped("rejects malformed persisted values at each owning boundary", () =>
         (sql) => sql`UPDATE task_review_findings SET title = '' WHERE review_id = 'review-decoded'`,
       );
       expect(yield* Effect.isFailure(reviews.listFindings("review-decoded"))).toBe(true);
-
-      // Session and transcript records are decoded at the owning boundary.
-      yield* repository.operation(
-        "corrupt Session producer",
-        (sql) => sql`UPDATE task_review_sessions SET producer = ' ' WHERE task_id = ${task.id}`,
-      );
-      expect(yield* Effect.isFailure(reviews.getTaskReviewSession(task.id, " "))).toBe(true);
-      yield* repository.operation(
-        "corrupt Transcript file path",
-        (sql) => sql`UPDATE task_review_transcripts SET file_path = '' WHERE task_id = ${task.id}`,
-      );
-      expect(yield* Effect.isFailure(reviews.listTaskReviewTranscripts(task.id))).toBe(true);
     }),
   ),
 );

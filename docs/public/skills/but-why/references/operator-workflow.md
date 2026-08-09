@@ -20,7 +20,8 @@ It does not permit Task Submission, Change Start, implementation, or Implementat
 It covers only that exact proposal and does not permit a changed proposal, Task Recording, Change Start, implementation, or Implementation Authorization.
 A passing Task Review of that exact proposal is the Task Approval that makes the Task eligible to start a Change.
 
-**Task Approval** is the outcome of a completed passing Task Review for one exact Task proposal.
+**Task Approval** is the approval represented by Todo.
+A passing Task Review grants Task Approval, and `by task approve <task-id>` remains temporarily available during the Task Review expansion stage.
 Task Approval does not start a Change or launch implementation.
 
 **Implementation Authorization** is the Operator's explicit permission to implement one selected work item through its selected Work Route.
@@ -96,7 +97,7 @@ Present the exact Context and dependency set to the Operator and obtain Task Sub
 Do not submit a different proposal, and do not record Task Context or dependency changes without a new Task Recording Authorization.
 Treat the returned Task Review result as authoritative.
 A passing review makes the Task Todo; Findings and Tooling Failure leave it New.
-Run `by task show <task-id>` or `by task-review show <review-id>` only when required approval, review, or Change-link state is omitted.
+Run `by task show <task-id>` only when required approval, review, or Change-link state is omitted.
 Do not start a Change or launch an Implementer Interactive Session as part of Task Submission.
 
 This section is complete when the selected Task proposal has Task Submission Authorization and its returned Task Review result is known.
@@ -159,13 +160,12 @@ by task dependencies replace <task-id> --depends-on <task-id> [--depends-on <tas
 by task dependencies clear <task-id>
 by task list [--all] [--state <state>] [--limit <positive integer | all>]
 by task show <task-id>
+by task approve <task-id>
 by task submit <task-id>
-by task reviews <task-id>
 by task context <task-id>
 by task context draft <task-id>
 by task context apply <task-id>
 by task cancel <task-id> --reason <reason>
-by task-review show <review-id>
 by task-review abandon <review-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
 by change prepare [<change-id>]

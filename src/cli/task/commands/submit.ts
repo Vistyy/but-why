@@ -74,8 +74,8 @@ const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {
           message: `A Task Review is already active for task ${taskId}.`,
           details: { taskId, reviewId: result.reviewId },
           help: [
-            `Inspect it with \`by task-review show ${result.reviewId}\`.`,
-            `Abandon it with \`by task-review abandon ${result.reviewId} --reason <reason>\` if its Submission process stopped.`,
+            "Wait for the active operation to finish.",
+            `After every Review process stops, abandon it with \`by task-review abandon ${result.reviewId} --reason <reason>\`.`,
           ],
         });
       case "review_cleanup_pending":
@@ -133,10 +133,9 @@ const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {
         ? {}
         : { findings: result.findings }),
     },
-    ...(result.status === "blocked"
-      ? {
-          nextAction: `Inspect Findings with \`by task-review show ${result.reviewId}\`.`,
-        }
-      : {}),
+    nextAction:
+      result.status === "passed"
+        ? `by change start --task ${result.task.id}`
+        : `by task context draft ${result.task.id}`,
   });
 };

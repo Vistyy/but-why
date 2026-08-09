@@ -91,20 +91,6 @@ export type TaskReviewToolingFailure = {
   readonly createdAt: string;
 };
 
-export type TaskReviewSessionRecord = {
-  readonly taskId: PublicTaskId;
-  readonly producer: string;
-  readonly fingerprint: string;
-  readonly sessionReference: string;
-};
-
-export type TaskReviewTranscript = {
-  readonly taskId: PublicTaskId;
-  readonly producer: string;
-  readonly piSessionId: string;
-  readonly filePath: string;
-};
-
 export type TaskReviewWorkspaceSetup = {
   readonly reviewId: string;
   readonly tempRefName: string;

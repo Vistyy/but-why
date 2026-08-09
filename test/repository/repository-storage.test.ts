@@ -1739,8 +1739,6 @@ describe("repository SQL storage", () => {
               yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
               yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
               yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-              yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-              yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -2264,8 +2262,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2519,8 +2515,6 @@ describe("repository SQL storage", () => {
             yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
             yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
             yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-            yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-            yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
           }),
         );
 
@@ -2626,8 +2620,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2710,8 +2702,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2786,8 +2776,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -3050,8 +3038,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3117,8 +3103,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3224,8 +3208,6 @@ describe("repository SQL storage", () => {
                     yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                     yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                     yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                    yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                    yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                   }),
                 );
               }).pipe(
@@ -3338,8 +3320,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3431,8 +3411,6 @@ describe("repository SQL storage", () => {
                   yield* sql`DROP TABLE IF EXISTS task_review_tooling_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_completion_failures`;
                   yield* sql`DROP TABLE IF EXISTS task_review_workspace_setups`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_sessions`;
-                  yield* sql`DROP TABLE IF EXISTS task_review_transcripts`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),

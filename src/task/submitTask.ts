@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { chmodSync, readdirSync, statSync } from "node:fs";
-
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect, Either } from "effect";
 
@@ -13,18 +11,12 @@ import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { runRepositoryPreparation } from "../repositoryPreparation/runRepositoryPreparation.js";
-import {
-  reviewerSessionFingerprint,
-  reviewerSessionsPath,
-} from "../reviewerSession/sessionFiles.js";
 import { disposableWorktreePath } from "../workspace/workspaceGit.js";
 import type { TaskState } from "./lifecycle.js";
 import type { PublicTaskId } from "./taskId.js";
 import type {
   TaskReviewFinding,
   TaskReviewProposal,
-  TaskReviewRecord,
-  TaskReviewSessionRecord,
   TaskReviewToolingFailure,
 } from "./taskReview.js";
 import {
@@ -34,12 +26,7 @@ import {
   type TaskReviewPolicy,
   taskReviewPolicySnapshot,
 } from "./taskReviewPolicy.js";
-import {
-  buildTaskReviewContinuationPrompt,
-  buildTaskReviewerPrompt,
-  deterministicProposalDiff,
-  type TaskReviewHistoryEvidence,
-} from "./taskReviewPrompts.js";
+import { buildTaskReviewerPrompt } from "./taskReviewPrompts.js";
 import type {
   StartTaskReviewResult,
   TaskReviewCompletionFailure,
@@ -48,7 +35,6 @@ import type {
 } from "./taskReviewStore.js";
 import type { TaskReviewToolingFailureRecord } from "./taskReviewTooling.js";
 import { taskReviewToolingFailureRecord } from "./taskReviewTooling.js";
-import { indexTaskReviewTranscripts } from "./taskReviewTranscripts.js";
 import { createTaskReviewWorkspace, taskReviewTempRefName } from "./taskReviewWorkspace.js";
 
 export type MainCheckoutHeadResult =
@@ -72,13 +58,6 @@ export type TaskSubmissionDependencies = {
   readonly readMainCheckoutHead: (cwd: string) => MainCheckoutHeadResult;
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
   readonly readGlobalConfig: (globalConfigPath: string) => TaskGlobalConfigReadResult;
-  readonly readRepoInstructionsFileAtCommit?: (
-    cwd: string,
-    commit: string,
-    instructionsFile: string,
-  ) =>
-    | { readonly ok: true; readonly instructions: string }
-    | { readonly ok: false; readonly message: string };
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
 };
 
@@ -163,18 +142,11 @@ const submitTask = (
         message: global.message,
       };
     }
-    const readRepoInstructionsFileAtCommit = dependencies.readRepoInstructionsFileAtCommit;
     const policy = resolveTaskReviewPolicy({
       repoConfig: repoConfig.config,
       globalConfig: global.config,
       repoRoot: dependencies.mainCheckoutRoot,
       globalConfigPath: dependencies.globalConfigPath,
-      ...(readRepoInstructionsFileAtCommit === undefined
-        ? {}
-        : {
-            readRepoInstructionsFile: (repoRoot: string, instructionsFile: string) =>
-              readRepoInstructionsFileAtCommit(repoRoot, head.commit, instructionsFile),
-          }),
     });
     if (!policy.ok) {
       return {
@@ -202,17 +174,7 @@ const submitTask = (
       return yield* Effect.dieMessage("Fresh Task Review admission unexpectedly reused a result");
     }
 
-    const prior = yield* dependencies.persistence.latestApplicableReviewForTask(input.taskId);
-    const priorEvidence =
-      prior === undefined
-        ? undefined
-        : yield* previousReviewEvidence(dependencies.persistence, prior);
-    const proposalDiff =
-      prior === undefined
-        ? undefined
-        : deterministicProposalDiff(proposalKeyOf(prior.proposal), proposalKeyOf(started.proposal));
-
-    const copyFiles = repoConfig.config.validationWorkspace?.copyFiles ?? [];
+    const copyFiles: readonly string[] = [];
     const prepare = taskReviewPrepareConfig(repoConfig.config.prepare);
     const agentEnvironment = repoAgentEnvironment(repoConfig.config);
     const workspace = yield* createTaskReviewWorkspace<
@@ -239,16 +201,12 @@ const submitTask = (
           proposal: started.proposal,
           baseCommit: head.commit,
           policy: policy.policy,
-          ...(priorEvidence === undefined ? {} : { priorEvidence }),
-          ...(proposalDiff === undefined || proposalDiff.length === 0 ? {} : { proposalDiff }),
           ...(prepare === undefined ? {} : { prepare }),
           reviewerAgentRuntime: dependencies.reviewerAgentRuntime,
           sandbox: activeWorkspace.sandbox,
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot: activeWorkspace.worktreePath,
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-          reviewerSessionsRoot: dependencies.reviewerSessionsRoot,
-          sessionStore: taskReviewSessionStore(dependencies.persistence),
           now: input.now,
         }),
     });
@@ -328,31 +286,6 @@ const submitTask = (
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
-    const indexed = yield* indexTaskReviewTranscripts(dependencies.persistence, {
-      taskId: input.taskId,
-      reviewerSessionsRoot: dependencies.reviewerSessionsRoot,
-    });
-    if (!indexed.ok) {
-      yield* dependencies.persistence.recordCompletionFailure({
-        reviewId,
-        operationName: "index_task_review_transcripts",
-        errorMessage: indexed.reason,
-        now: input.now,
-      });
-      const completionFailure = yield* dependencies.persistence.getCompletionFailure(reviewId);
-      return {
-        ok: false as const,
-        code: "review_cleanup_pending" as const,
-        reviewId,
-        completionFailure: completionFailure ?? {
-          reviewId,
-          operationName: "index_task_review_transcripts",
-          errorMessage: indexed.reason,
-          createdAt: input.now,
-        },
-      };
-    }
-
     const findings = phase?.findings ?? [];
     const outcome = phase?.outcome ?? "blocked";
     const completed = yield* dependencies.persistence.complete({
@@ -405,48 +338,6 @@ const toolingFailedResult = (
     };
   });
 
-const previousReviewEvidence = (
-  persistence: TaskReviewPersistence,
-  prior: TaskReviewRecord,
-): Effect.Effect<TaskReviewHistoryEvidence, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const findings = yield* persistence.listFindings(prior.id);
-    return {
-      reviewId: prior.id,
-      outcome: prior.outcome === "passed" ? "passed" : "blocked",
-      findings: findings.map(({ title, description, evidence, files }) => ({
-        title,
-        description,
-        evidence,
-        files,
-      })),
-    };
-  });
-
-const proposalKeyOf = (proposal: TaskReviewProposal) => ({
-  title: proposal.title,
-  description: proposal.description,
-  dependencyIds: proposal.dependencies.map((dependency) => dependency.taskId),
-});
-
-const taskReviewSessionStore = (
-  persistence: TaskReviewPersistence,
-): {
-  readonly get: (
-    taskId: PublicTaskId,
-    producer: string,
-  ) => Effect.Effect<TaskReviewSessionRecord | undefined, RepositoryStorageError>;
-  readonly save: (input: TaskReviewSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
-  readonly remove: (
-    taskId: PublicTaskId,
-    producer: string,
-  ) => Effect.Effect<void, RepositoryStorageError>;
-} => ({
-  get: (taskId, producer) => persistence.getTaskReviewSession(taskId, producer),
-  save: (input) => persistence.saveTaskReviewSession(input),
-  remove: (taskId, producer) => persistence.removeTaskReviewSession(taskId, producer),
-});
-
 const defaultTaskReviewPrepareTimeoutSeconds = 1200;
 
 const taskReviewPrepareConfig = (
@@ -471,26 +362,12 @@ const runTaskReviewPhases = (input: {
   readonly proposal: TaskReviewProposal;
   readonly baseCommit: string;
   readonly policy: TaskReviewPolicy;
-  readonly priorEvidence?: TaskReviewHistoryEvidence;
-  readonly proposalDiff?: string;
   readonly prepare?: SubmitPrepareConfig;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
   readonly agentEnvironment?: readonly string[];
-  readonly reviewerSessionsRoot: string;
-  readonly sessionStore: {
-    readonly get: (
-      taskId: PublicTaskId,
-      producer: string,
-    ) => Effect.Effect<TaskReviewSessionRecord | undefined, RepositoryStorageError>;
-    readonly save: (input: TaskReviewSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
-    readonly remove: (
-      taskId: PublicTaskId,
-      producer: string,
-    ) => Effect.Effect<void, RepositoryStorageError>;
-  };
   readonly now: string;
 }): Effect.Effect<TaskReviewPhaseResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -531,77 +408,22 @@ const runTaskReviewPhases = (input: {
       }
     }
 
-    const identity = {
-      taskId: input.taskId,
-      producer: "task_review" as const,
-      agentProfile: input.policy.profile,
-      instructions: input.policy.instructions,
+    const result = yield* input.reviewerAgentRuntime.review({
+      sandbox: input.sandbox,
+      reviewer: "task_review",
+      validationRunId: input.reviewId,
+      availableArtifactRefs: [],
+      prompt: buildTaskReviewerPrompt({
+        reviewId: input.reviewId,
+        baseCommit: input.baseCommit,
+        proposal: input.proposal,
+        policy: input.policy,
+      }),
+      profile: input.policy.profile,
+      commandCwd: input.commandCwd,
+      ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
-      resources: {
-        ...(input.policy.profile.profile.runtimeConfig?.extensions === undefined
-          ? {}
-          : { extensions: input.policy.profile.profile.runtimeConfig.extensions }),
-        ...(input.policy.profile.profile.runtimeConfig?.skills === undefined
-          ? {}
-          : { skills: input.policy.profile.profile.runtimeConfig.skills }),
-        ...(input.policy.profile.profile.runtimeConfig?.tools === undefined
-          ? {}
-          : { tools: input.policy.profile.profile.runtimeConfig.tools }),
-        ...(input.policy.profile.profile.runtimeConfig?.contextFileDiscovery === undefined
-          ? {}
-          : {
-              contextFileDiscovery: input.policy.profile.profile.runtimeConfig.contextFileDiscovery,
-            }),
-      },
-    };
-    const fingerprint = reviewerSessionFingerprint(identity);
-    const stored = yield* input.sessionStore.get(input.taskId, "task_review");
-    const compatible =
-      stored !== undefined &&
-      stored.fingerprint === fingerprint &&
-      stored.sessionReference.length > 0;
-    const review = (resumeSession?: string) =>
-      input.reviewerAgentRuntime.review({
-        sandbox: input.sandbox,
-        reviewer: "task_review",
-        validationRunId: input.reviewId,
-        availableArtifactRefs: [],
-        prompt:
-          compatible && resumeSession !== undefined
-            ? buildTaskReviewContinuationPrompt({
-                reviewId: input.reviewId,
-                baseCommit: input.baseCommit,
-                proposal: input.proposal,
-                ...(input.priorEvidence === undefined ? {} : { priorOutcome: input.priorEvidence }),
-                ...(input.proposalDiff === undefined ? {} : { proposalDiff: input.proposalDiff }),
-              })
-            : buildTaskReviewerPrompt({
-                reviewId: input.reviewId,
-                baseCommit: input.baseCommit,
-                proposal: input.proposal,
-                policy: input.policy,
-                ...(input.priorEvidence === undefined ? {} : { priorOutcome: input.priorEvidence }),
-                ...(input.proposalDiff === undefined ? {} : { proposalDiff: input.proposalDiff }),
-              }),
-        profile: input.policy.profile,
-        commandCwd: input.commandCwd,
-        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-        ...(input.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.agentEnvironment }),
-        sessionStorageRoot: reviewerSessionsPath(
-          input.reviewerSessionsRoot,
-          input.taskId,
-          "task_review",
-        ),
-        ...(resumeSession === undefined ? {} : { resumeSession }),
-      });
-    let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
-    if (!provisional.ok && compatible && provisional.sessionUsability === "unusable") {
-      yield* input.sessionStore.remove(input.taskId, "task_review");
-      provisional = yield* review();
-    }
-    const result = provisional;
+    });
     if (!result.ok) {
       return {
         outcome: "blocked" as const,
@@ -636,27 +458,6 @@ const runTaskReviewPhases = (input: {
       };
     }
     const decoded = decodedAttempt.right;
-    const sessionPermissionsOk =
-      result.sessionFilePath === undefined || chmodSessionFile(result.sessionFilePath);
-    if (result.sessionFilePath !== undefined && !sessionPermissionsOk) {
-      return {
-        outcome: "blocked" as const,
-        findings: [],
-        toolingFailure: taskReviewToolingFailureRecord({
-          errorKind: "reviewer_session_hardening_failed",
-          operationName: "harden_reviewer_session_permissions",
-          errorMessage: `Reviewer session permissions could not be hardened: ${result.sessionFilePath}`,
-        }),
-      };
-    }
-    if (sessionPermissionsOk) {
-      yield* input.sessionStore.save({
-        taskId: input.taskId,
-        producer: "task_review",
-        fingerprint,
-        sessionReference: result.sessionReference ?? "",
-      });
-    }
     const findings = reviewerOutputToFindings(input.reviewId, decoded);
     return {
       outcome: findings.length === 0 ? "passed" : "blocked",
@@ -671,20 +472,3 @@ const policyResolutionMessage = (error: unknown): string => {
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-const chmodSessionFile = (path: string): boolean => {
-  try {
-    const stat = statSync(path);
-    if (stat.isDirectory()) {
-      for (const entry of readdirSync(path)) {
-        if (!chmodSessionFile(`${path}/${entry}`)) return false;
-      }
-      chmodSync(path, 0o700);
-    } else {
-      chmodSync(path, 0o600);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-};
