@@ -454,7 +454,12 @@ describe("GitHub pull request gateway", () => {
         if (args[0] === "remote")
           return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
         if (args.includes("ls-remote")) return { ok: true, stdout: "" };
-        return { ok: false, status: 1, stderr: "x".repeat(2000) };
+        return {
+          ok: false,
+          status: 1,
+          stdout: "https://github.com/acme/widgets.git",
+          stderr: "Authorization: SUPERSECRET",
+        };
       },
       runGh: () => ({ ok: true, stdout: "" }),
     });
@@ -473,7 +478,7 @@ describe("GitHub pull request gateway", () => {
     ).toMatchObject({
       ok: false,
       code: "push_failed",
-      evidence: { operation: "branch_push", exitStatus: 1, stderr: expect.any(String) },
+      evidence: { operation: "branch_push", exitStatus: 1 },
     });
     const result = gateway.createPullRequest({
       owner: "acme",
@@ -487,7 +492,13 @@ describe("GitHub pull request gateway", () => {
       body: "Body",
     });
     if (result.ok) throw new Error("Expected push failure evidence");
-    expect(result.evidence?.stderr?.length).toBeLessThanOrEqual(1000);
+    expect(result.evidence).toEqual({
+      operation: "branch_push",
+      classification: "rejected",
+      exitStatus: 1,
+    });
+    expect(JSON.stringify(result)).not.toContain("https://");
+    expect(JSON.stringify(result)).not.toContain("SUPERSECRET");
   });
 
   it("rejects unsafe push destinations without a push or pull request mutation", () => {

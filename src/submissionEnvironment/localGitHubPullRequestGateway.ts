@@ -29,14 +29,6 @@ export type PublicationCommandResult =
       readonly status?: number;
     };
 
-const bounded = (value: string): string =>
-  value
-    .replace(
-      /((?:token|password|secret|authorization)["']?\s*[:=]\s*)(?:\r?\n\s*)?[^\r\n]*/gi,
-      "$1[redacted]",
-    )
-    .replace(/https?:\/\/[^\s/@]+:[^\s@]+@/gi, "https://[redacted]@")
-    .slice(0, 1000);
 const classifyCommandFailure = (result: PublicationCommandResult): "rejected" | "unavailable" =>
   result.status === undefined && result.stdout === undefined && result.stderr === undefined
     ? "unavailable"
@@ -51,14 +43,11 @@ const evidence = (
     | "pull_request_update",
   result: PublicationCommandResult,
   classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable",
-  parseFailure?: string,
+  _parseFailure?: string,
 ) => ({
   operation,
   classification,
   ...(result.status === undefined ? {} : { exitStatus: result.status }),
-  ...(result.stdout === undefined ? {} : { stdout: bounded(result.stdout) }),
-  ...(result.stderr === undefined ? {} : { stderr: bounded(result.stderr) }),
-  ...(parseFailure === undefined ? {} : { parseFailure: bounded(parseFailure) }),
 });
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;

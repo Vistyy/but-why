@@ -28,9 +28,6 @@ export type PublicationFailureEvidence = {
   readonly destinationOwner?: string;
   readonly destinationRepo?: string;
   readonly exitStatus?: number;
-  readonly stdout?: string;
-  readonly stderr?: string;
-  readonly parseFailure?: string;
 };
 
 export type GitHubPullRequestRequest = {
