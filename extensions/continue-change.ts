@@ -231,6 +231,7 @@ const visibleShellText = (rawCommand: string): string => {
   let result = "";
   let quote: "'" | '"' | undefined;
   let comment = false;
+  let arrayDepth = 0;
   for (let index = 0; index < command.length; index += 1) {
     const character = command[index] ?? "";
     if (comment) {
@@ -240,6 +241,29 @@ const visibleShellText = (rawCommand: string): string => {
       } else {
         result += " ";
       }
+      continue;
+    }
+    if (arrayDepth > 0 && quote === undefined) {
+      if (character === "$" && command[index + 1] === "(") {
+        const closing = findCommandSubstitutionEnd(command, index + 2);
+        if (closing !== undefined) {
+          result += `( ${visibleShellText(command.slice(index + 2, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (character === "`") {
+        const closing = command.indexOf("`", index + 1);
+        if (closing !== -1) {
+          result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (character === "'" || character === '"') quote = character;
+      else if (character === "(") arrayDepth += 1;
+      else if (character === ")") arrayDepth -= 1;
+      result += " ";
       continue;
     }
     if (quote !== undefined) {
@@ -268,7 +292,11 @@ const visibleShellText = (rawCommand: string): string => {
       }
       continue;
     }
-    if (character === "`") {
+    if (character === "=" && command[index + 1] === "(") {
+      arrayDepth = 1;
+      result += "  ";
+      index += 1;
+    } else if (character === "`") {
       const closing = command.indexOf("`", index + 1);
       if (closing === -1) {
         result += " ";

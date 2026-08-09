@@ -196,7 +196,7 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("tool_call", {
         ...submit,
         toolCallId: "unrelated-1",
-        input: { command: `commands=(just by change submit ${changeId})` },
+        input: { command: `commands=(\n  just by change submit ${changeId}\n)` },
       }),
     ).toBeUndefined();
     expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-2" })).toBeUndefined();
