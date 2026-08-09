@@ -552,6 +552,69 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("preserves publication after an uncertain update readback is unavailable", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote: GitHubPullRequest | undefined = pullRequest(branchHead);
+        let updateCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => remote,
+            createPullRequest: () => ({ ok: true, pullRequest: pullRequest(branchHead) }),
+            updatePullRequest: () => {
+              updateCalls += 1;
+              remote = undefined;
+              return {
+                ok: false as const,
+                code: "remote_response_lost" as const,
+                evidence: {
+                  operation: "pull_request_update" as const,
+                  classification: "lost_response" as const,
+                },
+              };
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(
+          fixture,
+          "Unavailable Update Readback",
+          "2026-07-22T10:05:00.000Z",
+        );
+        branchHead = next.captured.headSha;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: { operation: "pull_request_update", classification: "lost_response" },
+          recoveryEvidence: { operation: "remote_lookup", classification: "unavailable" },
+        });
+        expect(updateCalls).toBe(1);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: fixture.captured.candidateId,
+            expectedHeadSha: fixture.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
   it.scoped("returns a remote mismatch after one exact stale confirmation read", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
