@@ -1,9 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { expect } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, it, vi } from "vitest";
+import { describe, vi } from "vitest";
 
 import type {
   ReviewerAgentResult,
@@ -97,6 +97,7 @@ type PhaseHarness = {
   readonly run: (
     runtime: ReviewerAgentRuntime<ReviewerOutput>,
     overrides?: Partial<RunSpecialistReviewPhaseInput>,
+    includeAcceptanceContext?: boolean,
   ) => ReturnType<typeof runSpecialistReviewPhase>;
 };
 
@@ -125,13 +126,13 @@ const phaseHarness = (): PhaseHarness => {
   return {
     rounds,
     sessions,
-    run: (runtime, overrides = {}) =>
+    run: (runtime, overrides = {}, includeAcceptanceContext = true) =>
       runSpecialistReviewPhase({
         validationRunId: "123e4567-e89b-42d3-a456-426614174000",
         changeId: "change-1",
         candidate,
         policies: [policy("standards")],
-        acceptanceContext,
+        ...(includeAcceptanceContext ? { acceptanceContext } : {}),
         agentEnvironment: ["nix", "develop", "-c"],
         runtime,
         sandbox,
@@ -159,448 +160,499 @@ const phaseHarness = (): PhaseHarness => {
 };
 
 describe("Candidate Specialist Review phase", () => {
-  it("uses the exact Candidate and named concern in configured order without suppressing later Specialists", async () => {
-    const harness = phaseHarness();
-    const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
-      if (input.reviewer === "zeta") return Effect.succeed(success([finding("Zeta Finding")]));
-      if (input.reviewer === "broken")
-        return Effect.succeed({
-          ok: false as const,
-          failure: outputFailure("broken", "Broken Specialist output."),
-          sessionUsability: "unknown" as const,
-          attempts: 2,
-          stdout: "invalid specialist output",
+  it.scoped(
+    "uses the exact Candidate and named concern in configured order without suppressing later Specialists",
+    () =>
+      Effect.gen(function* () {
+        const harness = phaseHarness();
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
+          if (input.reviewer === "zeta") return Effect.succeed(success([finding("Zeta Finding")]));
+          if (input.reviewer === "broken")
+            return Effect.succeed({
+              ok: false as const,
+              failure: outputFailure("broken", "Broken Specialist output."),
+              sessionUsability: "unknown" as const,
+              attempts: 2,
+              stdout: "invalid specialist output",
+            });
+          return Effect.succeed(success([], `${input.reviewer}-session`));
         });
-      return Effect.succeed(success([], `${input.reviewer}-session`));
-    });
 
-    const result = await Effect.runPromise(
-      harness.run({ review }, { policies: [policy("zeta"), policy("broken"), policy("alpha")] }),
-    );
+        const result = yield* Effect.suspend(() =>
+          harness.run(
+            { review },
+            { policies: [policy("zeta"), policy("broken"), policy("alpha")] },
+          ),
+        );
 
-    expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual(["zeta", "broken", "alpha"]);
-    for (const [input] of review.mock.calls) {
-      expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
-      expect(input.prompt).toContain(candidate.changeBaseSha);
-      expect(input.prompt).toContain(candidate.headSha);
-      expect(input.prompt).toContain(`${input.reviewer} concern instructions`);
-      expect(input.prompt).toContain(acceptanceContext.description);
-      expect(input.prompt).not.toContain(candidate.candidateId);
-      for (const other of ["zeta", "broken", "alpha"].filter(
-        (producer) => producer !== input.reviewer,
-      )) {
-        expect(input.prompt).not.toContain(`${other} concern instructions`);
-      }
-    }
-    expect(result).toMatchObject({
-      findings: 1,
-      reviewerEvidence: [{ producer: "zeta" }, { producer: "broken" }, { producer: "alpha" }],
-    });
-    expect(result.toolingFailures).toHaveLength(1);
-    expect(
-      harness.rounds.map(({ producer, roundNumber, roundStatus, findings }) => ({
-        producer,
-        roundNumber,
-        roundStatus,
-        findingTitles: findings.map((item) => item.title),
-      })),
-    ).toEqual([
-      { producer: "zeta", roundNumber: 1, roundStatus: "failed", findingTitles: ["Zeta Finding"] },
-      { producer: "broken", roundNumber: 2, roundStatus: "failed", findingTitles: [] },
-      { producer: "alpha", roundNumber: 3, roundStatus: "passed", findingTitles: [] },
-    ]);
-    for (const round of harness.rounds) {
-      expect(round.artifactRecords).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ phase: "specialist_review", producer: round.producer }),
-        ]),
-      );
-    }
-
-    const tasklessReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-      Effect.succeed(success()),
-    );
-    await Effect.runPromise(
-      harness.run({ review: tasklessReview }, { acceptanceContext: undefined }),
-    );
-    expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
-      "authoritative scope constraint",
-    );
-    expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(acceptanceContext.description);
-  });
-
-  it("rechecks prior producer Findings in the Specialist revision turn and fails closed when revision fails", async () => {
-    const earlier = finding("Earlier Specialist Finding");
-    const harness = phaseHarness();
-    const reports: ReviewerAgentResult<ReviewerOutput>[] = [
-      success([finding("Provisional Finding")], "provisional-session"),
-      success([], "final-session"),
-    ];
-    const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-      Effect.succeed(reports.shift() ?? success()),
-    );
-
-    const clean = await Effect.runPromise(
-      harness.run(
-        { review },
-        { listPreviousCandidateReviewerFindings: () => Effect.succeed([earlier]) },
-      ),
-    );
-
-    expect(clean).toMatchObject({
-      findings: 0,
-      toolingFailures: [],
-      reviewerEvidence: [{ reviewCalls: 2 }],
-    });
-    expect(review.mock.calls[0]?.[0].prompt).not.toContain(earlier.title);
-    expect(review.mock.calls[1]?.[0].prompt).toContain(earlier.title);
-    expect(review.mock.calls[1]?.[0].prompt).toContain("Provisional Finding");
-    expect(harness.rounds[0]?.roundStatus).toBe("passed");
-    expect(harness.rounds[0]?.findings).toEqual([]);
-
-    const failedHarness = phaseHarness();
-    const revisionFailure = new SandcastleToolingFailed({
-      operationName: "run_reviewer_agent",
-      message: "Specialist revision failed.",
-    });
-    let calls = 0;
-    const failed = await Effect.runPromise(
-      failedHarness.run(
-        {
-          review: () => {
-            calls += 1;
-            return Effect.succeed(
-              calls === 1
-                ? success([finding("Provisional Finding")], "provisional-session")
-                : {
-                    ok: false as const,
-                    failure: revisionFailure,
-                    sessionUsability: "unknown" as const,
-                    attempts: 1,
-                    stdout: "revision failed",
-                  },
-            );
-          },
-        },
-        { listPreviousCandidateReviewerFindings: () => Effect.succeed([earlier]) },
-      ),
-    );
-
-    expect(failed).toMatchObject({ findings: 0, reviewerEvidence: [{ reviewCalls: 2 }] });
-    expect(failed.toolingFailures).toEqual([
-      expect.objectContaining({ message: "Specialist revision failed." }),
-    ]);
-    expect(failedHarness.rounds[0]?.roundStatus).toBe("failed");
-    expect(failedHarness.rounds[0]?.findings).toEqual([]);
-  });
-
-  it("keeps resumed, restarted, and unknown-failed Specialist sessions producer-specific", async () => {
-    const harness = phaseHarness();
-    const initialReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
-      Effect.succeed(success([], `${input.reviewer}-session`)),
-    );
-    await Effect.runPromise(
-      harness.run({ review: initialReview }, { policies: [policy("alpha"), policy("beta")] }),
-    );
-
-    const alphaResumeFailure = outputFailure("alpha", "Alpha resumed session is unusable.");
-    const betaTemporaryFailure = outputFailure("beta", "Beta session status is unknown.");
-    const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
-      if (input.reviewer === "alpha" && input.resumeSession !== undefined)
-        return Effect.succeed({
-          ok: false as const,
-          failure: alphaResumeFailure,
-          sessionUsability: "unusable" as const,
-          attempts: 1,
-          stdout: "alpha resume failed",
+        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+          "zeta",
+          "broken",
+          "alpha",
+        ]);
+        for (const [input] of review.mock.calls) {
+          expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+          expect(input.prompt).toContain(candidate.changeBaseSha);
+          expect(input.prompt).toContain(candidate.headSha);
+          expect(input.prompt).toContain(`${input.reviewer} concern instructions`);
+          expect(input.prompt).toContain(acceptanceContext.description);
+          expect(input.prompt).not.toContain(candidate.candidateId);
+          for (const other of ["zeta", "broken", "alpha"].filter(
+            (producer) => producer !== input.reviewer,
+          )) {
+            expect(input.prompt).not.toContain(`${other} concern instructions`);
+          }
+        }
+        expect(result).toMatchObject({
+          findings: 1,
+          reviewerEvidence: [{ producer: "zeta" }, { producer: "broken" }, { producer: "alpha" }],
         });
-      if (input.reviewer === "alpha") return Effect.succeed(success([], "alpha-fresh-session"));
-      return Effect.succeed({
-        ok: false as const,
-        failure: betaTemporaryFailure,
-        sessionUsability: "unknown" as const,
-        attempts: 1,
-        stdout: "beta temporary failure",
-      });
-    });
-
-    const result = await Effect.runPromise(
-      harness.run(
-        { review: successorReview },
-        {
-          validationRunId: "223e4567-e89b-42d3-a456-426614174000",
-          candidate: { ...candidate, candidateId: "candidate-2", headSha: "3".repeat(40) },
-          policies: [policy("alpha"), policy("beta")],
-          sandbox: {
-            exec: async () => ({ exitCode: 0, stdout: `${"3".repeat(40)}\n`, stderr: "" }),
-            run: async () => {
-              throw new Error("Captured Specialist runtime must not call Sandbox.run");
-            },
+        expect(result.toolingFailures).toHaveLength(1);
+        expect(
+          harness.rounds.map(({ producer, roundNumber, roundStatus, findings }) => ({
+            producer,
+            roundNumber,
+            roundStatus,
+            findingTitles: findings.map((item) => item.title),
+          })),
+        ).toEqual([
+          {
+            producer: "zeta",
+            roundNumber: 1,
+            roundStatus: "failed",
+            findingTitles: ["Zeta Finding"],
           },
-        },
-      ),
-    );
+          { producer: "broken", roundNumber: 2, roundStatus: "failed", findingTitles: [] },
+          { producer: "alpha", roundNumber: 3, roundStatus: "passed", findingTitles: [] },
+        ]);
+        for (const round of harness.rounds) {
+          expect(round.artifactRecords).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ phase: "specialist_review", producer: round.producer }),
+            ]),
+          );
+        }
 
-    expect(
-      successorReview.mock.calls.map(([input]) => [input.reviewer, input.resumeSession]),
-    ).toEqual([
-      ["alpha", "alpha-session"],
-      ["alpha", undefined],
-      ["beta", "beta-session"],
-    ]);
-    expect(result).toMatchObject({
-      findings: 0,
-      reviewerEvidence: [
-        { producer: "alpha", continuity: "restarted", reviewCalls: 2 },
-        { producer: "beta", continuity: "resumed", reviewCalls: 1 },
-      ],
-    });
-    expect(result.toolingFailures).toHaveLength(1);
-    expect(harness.sessions.get("change-1/alpha")?.sessionReference).toBe("alpha-fresh-session");
-    expect(harness.sessions.get("change-1/beta")?.sessionReference).toBe("beta-session");
-  });
+        const tasklessReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed(success()),
+        );
+        yield* harness.run({ review: tasklessReview }, {}, false);
+        expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
+          "authoritative scope constraint",
+        );
+        expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
+          acceptanceContext.description,
+        );
+      }),
+  );
 
-  it("persists producer-specific rounds, Findings, Tooling Failures, and Artifacts across a clean successor", async () => {
-    const repo = candidateReadyRepo();
-    const first = await Effect.runPromise(captureLocalCandidate({ cwd: repo, now }));
-    if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
-    const artifactsRoot = join(commonDirectory(repo), "but-why", "artifacts");
-    const validation = candidateValidationForTest({
-      localRepositoryMainCheckoutRoot: repo,
-      artifactsRoot,
-      repository: {
-        statePath: candidateRepositoryConfig(repo).statePath,
-        commonDirectory: commonDirectory(repo),
-      },
-    });
-    const broken = outputFailure("broken", "Broken durable Specialist output.");
-    const firstReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
-      input.reviewer === "standards"
-        ? Effect.succeed(success([finding("Durable Specialist Finding")]))
-        : Effect.succeed({
-            ok: false as const,
-            failure: broken,
-            sessionUsability: "unknown" as const,
-            attempts: 2,
-            stdout: "invalid durable output",
-          }),
-    );
+  it.scoped(
+    "rechecks prior producer Findings in the Specialist revision turn and fails closed when revision fails",
+    () =>
+      Effect.gen(function* () {
+        const earlier = finding("Earlier Specialist Finding");
+        const harness = phaseHarness();
+        const reports: ReviewerAgentResult<ReviewerOutput>[] = [
+          success([finding("Provisional Finding")], "provisional-session"),
+          success([], "final-session"),
+        ];
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed(reports.shift() ?? success()),
+        );
 
-    const runPersisted = (
-      captured: typeof first,
-      policies: readonly SpecialistReviewPolicy[],
-      runtime: ReviewerAgentRuntime<ReviewerOutput>,
-      runNow: string,
-    ) =>
-      validation.runWithPersistence((persistence) =>
-        Effect.gen(function* () {
-          const started = yield* persistence.startOrReuse({
-            candidateId: captured.candidateId,
-            headSha: captured.headSha,
-            changeBaseSha: captured.changeBaseSha,
-            policy: { checks: [], copyFiles: [], specialistReviews: policies },
-            now: runNow,
-          });
-          if (started.reused || "blocked" in started)
-            throw new Error("Expected a new unblocked Specialist Validation Run");
-          const result = yield* runSpecialistReviewPhase({
-            validationRunId: started.validationRunId,
-            changeId: captured.changeId,
-            candidate: captured,
-            policies,
-            runtime,
-            sandbox: {
-              exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
-              run: async () => {
-                throw new Error("Captured Specialist runtime must not call Sandbox.run");
+        const clean = yield* Effect.suspend(() =>
+          harness.run(
+            { review },
+            { listPreviousCandidateReviewerFindings: () => Effect.succeed([earlier]) },
+          ),
+        );
+
+        expect(clean).toMatchObject({
+          findings: 0,
+          toolingFailures: [],
+          reviewerEvidence: [{ reviewCalls: 2 }],
+        });
+        expect(review.mock.calls[0]?.[0].prompt).not.toContain(earlier.title);
+        expect(review.mock.calls[1]?.[0].prompt).toContain(earlier.title);
+        expect(review.mock.calls[1]?.[0].prompt).toContain("Provisional Finding");
+        expect(harness.rounds[0]?.roundStatus).toBe("passed");
+        expect(harness.rounds[0]?.findings).toEqual([]);
+
+        const failedHarness = phaseHarness();
+        const revisionFailure = new SandcastleToolingFailed({
+          operationName: "run_reviewer_agent",
+          message: "Specialist revision failed.",
+        });
+        let calls = 0;
+        const failed = yield* Effect.suspend(() =>
+          failedHarness.run(
+            {
+              review: () => {
+                calls += 1;
+                return Effect.succeed(
+                  calls === 1
+                    ? success([finding("Provisional Finding")], "provisional-session")
+                    : {
+                        ok: false as const,
+                        failure: revisionFailure,
+                        sessionUsability: "unknown" as const,
+                        attempts: 1,
+                        stdout: "revision failed",
+                      },
+                );
               },
             },
-            artifactsRoot,
-            commandCwd: repo,
-            resourceRoot: repo,
-            allowedUntrackedFiles: [],
-            now: runNow,
-            listArtifacts: persistence.listArtifacts,
-            listPreviousCandidateReviewerFindings:
-              persistence.listPreviousCandidateReviewerFindings,
-            recordSpecialistRound: persistence.recordSpecialistRound,
-          });
-          for (const toolingFailure of result.toolingFailures) {
-            yield* persistence.recordToolingFailure({
-              validationRunId: started.validationRunId,
-              ...validationToolingFailureRecord(toolingFailure),
-              now: runNow,
-            });
-          }
-          const outcome =
-            result.toolingFailures.length > 0
-              ? "tooling_failed"
-              : result.findings === 1
-                ? "blocked"
-                : "passed";
-          yield* persistence.complete({
-            validationRunId: started.validationRunId,
-            outcome,
-            now: runNow,
-          });
-          return { validationRunId: started.validationRunId, result, outcome };
-        }),
-      );
+            { listPreviousCandidateReviewerFindings: () => Effect.succeed([earlier]) },
+          ),
+        );
 
-    const durable = await Effect.runPromise(
-      runPersisted(first, [policy("standards"), policy("broken")], { review: firstReview }, now),
-    );
-    expect(durable.outcome).toBe("tooling_failed");
-    expect(await Effect.runPromise(validation.listRounds(durable.validationRunId))).toEqual([
-      { producer: "standards", status: "failed" },
-      { producer: "broken", status: "failed" },
-    ]);
-    expect(
-      (await Effect.runPromise(validation.listFindings(durable.validationRunId))).map(
-        (item) => item.title,
-      ),
-    ).toEqual(["Durable Specialist Finding"]);
-    expect(
-      await Effect.runPromise(validation.listToolingFailures(durable.validationRunId)),
-    ).toEqual([
-      expect.objectContaining({
-        errorKind: "reviewer_output_contract_failed",
-        errorMessage: expect.stringContaining("Broken durable Specialist output."),
+        expect(failed).toMatchObject({ findings: 0, reviewerEvidence: [{ reviewCalls: 2 }] });
+        expect(failed.toolingFailures).toEqual([
+          expect.objectContaining({ message: "Specialist revision failed." }),
+        ]);
+        expect(failedHarness.rounds[0]?.roundStatus).toBe("failed");
+        expect(failedHarness.rounds[0]?.findings).toEqual([]);
       }),
-    ]);
-    expect(await Effect.runPromise(validation.listArtifacts(durable.validationRunId))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
-        expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
-      ]),
-    );
+  );
 
-    git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
-    const successor = await Effect.runPromise(
-      captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:05:00.000Z" }),
-    );
-    if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
-    const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-      Effect.succeed(success()),
-    );
-    const clean = await Effect.runPromise(
-      runPersisted(
-        successor,
-        [policy("standards")],
-        { review: successorReview },
-        "2026-07-15T10:05:00.000Z",
-      ),
-    );
+  it.scoped(
+    "keeps resumed, restarted, and unknown-failed Specialist sessions producer-specific",
+    () =>
+      Effect.gen(function* () {
+        const harness = phaseHarness();
+        const initialReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
+          Effect.succeed(success([], `${input.reviewer}-session`)),
+        );
+        yield* Effect.suspend(() =>
+          harness.run({ review: initialReview }, { policies: [policy("alpha"), policy("beta")] }),
+        );
 
-    expect(clean.outcome).toBe("passed");
-    expect(successorReview).toHaveBeenCalledTimes(2);
-    expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
-    expect(successorReview.mock.calls[1]?.[0].prompt).toContain("Durable Specialist Finding");
-    expect(await Effect.runPromise(validation.listFindings(clean.validationRunId))).toEqual([]);
-    expect(
-      (await Effect.runPromise(validation.listFindings(durable.validationRunId))).map(
-        (item) => item.title,
-      ),
-    ).toEqual(["Durable Specialist Finding"]);
-  }, 15_000);
-
-  it("cannot pass after producer runtime or Artifact-recording failure", async () => {
-    const runtimeHarness = phaseHarness();
-    const launchFailure = new SandcastleToolingFailed({
-      operationName: "run_reviewer_agent",
-      message: "Reviewer launch failed.",
-    });
-    const runtimeResult = await Effect.runPromise(
-      runtimeHarness.run({
-        review: () =>
-          Effect.succeed({
+        const alphaResumeFailure = outputFailure("alpha", "Alpha resumed session is unusable.");
+        const betaTemporaryFailure = outputFailure("beta", "Beta session status is unknown.");
+        const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) => {
+          if (input.reviewer === "alpha" && input.resumeSession !== undefined)
+            return Effect.succeed({
+              ok: false as const,
+              failure: alphaResumeFailure,
+              sessionUsability: "unusable" as const,
+              attempts: 1,
+              stdout: "alpha resume failed",
+            });
+          if (input.reviewer === "alpha") return Effect.succeed(success([], "alpha-fresh-session"));
+          return Effect.succeed({
             ok: false as const,
-            failure: launchFailure,
+            failure: betaTemporaryFailure,
             sessionUsability: "unknown" as const,
             attempts: 1,
-            stdout: "",
-          }),
-      }),
-    );
-    expect(runtimeResult).toMatchObject({
-      findings: 0,
-      toolingFailures: [{ message: "Reviewer launch failed." }],
-    });
-    expect(runtimeHarness.rounds[0]?.roundStatus).toBe("failed");
-
-    const artifactHarness = phaseHarness();
-    const nonDirectory = join(createTestWorkspace(), "not-a-directory");
-    writeFileSync(nonDirectory, "blocks Artifact directory creation");
-    const artifactFailure = await Effect.runPromise(
-      Effect.flip(
-        artifactHarness.run(
-          { review: () => Effect.succeed(success()) },
-          { artifactsRoot: nonDirectory },
-        ),
-      ),
-    );
-    expect(artifactFailure).toMatchObject({
-      _tag: "InfrastructureToolingFailed",
-      operationName: "record_reviewer_artifacts",
-    });
-    expect(artifactHarness.rounds).toEqual([]);
-  });
-
-  it("rejects real Candidate mutation before recording a Specialist result", async () => {
-    const repo = candidateReadyRepo();
-    const captured = await Effect.runPromise(captureLocalCandidate({ cwd: repo, now }));
-    if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-    const rounds: RecordCandidateSpecialistRoundInput[] = [];
-    const sandbox: Pick<Sandbox, "exec" | "run"> = {
-      exec: async (command, options) => {
-        const result = runTestProcess("bash", ["-lc", command], {
-          cwd: options?.cwd ?? repo,
+            stdout: "beta temporary failure",
+          });
         });
-        return {
-          exitCode: result.status ?? 1,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        };
-      },
-      run: async () => {
-        throw new Error("Captured Specialist runtime must not call Sandbox.run");
-      },
-    };
-    const integrityFailure = await Effect.runPromise(
-      Effect.flip(
-        runSpecialistReviewPhase({
-          validationRunId: "323e4567-e89b-42d3-a456-426614174000",
-          changeId: captured.changeId,
-          candidate: captured,
-          policies: [policy("standards")],
-          runtime: {
-            review: () =>
-              Effect.sync(() => {
-                writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
-                return success();
-              }),
+
+        const result = yield* Effect.suspend(() =>
+          harness.run(
+            { review: successorReview },
+            {
+              validationRunId: "223e4567-e89b-42d3-a456-426614174000",
+              candidate: { ...candidate, candidateId: "candidate-2", headSha: "3".repeat(40) },
+              policies: [policy("alpha"), policy("beta")],
+              sandbox: {
+                exec: async () => ({ exitCode: 0, stdout: `${"3".repeat(40)}\n`, stderr: "" }),
+                run: async () => {
+                  throw new Error("Captured Specialist runtime must not call Sandbox.run");
+                },
+              },
+            },
+          ),
+        );
+
+        expect(
+          successorReview.mock.calls.map(([input]) => [input.reviewer, input.resumeSession]),
+        ).toEqual([
+          ["alpha", "alpha-session"],
+          ["alpha", undefined],
+          ["beta", "beta-session"],
+        ]);
+        expect(result).toMatchObject({
+          findings: 0,
+          reviewerEvidence: [
+            { producer: "alpha", continuity: "restarted", reviewCalls: 2 },
+            { producer: "beta", continuity: "resumed", reviewCalls: 1 },
+          ],
+        });
+        expect(result.toolingFailures).toHaveLength(1);
+        expect(harness.sessions.get("change-1/alpha")?.sessionReference).toBe(
+          "alpha-fresh-session",
+        );
+        expect(harness.sessions.get("change-1/beta")?.sessionReference).toBe("beta-session");
+      }),
+  );
+
+  it.scoped(
+    "persists producer-specific rounds, Findings, Tooling Failures, and Artifacts across a clean successor",
+    () =>
+      Effect.gen(function* () {
+        const repo = candidateReadyRepo();
+        const first = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
+        const artifactsRoot = join(commonDirectory(repo), "but-why", "artifacts");
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: repo,
+          artifactsRoot,
+          repository: {
+            statePath: candidateRepositoryConfig(repo).statePath,
+            commonDirectory: commonDirectory(repo),
           },
-          sandbox,
-          artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-          commandCwd: repo,
-          resourceRoot: repo,
-          allowedUntrackedFiles: [],
-          now,
-          listArtifacts: () => Effect.succeed([]),
-          listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
-          recordSpecialistRound: (round) =>
-            Effect.sync(() => {
-              rounds.push(round);
+        });
+        const broken = outputFailure("broken", "Broken durable Specialist output.");
+        const firstReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
+          input.reviewer === "standards"
+            ? Effect.succeed(success([finding("Durable Specialist Finding")]))
+            : Effect.succeed({
+                ok: false as const,
+                failure: broken,
+                sessionUsability: "unknown" as const,
+                attempts: 2,
+                stdout: "invalid durable output",
+              }),
+        );
+
+        const runPersisted = (
+          captured: typeof first,
+          policies: readonly SpecialistReviewPolicy[],
+          runtime: ReviewerAgentRuntime<ReviewerOutput>,
+          runNow: string,
+        ) =>
+          validation.runWithPersistence((persistence) =>
+            Effect.gen(function* () {
+              const started = yield* persistence.startOrReuse({
+                candidateId: captured.candidateId,
+                headSha: captured.headSha,
+                changeBaseSha: captured.changeBaseSha,
+                policy: { checks: [], copyFiles: [], specialistReviews: policies },
+                now: runNow,
+              });
+              if (started.reused || "blocked" in started)
+                throw new Error("Expected a new unblocked Specialist Validation Run");
+              const result = yield* runSpecialistReviewPhase({
+                validationRunId: started.validationRunId,
+                changeId: captured.changeId,
+                candidate: captured,
+                policies,
+                runtime,
+                sandbox: {
+                  exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
+                  run: async () => {
+                    throw new Error("Captured Specialist runtime must not call Sandbox.run");
+                  },
+                },
+                artifactsRoot,
+                commandCwd: repo,
+                resourceRoot: repo,
+                allowedUntrackedFiles: [],
+                now: runNow,
+                listArtifacts: persistence.listArtifacts,
+                listPreviousCandidateReviewerFindings:
+                  persistence.listPreviousCandidateReviewerFindings,
+                recordSpecialistRound: persistence.recordSpecialistRound,
+              });
+              for (const toolingFailure of result.toolingFailures) {
+                yield* persistence.recordToolingFailure({
+                  validationRunId: started.validationRunId,
+                  ...validationToolingFailureRecord(toolingFailure),
+                  now: runNow,
+                });
+              }
+              const outcome =
+                result.toolingFailures.length > 0
+                  ? "tooling_failed"
+                  : result.findings === 1
+                    ? "blocked"
+                    : "passed";
+              yield* persistence.complete({
+                validationRunId: started.validationRunId,
+                outcome,
+                now: runNow,
+              });
+              return { validationRunId: started.validationRunId, result, outcome };
+            }),
+          );
+
+        const durable = yield* Effect.suspend(() =>
+          runPersisted(
+            first,
+            [policy("standards"), policy("broken")],
+            { review: firstReview },
+            now,
+          ),
+        );
+        expect(durable.outcome).toBe("tooling_failed");
+        expect(yield* Effect.suspend(() => validation.listRounds(durable.validationRunId))).toEqual(
+          [
+            { producer: "standards", status: "failed" },
+            { producer: "broken", status: "failed" },
+          ],
+        );
+        expect(
+          (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
+            (item) => item.title,
+          ),
+        ).toEqual(["Durable Specialist Finding"]);
+        expect(
+          yield* Effect.suspend(() => validation.listToolingFailures(durable.validationRunId)),
+        ).toEqual([
+          expect.objectContaining({
+            errorKind: "reviewer_output_contract_failed",
+            errorMessage: expect.stringContaining("Broken durable Specialist output."),
+          }),
+        ]);
+        expect(
+          yield* Effect.suspend(() => validation.listArtifacts(durable.validationRunId)),
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
+            expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
+          ]),
+        );
+
+        git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
+        const successor = yield* Effect.suspend(() =>
+          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:05:00.000Z" }),
+        );
+        if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+        const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed(success()),
+        );
+        const clean = yield* Effect.suspend(() =>
+          runPersisted(
+            successor,
+            [policy("standards")],
+            { review: successorReview },
+            "2026-07-15T10:05:00.000Z",
+          ),
+        );
+
+        expect(clean.outcome).toBe("passed");
+        expect(successorReview).toHaveBeenCalledTimes(2);
+        expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
+          "Durable Specialist Finding",
+        );
+        expect(successorReview.mock.calls[1]?.[0].prompt).toContain("Durable Specialist Finding");
+        expect(yield* Effect.suspend(() => validation.listFindings(clean.validationRunId))).toEqual(
+          [],
+        );
+        expect(
+          (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
+            (item) => item.title,
+          ),
+        ).toEqual(["Durable Specialist Finding"]);
+      }),
+    15_000,
+  );
+
+  it.scoped("cannot pass after producer runtime or Artifact-recording failure", () =>
+    Effect.gen(function* () {
+      const runtimeHarness = phaseHarness();
+      const launchFailure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "Reviewer launch failed.",
+      });
+      const runtimeResult = yield* Effect.suspend(() =>
+        runtimeHarness.run({
+          review: () =>
+            Effect.succeed({
+              ok: false as const,
+              failure: launchFailure,
+              sessionUsability: "unknown" as const,
+              attempts: 1,
+              stdout: "",
             }),
         }),
-      ),
-    );
+      );
+      expect(runtimeResult).toMatchObject({
+        findings: 0,
+        toolingFailures: [{ message: "Reviewer launch failed." }],
+      });
+      expect(runtimeHarness.rounds[0]?.roundStatus).toBe("failed");
 
-    expect(integrityFailure).toMatchObject({
-      _tag: "GitToolingFailed",
-      operationName: "verify_candidate_head",
-    });
-    expect(rounds).toEqual([]);
-    expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);
-  }, 15_000);
+      const artifactHarness = phaseHarness();
+      const nonDirectory = join(createTestWorkspace(), "not-a-directory");
+      writeFileSync(nonDirectory, "blocks Artifact directory creation");
+      const artifactFailure = yield* Effect.suspend(() =>
+        Effect.flip(
+          artifactHarness.run(
+            { review: () => Effect.succeed(success()) },
+            { artifactsRoot: nonDirectory },
+          ),
+        ),
+      );
+      expect(artifactFailure).toMatchObject({
+        _tag: "InfrastructureToolingFailed",
+        operationName: "record_reviewer_artifacts",
+      });
+      expect(artifactHarness.rounds).toEqual([]);
+    }),
+  );
+
+  it.scoped(
+    "rejects real Candidate mutation before recording a Specialist result",
+    () =>
+      Effect.gen(function* () {
+        const repo = candidateReadyRepo();
+        const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const rounds: RecordCandidateSpecialistRoundInput[] = [];
+        const sandbox: Pick<Sandbox, "exec" | "run"> = {
+          exec: async (command, options) => {
+            const result = runTestProcess("bash", ["-lc", command], {
+              cwd: options?.cwd ?? repo,
+            });
+            return {
+              exitCode: result.status ?? 1,
+              stdout: result.stdout,
+              stderr: result.stderr,
+            };
+          },
+          run: async () => {
+            throw new Error("Captured Specialist runtime must not call Sandbox.run");
+          },
+        };
+        const integrityFailure = yield* Effect.suspend(() =>
+          Effect.flip(
+            runSpecialistReviewPhase({
+              validationRunId: "323e4567-e89b-42d3-a456-426614174000",
+              changeId: captured.changeId,
+              candidate: captured,
+              policies: [policy("standards")],
+              runtime: {
+                review: () =>
+                  Effect.sync(() => {
+                    writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
+                    return success();
+                  }),
+              },
+              sandbox,
+              artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+              commandCwd: repo,
+              resourceRoot: repo,
+              allowedUntrackedFiles: [],
+              now,
+              listArtifacts: () => Effect.succeed([]),
+              listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
+              recordSpecialistRound: (round) =>
+                Effect.sync(() => {
+                  rounds.push(round);
+                }),
+            }),
+          ),
+        );
+
+        expect(integrityFailure).toMatchObject({
+          _tag: "GitToolingFailed",
+          operationName: "verify_candidate_head",
+        });
+        expect(rounds).toEqual([]);
+        expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);
+      }),
+    15_000,
+  );
 });

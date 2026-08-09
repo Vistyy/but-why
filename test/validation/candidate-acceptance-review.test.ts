@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, layer } from "@effect/vitest";
