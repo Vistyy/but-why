@@ -2,12 +2,12 @@ import type { ChangeOwnedPullRequest, ChangePublicationTarget } from "./change.j
 import type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type GitHubPullRequest = ChangeOwnedPullRequest & {
+  readonly repository: { readonly owner: string; readonly repo: string };
   readonly baseBranch: string;
   readonly headBranch: string;
   readonly headSha: string;
-  readonly state?: "open" | "closed";
-  readonly merged?: boolean;
-  readonly repository?: { readonly owner: string; readonly repo: string };
+  readonly state: "open" | "closed";
+  readonly merged: boolean;
 };
 
 export type PublicationFailureEvidence = {
@@ -16,14 +16,21 @@ export type PublicationFailureEvidence = {
     | "push_destination"
     | "branch_push"
     | "pull_request_creation"
-    | "pull_request_update";
-  readonly classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable";
+    | "pull_request_update"
+    | "pull_request_close";
+  readonly classification:
+    | "rejected"
+    | "lost_response"
+    | "response_parse_failure"
+    | "unavailable"
+    | "conflict";
   readonly reason?:
     | "unavailable"
     | "destination_count"
     | "credentials"
     | "malformed"
-    | "repository_mismatch";
+    | "repository_mismatch"
+    | "postcondition_mismatch";
   readonly destinationCount?: number;
   readonly destinationOwner?: string;
   readonly destinationRepo?: string;
@@ -58,6 +65,7 @@ export type GitHubPullRequestMutationResult =
         | "remote_rejected"
         | "close_failed";
       readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly observedRemoteHeadSha?: string;
     };
 

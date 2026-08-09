@@ -11,7 +11,12 @@ import type {
 import { branchNameForRef } from "../changeBranch.js";
 import type { ChangePersistence } from "../changePersistence.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
-import { observeOwnedPullRequest, ownedPublication } from "../ownedPullRequestClassifier.js";
+import {
+  classifyOwnedPullRequest,
+  type OwnedPublication,
+  observeOwnedPullRequest,
+  ownedPublication,
+} from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
@@ -67,11 +72,10 @@ export type PublishCandidateResult =
         | "publication_remote_mismatch"
         | "publication_state_conflict"
         | "publication_tooling_failed";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "current_head_mismatch";
       readonly evidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly recoveryEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly expectedRemoteHeadSha?: string;
+      readonly observedRemoteHeadSha?: string;
     };
 
 type Dependencies = {
@@ -174,10 +178,19 @@ const create = (
         pending,
         created,
       );
-    if (!matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
+    if (
+      !isExactOpenPullRequest(
+        created.pullRequest,
+        created.pullRequest.number,
+        input.target,
+        headBranch,
+        expectedHeadSha,
+      )
+    )
       return {
         ok: false,
         code: "publication_remote_mismatch",
+        evidence: conflictingMutationEvidence("pull_request_creation"),
         expectedRemoteHeadSha: expectedHeadSha,
         observedRemoteHeadSha: created.pullRequest.headSha,
       };
@@ -193,13 +206,13 @@ const createFailure = (
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
-  if (failure.code === "remote_response_lost" || failure.code === "remote_response_unusable")
-    return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
   if (
-    failure.code === "remote_rejected" ||
-    failure.code === "remote_head_mismatch" ||
-    failure.code === "remote_lookup_failed"
+    failure.code === "remote_response_lost" ||
+    failure.code === "remote_response_unusable" ||
+    failure.code === "remote_rejected"
   )
+    return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
+  if (failure.code === "remote_head_mismatch" || failure.code === "remote_lookup_failed")
     return retainFailure(dependencies, pending, failure);
   const code =
     failure.code === "local_head_mismatch" ? "current_head_mismatch" : "publication_tooling_failed";
@@ -261,14 +274,14 @@ const recover = (
     if (marker === null || marker.pullRequest !== null)
       return { ok: false, code: "publication_state_conflict" };
     const found = dependencies.github.findPullRequests(marker.target, marker.headBranch);
-    if (found === undefined)
+    if (found === undefined) {
+      const failureEvidence = dependencies.github.getLastFailureEvidence?.();
       return {
         ok: false,
         code: "publication_tooling_failed",
-        ...(dependencies.github.getLastFailureEvidence?.() === undefined
-          ? {}
-          : { evidence: dependencies.github.getLastFailureEvidence?.() }),
+        ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
       };
+    }
     if (!sameTarget(marker.target, input.target))
       return { ok: false, code: "publication_state_conflict" };
     const selected = selectRecoveredPullRequest(
@@ -345,11 +358,22 @@ const createRecoveryAttempt = (
       allowExistingRemoteHead: true,
       ...metadata,
     });
-    if (created.ok && matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
+    if (
+      created.ok &&
+      isExactOpenPullRequest(
+        created.pullRequest,
+        created.pullRequest.number,
+        input.target,
+        headBranch,
+        expectedHeadSha,
+      )
+    )
       return yield* record(dependencies, input, headBranch, expectedHeadSha, created.pullRequest);
     if (
       !created.ok &&
-      (created.code === "remote_response_lost" || created.code === "remote_response_unusable")
+      (created.code === "remote_response_lost" ||
+        created.code === "remote_response_unusable" ||
+        created.code === "remote_rejected")
     )
       return yield* confirmCreation(
         dependencies,
@@ -371,6 +395,7 @@ const createRecoveryAttempt = (
     return {
       ok: false,
       code: "publication_remote_mismatch",
+      evidence: conflictingMutationEvidence("pull_request_creation"),
       expectedRemoteHeadSha: expectedHeadSha,
       observedRemoteHeadSha: created.pullRequest.headSha,
     };
@@ -390,13 +415,10 @@ const confirmCreation = (
     ? record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest)
     : Effect.succeed({
         ...selected,
-        ...(failureEvidence === undefined
-          ? lookupEvidence === undefined
-            ? {}
-            : { evidence: lookupEvidence }
-          : lookupEvidence === undefined
-            ? { evidence: failureEvidence }
-            : { evidence: lookupEvidence }),
+        ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+        recoveryEvidence:
+          lookupEvidence ??
+          (found === undefined ? unavailableRecoveryEvidence : conflictingRecoveryEvidence),
       });
 };
 
@@ -430,7 +452,7 @@ const selectRecoveredPullRequest = (
   | Extract<PublishCandidateResult, { readonly ok: false }> => {
   if (found === undefined) return { ok: false, code: "publication_tooling_failed" };
   const exact = found.filter((pullRequest) =>
-    matches(pullRequest, target, headBranch, expectedHeadSha),
+    isExactOpenPullRequest(pullRequest, pullRequest.number, target, headBranch, expectedHeadSha),
   );
   return selectSingleRecoveredPullRequest(found, exact);
 };
@@ -617,23 +639,30 @@ const confirmUpdatedPullRequest = (
     const delay =
       dependencies.delayBeforeConfirmation ??
       ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      yield* delay(100);
-      const confirmed = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
-      if (confirmed === undefined) {
-        return {
-          ok: false,
-          code: "publication_tooling_failed",
-          ...(dependencies.github.getLastFailureEvidence?.() === undefined
-            ? {}
-            : { evidence: dependencies.github.getLastFailureEvidence?.() }),
-        };
-      }
-      if (isExpectedUpdatedPullRequest(confirmed, owned, input, headBranch, expectedHeadSha)) {
-        return yield* record(dependencies, input, headBranch, expectedHeadSha, confirmed, owned);
-      }
+    yield* delay(100);
+    const confirmed = safeGetPullRequest(
+      dependencies.github,
+      input.target,
+      owned.pullRequest.number,
+    );
+    if (confirmed === undefined) {
+      return {
+        ok: false,
+        code: "publication_tooling_failed",
+        evidence: conflictingMutationEvidence("pull_request_update"),
+        recoveryEvidence:
+          dependencies.github.getLastFailureEvidence?.() ?? unavailableRecoveryEvidence,
+      };
     }
-    return { ok: false, code: "publication_remote_mismatch" };
+    if (isExpectedUpdatedPullRequest(confirmed, owned, input, headBranch, expectedHeadSha)) {
+      return yield* record(dependencies, input, headBranch, expectedHeadSha, confirmed, owned);
+    }
+    return {
+      ok: false,
+      code: "publication_remote_mismatch",
+      evidence: conflictingMutationEvidence("pull_request_update"),
+      recoveryEvidence: conflictingRecoveryEvidence,
+    };
   });
 
 const isExpectedUpdatedPullRequest = (
@@ -657,8 +686,7 @@ const isExpectedPullRequest = (
   target: ChangePublicationTarget,
   headBranch: string,
   expectedHeadSha: string,
-): boolean =>
-  pullRequest.number === number && matches(pullRequest, target, headBranch, expectedHeadSha);
+): boolean => isExactOpenPullRequest(pullRequest, number, target, headBranch, expectedHeadSha);
 
 const updateFailure = (
   dependencies: Dependencies,
@@ -695,7 +723,11 @@ const updateFailure = (
 
 const canRecoverUpdateFailure = (
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
-): boolean => failure === "remote_response_lost" || failure === "push_failed";
+): boolean =>
+  failure === "remote_response_lost" ||
+  failure === "remote_response_unusable" ||
+  failure === "remote_rejected" ||
+  failure === "push_failed";
 
 const recoverUpdatedPullRequest = (
   dependencies: Dependencies,
@@ -705,17 +737,24 @@ const recoverUpdatedPullRequest = (
   expectedHeadSha: string,
   failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
 ): PublicationEffect => {
-  const recovered = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
+  const recovered = safeGetPullRequest(dependencies.github, input.target, owned.pullRequest.number);
   if (recovered === undefined) {
     return Effect.succeed({
       ok: false,
       code: "publication_tooling_failed",
       ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+      recoveryEvidence:
+        dependencies.github.getLastFailureEvidence?.() ?? unavailableRecoveryEvidence,
     });
   }
   return isExpectedUpdatedPullRequest(recovered, owned, input, headBranch, expectedHeadSha)
     ? record(dependencies, input, headBranch, expectedHeadSha, recovered, owned)
-    : Effect.succeed({ ok: false, code: "publication_remote_mismatch" });
+    : Effect.succeed({
+        ok: false,
+        code: "publication_remote_mismatch",
+        ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+        recoveryEvidence: conflictingRecoveryEvidence,
+      });
 };
 
 const record = (
@@ -787,6 +826,37 @@ const facts = (input: PublishCandidateInput, headBranch: string, expectedHeadSha
   headBranch,
   expectedHeadSha,
 });
+const safeGetPullRequest = (
+  github: GitHubPullRequestGateway,
+  target: ChangePublicationTarget,
+  number: number,
+): GitHubPullRequest | undefined => {
+  try {
+    return github.getPullRequest(target, number);
+  } catch {
+    return undefined;
+  }
+};
+
+const conflictingMutationEvidence = (operation: "pull_request_creation" | "pull_request_update") =>
+  ({
+    operation,
+    classification: "conflict",
+    reason: "postcondition_mismatch",
+  }) as const;
+
+const unavailableRecoveryEvidence = {
+  operation: "remote_lookup",
+  classification: "unavailable",
+  reason: "unavailable",
+} as const;
+
+const conflictingRecoveryEvidence = {
+  operation: "remote_lookup",
+  classification: "conflict",
+  reason: "postcondition_mismatch",
+} as const;
+
 const request = (
   target: ChangePublicationTarget,
   branchRef: string,
@@ -806,19 +876,23 @@ const hasExpectedHead = (
   branchRef: string,
   expectedHeadSha: string,
 ) => git.readBranchHead(branchRef) === expectedHeadSha;
-const matches = (
+const isExactOpenPullRequest = (
   pullRequest: GitHubPullRequest,
+  number: number,
   target: ChangePublicationTarget,
   headBranch: string,
   expectedHeadSha: string,
-) =>
-  pullRequest.repository?.owner === target.owner &&
-  pullRequest.repository.repo === target.repo &&
-  pullRequest.state === "open" &&
-  pullRequest.merged === false &&
-  pullRequest.baseBranch === target.baseBranch &&
-  pullRequest.headBranch === headBranch &&
-  pullRequest.headSha === expectedHeadSha;
+): boolean => {
+  const expected: OwnedPublication = {
+    candidateId: "mutation-postcondition",
+    validationRunId: "mutation-postcondition",
+    target,
+    headBranch,
+    expectedHeadSha,
+    pullRequest: { number, url: pullRequest.url },
+  };
+  return classifyOwnedPullRequest(expected, pullRequest).kind === "exact_open";
+};
 const sameTarget = (left: ChangePublicationTarget, right: ChangePublicationTarget) =>
   left.owner === right.owner &&
   left.repo === right.repo &&

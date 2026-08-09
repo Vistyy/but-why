@@ -71,7 +71,7 @@ export const observedMergedChangeEvidence = (
 };
 
 export const observeOwnedPullRequest = (
-  github: Pick<GitHubPullRequestGateway, "getPullRequest">,
+  github: Pick<GitHubPullRequestGateway, "getPullRequest" | "getLastFailureEvidence">,
   change: ChangeRecord,
 ): OwnedPullRequestClassification => {
   const publication = ownedPublication(change);
@@ -83,7 +83,13 @@ export const observeOwnedPullRequest = (
     return { kind: "unavailable", reason: "github_unavailable" };
   }
   if (pullRequest === undefined) {
-    return { kind: "unavailable", reason: "pull_request_unavailable" };
+    return {
+      kind: "unavailable",
+      reason:
+        github.getLastFailureEvidence?.()?.classification === "response_parse_failure"
+          ? "pull_request_facts_unavailable"
+          : "pull_request_unavailable",
+    };
   }
   return classifyOwnedPullRequest(publication, pullRequest);
 };
@@ -97,7 +103,6 @@ export const classifyOwnedPullRequest = (
   }
   const repository = pullRequest.repository;
   if (
-    repository === undefined ||
     repository.owner !== publication.target.owner ||
     repository.repo !== publication.target.repo
   ) {
@@ -111,9 +116,6 @@ export const classifyOwnedPullRequest = (
   }
   if (pullRequest.merged === true && pullRequest.headSha !== publication.expectedHeadSha) {
     return { kind: "mismatch", rejection: "merged_head_mismatch", pullRequest };
-  }
-  if (pullRequest.state === undefined || pullRequest.merged === undefined) {
-    return { kind: "unavailable", reason: "pull_request_facts_unavailable" };
   }
   const state = `${pullRequest.state}:${String(pullRequest.merged)}`;
   if (state !== "open:false" && state !== "closed:false" && state !== "closed:true") {
