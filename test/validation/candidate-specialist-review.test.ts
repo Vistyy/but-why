@@ -15,8 +15,8 @@ import type {
   ReviewerSessionStore,
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import {
-  runSpecialistReviewPhase,
   type RunSpecialistReviewPhaseInput,
+  runSpecialistReviewPhase,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
 import {
