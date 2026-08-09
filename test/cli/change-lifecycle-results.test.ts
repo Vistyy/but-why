@@ -45,6 +45,26 @@ describe("Change lifecycle CLI results", () => {
     });
   });
 
+  it("renders incomplete Task prerequisites", () => {
+    expect(
+      startResult({
+        ok: false,
+        code: "task_dependencies_unsatisfied",
+        blockedBy: [{ id: "BY-196" as PublicTaskId, title: "Prerequisite", state: "todo" }],
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "task_dependencies_unsatisfied",
+          message: "The Task has incomplete prerequisites.",
+          blockedBy: [{ id: "BY-196", title: "Prerequisite", state: "todo" }],
+        },
+        help: ["Complete every prerequisite, then run Change Start again."],
+      },
+    });
+  });
+
   it("renders requested Change Base conflicts", () => {
     expect(
       startResult({
