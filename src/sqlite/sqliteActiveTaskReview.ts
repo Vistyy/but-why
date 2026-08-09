@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
 
-export type DecodedActiveTaskReview = {
+type DecodedActiveTaskReview = {
   readonly reviewId: string;
   readonly taskId: PublicTaskId;
 };
