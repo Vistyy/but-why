@@ -64,7 +64,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           const context = yield* getAbandonmentContext(sql, reviewId).pipe(
             Effect.flatMap(decodeAbandonmentContextOptional),
           );
-          if (context !== undefined && context.reviewState === "complete") {
+          if (context !== undefined) {
             yield* validateStoredTaskReviewEvidence(sql, context.taskId);
           }
           return context;
@@ -582,7 +582,15 @@ const validateStoredTaskReviewEvidence = (
           const completionFailure = yield* getCompletionFailure(sql, review.id).pipe(
             Effect.flatMap(decodeCompletionFailureOptional),
           );
-          if (review.state !== "complete") return;
+          if (review.state === "running") {
+            if (findings.length > 0 || toolingFailures.length > 0) {
+              return yield* invalidData(
+                "validate stored Task Review evidence",
+                `Running Task Review ${review.id} has terminal outcome evidence`,
+              );
+            }
+            return;
+          }
           const validOutcomeEvidence =
             completionFailure === undefined &&
             ((review.outcome === "passed" &&
@@ -685,6 +693,7 @@ const abandon = (
       return { ok: true as const, status: "already_complete" as const };
     }
     const taskId = storedPublicTaskId(review.taskId);
+    yield* validateStoredTaskReviewEvidence(sql, taskId);
     const taskGraph = yield* readDecodedTaskGraph(sql, "abandon Task Review");
     if (taskGraph.tasksById.get(taskId)?.state !== "new") {
       return yield* invalidData(

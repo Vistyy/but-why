@@ -2,7 +2,10 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { isDisposableWorktreeRemoved } from "../../src/disposableWorkspace/disposableWorkspaceGit.js";
+import {
+  deleteDisposableWorkspaceRefWithDiagnostic,
+  isDisposableWorktreeRemoved,
+} from "../../src/disposableWorkspace/disposableWorkspaceGit.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -19,6 +22,19 @@ describe("Disposable workspace Git cleanup verification", () => {
 
     git(repository, "worktree", "remove", "--force", worktreePath);
     expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(true);
+  });
+
+  it("does not report a temporary ref removed when Git cannot verify its absence", () => {
+    const missingRepository = join(createTestWorkspace(), "missing-repository");
+
+    expect(
+      deleteDisposableWorkspaceRefWithDiagnostic(
+        missingRepository,
+        "refs/but-why/validation-runs/test/validation",
+      ),
+    ).toMatchObject({
+      state: "failed",
+    });
   });
 });
 

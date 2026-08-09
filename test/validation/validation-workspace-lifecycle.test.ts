@@ -284,7 +284,7 @@ describe("Validation Workspace scoped lifecycle", () => {
           errorMessage: `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}; worktree cleanup failed`,
           worktreePath: expectedWorktreePath,
           cleanupResult: {
-            worktree: "not_created",
+            worktree: "failed",
             tempRef: "removed",
           },
         },

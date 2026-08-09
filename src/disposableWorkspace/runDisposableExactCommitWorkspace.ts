@@ -284,7 +284,13 @@ const setupDisposableWorkspaceScope = <Error>(
       return copyFileAttempt;
     }
 
-    const existingWorktreeAttempt = prepareExistingWorktree(input, state, adapters);
+    const existingWorktreeAttempt = yield* prepareExistingWorktree(
+      input,
+      state,
+      adapters,
+      cleanupResult,
+      cleanupDiagnostics,
+    );
 
     if (!existingWorktreeAttempt.ok) {
       return existingWorktreeAttempt;
@@ -378,54 +384,60 @@ const prepareExistingWorktree = <Error>(
   input: RunDisposableExactCommitWorkspaceInput<Error>,
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
-): { readonly ok: true } | WorkspaceSetupFailure => {
-  const existingWorktree = adapters.inspectExistingWorktree(state.expectedWorktreePath);
+  cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
+): Effect.Effect<{ readonly ok: true } | WorkspaceSetupFailure> =>
+  Effect.gen(function* () {
+    const existingWorktree = adapters.inspectExistingWorktree(state.expectedWorktreePath);
 
-  if (!existingWorktree.exists) {
+    if (!existingWorktree.exists) {
+      return { ok: true };
+    }
+
+    if (
+      existingWorktree.branch !== undefined &&
+      existingWorktree.branch !== "HEAD" &&
+      existingWorktree.branch !== state.tempRefName
+    ) {
+      return setupFailed(
+        "create_sandcastle_workspace",
+        `Disposable worktree already exists for a different workspace reference: ${state.expectedWorktreePath}`,
+      );
+    }
+
+    if (existingWorktree.head !== input.commitSha) {
+      return setupFailed(
+        "create_sandcastle_workspace",
+        `Disposable worktree already exists for a different commit: ${state.expectedWorktreePath}`,
+      );
+    }
+
+    if (!existingWorktree.dirty) {
+      return { ok: true };
+    }
+
+    state.worktreePath = state.expectedWorktreePath;
+    const removed = adapters.removeWorktree(input.repoRoot, state.expectedWorktreePath);
+
+    if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
+      yield* Ref.update(cleanupResult, (current) => ({ ...current, worktree: "failed" as const }));
+      yield* Ref.update(cleanupDiagnostics, (current) => ({
+        ...current,
+        worktree: removed.message,
+      }));
+      return setupFailed(
+        "create_sandcastle_workspace",
+        [
+          `Disposable worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
+          removed.message,
+        ].join("; "),
+        state.expectedWorktreePath,
+      );
+    }
+
+    state.worktreePath = undefined;
     return { ok: true };
-  }
-
-  if (
-    existingWorktree.branch !== undefined &&
-    existingWorktree.branch !== "HEAD" &&
-    existingWorktree.branch !== state.tempRefName
-  ) {
-    return setupFailed(
-      "create_sandcastle_workspace",
-      `Disposable worktree already exists for a different workspace reference: ${state.expectedWorktreePath}`,
-    );
-  }
-
-  if (existingWorktree.head !== input.commitSha) {
-    return setupFailed(
-      "create_sandcastle_workspace",
-      `Disposable worktree already exists for a different commit: ${state.expectedWorktreePath}`,
-    );
-  }
-
-  if (!existingWorktree.dirty) {
-    return { ok: true };
-  }
-
-  state.worktreePath = state.expectedWorktreePath;
-  const removed = adapters.removeWorktree(input.repoRoot, state.expectedWorktreePath);
-
-  if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
-    return setupFailed(
-      "create_sandcastle_workspace",
-      [
-        `Disposable worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
-        removed.ok
-          ? `Disposable worktree remains after removal: ${state.expectedWorktreePath}`
-          : removed.message,
-      ].join("; "),
-      state.expectedWorktreePath,
-    );
-  }
-
-  state.worktreePath = undefined;
-  return { ok: true };
-};
+  });
 
 const acquireSandcastleWorktree = <Error>(
   input: RunDisposableExactCommitWorkspaceInput<Error>,

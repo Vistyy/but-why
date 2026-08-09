@@ -108,15 +108,19 @@ export const deleteDisposableWorkspaceRefWithDiagnostic = (
   repoRoot: string,
   tempRefName: string,
 ): DisposableWorkspaceCleanupAttempt => {
-  const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
+  const deletion = git(repoRoot, ["update-ref", "-d", tempRefName]);
+  const verification = git(repoRoot, ["show-ref", "--verify", "--quiet", tempRefName]);
 
-  if (result.ok) return { state: "removed" };
-  if (!git(repoRoot, ["rev-parse", "--verify", `${tempRefName}^{commit}`]).ok) {
-    return { state: "removed" };
-  }
+  if (!verification.ok && verification.status === 1) return { state: "removed" };
+
+  const verificationMessage = verification.ok
+    ? `Disposable workspace ref remains after deletion: ${tempRefName}`
+    : verification.message;
   return {
     state: "failed",
-    message: result.message || `Git could not delete disposable workspace ref: ${tempRefName}`,
+    message: [deletion.ok ? undefined : deletion.message, verificationMessage]
+      .filter((message): message is string => message !== undefined && message.length > 0)
+      .join("\n"),
   };
 };
 
@@ -133,6 +137,7 @@ type GitResult =
     }
   | {
       readonly ok: false;
+      readonly status: number | null;
       readonly message: string;
     };
 
@@ -148,8 +153,20 @@ const git = (cwd: string, args: readonly string[]): GitResult => {
     return { ok: true, stdout: result.stdout };
   }
 
+  const diagnostic = [
+    result.error?.message,
+    typeof result.stderr === "string" ? result.stderr.trim() : undefined,
+    typeof result.stdout === "string" ? result.stdout.trim() : undefined,
+    result.status === null ? "Git command did not return an exit status." : undefined,
+  ]
+    .filter((message): message is string => message !== undefined && message.length > 0)
+    .join("\n");
+
   return {
     ok: false,
-    message: [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n"),
+    status: result.status,
+    message:
+      diagnostic ||
+      `Git command failed with exit status ${result.status ?? "unknown"}: git ${args.join(" ")}`,
   };
 };

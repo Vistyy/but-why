@@ -308,6 +308,49 @@ it.scoped("rejects outcome evidence that conflicts with persisted Review evidenc
   ),
 );
 
+it.scoped("rejects abandonment when a running Review already has terminal evidence", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Conflicting abandonment evidence", firstNow);
+      yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-conflicting-abandonment",
+        now: firstNow,
+      });
+      yield* reviews.recordToolingFailure({
+        reviewId: "review-conflicting-abandonment",
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "run_task_reviewer_agent",
+        errorMessage: "Reviewer process failed.",
+        now: secondNow,
+      });
+
+      const abandonment = yield* Effect.either(
+        reviews.abandon({
+          reviewId: "review-conflicting-abandonment",
+          cleanupWorktree: "removed",
+          cleanupTempRef: "removed",
+          errorKind: "infrastructure_tooling_failed",
+          operationName: "task_review_abandonment",
+          errorMessage: "Submission process stopped.",
+          now: thirdNow,
+        }),
+      );
+
+      expect(abandonment).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+      expect(yield* reviews.getActiveForTask(task.id)).toBeDefined();
+      expect(yield* reviews.listToolingFailures("review-conflicting-abandonment")).toHaveLength(1);
+    }),
+  ),
+);
+
 it.scoped("rejects malformed relational evidence when reading the latest Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
