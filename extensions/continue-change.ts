@@ -5,19 +5,35 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
+type ChangeCloseReason = "completed" | "cancelled";
 
-type ChangeCleanup = {
+type JsonObject = Readonly<Record<string, unknown>>;
+
+type ChangeCleanup = JsonObject & {
   readonly state: "complete" | "pending";
-  readonly blockingReason: string | null;
+};
+
+type CurrentCandidate = JsonObject & {
+  readonly id: string;
+  readonly headSha: string;
+};
+
+type CurrentValidationRun = JsonObject & {
+  readonly id: string;
+};
+
+type BlockerResolution = JsonObject & {
+  readonly id: string;
+  readonly content: string;
 };
 
 export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
-    readonly closeReason: string | null;
+    readonly closeReason: ChangeCloseReason | null;
   };
-  readonly currentCandidate: Readonly<Record<string, unknown>> | null;
-  readonly currentValidationRun: Readonly<Record<string, unknown>> | null;
+  readonly currentCandidate: CurrentCandidate | null;
+  readonly currentValidationRun: CurrentValidationRun | null;
   readonly findingCount: number;
   readonly toolingFailureCount: number;
   readonly pullRequest: Readonly<Record<string, unknown>> | null;
@@ -30,9 +46,9 @@ export type ChangeInspectionSnapshot = {
 };
 
 type BlockerHistory = {
-  readonly blockers: readonly Readonly<Record<string, unknown>>[];
-  readonly resolutions: readonly Readonly<Record<string, unknown>>[];
-  readonly active: Readonly<Record<string, unknown>> | null;
+  readonly blockers: readonly JsonObject[];
+  readonly resolutions: readonly JsonObject[];
+  readonly active: JsonObject | null;
 };
 
 export type ContinuationDecision =
@@ -140,8 +156,8 @@ export const decideContinuation = (
     publication?.pullRequest !== null &&
     publication?.pullRequest !== undefined &&
     currentCandidate !== null &&
-    recordValue(currentCandidate, "id") === publication.candidateId &&
-    recordValue(currentCandidate, "headSha") === publication.expectedHeadSha &&
+    currentCandidate.id === publication.candidateId &&
+    currentCandidate.headSha === publication.expectedHeadSha &&
     git.head === publication.expectedHeadSha &&
     git.status.trim() === "";
   if (hasOwnedPullRequest) return { kind: "idle" };
@@ -285,8 +301,8 @@ export default function continueChange(pi: ExtensionAPI): void {
         publication?.pullRequest !== null &&
         publication?.pullRequest !== undefined &&
         currentCandidate !== null &&
-        recordValue(currentCandidate, "id") === publication.candidateId &&
-        recordValue(currentCandidate, "headSha") === publication.expectedHeadSha &&
+        currentCandidate.id === publication.candidateId &&
+        currentCandidate.headSha === publication.expectedHeadSha &&
         git.head === publication.expectedHeadSha &&
         git.status.trim() === ""
       ) {
@@ -306,6 +322,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       )
       .at(-1);
     if (!isPersistedState(latest?.data)) return;
+    if (changeId !== undefined && latest.data.changeId !== changeId) return;
     persisted = latest.data;
     changeId ??= latest.data.changeId;
   };
@@ -464,22 +481,21 @@ export default function continueChange(pi: ExtensionAPI): void {
     };
   };
 
-  const latestResolution = (history: BlockerHistory): Readonly<Record<string, unknown>> | null =>
-    history.resolutions.at(-1) ?? null;
-
-  const resolutionId = (resolution: Readonly<Record<string, unknown>> | null): string | null => {
-    const id = resolution === null ? undefined : recordValue(resolution, "id");
-    return typeof id === "string" ? id : null;
+  const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
+    const latest = history.resolutions.at(-1);
+    return latest !== undefined && isResolution(latest) ? latest : null;
   };
+
+  const resolutionId = (resolution: BlockerResolution | null): string | null =>
+    resolution?.id ?? null;
 
   const resolutionMessage = (
     id: string,
-    resolution: Readonly<Record<string, unknown>>,
+    resolution: BlockerResolution,
     hasFindings: boolean,
     commandPrefix: ButWhyCommandPrefix,
   ): string => {
-    const content = recordValue(resolution, "content");
-    const explanation = typeof content === "string" ? content : "The approved Resolution has no recorded text.";
+    const explanation = resolution.content;
     const next = hasFindings
       ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
       : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, the Managed Worktree, and the linked Task Context when present. Continue implementing the complete accepted intent until Change Submit passes.`;
@@ -491,12 +507,9 @@ export default function continueChange(pi: ExtensionAPI): void {
     snapshot: ChangeInspectionSnapshot,
     commandPrefix: ButWhyCommandPrefix,
   ): string => {
-    const runId =
-      snapshot.currentValidationRun === null
-        ? undefined
-        : recordValue(snapshot.currentValidationRun, "id");
+    const runId = snapshot.currentValidationRun?.id;
     const detail =
-      typeof runId === "string"
+      runId !== undefined
         ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", runId)}\`.`
         : `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "change", "show", id)}\`.`;
     return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
@@ -780,63 +793,81 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 }
 
+const isNonNegativeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
+  value === undefined || value === null || typeof value === "string";
+
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
   typeof recordValue(value, "changeId") === "string" &&
   typeof recordValue(value, "fingerprint") === "string" &&
-  typeof recordValue(value, "unchangedRestarts") === "number" &&
+  isNonNegativeInteger(recordValue(value, "unchangedRestarts")) &&
   typeof recordValue(value, "paused") === "boolean" &&
-  (recordValue(value, "resolutionId") === undefined ||
-    recordValue(value, "resolutionId") === null ||
-    typeof recordValue(value, "resolutionId") === "string") &&
-  (recordValue(value, "pendingResolutionId") === undefined ||
-    recordValue(value, "pendingResolutionId") === null ||
-    typeof recordValue(value, "pendingResolutionId") === "string");
+  isOptionalNullableString(recordValue(value, "resolutionId")) &&
+  isOptionalNullableString(recordValue(value, "pendingResolutionId"));
+
+const isCandidate = (value: unknown): value is CurrentCandidate =>
+  isRecord(value) &&
+  typeof recordValue(value, "id") === "string" &&
+  typeof recordValue(value, "headSha") === "string";
+
+const isValidationRun = (value: unknown): value is CurrentValidationRun =>
+  isRecord(value) && typeof recordValue(value, "id") === "string";
 
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;
   const change = recordValue(value, "change");
+  const candidate = recordValue(value, "currentCandidate");
+  const validationRun = recordValue(value, "currentValidationRun");
   const publication = recordValue(value, "publication");
   const cleanup = recordValue(value, "cleanup");
-  const validPublication =
-    publication === undefined ||
-    publication === null ||
-    (isRecord(publication) &&
-      typeof recordValue(publication, "candidateId") === "string" &&
-      typeof recordValue(publication, "expectedHeadSha") === "string" &&
-      (recordValue(publication, "pullRequest") === null ||
-        isRecord(recordValue(publication, "pullRequest"))));
   return (
     isRecord(change) &&
-    (recordValue(change, "state") === "open" ||
-      recordValue(change, "state") === "closed") &&
-    (typeof recordValue(change, "closeReason") === "string" ||
+    (recordValue(change, "state") === "open" || recordValue(change, "state") === "closed") &&
+    (recordValue(change, "closeReason") === "completed" ||
+      recordValue(change, "closeReason") === "cancelled" ||
       recordValue(change, "closeReason") === null) &&
-    (recordValue(value, "currentCandidate") === null ||
-      isRecord(recordValue(value, "currentCandidate"))) &&
-    (recordValue(value, "currentValidationRun") === null ||
-      isRecord(recordValue(value, "currentValidationRun"))) &&
-    typeof recordValue(value, "findingCount") === "number" &&
-    typeof recordValue(value, "toolingFailureCount") === "number" &&
+    (candidate === null || isCandidate(candidate)) &&
+    (validationRun === null || isValidationRun(validationRun)) &&
+    isNonNegativeInteger(recordValue(value, "findingCount")) &&
+    isNonNegativeInteger(recordValue(value, "toolingFailureCount")) &&
     (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest"))) &&
     (cleanup === undefined ||
       (isRecord(cleanup) &&
-        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending") &&
-        (typeof recordValue(cleanup, "blockingReason") === "string" ||
-          recordValue(cleanup, "blockingReason") === null))) &&
-    validPublication
+        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending"))) &&
+    (publication === undefined ||
+      publication === null ||
+      (isRecord(publication) &&
+        typeof recordValue(publication, "candidateId") === "string" &&
+        typeof recordValue(publication, "expectedHeadSha") === "string" &&
+        (recordValue(publication, "pullRequest") === null ||
+          isRecord(recordValue(publication, "pullRequest")))))
   );
 };
 
-const isBlockerHistory = (value: unknown): value is BlockerHistory =>
+const isResolution = (value: unknown): value is BlockerResolution =>
   isRecord(value) &&
-  Array.isArray(recordValue(value, "blockers")) &&
-  Array.isArray(recordValue(value, "resolutions")) &&
-  (recordValue(value, "active") === null || isRecord(recordValue(value, "active"))) &&
-  (recordValue(value, "blockers") as unknown[]).every(isRecord) &&
-  (recordValue(value, "resolutions") as unknown[]).every(isRecord);
+  typeof recordValue(value, "id") === "string" &&
+  typeof recordValue(value, "content") === "string";
+
+const isBlockerHistory = (value: unknown): value is BlockerHistory => {
+  if (!isRecord(value)) return false;
+  const blockers = recordValue(value, "blockers");
+  const resolutions = recordValue(value, "resolutions");
+  const active = recordValue(value, "active");
+  return (
+    Array.isArray(blockers) &&
+    blockers.every(isRecord) &&
+    Array.isArray(resolutions) &&
+    resolutions.every(isRecord) &&
+    (resolutions.length === 0 || isResolution(resolutions.at(-1))) &&
+    (active === null || isRecord(active))
+  );
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const recordValue = (record: Record<string, unknown>, key: string): unknown => record[key];

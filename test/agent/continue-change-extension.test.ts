@@ -17,7 +17,6 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-type TestSnapshot = ReturnType<typeof snapshot>;
 type TestBlockerHistory = {
   blockers: Record<string, unknown>[];
   resolutions: Record<string, unknown>[];
@@ -28,7 +27,7 @@ type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
 const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
 
-const createHarness = (cwd = sourceCwd) => {
+const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   const handlers = new Map<string, EventHandler>();
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
@@ -44,10 +43,20 @@ const createHarness = (cwd = sourceCwd) => {
       },
     },
   ];
+  if (initialPersistedState !== undefined) {
+    entries.push({
+      type: "custom",
+      id: "custom-persisted",
+      parentId: entries.at(-1)?.id ?? null,
+      timestamp: new Date().toISOString(),
+      customType: "but-why-change-continuation",
+      data: initialPersistedState,
+    });
+  }
   const sent: string[] = [];
   const notifications: string[] = [];
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
-  let currentSnapshot: TestSnapshot = snapshot();
+  let currentSnapshot: unknown = snapshot();
   let currentBlockerHistory: TestBlockerHistory = { blockers: [], resolutions: [], active: null };
   let inspectionFails = false;
   let inspectionGate: Promise<void> | undefined;
@@ -120,7 +129,7 @@ const createHarness = (cwd = sourceCwd) => {
     getExecCallCount() {
       return execCalls.length;
     },
-    setSnapshot(next: TestSnapshot) {
+    setSnapshot(next: unknown) {
       currentSnapshot = next;
     },
     setInspectionFails(value: boolean) {
@@ -504,6 +513,104 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([]);
     expect(harness.latestWidgetText()).toEqual(["✓ Change is complete"]);
     expect(harness.latestWidgetColor()).toEqual(["success"]);
+  });
+
+  it.each([
+    [
+      "Change close reason",
+      snapshot({ change: { state: "closed", closeReason: "not-a-close-reason" } }),
+      undefined,
+    ],
+    ["Candidate identity", snapshot({ currentCandidate: { id: "candidate-1" } }), undefined],
+    ["Validation Run identity", snapshot({ currentValidationRun: {} }), undefined],
+    ["non-negative Finding count", snapshot({ findingCount: -1 }), undefined],
+    ["integer Tooling Failure count", snapshot({ toolingFailureCount: 0.5 }), undefined],
+    [
+      "publication identity",
+      snapshot({ publication: { candidateId: "candidate-1", pullRequest: null } }),
+      undefined,
+    ],
+    ["JSON object", undefined, { blockers: [], resolutions: [], active: [] }],
+    [
+      "Resolution identity and text",
+      undefined,
+      {
+        blockers: [{ body: { opaque: true } }],
+        resolutions: [{ id: "resolution-1" }],
+        active: null,
+      },
+    ],
+  ])("rejects malformed %s control data without continuing", async (_name, malformedSnapshot, malformedHistory) => {
+    const harness = createHarness();
+    if (malformedSnapshot !== undefined) harness.setSnapshot(malformedSnapshot);
+    if (malformedHistory !== undefined)
+      harness.setBlockerHistory(malformedHistory as TestBlockerHistory);
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Change inspection failed"]);
+  });
+
+  it.each([-1, 0.5])("ignores invalid persisted retry count %s", async (unchangedRestarts) => {
+    const harness = createHarness(sourceCwd, {
+      changeId,
+      fingerprint: "untrusted",
+      unchangedRestarts,
+      paused: true,
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([expect.stringContaining("Resume implementation of Change")]);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false, unchangedRestarts: 1 } });
+  });
+
+  it("ignores persisted state for a different Change", async () => {
+    const harness = createHarness(sourceCwd, {
+      changeId: "11111111-1111-4111-8111-111111111111",
+      fingerprint: "other-change",
+      unchangedRestarts: 2,
+      paused: true,
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([expect.stringContaining(`Change ${changeId}`)]);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { changeId, paused: false } });
+  });
+
+  it("keeps opaque cleanup details out of continuation decisions", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setSnapshot(
+      snapshot({
+        change: { state: "closed", closeReason: "completed" },
+        cleanup: { state: "pending", blockingReason: { opaque: true } },
+      }),
+    );
+
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Change cleanup is needed"]);
+  });
+
+  it("keeps unknown nested CLI data in the durable retry fingerprint", async () => {
+    const harness = createHarness();
+    harness.setSnapshot(snapshot({ pullRequest: { number: 12, opaque: { revision: 1 } } }));
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+    expect(harness.entries.at(-1)).toMatchObject({ data: { unchangedRestarts: 1 } });
+
+    harness.setSnapshot(snapshot({ pullRequest: { number: 12, opaque: { revision: 2 } } }));
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(2);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { unchangedRestarts: 0 } });
   });
 
   it("uses hidden session entries for retry state", async () => {
