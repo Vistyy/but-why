@@ -67,7 +67,6 @@ const startJust = (
     env: {
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
-      BY_TEST_SUITE: "routine",
       ...environment,
     },
   });
@@ -115,7 +114,7 @@ const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult>
     const child = startTestProcess(
       join(repositoryRoot, "node_modules/.bin/vitest"),
       ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
-      { cwd: fixtureRoot, env: { BY_TEST_SUITE: "" } },
+      { cwd: fixtureRoot },
     );
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -259,12 +258,10 @@ const createQualityFixture = (directory: string): void => {
   writeFileSync(
     join(directory, "justfile"),
     `quality:
-    @exec ${JSON.stringify(qualityRunner)} quality
+    @exec ${JSON.stringify(qualityRunner)}
 
-full-quality:
-    @exec ${JSON.stringify(qualityRunner)} full-quality
 
-_quality-static-routine:
+_quality-static:
     @true
 
 build:
@@ -280,9 +277,9 @@ const createObservableQualityFixture = (directory: string): void => {
   writeFileSync(
     join(directory, "justfile"),
     `quality:
-    @exec ${JSON.stringify(qualityRunner)} quality
+    @exec ${JSON.stringify(qualityRunner)}
 
-_quality-static-routine:
+_quality-static:
     @printf static > "$QUALITY_STATIC_FILE"
 
 build:
@@ -290,6 +287,24 @@ build:
 
 test:
     @printf test > "$QUALITY_TEST_FILE"
+`,
+  );
+};
+
+const createFailingQualityFixture = (directory: string): void => {
+  writeFileSync(
+    join(directory, "justfile"),
+    `quality:
+    @exec ${JSON.stringify(qualityRunner)}
+
+_quality-static:
+    @printf 'static\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "static" ]]; then echo "static failure marker" >&2; exit 7; fi
+
+build:
+    @printf 'build\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "build" ]]; then echo "build failure marker" >&2; exit 7; fi
+
+test:
+    @printf 'test\\n' >> "$QUALITY_INVOCATIONS"; if [[ "$QUALITY_FAILURE" == "test" ]]; then echo "test failure marker" >&2; exit 7; fi
 `,
   );
 };
@@ -316,18 +331,14 @@ afterEach(() => {
 });
 
 describe("quality interface", () => {
-  test("waits before starting a complete quality workload", async () => {
+  test("waits before starting the quality workload", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const staticFile = join(directory, "static");
     const buildFile = join(directory, "build");
     const testFile = join(directory, "test");
-    const { holder, readyFile, releaseFile } = startHeldRunner(
-      lockFile,
-      directory,
-      "complete test",
-    );
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "test");
     createObservableQualityFixture(directory);
     let quality: ReturnType<typeof startJust> | undefined;
 
@@ -343,10 +354,10 @@ describe("quality interface", () => {
         },
         directory,
       );
-      await waitForOutput(quality, "waiting: complete quality is waiting for capacity");
+      await waitForOutput(quality, "waiting: quality is waiting for capacity");
 
       expect(quality.child.exitCode).toBeNull();
-      expect(quality.output).toContain("waiting: complete quality is waiting for capacity");
+      expect(quality.output).toContain("waiting: quality is waiting for capacity");
       expect(() => readFileSync(staticFile)).toThrow();
       expect(() => readFileSync(buildFile)).toThrow();
       expect(() => readFileSync(testFile)).toThrow();
@@ -356,7 +367,6 @@ describe("quality interface", () => {
       expect(result.status, result.output).toBe(0);
       expect(result.output).toContain("quality completed in");
       expect(result.output).not.toContain("warning: quality exceeded");
-      expect(result.output).not.toContain("warning: full-quality exceeded");
       expect(readFileSync(staticFile, "utf8")).toBe("static");
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
@@ -366,36 +376,63 @@ describe("quality interface", () => {
     }
   });
 
-  test("waits for complete workloads while targeted tests remain unlocked", async () => {
+  test.each([
+    "static",
+    "build",
+    "test",
+  ] as const)("forwards a %s failure with complete diagnostics and no success report", async (failure) => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-failure-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const invocationsFile = join(directory, "invocations");
+    createFailingQualityFixture(directory);
+
+    const result = await startJust(
+      lockFile,
+      ["quality"],
+      {
+        QUALITY_FAILURE: failure,
+        QUALITY_INVOCATIONS: invocationsFile,
+      },
+      directory,
+    ).done;
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(`${failure} failure marker`);
+    expect(result.output).toContain("quality failed after");
+    expect(result.output).not.toContain("quality completed in");
+    const invocations = readFileSync(invocationsFile, "utf8").trim().split("\n");
+    expect(invocations.filter((invocation) => invocation === "static")).toHaveLength(1);
+    expect(invocations.filter((invocation) => invocation === "build")).toHaveLength(1);
+    expect(invocations.filter((invocation) => invocation === "test")).toHaveLength(1);
+  });
+
+  test("waits for unselected workloads while targeted tests remain unlocked", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
-    const { holder, readyFile, releaseFile } = startHeldRunner(
-      lockFile,
-      directory,
-      "complete coverage",
-    );
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
     createCompletingPnpm(directory);
-    let complete: ReturnType<typeof startJust> | undefined;
+    let unselected: ReturnType<typeof startJust> | undefined;
 
     try {
       await waitForFile(readyFile);
-      complete = startJust(lockFile, ["test", "--reporter=dot"], {
+      unselected = startJust(lockFile, ["test", "--reporter=dot"], {
         PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
       });
-      await waitForOutput(complete, "waiting: complete test is waiting for capacity");
-      expect(complete.child.exitCode).toBeNull();
-      expect(complete.output).toContain("waiting: complete test is waiting for capacity");
+      await waitForOutput(unselected, "waiting: test is waiting for capacity");
+      expect(unselected.child.exitCode).toBeNull();
+      expect(unselected.output).toContain("waiting: test is waiting for capacity");
 
       const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
       expect(targeted.status).toBe(0);
       expect(targeted.output).toContain("1 passed");
 
       writeFileSync(releaseFile, "release");
-      const completeResult = await complete.done;
-      expect(completeResult.status, completeResult.output).toBe(0);
+      const unselectedResult = await unselected.done;
+      expect(unselectedResult.status, unselectedResult.output).toBe(0);
     } finally {
-      if (complete?.child.exitCode === null) await stopJust(complete);
+      if (unselected?.child.exitCode === null) await stopJust(unselected);
       await stopRunner(holder);
     }
   }, 30_000);
@@ -405,26 +442,22 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const acquiredFile = join(directory, "acquired");
-    const { holder, readyFile, releaseFile } = startHeldRunner(
-      lockFile,
-      directory,
-      "complete coverage",
-    );
+    const { holder, readyFile, releaseFile } = startHeldRunner(lockFile, directory, "coverage");
     let waiter: ReturnType<typeof startRunner> | undefined;
 
     try {
       await waitForFile(readyFile);
       waiter = startRunner(lockFile, [
-        "complete test",
+        "test",
         "sh",
         "-c",
         'printf acquired > "$1"',
         "sh",
         acquiredFile,
       ]);
-      await waitForOutput(waiter, "waiting: complete test is waiting for capacity");
+      await waitForOutput(waiter, "waiting: test is waiting for capacity");
       expect(waiter.child.exitCode).toBeNull();
-      expect(waiter.output).toContain("waiting: complete test is waiting for capacity");
+      expect(waiter.output).toContain("waiting: test is waiting for capacity");
       waiter.child.kill("SIGTERM");
       expect((await waiter.done).status).toBe(143);
       expect(waiter.output).toContain("rerun the same command to retry");
@@ -441,10 +474,10 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
 
-    const failed = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 7"]);
+    const failed = await runRunner(lockFile, ["test", "sh", "-c", "exit 7"]);
     expect(failed.status).toBe(7);
 
-    const succeeded = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
+    const succeeded = await runRunner(lockFile, ["test", "sh", "-c", "exit 0"]);
     expect(succeeded.status).toBe(0);
   });
 
@@ -455,7 +488,7 @@ describe("quality interface", () => {
     const readyFile = join(directory, "descendant-ready");
     const descendantPidFile = join(directory, "descendant-pid");
     const holder = startRunner(lockFile, [
-      "complete test",
+      "test",
       "sh",
       "-c",
       'printf ready > "$1"; sleep 100 & descendant=$!; printf "$descendant" > "$2"; wait',
@@ -488,7 +521,7 @@ describe("quality interface", () => {
     const daemonReadyFile = join(directory, "daemon-ready");
     const daemonPidFile = join(directory, "daemon-pid");
     const holder = startRunner(lockFile, [
-      "complete test",
+      "test",
       "sh",
       "-c",
       '(setsid sh -c \'trap "" INT TERM; printf "$$" > "$1"; printf ready > "$2"; while :; do sleep 1; done\' sh "$2" "$3" >/dev/null 2>&1 &); printf ready > "$1"; while :; do sleep 1; done',
@@ -550,19 +583,19 @@ describe("quality interface", () => {
   });
 
   test.each([
-    ["quality", "SIGTERM", 143],
-    ["full-quality", "SIGINT", 130],
-  ] as const)("interrupts the complete %s command with %s and releases capacity", async (qualityCommand, signal, expectedStatus) => {
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const)("interrupts quality with %s and releases capacity", async (signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
-    const readyFile = join(directory, `${qualityCommand}-ready`);
-    const descendantPidFile = join(directory, `${qualityCommand}-descendant-pid`);
+    const readyFile = join(directory, "quality-ready");
+    const descendantPidFile = join(directory, "quality-descendant-pid");
     createBlockingPnpm(directory, readyFile, descendantPidFile);
     createQualityFixture(directory);
     const quality = startJust(
       lockFile,
-      [qualityCommand],
+      ["quality"],
       {
         PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
       },
@@ -576,9 +609,9 @@ describe("quality interface", () => {
       await waitForOutput(observer, "waiting: capacity observer is waiting for capacity");
       signalJust(quality, signal);
       expect((await quality.done).status).toBe(expectedStatus);
-      expect(quality.output).toContain(`${qualityCommand} interrupted after`);
-      expect(quality.output).toContain(`rerun just ${qualityCommand} to retry`);
-      expect(quality.output).not.toContain(`${qualityCommand} completed in`);
+      expect(quality.output).toContain("quality interrupted after");
+      expect(quality.output).toContain("rerun just quality to retry");
+      expect(quality.output).not.toContain("quality completed in");
       const observation = await observer.done;
       expect(observation.status, observation.output).toBe(0);
       expect(observation.output).toContain("capacity acquired after supervisor exit");
@@ -592,7 +625,7 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const nestedCommand = `${runner} 'nested internal' sh -c 'printf nested-success'`;
-    const result = await runRunner(lockFile, ["complete test", "sh", "-c", nestedCommand]);
+    const result = await runRunner(lockFile, ["test", "sh", "-c", nestedCommand]);
 
     expect(result.status).toBe(0);
     expect(result.output).toContain("nested-success");

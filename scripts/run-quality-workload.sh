@@ -1,28 +1,19 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-if (( $# != 1 )); then
-    echo "error: a quality workload is required; use run-quality-workload.sh <quality|full-quality>" >&2
+if (( $# != 0 )); then
+    echo "error: the quality runner does not accept arguments; run just quality" >&2
     exit 2
 fi
 
-mode=$1
 source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
-case "$mode" in
-    quality|full-quality) ;;
-    *)
-        echo "error: unsupported quality workload: $mode; use run-quality-workload.sh quality or run-quality-workload.sh full-quality" >&2
-        exit 2
-        ;;
-esac
-
 script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ "${BY_CAPACITY_LOCK_HELD:-0}" != "1" ]]; then
     started_at_ns=$(date +%s%N)
     lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
     export BY_QUALITY_STARTED_AT_NS="$started_at_ns"
     export BY_CAPACITY_LOCK_ACQUIRED_AT_FILE="$lock_acquired_at_file"
-    exec "$script_directory/with-capacity-lock.sh" "complete $mode" "$script_directory/run-quality-workload.sh" "$mode"
+    exec "$script_directory/with-capacity-lock.sh" quality "$script_directory/run-quality-workload.sh"
 fi
 
 child_pids=()
@@ -71,35 +62,17 @@ wait_for_child() {
     return "$status"
 }
 
-run_test_child() {
-    local suite=$1
-    local test_status
-    start_child env BY_TEST_SUITE="$suite" just test
-    test_pid=${child_pids[-1]}
-    wait_for_child "$test_pid"
-    test_status=$?
-    return "$test_status"
-}
-
 status=0
-start_child just _quality-static-routine
+start_child just _quality-static
 static_pid=${child_pids[-1]}
-if [[ "$mode" == "quality" ]]; then
-    start_child just build
-    build_pid=${child_pids[-1]}
-    wait_for_child "$build_pid" || status=1
-    if (( status == 0 && interrupted_status == 0 )); then
-        run_test_child routine || status=1
-    fi
-    wait_for_child "$static_pid" || status=1
-else
-    start_child just build
-    build_pid=${child_pids[-1]}
-    wait_for_child "$build_pid" || status=1
-    wait_for_child "$static_pid" || status=1
-    if (( status == 0 && interrupted_status == 0 )); then
-        run_test_child "" || status=1
-    fi
+start_child just build
+build_pid=${child_pids[-1]}
+wait_for_child "$build_pid" || status=1
+wait_for_child "$static_pid" || status=1
+if (( interrupted_status == 0 )); then
+    start_child just test
+    test_pid=${child_pids[-1]}
+    wait_for_child "$test_pid" || status=1
 fi
 
 trap - INT TERM
@@ -124,8 +97,10 @@ if (( elapsed_ms < 0 )); then
 fi
 printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
 if (( interrupted_status != 0 )); then
-    echo "$mode interrupted after ${elapsed}s; rerun just $mode to retry" >&2
+    echo "quality interrupted after ${elapsed}s; rerun just quality to retry" >&2
+elif (( exit_status != 0 )); then
+    echo "quality failed after ${elapsed}s" >&2
 else
-    echo "$mode completed in ${elapsed}s"
+    echo "quality completed in ${elapsed}s"
 fi
 exit "$exit_status"
