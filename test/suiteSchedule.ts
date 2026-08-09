@@ -10,7 +10,6 @@ export const completeOnlyTestFiles = [
   "test/change/change-reconcile-discard.test.ts",
   "test/change/change-start-managed-worktree.test.ts",
   "test/publication/publication-policy.test.ts",
-  "test/repository/cli-loading.test.ts",
   "test/repository/process-isolation.test.ts",
   "test/repository/quality-interface.test.ts",
   "test/repository/repository-storage.test.ts",
