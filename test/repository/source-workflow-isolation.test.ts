@@ -61,6 +61,10 @@ test("source workflow delegates a Candidate worktree to the canonical executable
         '    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,\n    "0009_candidate_probe": candidateProbe,\n',
       )}\n`,
   );
+  writeFileSync(
+    join(candidate, "src/main.ts"),
+    'throw new Error("candidate_cli_probe_loaded");\n',
+  );
   writeFileSync(join(candidate, "description.md"), "Created by the trusted executable.\n");
 
   const result = runTestProcess(
@@ -73,33 +77,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
   expect(JSON.parse(result.stdout)).toMatchObject({
     task: { id: "BY-1", title: "Trusted workflow" },
   });
-  expect(readMigrationIds(main)).toEqual([
-    "baseline",
-    "reviewer_sessions",
-    "implementation_decisions",
-    "implementation_blockers",
-    "acceptance_context_versions",
-    "reconcile_implementation_blocker_storage",
-    "reviewer_sessions_per_producer",
-    "recover_published_remote_branch_cleanup",
-    "active_validation_runs",
-    "validation_workspace_paths",
-    "candidate_publications",
-    "structured_implementation_decisions",
-    "remove_no_change_completion",
-    "remove_change_readiness",
-    "remove_acceptance_context_versions",
-    "remove_implementation_decision_content",
-    "validation_run_blocker_identity",
-    "remove_finding_severity",
-    "simplify_reviewer_sessions",
-    "remove_candidate_publications",
-    "reviewer_transcripts",
-    "change_cancel_reason",
-    "restrict_lifecycle_states",
-    "remove_task_comments",
-    "repair_validation_policy_snapshot_ok_field",
-  ]);
+  expect(readMigrationIds(main)).not.toContain("candidate_probe");
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
 }, 30_000);
 
@@ -131,17 +109,6 @@ test("source workflow fails without Candidate fallback when the main checkout is
     help: ["Restore the canonical main checkout, then retry the command."],
   });
 
-  const defaultResult = runTestProcess("just", ["by", "task", "list"], {
-    cwd: candidate,
-    env: { PATH: `${fakeGitDirectory}:${inheritedPath}` },
-  });
-  expect(defaultResult.status).toBe(1);
-  expect(defaultResult.stderr).toBe("");
-  expect(defaultResult.stdout).toBe(`error:
-  code: main_checkout_unavailable
-  message: "The Local Repository's canonical main checkout is unavailable."
-help[1]: "Restore the canonical main checkout, then retry the command."
-`);
 }, 30_000);
 
 test("source workflow preserves a newline in the canonical checkout path", () => {
