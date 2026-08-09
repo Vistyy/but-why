@@ -103,6 +103,12 @@ else
 fi
 
 trap - INT TERM
+if (( interrupted_status == 0 )) && [[ -s "${BY_CAPACITY_INTERRUPTION_FILE:-}" ]]; then
+    interruption_status=$(<"$BY_CAPACITY_INTERRUPTION_FILE")
+    case "$interruption_status" in
+        130|143) interrupted_status=$interruption_status ;;
+    esac
+fi
 if (( interrupted_status != 0 )); then
     for pid in "${child_pids[@]}"; do
         wait "$pid" 2>/dev/null || true

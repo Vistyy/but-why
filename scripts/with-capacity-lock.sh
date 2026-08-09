@@ -21,9 +21,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 
 child_pid=
 interrupted_status=0
+interruption_file=$(mktemp "${TMPDIR:-/tmp}/but-why-workload-interrupted.XXXXXX")
+export BY_CAPACITY_INTERRUPTION_FILE=$interruption_file
 terminate_child() {
     interrupted_status=$1
     local signal=$2
+    printf '%s\n' "$interrupted_status" > "$interruption_file"
     if [[ -z "$child_pid" ]]; then
         return
     fi
@@ -40,6 +43,7 @@ trap 'terminate_child 143 TERM; report_interruption' TERM
 
 lock_owned=0
 cleanup() {
+    rm -f "$interruption_file"
     if (( lock_owned == 1 )); then
         rm -f "$status_file"
     fi
