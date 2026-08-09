@@ -1,14 +1,11 @@
+import { Buffer } from "node:buffer";
+
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
-import type {
-  DependencyValidationCode,
-  TaskContext,
-  TaskDependencyFact,
-  TaskSummary,
-} from "../task/task.js";
+import type { DependencyValidationCode, TaskContext, TaskSummary } from "../task/task.js";
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
@@ -22,6 +19,17 @@ import type {
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
 import { RepositorySql } from "./repositorySql.js";
+import {
+  type DecodedTaskGraph,
+  type DecodedTaskRow,
+  decodePersisted,
+  decodeStoredNullableString,
+  decodeStoredSqlitePositiveInteger,
+  decodeStoredString,
+  decodeStoredTaskId,
+  readDecodedTaskGraph,
+  taskDependencyFacts,
+} from "./sqliteTaskReadModel.js";
 
 export const openSqliteTaskPersistence = (
   taskPrefix: string,
@@ -33,9 +41,9 @@ export const openSqliteTaskPersistence = (
       repository.transactionImmediate("edit Task dependencies", (sql) =>
         editTaskDependencies(sql, input),
       ),
-    listTasks: (input) => repository.operation("list Tasks", (sql) => listTasks(sql, input)),
-    listActionableTasks: () => repository.operation("list actionable Tasks", listActionableTasks),
-    getTaskById: (taskId) => repository.operation("read Task", (sql) => getTaskById(sql, taskId)),
+    listTasks: (input) => repository.transaction("list Tasks", (sql) => listTasks(sql, input)),
+    listActionableTasks: () => repository.transaction("list actionable Tasks", listActionableTasks),
+    getTaskById: (taskId) => repository.transaction("read Task", (sql) => getTaskById(sql, taskId)),
     getTaskContextById: (taskId) =>
       repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
     approveTask: (input) =>
@@ -151,98 +159,62 @@ const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenc
   });
 
 const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
-  Effect.gen(function* () {
-    const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
-    const rows = input.state
-      ? yield* sql<TaskSummaryRow>`
-          SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-            COUNT(*) OVER () AS totalCount
-          FROM tasks
-          WHERE state = ${input.state}
-          ORDER BY created_at ASC, numeric_id ASC
-          LIMIT ${limit}
-        `
-      : input.includeDone
-        ? yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              COUNT(*) OVER () AS totalCount
-            FROM tasks
-            ORDER BY created_at ASC, numeric_id ASC
-            LIMIT ${limit}
-          `
-        : yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              COUNT(*) OVER () AS totalCount
-            FROM tasks
-            WHERE state NOT IN ('done', 'cancelled')
-            ORDER BY created_at ASC, numeric_id ASC
-            LIMIT ${limit}
-          `;
-    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+  Effect.map(readDecodedTaskGraph(sql, "list Tasks"), (graph) => {
+    const matching = graph.tasks
+      .filter((task) =>
+        input.state
+          ? task.state === input.state
+          : input.includeDone || (task.state !== "done" && task.state !== "cancelled"),
+      )
+      .sort(
+        (left, right) =>
+          compareSqliteText(left.createdAt, right.createdAt) || left.numericId - right.numericId,
+      );
+    const selected =
+      input.limit === undefined || input.limit === "all"
+        ? matching
+        : matching.slice(0, input.limit);
     return {
-      tasks,
-      total: Number(rows[0]?.totalCount ?? (yield* countTasks(sql, input))),
+      tasks: selected.map((task) => rowToTaskSummary(graph, task)),
+      total: matching.length,
     };
   });
 
-const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
-  Effect.map(
-    input.state
-      ? sql<{ readonly total: number | bigint }>`
-          SELECT COUNT(*) AS total FROM tasks WHERE state = ${input.state}
-        `
-      : input.includeDone
-        ? sql<{ readonly total: number | bigint }>`SELECT COUNT(*) AS total FROM tasks`
-        : sql<{ readonly total: number | bigint }>`
-            SELECT COUNT(*) AS total FROM tasks WHERE state NOT IN ('done', 'cancelled')
-          `,
-    (rows) => Number(rows[0]?.total ?? 0),
+const listActionableTasks = (sql: SqlClient.SqlClient) =>
+  Effect.map(readDecodedTaskGraph(sql, "list actionable Tasks"), (graph) =>
+    graph.tasks
+      .filter((task) => task.state === "new" || task.state === "todo")
+      .sort(
+        (left, right) =>
+          actionableStateOrder(left.state) - actionableStateOrder(right.state) ||
+          compareSqliteText(right.updatedAt, left.updatedAt) ||
+          left.numericId - right.numericId,
+      )
+      .map((task) => rowToTaskSummary(graph, task)),
   );
 
-const listActionableTasks = (sql: SqlClient.SqlClient) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<TaskSummaryRow>`
-      SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
-      FROM tasks
-      WHERE state IN ('new', 'todo')
-      ORDER BY
-        CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
-        updated_at DESC,
-        numeric_id ASC
-    `;
-    return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
-  });
+const actionableStateOrder = (state: TaskState): number => (state === "new" ? 0 : 1);
+
+const compareSqliteText = (left: string, right: string): number =>
+  Buffer.compare(Buffer.from(left), Buffer.from(right));
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredTaskRecordRow>`
-      SELECT id, title, description, state,
-        cancel_reason AS cancelReason,
-        created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM tasks
-      WHERE id = ${taskId}
-    `;
-    const row = rows[0];
-    return row === undefined ? undefined : yield* rowToStoredTaskRecord(sql, row);
+  Effect.map(readDecodedTaskGraph(sql, "read Task"), (graph) => {
+    const task = graph.tasksById.get(taskId);
+    return task === undefined ? undefined : rowToStoredTaskRecord(graph, task);
   });
 
 const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<TaskContextHeaderRow>`
-      SELECT id, title, description FROM tasks WHERE id = ${taskId}
-    `;
-    const task = rows[0];
+    const graph = yield* readDecodedTaskGraph(sql, "read Task Context");
+    const task = graph.tasksById.get(taskId);
     if (task === undefined) return undefined;
-    const resolutions = yield* sql<{ readonly content: string }>`
-      SELECT resolution_content AS content FROM implementation_blockers
-      JOIN changes ON changes.id = implementation_blockers.change_id
-      WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
-      ORDER BY implementation_blockers.sequence ASC
-    `;
+    const resolutions = yield* readTaskResolutions(sql, graph, taskId);
     return {
-      ...task,
-      ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      ...(resolutions.length === 0 ? {} : { resolutions }),
     } satisfies TaskContext;
   });
 
@@ -304,15 +276,15 @@ const taskDependenciesAreEditable = (state: TaskState): boolean => state === "ne
 
 const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    const graph = yield* readDecodedTaskGraph(sql, "edit Task dependencies");
+    const row = graph.tasksById.get(taskId);
+    if (row === undefined) return { ok: false as const, code: "task_not_found" as const };
+    const current = rowToStoredTaskRecord(graph, row);
     if (!taskDependenciesAreEditable(current.state)) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
-    const linked = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
-    `;
-    if (linked.length > 0) {
+    const links = yield* readChangeTaskLinks(sql, "edit Task dependencies", graph);
+    if (links.some((link) => link.taskId === taskId)) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
     return { ok: true as const, task: current };
@@ -334,12 +306,13 @@ const validateDependencies = (
   SqlError | RepositoryPersistedDataInvalid
 > =>
   Effect.gen(function* () {
+    const graph = yield* readDecodedTaskGraph(sql, "validate Task dependencies");
     const seen = new Set<string>();
     for (const prerequisiteTaskId of prerequisiteTaskIds) {
       const localError = validateDependencyIdentity(seen, dependentTaskId, prerequisiteTaskId);
       if (localError !== undefined) return localError;
-      const storedError = yield* validateStoredDependency(
-        sql,
+      const storedError = validateStoredDependency(
+        graph,
         dependentTaskId,
         prerequisiteTaskId,
         dependentExists,
@@ -364,43 +337,42 @@ const validateDependencyIdentity = (
 };
 
 const validateStoredDependency = (
-  sql: SqlClient.SqlClient,
+  graph: DecodedTaskGraph,
   dependentTaskId: PublicTaskId,
   prerequisiteTaskId: PublicTaskId,
   dependentExists: boolean,
-) =>
-  Effect.gen(function* () {
-    if ((yield* getTaskById(sql, prerequisiteTaskId)) === undefined) {
-      return {
-        ok: false as const,
-        code: "dependency_unknown_task" as const,
-        taskId: prerequisiteTaskId,
-      };
-    }
-    if (!dependentExists) return undefined;
-    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
-      ? { ok: false as const, code: "dependency_cycle" as const }
-      : undefined;
-  });
+): DependencyValidationResult | undefined => {
+  if (!graph.tasksById.has(prerequisiteTaskId)) {
+    return {
+      ok: false as const,
+      code: "dependency_unknown_task" as const,
+      taskId: prerequisiteTaskId,
+    };
+  }
+  if (!dependentExists) return undefined;
+  return dependencyPathExists(graph, prerequisiteTaskId, dependentTaskId)
+    ? { ok: false as const, code: "dependency_cycle" as const }
+    : undefined;
+};
 
 const dependencyPathExists = (
-  sql: SqlClient.SqlClient,
+  graph: DecodedTaskGraph,
   fromTaskId: PublicTaskId,
   targetTaskId: PublicTaskId,
-) =>
-  Effect.map(
-    sql<{ readonly found: number }>`
-      WITH RECURSIVE prerequisites(task_id) AS (
-        SELECT ${fromTaskId}
-        UNION
-        SELECT task_dependencies.prerequisite_task_id
-        FROM task_dependencies
-        JOIN prerequisites ON task_dependencies.dependent_task_id = prerequisites.task_id
-      )
-      SELECT 1 AS found FROM prerequisites WHERE task_id = ${targetTaskId} LIMIT 1
-    `,
-    (rows) => rows.length > 0,
-  );
+): boolean => {
+  const pending = [fromTaskId];
+  const visited = new Set<PublicTaskId>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined || visited.has(current)) continue;
+    if (current === targetTaskId) return true;
+    visited.add(current);
+    for (const dependency of graph.dependencies) {
+      if (dependency.dependentTask.id === current) pending.push(dependency.prerequisiteTask.id);
+    }
+  }
+  return false;
+};
 
 const insertDependencies = (
   sql: SqlClient.SqlClient,
@@ -416,56 +388,138 @@ const insertDependencies = (
     { discard: true },
   );
 
-const dependencyFacts = (
-  sql: SqlClient.SqlClient,
-  taskId: string,
-  direction: "prerequisites" | "dependents",
-) =>
-  direction === "prerequisites"
-    ? sql<TaskDependencyFact>`
-        SELECT tasks.id, tasks.title, tasks.state
-        FROM task_dependencies
-        JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-        WHERE task_dependencies.dependent_task_id = ${taskId}
-        ORDER BY tasks.numeric_id ASC
-      `
-    : sql<TaskDependencyFact>`
-        SELECT tasks.id, tasks.title, tasks.state
-        FROM task_dependencies
-        JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
-        WHERE task_dependencies.prerequisite_task_id = ${taskId}
-        ORDER BY tasks.numeric_id ASC
-      `;
-
 const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
+  Effect.flatMap(readDecodedTaskGraph(sql, "create Task"), (graph) => {
+    const maximum = graph.tasks.reduce((current, task) => Math.max(current, task.numericId), 0);
+    const next = maximum + 1;
+    return Number.isSafeInteger(next)
+      ? Effect.succeed(next)
+      : invalidData("create Task", "Next Task numeric ID is unsafe");
+  });
+
+const rowToTaskSummary = (graph: DecodedTaskGraph, row: DecodedTaskRow): TaskSummary => {
+  const prerequisites = taskDependencyFacts(graph, row.id, "prerequisites");
+  const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
+  return {
+    id: row.id,
+    title: row.title,
+    state: row.state,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    startable: row.state === "todo" && blockedBy.length === 0,
+    blockedBy,
+  };
+};
+
+const rowToStoredTaskRecord = (graph: DecodedTaskGraph, row: DecodedTaskRow): StoredTaskRecord => ({
+  ...rowToTaskSummary(graph, row),
+  description: row.description,
+  cancelReason: row.cancelReason,
+  prerequisites: taskDependencyFacts(graph, row.id, "prerequisites"),
+  dependents: taskDependencyFacts(graph, row.id, "dependents"),
+});
+
+const readChangeTaskLinks = (
+  sql: SqlClient.SqlClient,
+  operationName: string,
+  graph?: DecodedTaskGraph,
+) =>
   Effect.gen(function* () {
-    const rows = yield* sql<NumericIdRow>`
-      SELECT COALESCE(MAX(numeric_id), 0) + 1 AS numericId FROM tasks
+    const rows = yield* sql<UnknownChangeTaskLinkRow>`
+      SELECT id, task_id AS taskId FROM changes
     `;
-    const row = rows[0];
-    if (row === undefined) return yield* invalidData("create Task", "Missing numeric ID");
-    return Number(row.numericId);
+    return yield* decodePersisted(operationName, () => {
+      const ids = new Set<string>();
+      const linkedTaskIds = new Set<PublicTaskId>();
+      return rows.map((row): DecodedChangeTaskLink => {
+        const id = decodeStoredString(row.id, "Change ID");
+        if (ids.has(id)) throw new Error("Duplicate Change ID");
+        ids.add(id);
+        const taskId =
+          row.taskId === null ? null : decodeStoredTaskId(row.taskId, "Change Task ID");
+        if (taskId !== null) {
+          if (linkedTaskIds.has(taskId)) throw new Error("Task is linked to multiple Changes");
+          if (graph !== undefined && !graph.tasksById.has(taskId)) {
+            throw new Error("Change has an unknown linked Task");
+          }
+          linkedTaskIds.add(taskId);
+        }
+        return { id, taskId };
+      });
+    });
   });
 
-const rowToTaskSummary = (sql: SqlClient.SqlClient, row: TaskSummaryRow) =>
-  Effect.map(dependencyFacts(sql, row.id, "prerequisites"), (prerequisites): TaskSummary => {
-    const { totalCount: _totalCount, ...summary } = row;
-    const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
-    return { ...summary, startable: row.state === "todo" && blockedBy.length === 0, blockedBy };
-  });
-
-const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRow) =>
+const readTaskResolutions = (
+  sql: SqlClient.SqlClient,
+  graph: DecodedTaskGraph,
+  taskId: PublicTaskId,
+) =>
   Effect.gen(function* () {
-    const summary = yield* rowToTaskSummary(sql, row);
-    const prerequisites = yield* dependencyFacts(sql, row.id, "prerequisites");
-    const dependents = yield* dependencyFacts(sql, row.id, "dependents");
-    return {
-      ...summary,
-      description: row.description,
-      cancelReason: row.cancelReason,
-      prerequisites,
-      dependents,
-    } satisfies StoredTaskRecord;
+    const changes = yield* readChangeTaskLinks(sql, "read Task Context", graph);
+    const changeIds = new Set(changes.map((change) => change.id));
+    const linkedChangeIds = new Set(
+      changes.filter((change) => change.taskId === taskId).map((change) => change.id),
+    );
+    const rows = yield* sql<UnknownResolutionRow>`
+      SELECT CAST(sequence AS TEXT) AS sequence, typeof(sequence) AS sequenceType,
+        id, change_id AS changeId, resolved_at AS resolvedAt,
+        resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
+        resolution_content AS resolutionContent
+      FROM implementation_blockers
+    `;
+    return yield* decodePersisted("read Task Context", () => {
+      const sequences = new Set<number>();
+      const blockerIds = new Set<string>();
+      return rows
+        .map((row) => {
+          const sequence = decodeStoredSqlitePositiveInteger(
+            row.sequence,
+            row.sequenceType,
+            "Implementation Blocker sequence",
+          );
+          const blockerId = decodeStoredString(row.id, "Implementation Blocker ID");
+          const changeId = decodeStoredString(row.changeId, "Implementation Blocker Change ID");
+          if (sequences.has(sequence)) throw new Error("Duplicate Implementation Blocker sequence");
+          if (blockerIds.has(blockerId)) throw new Error("Duplicate Implementation Blocker ID");
+          if (!changeIds.has(changeId)) {
+            throw new Error("Implementation Blocker has an unknown Change");
+          }
+          sequences.add(sequence);
+          blockerIds.add(blockerId);
+          const resolvedAt = decodeStoredNullableString(
+            row.resolvedAt,
+            "Implementation Blocker resolution time",
+          );
+          const resolutionId = decodeStoredNullableString(row.resolutionId, "Resolution ID");
+          const resolutionRecordedAt = decodeStoredNullableString(
+            row.resolutionRecordedAt,
+            "Resolution recorded time",
+          );
+          const resolutionContent = decodeStoredNullableString(
+            row.resolutionContent,
+            "Resolution content",
+          );
+          const resolutionParts = [
+            resolvedAt,
+            resolutionId,
+            resolutionRecordedAt,
+            resolutionContent,
+          ];
+          const isUnresolved = resolutionParts.every((part) => part === null);
+          const isResolved = resolutionParts.every((part) => part !== null);
+          if (!isUnresolved && !isResolved) {
+            throw new Error("Implementation Blocker resolution relationship is incomplete");
+          }
+          return { sequence, changeId, resolutionContent };
+        })
+        .flatMap((row) =>
+          linkedChangeIds.has(row.changeId) && row.resolutionContent !== null
+            ? [{ sequence: row.sequence, content: row.resolutionContent }]
+            : [],
+        )
+        .sort((left, right) => left.sequence - right.sequence)
+        .map((row) => row.content);
+    });
   });
 
 const invalidData = (operationName: string, message: string) =>
@@ -476,21 +530,23 @@ const invalidData = (operationName: string, message: string) =>
     }),
   );
 
-type NumericIdRow = { readonly numericId: number | bigint };
-type TaskSummaryRow = {
-  readonly id: PublicTaskId;
-  readonly title: string;
-  readonly state: TaskState;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly totalCount?: number | bigint;
+type UnknownChangeTaskLinkRow = {
+  readonly id: unknown;
+  readonly taskId: unknown;
 };
-type StoredTaskRecordRow = TaskSummaryRow & {
-  readonly description: string;
-  readonly cancelReason: string | null;
+
+type DecodedChangeTaskLink = {
+  readonly id: string;
+  readonly taskId: PublicTaskId | null;
 };
-type TaskContextHeaderRow = {
-  readonly id: PublicTaskId;
-  readonly title: string;
-  readonly description: string;
+
+type UnknownResolutionRow = {
+  readonly sequence: unknown;
+  readonly sequenceType: unknown;
+  readonly id: unknown;
+  readonly changeId: unknown;
+  readonly resolvedAt: unknown;
+  readonly resolutionId: unknown;
+  readonly resolutionRecordedAt: unknown;
+  readonly resolutionContent: unknown;
 };
