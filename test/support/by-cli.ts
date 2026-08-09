@@ -8,6 +8,7 @@ import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
 import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runTestProcess } from "./testProcess.js";
@@ -120,7 +121,7 @@ type InProcessCliOptions = {
   readonly stdin?: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 

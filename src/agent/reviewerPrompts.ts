@@ -1,6 +1,5 @@
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
@@ -223,9 +222,9 @@ export const buildReviewerRevisionPrompt = (input: {
     "Return one final report with every open earlier Finding and every new Finding.",
   ].join("\n");
 
-export const buildReviewerOutputCorrectionPrompt = (
-  failure: ReviewerOutputContractFailed,
-): string =>
+export const buildReviewerOutputCorrectionPrompt = (failure: {
+  readonly message: string;
+}): string =>
   [
     "Your reviewer output did not satisfy the required contract.",
     failure.message,

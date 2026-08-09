@@ -6,7 +6,26 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
 
-import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  piReviewerAgentRuntime,
+  ReviewerExecutionFailed,
+} from "../../src/agent/reviewerAgentRuntime.js";
+import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
+import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
+
+const decodeEmptyFindings = (output: unknown) =>
+  decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
+    Effect.mapError(
+      (failure) =>
+        new ReviewerExecutionFailed({
+          operationName: failure.operationName,
+          message: failure.message,
+          diagnostics: failure.diagnostics,
+          correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
+        }),
+    ),
+  );
+
 import { runTestProcess } from "../support/testProcess.js";
 
 const reviewerProbeProcessTimeoutMs = 10_000;
@@ -153,8 +172,7 @@ describe("Pi reviewer agent runtime process boundary", () => {
           const result = yield* piReviewerAgentRuntime.review({
             sandbox: { run } as unknown as Pick<Sandbox, "run">,
             reviewer: "acceptance",
-            validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-            availableArtifactRefs: [],
+            decodeOutput: decodeEmptyFindings,
             prompt: "Review the Candidate.",
             profile,
           });
