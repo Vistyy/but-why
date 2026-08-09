@@ -43,7 +43,12 @@ const classifyCommandFailure = (result: PublicationCommandResult): "rejected" | 
     : "rejected";
 
 const evidence = (
-  operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
+  operation:
+    | "remote_lookup"
+    | "push_destination"
+    | "branch_push"
+    | "pull_request_creation"
+    | "pull_request_update",
   result: PublicationCommandResult,
   classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable",
   parseFailure?: string,
@@ -383,7 +388,9 @@ const createPullRequest = (
       ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
     };
   }
-  const remoteHead = initialRemoteHeadState(runGit, request);
+  const destination = resolvePushDestination(runGit, request);
+  if (!destination.ok) return destination.failure;
+  const remoteHead = initialRemoteHeadState(runGit, request, destination.url);
   if (remoteHead.kind === "unknown")
     return {
       ok: false,
@@ -403,7 +410,7 @@ const createPullRequest = (
   )
     return { ok: false, code: "remote_head_mismatch" };
   if (remoteHead.kind === "missing") {
-    const pushed = pushExactHead(runGit, request);
+    const pushed = pushExactHead(runGit, request, destination.url);
     if (!pushed.ok)
       return {
         ok: false,
@@ -462,7 +469,9 @@ const updatePullRequest = (
       ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
     };
   }
-  const pushed = pushExpectedHead(runGit, request);
+  const destination = resolvePushDestination(runGit, request);
+  if (!destination.ok) return destination.failure;
+  const pushed = pushExpectedHead(runGit, request, destination.url);
   if (!pushed.ok)
     return {
       ok: false,
@@ -521,15 +530,18 @@ const hasExpectedLocalHead = (
 const initialRemoteHeadState = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
+  destination: string,
 ): {
   readonly kind: "missing" | "present" | "unknown";
   readonly sha?: string;
   readonly evidence?: ReturnType<typeof evidence>;
 } => {
   const remoteHead = runGit([
+    "-c",
+    `url.${destination}.pushInsteadOf=${destination}`,
     "ls-remote",
     "--heads",
-    requestRemote(request),
+    destination,
     `refs/heads/${request.headBranch}`,
   ]);
   if (!remoteHead.ok)
@@ -549,30 +561,126 @@ const initialRemoteHeadState = (
   return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
 };
 
+type PushDestinationFailureReason =
+  | "unavailable"
+  | "destination_count"
+  | "credentials"
+  | "malformed"
+  | "repository_mismatch";
+
+type PushDestinationResult =
+  | { readonly ok: true; readonly url: string }
+  | {
+      readonly ok: false;
+      readonly failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>;
+    };
+
+const resolvePushDestination = (
+  runGit: PublicationCommandRunner,
+  request: GitHubPullRequestRequest,
+): PushDestinationResult => {
+  const result = runGit(["remote", "get-url", "--push", "--all", request.remoteName]);
+  if (!result.ok)
+    return pushDestinationFailure("unavailable", {
+      ...(result.status === undefined ? {} : { exitStatus: result.status }),
+    });
+  const destinations = result.stdout.split(/\r?\n/u).filter((value) => value.length > 0);
+  if (destinations.length !== 1)
+    return pushDestinationFailure("destination_count", {
+      destinationCount: Math.min(destinations.length, 1000),
+    });
+  const decoded = decodeGitHubPushDestination(destinations[0] ?? "");
+  if (!decoded.ok) return pushDestinationFailure(decoded.reason);
+  if (
+    decoded.owner.toLowerCase() !== request.owner.toLowerCase() ||
+    decoded.repo.toLowerCase() !== request.repo.toLowerCase()
+  )
+    return pushDestinationFailure("repository_mismatch", {
+      destinationOwner: decoded.owner.slice(0, 100),
+      destinationRepo: decoded.repo.slice(0, 100),
+    });
+  return { ok: true, url: destinations[0] ?? "" };
+};
+
+const pushDestinationFailure = (
+  reason: PushDestinationFailureReason,
+  facts: {
+    readonly exitStatus?: number;
+    readonly destinationCount?: number;
+    readonly destinationOwner?: string;
+    readonly destinationRepo?: string;
+  } = {},
+): PushDestinationResult => ({
+  ok: false,
+  failure: {
+    ok: false,
+    code: "push_destination_failed",
+    evidence: {
+      operation: "push_destination",
+      classification: reason === "unavailable" ? "unavailable" : "rejected",
+      reason,
+      ...facts,
+    },
+  },
+});
+
+const decodeGitHubPushDestination = (
+  value: string,
+):
+  | { readonly ok: true; readonly owner: string; readonly repo: string }
+  | { readonly ok: false; readonly reason: "credentials" | "malformed" } => {
+  const scp = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/u.exec(value);
+  if (scp !== null)
+    return scp[1]?.length && scp[2]?.length
+      ? { ok: true, owner: scp[1], repo: scp[2] }
+      : { ok: false, reason: "malformed" };
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  const isHttps = parsed.protocol === "https:" && parsed.username === "";
+  const isSsh = parsed.protocol === "ssh:" && parsed.username === "git";
+  if (parsed.password !== "" || (!isHttps && !isSsh && parsed.username !== ""))
+    return { ok: false, reason: "credentials" };
+  if (parsed.hostname.toLowerCase() !== "github.com" || (!isHttps && !isSsh))
+    return { ok: false, reason: "malformed" };
+  const parts = parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/");
+  const owner = parts[0] ?? "";
+  const repo = (parts[1] ?? "").replace(/\.git$/u, "");
+  return parts.length === 2 && owner.length > 0 && repo.length > 0
+    ? { ok: true, owner, repo }
+    : { ok: false, reason: "malformed" };
+};
+
 const pushExactHead = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
+  destination: string,
 ): PublicationCommandResult =>
   runGit([
+    "-c",
+    `url.${destination}.pushInsteadOf=${destination}`,
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:`,
-    requestRemote(request),
+    destination,
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
   ]);
 
 const pushExpectedHead = (
   runGit: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
+  destination: string,
 ): PublicationCommandResult =>
   runGit([
+    "-c",
+    `url.${destination}.pushInsteadOf=${destination}`,
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:${request.expectedCurrentHeadSha}`,
-    requestRemote(request),
+    destination,
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
   ]);
-
-const requestRemote = (request: Pick<GitHubPullRequestRequest, "remoteName">): string =>
-  request.remoteName;
 
 const runCommand = (
   command: string,

@@ -13,10 +13,20 @@ export type GitHubPullRequest = ChangeOwnedPullRequest & {
 export type PublicationFailureEvidence = {
   readonly operation:
     | "remote_lookup"
+    | "push_destination"
     | "branch_push"
     | "pull_request_creation"
     | "pull_request_update";
   readonly classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable";
+  readonly reason?:
+    | "unavailable"
+    | "destination_count"
+    | "credentials"
+    | "malformed"
+    | "repository_mismatch";
+  readonly destinationCount?: number;
+  readonly destinationOwner?: string;
+  readonly destinationRepo?: string;
   readonly exitStatus?: number;
   readonly stdout?: string;
   readonly stderr?: string;
@@ -43,6 +53,7 @@ export type GitHubPullRequestMutationResult =
       readonly code:
         | "local_head_mismatch"
         | "remote_head_mismatch"
+        | "push_destination_failed"
         | "push_failed"
         | "remote_lookup_failed"
         | "remote_response_lost"

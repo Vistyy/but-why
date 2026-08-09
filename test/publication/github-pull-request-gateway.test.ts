@@ -11,7 +11,12 @@ describe("GitHub pull request gateway", () => {
         gitCalls.push(args);
         return {
           ok: true,
-          stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "",
+          stdout:
+            args[0] === "rev-parse"
+              ? "candidate-sha\n"
+              : args[0] === "remote"
+                ? "https://github.com/acme/widgets.git\n"
+                : "",
         };
       },
       runGh: (args) => {
@@ -48,11 +53,21 @@ describe("GitHub pull request gateway", () => {
     });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
-      ["ls-remote", "--heads", "origin", "refs/heads/feature"],
+      ["remote", "get-url", "--push", "--all", "origin"],
       [
+        "-c",
+        "url.https://github.com/acme/widgets.git.pushInsteadOf=https://github.com/acme/widgets.git",
+        "ls-remote",
+        "--heads",
+        "https://github.com/acme/widgets.git",
+        "refs/heads/feature",
+      ],
+      [
+        "-c",
+        "url.https://github.com/acme/widgets.git.pushInsteadOf=https://github.com/acme/widgets.git",
         "push",
         "--force-with-lease=refs/heads/feature:",
-        "origin",
+        "https://github.com/acme/widgets.git",
         "candidate-sha:refs/heads/feature",
       ],
     ]);
@@ -80,7 +95,15 @@ describe("GitHub pull request gateway", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => {
         gitCalls.push(args);
-        return { ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" };
+        return {
+          ok: true,
+          stdout:
+            args[0] === "rev-parse"
+              ? "candidate-sha\n"
+              : args[0] === "remote"
+                ? "git@github.com:acme/widgets.git\n"
+                : "",
+        };
       },
       runGh: (args) => {
         ghCalls.push(args);
@@ -115,10 +138,13 @@ describe("GitHub pull request gateway", () => {
     });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
+      ["remote", "get-url", "--push", "--all", "origin"],
       [
+        "-c",
+        "url.git@github.com:acme/widgets.git.pushInsteadOf=git@github.com:acme/widgets.git",
         "push",
         "--force-with-lease=refs/heads/feature:previous-candidate-sha",
-        "origin",
+        "git@github.com:acme/widgets.git",
         "candidate-sha:refs/heads/feature",
       ],
     ]);
@@ -241,7 +267,12 @@ describe("GitHub pull request gateway", () => {
         gitCalls.push(args);
         return {
           ok: true,
-          stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "other-head\trefs/heads/feature\n",
+          stdout:
+            args[0] === "rev-parse"
+              ? "candidate-sha\n"
+              : args[0] === "remote"
+                ? "https://github.com/acme/widgets.git\n"
+                : "other-head\trefs/heads/feature\n",
         };
       },
       runGh: () => {
@@ -262,9 +293,10 @@ describe("GitHub pull request gateway", () => {
         body: "Validation facts",
       }),
     ).toEqual({ ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: "other-head" });
-    expect(gitCalls).toEqual([
-      ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
-      ["ls-remote", "--heads", "origin", "refs/heads/feature"],
+    expect(gitCalls.map((args) => (args.includes("ls-remote") ? "ls-remote" : args[0]))).toEqual([
+      "rev-parse",
+      "remote",
+      "ls-remote",
     ]);
   });
 
@@ -316,10 +348,12 @@ describe("GitHub pull request gateway", () => {
 
   it("keeps a failed remote branch lookup distinct from a failed push", () => {
     const gateway = localGitHubPullRequestGateway({
-      runGit: (args) =>
-        args[0] === "rev-parse"
-          ? { ok: true, stdout: "candidate-sha\n" }
-          : { ok: false, status: 128, stderr: "remote unavailable" },
+      runGit: (args) => {
+        if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        return { ok: false, status: 128, stderr: "remote unavailable" };
+      },
       runGh: () => ({ ok: true, stdout: "" }),
     });
     expect(
@@ -349,7 +383,11 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            args[0] === "rev-parse" ? "candidate-sha\n" : "candidate-sha\trefs/heads/feature\n",
+            args[0] === "rev-parse"
+              ? "candidate-sha\n"
+              : args[0] === "remote"
+                ? "https://github.com/acme/widgets.git\n"
+                : "candidate-sha\trefs/heads/feature\n",
         };
       },
       runGh: () => ({
@@ -372,7 +410,11 @@ describe("GitHub pull request gateway", () => {
         body: "Body",
       }),
     ).toMatchObject({ ok: true });
-    expect(gitCalls.map((call) => call[0])).toEqual(["rev-parse", "ls-remote"]);
+    expect(gitCalls.map((args) => (args.includes("ls-remote") ? "ls-remote" : args[0]))).toEqual([
+      "rev-parse",
+      "remote",
+      "ls-remote",
+    ]);
   });
 
   it("preserves failed local head preflight evidence for create and update", () => {
@@ -409,7 +451,9 @@ describe("GitHub pull request gateway", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => {
         if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
-        if (args[0] === "ls-remote") return { ok: true, stdout: "" };
+        if (args[0] === "remote")
+          return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+        if (args.includes("ls-remote")) return { ok: true, stdout: "" };
         return { ok: false, status: 1, stderr: "x".repeat(2000) };
       },
       runGh: () => ({ ok: true, stdout: "" }),
@@ -446,6 +490,56 @@ describe("GitHub pull request gateway", () => {
     expect(result.evidence?.stderr?.length).toBeLessThanOrEqual(1000);
   });
 
+  it("rejects unsafe push destinations without a push or pull request mutation", () => {
+    const request = {
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    };
+    const cases = [
+      [
+        "multiple",
+        "https://github.com/acme/widgets.git\nhttps://github.com/acme/other.git\n",
+        "destination_count",
+      ],
+      ["credentials", "https://user:SUPERSECRET@github.com/acme/widgets.git\n", "credentials"],
+      ["mismatch", "git@github.com:other/widgets.git\n", "repository_mismatch"],
+      ["malformed", "not a URL\n", "malformed"],
+    ] as const;
+    for (const [name, destinations, reason] of cases) {
+      const gitCalls: (readonly string[])[] = [];
+      let ghCalls = 0;
+      const gateway = localGitHubPullRequestGateway({
+        runGit: (args) => {
+          gitCalls.push(args);
+          if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
+          if (args[0] === "ls-remote") return { ok: true, stdout: "" };
+          if (args[0] === "remote") return { ok: true, stdout: destinations };
+          throw new Error(`must not push for ${name}`);
+        },
+        runGh: () => {
+          ghCalls += 1;
+          return { ok: true, stdout: "" };
+        },
+      });
+      const result = gateway.createPullRequest(request);
+      expect(result, name).toMatchObject({
+        ok: false,
+        code: "push_destination_failed",
+        evidence: { operation: "push_destination", reason },
+      });
+      expect(gitCalls.map((args) => args[0])).toEqual(["rev-parse", "remote"]);
+      expect(ghCalls).toBe(0);
+      expect(JSON.stringify(result)).not.toContain("SUPERSECRET");
+    }
+  });
+
   it("classifies lost and unusable creation responses", () => {
     const request = {
       owner: "acme",
@@ -463,7 +557,15 @@ describe("GitHub pull request gateway", () => {
       [{ ok: true as const, stdout: "not-json" }, "response_parse_failure" as const],
     ] as const) {
       const gateway = localGitHubPullRequestGateway({
-        runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),
+        runGit: (args) => ({
+          ok: true,
+          stdout:
+            args[0] === "rev-parse"
+              ? "candidate-sha\n"
+              : args[0] === "remote"
+                ? "https://github.com/acme/widgets.git\n"
+                : "",
+        }),
         runGh: () => response,
       });
       expect(gateway.createPullRequest(request)).toMatchObject({
@@ -772,7 +874,15 @@ describe("GitHub pull request gateway", () => {
 
   it("returns bounded redacted evidence for a rejected creation", () => {
     const gateway = localGitHubPullRequestGateway({
-      runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),
+      runGit: (args) => ({
+        ok: true,
+        stdout:
+          args[0] === "rev-parse"
+            ? "candidate-sha\n"
+            : args[0] === "remote"
+              ? "https://github.com/acme/widgets.git\n"
+              : "",
+      }),
       runGh: (args) =>
         args[1] === "--method"
           ? {
