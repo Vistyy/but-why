@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
@@ -49,7 +49,10 @@ import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteCh
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { transitionTaskToTodo } from "../support/taskApproval.js";
+import { repoRoot } from "../support/by-cli.js";
+import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import { startTestProcess } from "../support/testProcess.js";
 
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
@@ -3872,6 +3875,207 @@ describe("repository SQL storage", () => {
           expect(yield* readMigrationCount).toBe(26);
         });
       },
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  // Cross-process coordination evidence uses one real SQLite state path and real Node
+  // processes because the serialization claim crosses process and SQLite boundaries.
+  const helperTsxLoader = join(repoRoot, "node_modules/tsx/dist/loader.mjs");
+  const helperScript = join(repoRoot, "scripts/repository-process-helper.ts");
+
+  const runHelperProcess = (
+    args: readonly string[],
+    cwd: string,
+  ): Promise<{ readonly status: number | null; readonly stdout: string }> =>
+    new Promise((resolveResult) => {
+      const child = startTestProcess(
+        process.execPath,
+        ["--import", helperTsxLoader, helperScript, ...args],
+        { cwd, timeout: 60_000 },
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      child.on("close", (status) => resolveResult({ status, stdout: `${stdout}${stderr}`.trim() }));
+    });
+
+  const startMigrationLockHolder = (statePath: string, holdMs: number) => {
+    const child = startTestProcess(
+      process.execPath,
+      ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, String(holdMs)],
+      { cwd: dirname(statePath), timeout: 30_000 },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    const done = new Promise<{ readonly status: number | null; readonly stdout: string }>(
+      (resolveResult) => {
+        child.on("close", (status) => resolveResult({ status, stdout: output.trim() }));
+      },
+    );
+    return {
+      child,
+      done,
+      get output() {
+        return output;
+      },
+    };
+  };
+
+  const waitForMigrationLock = (holder: ReturnType<typeof startMigrationLockHolder>) =>
+    observeUntil({
+      description: "the lock holder to acquire the SQLite migration write lock",
+      observe: () => holder.output,
+      isReady: (value) => value.includes("locked"),
+      timeoutMs: 15_000,
+    });
+
+  it.effect("serializes Shared Repository State creation and migration across real processes", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-concurrent-init-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          const results = yield* Effect.promise(() =>
+            Promise.all(
+              ["ConcurrentA", "ConcurrentB", "ConcurrentC"].map((title) =>
+                runHelperProcess(
+                  ["open-state", statePath, directory, "5000", "30000", "50", title],
+                  directory,
+                ),
+              ),
+            ),
+          );
+          for (const result of results) {
+            expect(result.status).toBe(0);
+            expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, found: true });
+          }
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const migrations = yield* repository.operation(
+                "read concurrent migration ledger",
+                (sql) => sql<{ readonly migration_id: number; readonly name: string }>`
+                    SELECT migration_id, name
+                    FROM effect_sql_migrations
+                    ORDER BY migration_id
+                  `,
+              );
+              expect(migrations.length).toBe(25);
+              expect(migrations.map((row) => row.migration_id)).toEqual(
+                Array.from({ length: 25 }, (_, index) => index + 1),
+              );
+              const identities = yield* repository.operation(
+                "read concurrent repository identity",
+                (sql) => sql<{ readonly common_directory: string }>`
+                    SELECT common_directory
+                    FROM shared_state_identity
+                    WHERE id = 1
+                  `,
+              );
+              expect(identities).toEqual([{ common_directory: directory }]);
+
+              const tasks = yield* openSqliteTaskPersistence("BY");
+              const created = yield* tasks.createTask({
+                title: "After concurrent initialization",
+                description: "Read and write after concurrent startup.",
+                now: "2026-07-17T22:46:00.000Z",
+              });
+              expect(created.ok).toBe(true);
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("returns state_store_unavailable after a bounded wait while migration stays busy", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-contention-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          const holder = startMigrationLockHolder(statePath, 2_500);
+          try {
+            yield* Effect.promise(() => waitForMigrationLock(holder));
+
+            const contended = yield* Effect.promise(() =>
+              runHelperProcess(
+                ["open-state", statePath, directory, "150", "400", "20", "Contended"],
+                directory,
+              ),
+            );
+            expect(contended.status).toBe(1);
+            expect(JSON.parse(contended.stdout)).toMatchObject({
+              ok: false,
+              error: { _tag: "RepositoryStateUnavailable" },
+            });
+
+            const released = yield* Effect.promise(() => holder.done);
+            expect(released.status).toBe(0);
+            expect(released.stdout).toContain("released");
+
+            const recovered = yield* Effect.promise(() =>
+              runHelperProcess(
+                ["open-state", statePath, directory, "5000", "30000", "50", "Recovery"],
+                directory,
+              ),
+            );
+            expect(recovered.status).toBe(0);
+            expect(JSON.parse(recovered.stdout)).toMatchObject({ ok: true, found: true });
+          } finally {
+            if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
+          }
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("opens an already-current Shared Repository State without migration coordination", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-current-open-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          const primed = yield* Effect.promise(() =>
+            runHelperProcess(
+              ["open-state", statePath, directory, "5000", "30000", "50", "Prime"],
+              directory,
+            ),
+          );
+          expect(primed.status).toBe(0);
+          expect(JSON.parse(primed.stdout)).toMatchObject({ ok: true, found: true });
+
+          const holder = startMigrationLockHolder(statePath, 2_500);
+          try {
+            yield* Effect.promise(() => waitForMigrationLock(holder));
+
+            // The already-current open must succeed even with a short busy timeout
+            // and contention deadline while another process holds the migration
+            // write lock, because ordinary opens skip migration coordination.
+            const reopened = yield* Effect.promise(() =>
+              runHelperProcess(["open-read", statePath, directory, "150", "400", "20"], directory),
+            );
+            expect(reopened.status).toBe(0);
+            expect(JSON.parse(reopened.stdout)).toMatchObject({
+              ok: true,
+              migrationCount: 25,
+            });
+          } finally {
+            if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
+          }
+        }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
     ),
   );

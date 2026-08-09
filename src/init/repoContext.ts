@@ -6,7 +6,10 @@ import { Effect } from "effect";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
   RepositoryIdentityConflict,
+  RepositoryMigrationFailed,
   RepositoryRestoredTransientState,
+  RepositorySqlOperationFailed,
+  RepositoryStateUnavailable,
   type RestoredTransientChangeFact,
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
@@ -80,6 +83,9 @@ export type InitRepoError =
     }
   | {
       readonly code: "shared_state_identity_conflict";
+    }
+  | {
+      readonly code: "state_store_unavailable";
     }
   | {
       readonly code: "restored_transient_state";
@@ -257,7 +263,14 @@ export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRe
                   changes: error.changes,
                 },
               })
-            : Effect.die(error),
+            : error instanceof RepositoryStateUnavailable ||
+                error instanceof RepositoryMigrationFailed ||
+                error instanceof RepositorySqlOperationFailed
+              ? Effect.succeed<InitRepoResult>({
+                  ok: false,
+                  error: { code: "state_store_unavailable" },
+                })
+              : Effect.die(error),
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );

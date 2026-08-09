@@ -10,38 +10,42 @@ import {
   runBuiltByWithEnv,
   runBuiltByWithInput,
 } from "../support/by-cli.js";
+import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("by change implement stdin process boundary", () => {
-  it("forwards piped stdin through a real process", () => {
-    const root = createInitializedRepo();
-    commitButWhyConfigAndRecordDefault(root);
-    const home = createTestWorkspace();
-    const globalConfigDirectory = join(home, ".config/but-why");
-    mkdirSync(globalConfigDirectory, { recursive: true });
-    writeFileSync(
-      join(globalConfigDirectory, "config.json"),
-      `${JSON.stringify({
-        defaultAgentProfile: { scope: "global", name: "test" },
-        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
-      })}\n`,
-    );
-    const tools = createTestWorkspace();
-    writeFileSync(
-      join(tools, "gh"),
-      `#!/usr/bin/env sh
+  it.effect(
+    "forwards piped stdin through a real process",
+    () =>
+      Effect.gen(function* () {
+        const root = createInitializedRepo();
+        commitButWhyConfigAndRecordDefault(root);
+        const home = createTestWorkspace();
+        const globalConfigDirectory = join(home, ".config/but-why");
+        mkdirSync(globalConfigDirectory, { recursive: true });
+        writeFileSync(
+          join(globalConfigDirectory, "config.json"),
+          `${JSON.stringify({
+            defaultAgentProfile: { scope: "global", name: "test" },
+            agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+          })}\n`,
+        );
+        const tools = createTestWorkspace();
+        writeFileSync(
+          join(tools, "gh"),
+          `#!/usr/bin/env sh
 if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
   printf '{"defaultBranchRef":{"name":"main"}}\\n'
   exit 0
 fi
 exit 1
 `,
-    );
-    writeFileSync(
-      join(tools, "herdr"),
-      `#!/usr/bin/env sh
+        );
+        writeFileSync(
+          join(tools, "herdr"),
+          `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
   if [ -n "$BY_FAKE_CAPTURE" ] && [ -f "$BY_FAKE_CAPTURE.started" ]; then
     printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
@@ -67,43 +71,40 @@ if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
 fi
 exit 1
 `,
-    );
-    chmodSync(join(tools, "gh"), 0o755);
-    chmodSync(join(tools, "herdr"), 0o755);
-    const baseEnv = {
-      HOME: home,
-      // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
-    };
+        );
+        chmodSync(join(tools, "gh"), 0o755);
+        chmodSync(join(tools, "herdr"), 0o755);
+        const baseEnv = {
+          HOME: home,
+          // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+          PATH: `${tools}:${process.env["PATH"] ?? ""}`,
+        };
 
-    const started = runBuiltByWithEnv(root, baseEnv, "--json", "change", "start");
-    expect(started.status).toBe(0);
-    const change = JSON.parse(started.stdout) as {
-      readonly change: { readonly id: string };
-      readonly worktreePath: string;
-    };
-    const capture = join(root, "herdr-capture.txt");
-    const env = {
-      ...baseEnv,
-      BY_FAKE_CAPTURE: capture,
-      BY_FAKE_WORKTREE: change.worktreePath,
-      BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-    };
+        const fixture = yield* createChangeImplementFixture(root);
+        const capture = join(root, "herdr-capture.txt");
+        const env = {
+          ...baseEnv,
+          BY_FAKE_CAPTURE: capture,
+          BY_FAKE_WORKTREE: fixture.worktreePath,
+          BY_FAKE_SESSION: `change-${fixture.id.slice(0, 8)}`,
+        };
 
-    const piped = runBuiltByWithInput(
-      root,
-      "Implementer prompt from piped stdin\n",
-      env,
-      "--json",
-      "change",
-      "implement",
-      change.change.id,
-      "--implementer-prompt-file",
-      "-",
-    );
-    expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
-    expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
-  }, 30_000);
+        const piped = runBuiltByWithInput(
+          root,
+          "Implementer prompt from piped stdin\n",
+          env,
+          "--json",
+          "change",
+          "implement",
+          fixture.id,
+          "--implementer-prompt-file",
+          "-",
+        );
+        expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
+        expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
+      }),
+    30_000,
+  );
 
   it.effect(
     "records Implementation Decisions through the executable",

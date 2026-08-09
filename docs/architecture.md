@@ -134,6 +134,10 @@ Repo Config remains tracked at `.but-why/config.json`.
 State databases initialize through immutable ordered Effect SQL migrations beginning with `0001_baseline`.
 A schema change appends a new Migration Artifact instead of rewriting an applied migration.
 The migration chain shipped in the first public release remains frozen after release.
+Separate processes serialize creation and migration of the same Shared Repository State through SQLite's cross-process write lock.
+A process that needs creation or migration waits for that write lock for a bounded period, retrying while another process migrates.
+When the migration remains busy past that period, the process returns the existing `state_store_unavailable` classification.
+An already-current Shared Repository State opens without migration coordination, and its ordinary operations keep their existing behavior.
 
 ## CLI and configuration
 

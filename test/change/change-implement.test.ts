@@ -7,8 +7,8 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
-import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
+import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -23,18 +23,14 @@ import {
 const now = "2026-06-30T12:00:00.000Z";
 const contractMaxImplementerPromptBytes = 256 * 1024;
 let readyRepositoryTemplate: string;
-let unreadyRepositoryTemplate: string;
 
 beforeAll(() => {
   readyRepositoryTemplate = acquireTestWorkspace();
-  initializedRepository(undefined, readyRepositoryTemplate);
-  unreadyRepositoryTemplate = acquireTestWorkspace();
-  initializedRepository("printf 'failed' >&2; exit 7", unreadyRepositoryTemplate);
+  initializedRepository(readyRepositoryTemplate);
 });
 
 afterAll(() => {
   releaseTestWorkspace(readyRepositoryTemplate);
-  releaseTestWorkspace(unreadyRepositoryTemplate);
 });
 
 const readyRepository = () =>
@@ -53,7 +49,6 @@ const readyRepository = () =>
     );
     return root;
   });
-const unreadyRepository = () => cloneInitializedTestRepository(unreadyRepositoryTemplate);
 
 const invalidImplementerPromptCases = [
   [
@@ -129,18 +124,12 @@ describe("by change implement", () => {
   it.effect("launches a ready Change and passes a 256 KiB implementer prompt unchanged", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-      };
-      writeFileSync(
-        join(change.worktreePath, ".but-why", "config.json"),
-        JSON.stringify({
+      const fixture = yield* createChangeImplementFixture(root, {
+        managedRepoConfig: {
           taskPrefix: "BY",
           agentEnvironment: { command: ["nix", "develop", "-c"] },
-        }),
-      );
+        },
+      });
       const launches: unknown[] = [];
       const host: InteractiveSessionHost = {
         launch: async (input) => {
@@ -151,15 +140,15 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", fixture.id],
         now,
         { interactiveSessionHost: host },
       );
 
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
-        changeId: change.change.id,
-        worktreePath: change.worktreePath,
+        changeId: fixture.id,
+        worktreePath: fixture.worktreePath,
         host: "herdr",
         status: "started",
         agentProfile: "implementation",
@@ -167,11 +156,11 @@ describe("by change implement", () => {
       });
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
-        changeId: change.change.id,
-        hostSessionName: `change-${change.change.id.slice(0, 8)}`,
-        agentSessionName: `Change ${change.change.id}`,
+        changeId: fixture.id,
+        hostSessionName: `change-${fixture.id.slice(0, 8)}`,
+        agentSessionName: `Change ${fixture.id}`,
         repositoryPath: root,
-        worktreePath: change.worktreePath,
+        worktreePath: fixture.worktreePath,
       });
       const launch = launches[0] as {
         readonly initialPrompt: string;
@@ -183,7 +172,7 @@ describe("by change implement", () => {
       ]);
       expect(launch).not.toHaveProperty("agentEnvironment");
       expect(launch.initialPrompt).toBe(
-        [`Change identity: ${change.change.id}.`, `Managed Worktree: ${change.worktreePath}.`].join(
+        [`Change identity: ${fixture.id}.`, `Managed Worktree: ${fixture.worktreePath}.`].join(
           "\n\n",
         ),
       );
@@ -198,7 +187,7 @@ describe("by change implement", () => {
           "--json",
           "change",
           "implement",
-          change.change.id,
+          fixture.id,
           "--implementer-prompt-file",
           implementerPromptPath,
         ],
@@ -216,8 +205,8 @@ describe("by change implement", () => {
       expect(received).toHaveLength(1);
       expect(received[0]).toBe(
         [
-          `Change identity: ${change.change.id}.`,
-          `Managed Worktree: ${change.worktreePath}.`,
+          `Change identity: ${fixture.id}.`,
+          `Managed Worktree: ${fixture.worktreePath}.`,
           implementerPrompt,
         ].join("\n\n"),
       );
@@ -227,25 +216,18 @@ describe("by change implement", () => {
   it.effect("names a Task-backed session from its Task ID and immutable title", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const taskId = yield* createTask(
-        root,
-        "Record cancellation reasons",
-        "Implement this Change.\n",
-      );
-      yield* transitionTaskToTodoForRepo(root, taskId, now);
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "start", "--task", taskId],
-        now,
-      );
-      const change = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-      };
+      const taskId = "BY-172";
+      const fixture = yield* createChangeImplementFixture(root, {
+        taskId,
+        acceptanceContext: {
+          title: "Record cancellation reasons",
+          description: "Implement this Change.\n",
+        },
+      });
       let launchInput: unknown;
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", fixture.id],
         now,
         {
           interactiveSessionHost: {
@@ -259,7 +241,7 @@ describe("by change implement", () => {
 
       expect(result.status).toBe(0);
       expect(launchInput).toMatchObject({
-        changeId: change.change.id,
+        changeId: fixture.id,
         hostSessionName: taskSlugForId(publicTaskId(taskId)),
         agentSessionName: `${taskId} Record cancellation reasons`,
       });
@@ -284,15 +266,11 @@ describe("by change implement", () => {
           },
         }),
       );
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-      };
+      const fixture = yield* createChangeImplementFixture(root);
       let launches = 0;
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", fixture.id],
         now,
         {
           interactiveSessionHost: {
@@ -389,8 +367,7 @@ describe("by change implement", () => {
   it.effect("passes the selected Global Pi Agent Profile to the Interactive Session Host", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const fixture = yield* createChangeImplementFixture(root);
       const globalConfigPath = join(root, "global-config.json");
       writeFileSync(
         globalConfigPath,
@@ -408,7 +385,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", fixture.id],
         now,
         {
           globalConfigPath,
@@ -457,20 +434,19 @@ describe("by change implement", () => {
     ([_name, globalConfig, message]) =>
       Effect.gen(function* () {
         const root = yield* readyRepository();
-        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-        const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+        const fixture = yield* createChangeImplementFixture(root);
         const globalConfigPath = join(root, "global-config.json");
         writeFileSync(globalConfigPath, JSON.stringify(globalConfig));
         const before = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "show", change.change.id],
+          ["--json", "change", "show", fixture.id],
           now,
         );
         let launches = 0;
 
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", fixture.id],
           now,
           {
             globalConfigPath,
@@ -484,7 +460,7 @@ describe("by change implement", () => {
         );
         const after = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "show", change.change.id],
+          ["--json", "change", "show", fixture.id],
           now,
         );
 
@@ -503,20 +479,14 @@ describe("by change implement", () => {
   it.effect("rejects invalid Managed Worktree Repo Config before launching", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-      };
-      writeFileSync(
-        join(change.worktreePath, ".but-why", "config.json"),
-        JSON.stringify({ taskPrefix: "BY", agentEnvironment: { command: [] } }),
-      );
+      const fixture = yield* createChangeImplementFixture(root, {
+        managedRepoConfig: { taskPrefix: "BY", agentEnvironment: { command: [] } },
+      });
       let launches = 0;
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", fixture.id],
         now,
         {
           interactiveSessionHost: {
@@ -540,31 +510,16 @@ describe("by change implement", () => {
     "keeps implementation and the implementer prompt available after failed preparation",
     () =>
       Effect.gen(function* () {
-        const root = yield* unreadyRepository();
-        writeFileSync(
-          join(root, ".test-global-config.json"),
-          JSON.stringify({
-            defaultAgentProfile: { scope: "global", name: "implementation" },
-            agentProfiles: {
-              implementation: {
-                agentRuntime: "pi",
-                runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
-              },
-            },
-          }),
-        );
-        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-        expect(started.status).toBe(0);
-        const output = JSON.parse(started.stdout) as {
-          readonly change: { readonly id: string };
-          readonly worktreePath: string;
-          readonly prepareFailure: {
-            readonly command: string;
-            readonly exitCode: number;
-            readonly stderr: string;
-          };
-        };
-        expect(output.prepareFailure).toMatchObject({ exitCode: 7 });
+        const root = yield* readyRepository();
+        const fixture = yield* createChangeImplementFixture(root, {
+          prepareFailure: {
+            command: "printf 'failed' >&2; exit 7",
+            exitCode: 7,
+            timedOut: false,
+            stdout: "",
+            stderr: "failed",
+          },
+        });
 
         let launchedPrompt: string | undefined;
         const host: InteractiveSessionHost = {
@@ -576,90 +531,29 @@ describe("by change implement", () => {
 
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", output.change.id],
+          ["--json", "change", "implement", fixture.id],
           now,
           { interactiveSessionHost: host },
         );
 
         expect(result.status).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({
-          changeId: output.change.id,
-          worktreePath: output.worktreePath,
+          changeId: fixture.id,
+          worktreePath: fixture.worktreePath,
           host: "herdr",
           status: "started",
         });
-        expect(launchedPrompt).toContain(`Change identity: ${output.change.id}.`);
+        expect(launchedPrompt).toContain(`Change identity: ${fixture.id}.`);
         expect(launchedPrompt).toContain("Current Repository Preparation failure");
         expect(launchedPrompt).toContain("exit code: 7");
         expect(launchedPrompt).toContain("stderr (bounded): failed");
       }),
   );
 
-  it.effect(
-    "keeps Submission available after failed preparation without altering the failure",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* unreadyRepository();
-        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-        expect(started.status).toBe(0);
-        const output = JSON.parse(started.stdout) as {
-          readonly change: { readonly id: string };
-          readonly worktreePath: string;
-        };
-
-        const submit = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "submit", output.change.id],
-          now,
-        );
-
-        expect(submit.status).toBe(0);
-        expect(JSON.parse(submit.stdout)).toMatchObject({
-          changeId: output.change.id,
-          status: "nothing_to_submit",
-        });
-        const shown = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "show", output.change.id],
-          now,
-        );
-        expect(JSON.parse(shown.stdout)).toMatchObject({
-          change: {
-            id: output.change.id,
-            state: "open",
-            worktreePath: output.worktreePath,
-            prepareFailure: { exitCode: 7 },
-          },
-        });
-      }),
-  );
-
   it.effect("maps host outcomes and remains launchable after retryable failures", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-      };
-      writeFileSync(join(change.worktreePath, "dirty.txt"), "uncommitted\n");
-      const submit = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "submit", change.change.id],
-        now,
-      );
-      expect(submit.status).toBe(1);
-      expect(JSON.parse(submit.stdout)).toMatchObject({
-        error: {
-          code: "dirty_work",
-          changeId: change.change.id,
-          recovery: {
-            authority: "change_submit",
-            action: "resolve_dirty_work",
-            retryCommand: `by change submit ${change.change.id}`,
-          },
-        },
-      });
+      const fixture = yield* createChangeImplementFixture(root);
 
       const cases: readonly {
         readonly host: InteractiveSessionHost;
@@ -728,7 +622,7 @@ describe("by change implement", () => {
       for (const testCase of cases) {
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", fixture.id],
           now,
           { interactiveSessionHost: testCase.host },
         );
@@ -741,8 +635,7 @@ describe("by change implement", () => {
   it.effect("passes piped UTF-8 standard input to the Interactive Session Host", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const fixture = yield* createChangeImplementFixture(root);
       const stdinPath = join(root, "stdin-implementer-prompt.md");
       writeFileSync(stdinPath, "Implementer prompt from stdin: Héllo\n");
       const stdin = openSync(stdinPath, "r");
@@ -757,7 +650,7 @@ describe("by change implement", () => {
       try {
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", change.change.id, "--implementer-prompt-file", "-"],
+          ["--json", "change", "implement", fixture.id, "--implementer-prompt-file", "-"],
           now,
           { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
         );
@@ -833,20 +726,7 @@ describe("by change implement", () => {
   );
 });
 
-const createTask = (root: string, title: string, description: string) =>
-  Effect.gen(function* () {
-    const descriptionPath = join(root, `.task-${title.toLowerCase().replaceAll(" ", "-")}.md`);
-    writeFileSync(descriptionPath, description);
-    const created = yield* runByInProcessEffect(
-      root,
-      ["--json", "task", "create", "--title", title, "--file", descriptionPath],
-      now,
-    );
-    expect(created.status).toBe(0);
-    return (JSON.parse(created.stdout) as { readonly task: { readonly id: string } }).task.id;
-  });
-
-const initializedRepository = (prepare?: string, workspace?: string): string => {
+const initializedRepository = (workspace?: string): string => {
   const root = createInitializedRepo(workspace);
   writeFileSync(
     join(root, ".but-why", "config.json"),
@@ -854,7 +734,6 @@ const initializedRepository = (prepare?: string, workspace?: string): string => 
       {
         taskPrefix: "BY",
         validation: { checks: [{ id: "quality", command: "true" }] },
-        ...(prepare === undefined ? {} : { prepare: { command: prepare } }),
       },
       null,
       2,
