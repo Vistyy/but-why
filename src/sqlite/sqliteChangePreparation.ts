@@ -13,6 +13,7 @@ export const decodeSqliteChangePrepareFailure = (encoded: string): ChangePrepare
     typeof value.command !== "string" ||
     !("exitCode" in value) ||
     typeof value.exitCode !== "number" ||
+    !Number.isSafeInteger(value.exitCode) ||
     !("timedOut" in value) ||
     typeof value.timedOut !== "boolean" ||
     !("stdout" in value) ||

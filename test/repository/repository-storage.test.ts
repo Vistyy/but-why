@@ -3197,11 +3197,20 @@ describe("repository SQL storage", () => {
                       FOREIGN KEY (change_id) REFERENCES changes(id)
                     )`);
                     yield* sql`
+                      INSERT INTO tasks (
+                        id, numeric_id, title, description, state, cancel_reason,
+                        created_at, updated_at
+                      ) VALUES (
+                        'BY-1', 1, 'Current intent', 'Must survive.', 'todo', NULL,
+                        '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z'
+                      )
+                    `;
+                    yield* sql`
                       INSERT INTO changes (
-                        id, repository_common_directory, branch_ref, state, close_reason,
+                        id, repository_common_directory, branch_ref, task_id, state, close_reason,
                         created_at, updated_at, closed_at, acceptance_context
                       ) VALUES (
-                        'change-with-context', ${directory}, 'refs/heads/with-context',
+                        'change-with-context', ${directory}, 'refs/heads/with-context', 'BY-1',
                         'open', NULL, '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z',
                         NULL,
                         '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}'
