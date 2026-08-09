@@ -9,6 +9,7 @@ import {
   type CliResult,
   restoredTransientState,
   runtimeError,
+  stateStoreUnavailable,
   success,
   usageError,
 } from "../cliResults.js";
@@ -81,6 +82,8 @@ export const runInitCommand = (
             });
           case "restored_transient_state":
             return restoredTransientState(initResult.error.tasks, initResult.error.changes);
+          case "state_store_unavailable":
+            return stateStoreUnavailable(command.taskPrefix);
         }
       }
 

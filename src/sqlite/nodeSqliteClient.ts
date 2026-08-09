@@ -82,10 +82,15 @@ const nodeSqliteConnection = (database: DatabaseSync): NodeSqliteConnection => {
   };
 };
 
-export const nodeSqliteLayer = (filename: string): Layer.Layer<SqlClient.SqlClient> =>
+export const nodeSqliteLayer = (
+  filename: string,
+  options: { readonly busyTimeoutMs?: number } = {},
+): Layer.Layer<SqlClient.SqlClient> =>
   Layer.scopedContext(
     Effect.gen(function* () {
-      const database = new DatabaseSync(filename, { timeout: busyTimeoutMs });
+      const database = new DatabaseSync(filename, {
+        timeout: options.busyTimeoutMs ?? busyTimeoutMs,
+      });
       const scope = yield* Effect.scope;
       yield* Scope.addFinalizer(
         scope,

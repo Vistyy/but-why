@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
-  "entry": ["src/main.ts", "extensions/**/*.ts", "test/**/*.ts"],
+  "entry": ["src/main.ts", "extensions/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
   "ignoreDependencies": [
     "@ai-hero/sandcastle",
     "@effect/cli",

@@ -26,32 +26,40 @@ import { restrictLifecycleStatesMigration as restrictLifecycleStates } from "./m
 import { removeTaskCommentsMigration as removeTaskComments } from "./migrations/0024_remove_task_comments.js";
 import { repairValidationPolicySnapshotOkFieldMigration as repairValidationPolicySnapshotOkField } from "./migrations/0025_repair_validation_policy_snapshot_ok_field.js";
 
+const migrations = {
+  "0001_baseline": baseline,
+  "0002_reviewer_sessions": reviewerSessions,
+  "0003_implementation_decisions": implementationDecisions,
+  "0004_implementation_blockers": implementationBlockers,
+  "0005_acceptance_context_versions": acceptanceContextVersions,
+  "0006_reconcile_implementation_blocker_storage": reconcileImplementationBlockerStorage,
+  "0007_reviewer_sessions_per_producer": specialistReviewerSessions,
+  "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,
+  "0009_active_validation_runs": activeValidationRuns,
+  "0010_validation_workspace_paths": validationWorkspacePaths,
+  "0011_candidate_publications": candidatePublications,
+  "0012_structured_implementation_decisions": structuredImplementationDecisions,
+  "0013_remove_no_change_completion": removeNoChangeCompletion,
+  "0014_remove_change_readiness": removeChangeReadiness,
+  "0015_remove_acceptance_context_versions": removeAcceptanceContextVersions,
+  "0016_remove_implementation_decision_content": removeImplementationDecisionContent,
+  "0017_validation_run_blocker_identity": validationRunBlockerIdentity,
+  "0018_remove_finding_severity": removeFindingSeverity,
+  "0019_simplify_reviewer_sessions": simplifyReviewerSessions,
+  "0020_remove_candidate_publications": removeCandidatePublications,
+  "0021_reviewer_transcripts": reviewerTranscripts,
+  "0022_change_cancel_reason": changeCancelReason,
+  "0023_restrict_lifecycle_states": restrictLifecycleStates,
+  "0024_remove_task_comments": removeTaskComments,
+  "0025_repair_validation_policy_snapshot_ok_field": repairValidationPolicySnapshotOkField,
+};
+
 export const migrateRepositoryState = Migrator.make({})({
-  loader: Migrator.fromRecord({
-    "0001_baseline": baseline,
-    "0002_reviewer_sessions": reviewerSessions,
-    "0003_implementation_decisions": implementationDecisions,
-    "0004_implementation_blockers": implementationBlockers,
-    "0005_acceptance_context_versions": acceptanceContextVersions,
-    "0006_reconcile_implementation_blocker_storage": reconcileImplementationBlockerStorage,
-    "0007_reviewer_sessions_per_producer": specialistReviewerSessions,
-    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,
-    "0009_active_validation_runs": activeValidationRuns,
-    "0010_validation_workspace_paths": validationWorkspacePaths,
-    "0011_candidate_publications": candidatePublications,
-    "0012_structured_implementation_decisions": structuredImplementationDecisions,
-    "0013_remove_no_change_completion": removeNoChangeCompletion,
-    "0014_remove_change_readiness": removeChangeReadiness,
-    "0015_remove_acceptance_context_versions": removeAcceptanceContextVersions,
-    "0016_remove_implementation_decision_content": removeImplementationDecisionContent,
-    "0017_validation_run_blocker_identity": validationRunBlockerIdentity,
-    "0018_remove_finding_severity": removeFindingSeverity,
-    "0019_simplify_reviewer_sessions": simplifyReviewerSessions,
-    "0020_remove_candidate_publications": removeCandidatePublications,
-    "0021_reviewer_transcripts": reviewerTranscripts,
-    "0022_change_cancel_reason": changeCancelReason,
-    "0023_restrict_lifecycle_states": restrictLifecycleStates,
-    "0024_remove_task_comments": removeTaskComments,
-    "0025_repair_validation_policy_snapshot_ok_field": repairValidationPolicySnapshotOkField,
-  }),
+  loader: Migrator.fromRecord(migrations),
 });
+
+export const repositoryMigrationIds: readonly number[] = Object.keys(migrations)
+  .map((key) => /^(\d+)_/.exec(key)?.[1])
+  .filter((id): id is string => id !== undefined)
+  .map(Number)
+  .sort((left, right) => left - right);
