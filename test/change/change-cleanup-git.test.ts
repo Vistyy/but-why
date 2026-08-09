@@ -527,6 +527,44 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
     expect(reads).toBe(1);
   });
 
+  it("keeps discard pending when the Remote Change Branch is excluded", () => {
+    const repository = initializedRepository();
+    let deleted = false;
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/but-why/feature",
+          discardWork: true,
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "but-why/feature",
+            targetBranch: "main",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "excluded" }),
+          deleteRemoteBranch: () => {
+            deleted = true;
+            return { state: "deleted" };
+          },
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_excluded" });
+    expect(deleted).toBe(false);
+  });
+
   it("preserves a Remote Change Branch from a repointed remote", () => {
     const repository = initializedRepository();
 
