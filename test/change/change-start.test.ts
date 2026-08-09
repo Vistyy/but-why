@@ -245,11 +245,11 @@ describe("Change Start orchestration", () => {
             stderr: "ok\n__BUTWHY_PREPARE_COMPLETED_prepare__:0\n",
           }),
         ];
-        const commands: string[] = [];
+        const commands: Array<{ readonly command: string; readonly cwd?: string }> = [];
         const captured = fixture({
           prepare: { command: "prepare repository", timeoutSeconds: 17 },
-          execute: (command) => {
-            commands.push(command);
+          execute: (command, options) => {
+            commands.push({ command, ...options });
             return command.startsWith("command -v timeout")
               ? Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
               : required(responses.shift(), "missing captured preparation response");
@@ -277,7 +277,8 @@ describe("Change Start orchestration", () => {
           ok: true,
           change: { id, prepareFailure: null },
         });
-        expect(commands.filter((command) => command.includes("timeout 17s"))).toHaveLength(4);
+        expect(commands.filter(({ command }) => command.includes("timeout 17s"))).toHaveLength(4);
+        expect(commands.every(({ cwd }) => cwd === intent.worktreePath)).toBe(true);
         expect(
           captured.events.filter((event) => event === "provisionWorktree:recover"),
         ).toHaveLength(3);
