@@ -36,6 +36,7 @@ import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceCon
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
+import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
 
 export type CandidateValidationPolicy = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -279,12 +280,7 @@ const makeCandidateValidation = (dependencies: {
         now: input.now,
       });
     }
-    const outcome: CandidateValidationOutcome =
-      toolingFailures.length > 0
-        ? "tooling_failed"
-        : activeResult?.validationFindings === 1
-          ? "blocked"
-          : "passed";
+    const outcome: CandidateValidationOutcome = activeResult?.outcome ?? "passed";
     yield* dependencies.persistence.complete({
       validationRunId: started.validationRunId,
       outcome,
@@ -344,17 +340,18 @@ const runCandidatePhases = (
   },
 ): Effect.Effect<
   {
-    readonly validationFindings: 0 | 1;
+    readonly outcome: CandidateValidationOutcome;
     readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
-    readonly toolingFailures?: readonly ValidationToolingFailure[];
+    readonly toolingFailures: readonly ValidationToolingFailure[];
   },
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
     const resourceRoot = activeWorkspace.worktreePath;
-    let reviewerEvidence: ReviewerExecutionEvidence | undefined;
+    const prepare = input.policy.prepare;
+    const acceptanceInput = "acceptanceContext" in input ? input : undefined;
     const sessionOptions = {
       ...(dependencies.sessionStore === undefined
         ? {}
@@ -363,106 +360,97 @@ const runCandidatePhases = (
         ? {}
         : { sessionStorageRoot: dependencies.reviewerSessionsRoot }),
     };
-    if (input.policy.prepare !== undefined) {
-      const prepare = yield* runPreparePhase({
-        validationRunId,
-        prepare: input.policy.prepare,
-        sandbox: activeWorkspace.sandbox,
-        artifactsRoot: dependencies.artifactsRoot,
-        artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: activeWorkspace.worktreePath,
-        expectedHeadSha: input.headSha,
-        allowedUntrackedFiles: input.policy.copyFiles,
-        ...(input.progress === undefined ? {} : { progress: input.progress }),
-        now: input.now,
-        recordPrepareRound: dependencies.persistence.recordPrepareRound,
-      });
-      if (prepare.findings === 1) return { validationFindings: 1 as const };
-    }
-    const checks = yield* runCheckPhase({
-      validationRunId,
-      checks: input.policy.checks,
-      sandbox: activeWorkspace.sandbox,
-      artifactsRoot: dependencies.artifactsRoot,
-      artifactMaxBytes: maxValidationArtifactBytes,
-      commandCwd: activeWorkspace.worktreePath,
-      expectedHeadSha: input.headSha,
-      allowedUntrackedFiles: input.policy.copyFiles,
-      ...(input.progress === undefined ? {} : { progress: input.progress }),
-      now: input.now,
-      continueAfterFinding: true,
-      recordCheckRound: dependencies.persistence.recordCheckRound,
-    });
-    if (checks.findings === 1) return { validationFindings: 1 as const };
-    if ("acceptanceContext" in input) {
-      const acceptance = yield* runAcceptanceReviewPhase({
-        validationRunId,
-        changeId: input.changeId,
-        candidate: candidateIdentity(input),
-        acceptanceContext: input.acceptanceContext,
-        implementationDecisions: input.implementationDecisions,
-        ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
-        policy: input.policy.acceptanceReview,
-        ...(input.progress === undefined ? {} : { progress: input.progress }),
-        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-        runtime: dependencies.reviewerAgentRuntime,
-        sandbox: activeWorkspace.sandbox,
-        artifactsRoot: dependencies.artifactsRoot,
-        artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: activeWorkspace.worktreePath,
-        resourceRoot,
-        allowedUntrackedFiles: input.policy.copyFiles,
-        now: input.now,
-        listArtifacts: dependencies.persistence.listArtifacts,
-        listPreviousCandidateReviewerFindings:
-          dependencies.persistence.listPreviousCandidateReviewerFindings,
-        recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
-        ...sessionOptions,
-      });
-      reviewerEvidence = acceptance.reviewerEvidence;
-      if (acceptance.toolingFailure !== undefined) {
-        return {
-          validationFindings: 0 as const,
-          ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
-          toolingFailures: [acceptance.toolingFailure],
-        };
-      }
-      if (acceptance.findings === 1)
-        return {
-          validationFindings: 1 as const,
-          ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
-        };
-    }
-    const specialists = yield* runSpecialistReviewPhase({
-      validationRunId,
-      changeId: input.changeId,
-      candidate: candidateIdentity(input),
-      policies: input.policy.specialistReviews,
-      ...("acceptanceContext" in input ? { acceptanceContext: input.acceptanceContext } : {}),
-      ...(input.progress === undefined ? {} : { progress: input.progress }),
-      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-      runtime: dependencies.reviewerAgentRuntime,
-      sandbox: activeWorkspace.sandbox,
-      artifactsRoot: dependencies.artifactsRoot,
-      artifactMaxBytes: maxValidationArtifactBytes,
-      commandCwd: activeWorkspace.worktreePath,
-      resourceRoot,
-      allowedUntrackedFiles: input.policy.copyFiles,
-      now: input.now,
-      listArtifacts: dependencies.persistence.listArtifacts,
-      listPreviousCandidateReviewerFindings:
-        dependencies.persistence.listPreviousCandidateReviewerFindings,
-      recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
-      ...sessionOptions,
-    });
-    return {
-      validationFindings: specialists.findings,
-      ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
-      ...(specialists.reviewerEvidence.length === 0
+    return yield* runCandidateValidationGate({
+      ...(prepare === undefined
         ? {}
-        : { specialistReviewerEvidence: specialists.reviewerEvidence }),
-      toolingFailures: specialists.toolingFailures,
-    };
+        : {
+            prepare: () =>
+              runPreparePhase({
+                validationRunId,
+                prepare,
+                sandbox: activeWorkspace.sandbox,
+                artifactsRoot: dependencies.artifactsRoot,
+                artifactMaxBytes: maxValidationArtifactBytes,
+                commandCwd: activeWorkspace.worktreePath,
+                expectedHeadSha: input.headSha,
+                allowedUntrackedFiles: input.policy.copyFiles,
+                ...(input.progress === undefined ? {} : { progress: input.progress }),
+                now: input.now,
+                recordPrepareRound: dependencies.persistence.recordPrepareRound,
+              }),
+          }),
+      checks: () =>
+        runCheckPhase({
+          validationRunId,
+          checks: input.policy.checks,
+          sandbox: activeWorkspace.sandbox,
+          artifactsRoot: dependencies.artifactsRoot,
+          artifactMaxBytes: maxValidationArtifactBytes,
+          commandCwd: activeWorkspace.worktreePath,
+          expectedHeadSha: input.headSha,
+          allowedUntrackedFiles: input.policy.copyFiles,
+          ...(input.progress === undefined ? {} : { progress: input.progress }),
+          now: input.now,
+          continueAfterFinding: true,
+          recordCheckRound: dependencies.persistence.recordCheckRound,
+        }),
+      ...(acceptanceInput === undefined
+        ? {}
+        : {
+            acceptanceReview: () =>
+              runAcceptanceReviewPhase({
+                validationRunId,
+                changeId: acceptanceInput.changeId,
+                candidate: candidateIdentity(acceptanceInput),
+                acceptanceContext: acceptanceInput.acceptanceContext,
+                implementationDecisions: acceptanceInput.implementationDecisions,
+                ...(acceptanceInput.blockerHistory === undefined
+                  ? {}
+                  : { blockerHistory: acceptanceInput.blockerHistory }),
+                policy: acceptanceInput.policy.acceptanceReview,
+                ...(acceptanceInput.progress === undefined
+                  ? {}
+                  : { progress: acceptanceInput.progress }),
+                ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                runtime: dependencies.reviewerAgentRuntime,
+                sandbox: activeWorkspace.sandbox,
+                artifactsRoot: dependencies.artifactsRoot,
+                artifactMaxBytes: maxValidationArtifactBytes,
+                commandCwd: activeWorkspace.worktreePath,
+                resourceRoot,
+                allowedUntrackedFiles: input.policy.copyFiles,
+                now: input.now,
+                listArtifacts: dependencies.persistence.listArtifacts,
+                listPreviousCandidateReviewerFindings:
+                  dependencies.persistence.listPreviousCandidateReviewerFindings,
+                recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
+                ...sessionOptions,
+              }),
+          }),
+      specialistReviews: () =>
+        runSpecialistReviewPhase({
+          validationRunId,
+          changeId: input.changeId,
+          candidate: candidateIdentity(input),
+          policies: input.policy.specialistReviews,
+          ...("acceptanceContext" in input ? { acceptanceContext: input.acceptanceContext } : {}),
+          ...(input.progress === undefined ? {} : { progress: input.progress }),
+          ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+          runtime: dependencies.reviewerAgentRuntime,
+          sandbox: activeWorkspace.sandbox,
+          artifactsRoot: dependencies.artifactsRoot,
+          artifactMaxBytes: maxValidationArtifactBytes,
+          commandCwd: activeWorkspace.worktreePath,
+          resourceRoot,
+          allowedUntrackedFiles: input.policy.copyFiles,
+          now: input.now,
+          listArtifacts: dependencies.persistence.listArtifacts,
+          listPreviousCandidateReviewerFindings:
+            dependencies.persistence.listPreviousCandidateReviewerFindings,
+          recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
+          ...sessionOptions,
+        }),
+    });
   })();
 
 const candidateIdentity = (

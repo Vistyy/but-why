@@ -526,7 +526,7 @@ describe("Validation Workspace scoped lifecycle", () => {
           Effect.sync(() => {
             phasesRan = true;
             expect(workspace.worktreePath).toBe(expectedWorktreePath);
-            return { validationFindings: 0 as const };
+            return { outcome: "passed" as const, toolingFailures: [] };
           }),
       });
 
