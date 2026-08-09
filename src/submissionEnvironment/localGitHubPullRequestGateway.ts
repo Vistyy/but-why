@@ -527,7 +527,7 @@ const initialRemoteHeadState = (
 } => {
   const remoteHead = runGit([
     "-c",
-    `url.${destination}.pushInsteadOf=${destination}`,
+    `url.${destination}.insteadOf=${destination}`,
     "ls-remote",
     "--heads",
     destination,

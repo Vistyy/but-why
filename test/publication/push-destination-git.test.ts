@@ -51,6 +51,17 @@ describe("Git push destination binding", () => {
       `${candidate}:refs/heads/candidate`,
     );
 
+    expect(
+      git(
+        source,
+        "-c",
+        `url.${checkedDestination}.insteadOf=${checkedDestination}`,
+        "ls-remote",
+        "--heads",
+        checkedDestination,
+        "refs/heads/candidate",
+      ).split(/\s/u)[0],
+    ).toBe(candidate);
     expect(git(intended, "rev-parse", "refs/heads/candidate")).toBe(candidate);
     expect(
       runTestProcess("git", ["rev-parse", "--verify", "refs/heads/candidate"], { cwd: redirected })

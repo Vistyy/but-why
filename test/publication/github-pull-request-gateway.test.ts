@@ -56,7 +56,7 @@ describe("GitHub pull request gateway", () => {
       ["remote", "get-url", "--push", "--all", "origin"],
       [
         "-c",
-        "url.https://github.com/acme/widgets.git.pushInsteadOf=https://github.com/acme/widgets.git",
+        "url.https://github.com/acme/widgets.git.insteadOf=https://github.com/acme/widgets.git",
         "ls-remote",
         "--heads",
         "https://github.com/acme/widgets.git",
