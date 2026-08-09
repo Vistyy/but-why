@@ -11,11 +11,11 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerOutputContractFailed } from "../../contracts/reviewerOutputContractFailure.js";
 import {
   type ReviewerOutput,
   validateReviewerArtifactRefs,
 } from "../../contracts/reviewerOutput.js";
+import type { ReviewerOutputContractFailed } from "../../contracts/reviewerOutputContractFailure.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
