@@ -3,61 +3,26 @@ import { Effect } from "effect";
 
 import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
+import type { CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import type { PublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
+import { encodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
-  decodeSqliteAcceptanceContextSnapshot,
-  encodeSqliteAcceptanceContextSnapshot,
-} from "./sqliteAcceptanceContextSnapshot.js";
-import {
-  decodeSqliteChangePrepareFailure,
-  encodeSqliteChangePrepareFailure,
-} from "./sqliteChangePreparation.js";
-import {
-  decodeSqliteChangePublication,
-  type SqliteChangePublicationRow,
-} from "./sqliteChangePublication.js";
+  changeReadColumns,
+  decodeChangeRow,
+  requireChangeStartRecord,
+  type UnknownChangeRow,
+  validateChangeRelationships,
+} from "./sqliteChangeReadModel.js";
 import {
   type DecodedTaskGraph,
+  decodePersisted,
   readDecodedTaskGraph,
   taskDependencyFacts,
 } from "./sqliteTaskReadModel.js";
-
-const columns = [
-  "id",
-  "repository_common_directory AS repositoryCommonDirectory",
-  "branch_ref AS branchRef",
-  "base_ref AS baseRef",
-  "base_remote_url AS baseRemoteUrl",
-  "task_id AS taskId",
-  "starting_commit AS startingCommit",
-  "worktree_path AS worktreePath",
-  "acceptance_context AS acceptanceContext",
-  "prepare_command AS prepareCommand",
-  "prepare_timeout_seconds AS prepareTimeoutSeconds",
-  "prepare_failure AS prepareFailure",
-  "publication_candidate_id AS publicationCandidateId",
-  "publication_validation_run_id AS publicationValidationRunId",
-  "publication_owner AS publicationOwner",
-  "publication_repo AS publicationRepo",
-  "publication_base_branch AS publicationBaseBranch",
-  "publication_remote_name AS publicationRemoteName",
-  "publication_head_branch AS publicationHeadBranch",
-  "publication_expected_head_sha AS publicationExpectedHeadSha",
-  "publication_pr_number AS publicationPrNumber",
-  "publication_pr_url AS publicationPrUrl",
-  "cleanup_state AS cleanupState",
-  "cleanup_blocking_reason AS cleanupBlockingReason",
-  "state",
-  "close_reason AS closeReason",
-  "cancel_reason AS cancelReason",
-  "created_at AS createdAt",
-  "updated_at AS updatedAt",
-  "closed_at AS closedAt",
-].join(", ");
 
 export const openSqliteChangeStartPersistence = (): Effect.Effect<
   ChangeStartPersistence,
@@ -203,86 +168,30 @@ const recordPrepareOutcome = (
 
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.flatMap(
-    sql.unsafe<ChangeStartRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
-    (rows) => mapRow(rows[0]),
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
+      taskId,
+    ]),
+    (rows) => mapRow(rows[0], sql),
   );
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql.unsafe<ChangeStartRow>(`SELECT ${columns} FROM changes WHERE id = ?`, [changeId]),
-    (rows) => mapRow(rows[0]),
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
+      changeId,
+    ]),
+    (rows) => mapRow(rows[0], sql),
   );
 
-const mapRow = (row: ChangeStartRow | undefined) => {
-  if (
-    row === undefined ||
-    row.baseRef === null ||
-    row.baseRemoteUrl === null ||
-    row.startingCommit === null ||
-    row.worktreePath === null
-  ) {
-    return Effect.succeed(undefined);
-  }
-  const baseRef = row.baseRef;
-  const baseRemoteUrl = row.baseRemoteUrl;
-  const startingCommit = row.startingCommit;
-  const worktreePath = row.worktreePath;
-  return Effect.try({
-    try: (): ChangeStartRecord => ({
-      id: row.id,
-      repositoryCommonDirectory: row.repositoryCommonDirectory,
-      branchRef: row.branchRef,
-      baseRef,
-      baseRemoteUrl,
-      taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-      startingCommit,
-      worktreePath,
-      acceptanceContext:
-        row.acceptanceContext === null
-          ? null
-          : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-      prepare:
-        row.prepareCommand === null || row.prepareTimeoutSeconds === null
-          ? null
-          : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-      prepareFailure:
-        row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
-      publication: decodeSqliteChangePublication(row),
-      cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-      state: row.state,
-      closeReason: row.closeReason,
-      cancelReason: row.cancelReason,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      closedAt: row.closedAt,
-    }),
-    catch: (cause) =>
-      new RepositoryPersistedDataInvalid({ operationName: "read Change Start", cause }),
-  });
-};
+const mapRow = (row: UnknownChangeRow | undefined, sql: SqlClient.SqlClient) =>
+  row === undefined
+    ? Effect.succeed(undefined)
+    : Effect.gen(function* () {
+        const change = yield* decodePersisted("read Change Start", () =>
+          requireChangeStartRecord(decodeChangeRow(row)),
+        );
+        yield* validateChangeRelationships(sql, change, "read Change Start");
+        return change;
+      });
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-type ChangeStartRow = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly taskId: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly cleanupState: ChangeStartRecord["cleanup"]["state"];
-  readonly cleanupBlockingReason: string | null;
-  readonly state: ChangeStartRecord["state"];
-  readonly closeReason: ChangeStartRecord["closeReason"];
-  readonly cancelReason: ChangeStartRecord["cancelReason"];
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
-} & SqliteChangePublicationRow;

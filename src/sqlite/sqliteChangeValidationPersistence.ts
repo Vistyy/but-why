@@ -25,9 +25,16 @@ import {
   encodeSqliteCandidateValidationPolicy,
 } from "./sqliteCandidateValidationPolicy.js";
 import {
+  decodeImplementationBlockerHistory,
+  implementationBlockerReadColumns,
+  latestResolvedBlockerId,
+  type UnknownImplementationBlockerRow,
+} from "./sqliteChangeReadModel.js";
+import {
   decodeSqliteJsonStringArray,
   encodeSqliteJsonStringArray,
 } from "./sqliteJsonStringArray.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeValidationPersistence = (): Effect.Effect<
   ChangeValidationPersistence,
@@ -218,28 +225,22 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       });
     }
 
-    const unresolvedBlockers = yield* sql<{ readonly id: string }>`
-      SELECT blocker.id
-      FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
-        AND blocker.resolved_at IS NULL
-      LIMIT 1
-    `;
-    if (unresolvedBlockers.length > 0) {
+    const blockerRows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns}
+       FROM implementation_blockers
+       WHERE change_id = ?`,
+      [candidate.changeId],
+    );
+    const blockerHistory = yield* decodePersisted("start Candidate Validation Run", () =>
+      decodeImplementationBlockerHistory(blockerRows, candidate.changeId),
+    );
+    if (blockerHistory.active !== null) {
       return {
         reused: false,
         blocked: true,
       } satisfies StartCandidateValidationRunResult;
     }
-    const latestResolved = yield* sql<{ readonly id: string }>`
-      SELECT blocker.id
-      FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
-        AND blocker.resolved_at IS NOT NULL
-      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-      LIMIT 1
-    `;
-    const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
+    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const policySnapshot = yield* Effect.try({
       try: () => encodeSqliteCandidateValidationPolicy(input.policy),
       catch: (cause) =>
@@ -257,8 +258,8 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         AND state = 'complete'
         AND outcome = 'passed'
         AND (
-          (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
-          OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
+          (latest_resolved_blocker_id IS NULL AND ${currentLatestResolvedBlockerId} IS NULL)
+          OR latest_resolved_blocker_id = ${currentLatestResolvedBlockerId}
         )
       LIMIT 1
     `;
@@ -291,7 +292,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         state, created_at, updated_at
       ) VALUES (
         ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${decisionsSnapshot},
-        ${latestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
+        ${currentLatestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
       )
     `;
     yield* sql`

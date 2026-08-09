@@ -26,7 +26,12 @@ export const decodeSqliteChangePublication = (
     row.publicationHeadBranch,
     row.publicationExpectedHeadSha,
   ];
-  if (values.every((value) => value === null)) return null;
+  if (values.every((value) => value === null)) {
+    if (row.publicationPrNumber !== null || row.publicationPrUrl !== null) {
+      throw new Error("Stored Change publication marker is incomplete");
+    }
+    return null;
+  }
   if (values.some((value) => value === null)) {
     throw new Error("Stored Change publication marker is incomplete");
   }

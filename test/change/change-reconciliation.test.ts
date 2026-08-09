@@ -7,6 +7,7 @@ import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js"
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
@@ -14,6 +15,30 @@ import { publicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-07-24T10:00:00.000Z";
+
+const installPublicationIdentity = (changeId: string) =>
+  Effect.gen(function* () {
+    const repository = yield* RepositorySql;
+    yield* repository.operation("install reconciliation publication identity", (sql) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+          VALUES ('candidate-1', ${changeId}, 'base', 'head', ${now})
+        `;
+        yield* sql`
+          INSERT INTO candidate_validation_runs (
+            id, candidate_id, policy_snapshot, implementation_decisions,
+            latest_resolved_blocker_id, state, outcome, created_at, updated_at
+          ) VALUES (
+            'validation-run-1', 'candidate-1',
+            '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+            'complete', 'passed', ${now}, ${now}
+          )
+        `;
+      }),
+    );
+  });
+
 describe("by change reconcile", () => {
   it.effect(
     "leaves a closed unmerged owned pull request and its Change open",
@@ -44,6 +69,7 @@ describe("by change reconcile", () => {
             changeBaseSha: "base",
             now,
           };
+          yield* installPublicationIdentity(created.change.id);
           const begun = yield* changes.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
           const recorded = yield* changes.recordPublishedPullRequest({
@@ -134,6 +160,7 @@ describe("by change reconcile", () => {
             changeBaseSha: "base",
             now,
           };
+          yield* installPublicationIdentity(created.change.id);
           const begun = yield* changes.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
           const recorded = yield* changes.recordPublishedPullRequest({
@@ -243,6 +270,7 @@ describe("by change reconcile", () => {
           changeBaseSha: "base",
           now,
         };
+        yield* installPublicationIdentity(created.change.id);
         const begun = yield* changes.beginPublication(publication);
         if (!begun.ok) throw new Error(begun.code);
         const recorded = yield* changes.recordPublishedPullRequest({
@@ -371,6 +399,7 @@ describe("by change reconcile", () => {
             changeBaseSha: "base",
             now,
           };
+          yield* installPublicationIdentity(created.change.id);
           const begun = yield* changes.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
           const recorded = yield* changes.recordPublishedPullRequest({
@@ -480,6 +509,7 @@ describe("by change reconcile", () => {
             changeBaseSha: "base",
             now,
           };
+          yield* installPublicationIdentity(created.change.id);
           const begun = yield* changes.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
           const recorded = yield* changes.recordPublishedPullRequest({
@@ -587,6 +617,7 @@ describe("by change reconcile", () => {
             changeBaseSha: "base",
             now,
           };
+          yield* installPublicationIdentity(created.change.id);
           const begun = yield* changes.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
           const recorded = yield* changes.recordPublishedPullRequest({
