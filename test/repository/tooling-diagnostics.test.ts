@@ -143,8 +143,7 @@ describe("repository-authored blocking diagnostics", () => {
   test.each([
     ["scripts/run-test-workload.sh", [], /test|coverage/],
     ["scripts/run-test-workload.sh", ["invalid"], /test|coverage/],
-    ["scripts/run-quality-workload.sh", [], /quality|full-quality/],
-    ["scripts/run-quality-workload.sh", ["invalid"], /quality|full-quality/],
+    ["scripts/run-quality-workload.sh", ["invalid"], /just quality/],
     ["scripts/with-capacity-lock.sh", [], /workload-class|command/],
   ])("repository script %s reports its next action", (script, args, expectedAction) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-script-"));

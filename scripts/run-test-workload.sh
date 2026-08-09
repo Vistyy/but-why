@@ -38,4 +38,4 @@ if (( has_selection == 1 )); then
     exec pnpm exec vitest "${vitest_args[@]}"
 fi
 
-exec ./scripts/with-capacity-lock.sh "complete $workload" pnpm exec vitest "${vitest_args[@]}"
+exec ./scripts/with-capacity-lock.sh "$workload" pnpm exec vitest "${vitest_args[@]}"

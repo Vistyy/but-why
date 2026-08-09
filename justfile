@@ -30,23 +30,19 @@ fix:
     @just --unstable --fmt
     @pnpm exec biome check --write .
 
-# Run routine product feedback without coverage or slow external boundaries.
+# Run the blocking static checks, build, and maintained tests.
 quality:
-    @exec ./scripts/run-quality-workload.sh quality
+    @exec ./scripts/run-quality-workload.sh
 
-# Run complete product feedback, including focused external boundaries, without coverage.
-full-quality:
-    @exec ./scripts/run-quality-workload.sh full-quality
-
-# Run routine static checks that do not require coverage.
-_quality-static-routine:
+# Run blocking static checks that do not require coverage.
+_quality-static:
     #!/usr/bin/env bash
     set -uo pipefail
     just docs-check & docs_pid=$!
     just check & check_pid=$!
     just ast-grep-check & ast_grep_pid=$!
     just typecheck & typecheck_pid=$!
-    just _fallow-routine-check & fallow_pid=$!
+    just _fallow-static-check & fallow_pid=$!
     status=0
     for pid in "$docs_pid" "$check_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
         wait "$pid" || status=1
@@ -74,10 +70,10 @@ fallow-check:
     just _fallow-check
 
 _fallow-check:
-    just _fallow-routine-check
+    just _fallow-static-check
     just _fallow-coverage-check
 
-_fallow-routine-check:
+_fallow-static-check:
     #!/usr/bin/env bash
     set -uo pipefail
     status=0
