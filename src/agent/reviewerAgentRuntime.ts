@@ -24,7 +24,7 @@ import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
 export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecutionFailed")<{
-  readonly operationName: "run_reviewer_agent" | "decode_reviewer_output";
+  readonly operationName: string;
   readonly message: string;
   readonly diagnostics?: readonly ContractDiagnostic[];
 }> {}

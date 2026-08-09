@@ -17,7 +17,7 @@ const decodeEmptyFindings = (output: unknown) =>
     Effect.mapError(
       (failure) =>
         new ReviewerExecutionFailed({
-          operationName: "decode_reviewer_output",
+          operationName: failure.operationName,
           message: failure.message,
           diagnostics: failure.diagnostics,
         }),
