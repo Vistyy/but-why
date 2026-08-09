@@ -13,9 +13,9 @@ import type { ChangePersistence } from "../changePersistence.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import {
   classifyOwnedPullRequest,
+  type OwnedPublication,
   observeOwnedPullRequest,
   ownedPublication,
-  type OwnedPublication,
 } from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
