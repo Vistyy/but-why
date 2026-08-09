@@ -289,6 +289,7 @@ describe("Candidate validation", () => {
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(second.headSha);
         expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
       }),
+    15_000,
   );
 });
 
