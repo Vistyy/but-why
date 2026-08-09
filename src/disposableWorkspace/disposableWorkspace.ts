@@ -28,4 +28,8 @@ export type DisposableWorkspaceError = {
   readonly worktreePath?: string;
   readonly errorMessage: string;
   readonly cleanupResult: DisposableWorkspaceCleanupResult;
+  readonly cleanupDiagnostics?: {
+    readonly worktree?: string;
+    readonly tempRef?: string;
+  };
 };

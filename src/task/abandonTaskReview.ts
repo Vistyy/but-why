@@ -4,8 +4,8 @@ import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
-  deleteDisposableWorkspaceRef,
-  removeDisposableWorktree,
+  deleteDisposableWorkspaceRefWithDiagnostic,
+  removeDisposableWorktreeWithDiagnostic,
 } from "../disposableWorkspace/disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "../disposableWorkspace/disposableWorkspacePath.js";
 import type { TaskState } from "./lifecycle.js";
@@ -135,17 +135,24 @@ const abandonWhileLocked = (
     // Reconcile both deterministic resources with Git on every attempt.
     // Persisted cleanup states describe an earlier attempt and are not proof
     // that the owned resources are still absent.
-    const tempRef = deleteDisposableWorkspaceRef(input.repoRoot, tempRefName);
-    const worktree = removeDisposableWorktree(input.repoRoot, expectedWorktreePath)
-      ? "removed"
-      : "failed";
+    const tempRefAttempt = deleteDisposableWorkspaceRefWithDiagnostic(input.repoRoot, tempRefName);
+    const worktreeAttempt = removeDisposableWorktreeWithDiagnostic(
+      input.repoRoot,
+      expectedWorktreePath,
+    );
+    const tempRef = tempRefAttempt.state;
+    const worktree = worktreeAttempt.state;
     const cleanup = { worktree, tempRef } as const;
 
     if (worktree === "failed" || tempRef === "failed") {
+      const diagnostics = [
+        worktreeAttempt.state === "failed" ? `worktree: ${worktreeAttempt.message}` : undefined,
+        tempRefAttempt.state === "failed" ? `temporary ref: ${tempRefAttempt.message}` : undefined,
+      ].filter((value): value is string => value !== undefined);
       yield* input.persistence.recordCompletionFailure({
         reviewId: command.reviewId,
         operationName: "abandon_task_review_cleanup",
-        errorMessage: `${command.reason} Cleanup worktree=${worktree}; temporary ref=${tempRef}.`,
+        errorMessage: `${command.reason} Cleanup worktree=${worktree}; temporary ref=${tempRef}. ${diagnostics.join("; ")}`,
         now: command.now,
       });
       return {

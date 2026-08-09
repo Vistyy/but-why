@@ -194,7 +194,7 @@ const submitTask = (
         dependencies.persistence.recordCompletionFailure({
           reviewId,
           operationName: toolingError.operationName,
-          errorMessage: toolingError.errorMessage,
+          errorMessage: taskReviewWorkspaceDiagnosticMessage(toolingError),
           now: input.now,
         }),
       runInWorkspace: (activeWorkspace) =>
@@ -242,7 +242,7 @@ const submitTask = (
         toolingError.cleanupResult.tempRef === "failed";
       if (cleanupFailed) {
         const operationName = "cleanup_disposable_workspace";
-        const errorMessage = `Disposable workspace cleanup failed after ${toolingError.operationName}: ${toolingError.errorMessage}`;
+        const errorMessage = `Disposable workspace cleanup failed after ${toolingError.operationName}: ${taskReviewWorkspaceDiagnosticMessage(toolingError)}`;
         yield* dependencies.persistence.recordCompletionFailure({
           reviewId,
           operationName,
@@ -460,6 +460,22 @@ const runTaskReviewPhases = (input: {
       findings: [findings[0], ...findings.slice(1)],
     };
   });
+
+const taskReviewWorkspaceDiagnosticMessage = (error: {
+  readonly errorMessage: string;
+  readonly cleanupDiagnostics?: { readonly worktree?: string; readonly tempRef?: string };
+}): string =>
+  [
+    error.errorMessage,
+    error.cleanupDiagnostics?.worktree === undefined
+      ? undefined
+      : `worktree: ${error.cleanupDiagnostics.worktree}`,
+    error.cleanupDiagnostics?.tempRef === undefined
+      ? undefined
+      : `temporary ref: ${error.cleanupDiagnostics.tempRef}`,
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join("; ");
 
 const policyResolutionMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;

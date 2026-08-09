@@ -22,6 +22,10 @@ export type TaskReviewWorkspaceToolingError = {
     readonly worktree: "removed" | "not_created" | "failed";
     readonly tempRef: "removed" | "not_created" | "failed";
   };
+  readonly cleanupDiagnostics?: {
+    readonly worktree?: string;
+    readonly tempRef?: string;
+  };
 };
 
 export type TaskReviewWorkspaceResult<R> =
@@ -120,4 +124,7 @@ const toTaskReviewWorkspaceToolingError = (
   ...(toolingError.worktreePath === undefined ? {} : { worktreePath: toolingError.worktreePath }),
   errorMessage: toolingError.errorMessage,
   cleanupResult: toolingError.cleanupResult,
+  ...(toolingError.cleanupDiagnostics === undefined
+    ? {}
+    : { cleanupDiagnostics: toolingError.cleanupDiagnostics }),
 });

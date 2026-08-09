@@ -67,11 +67,27 @@ export const inspectExistingWorktree = (
   };
 };
 
-export const removeDisposableWorktree = (repoRoot: string, worktreePath: string): boolean => {
-  git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+export type DisposableWorkspaceCleanupAttempt =
+  | { readonly state: "removed" }
+  | { readonly state: "failed"; readonly message: string };
 
-  return isDisposableWorktreeRemoved(repoRoot, worktreePath);
+export const removeDisposableWorktreeWithDiagnostic = (
+  repoRoot: string,
+  worktreePath: string,
+): DisposableWorkspaceCleanupAttempt => {
+  const result = git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+
+  if (isDisposableWorktreeRemoved(repoRoot, worktreePath)) return { state: "removed" };
+  return {
+    state: "failed",
+    message: result.ok
+      ? `Git reported success but disposable worktree remains registered or present: ${worktreePath}`
+      : result.message || `Git could not remove disposable worktree: ${worktreePath}`,
+  };
 };
+
+export const removeDisposableWorktree = (repoRoot: string, worktreePath: string): boolean =>
+  removeDisposableWorktreeWithDiagnostic(repoRoot, worktreePath).state === "removed";
 
 export const isDisposableWorktreeRemoved = (repoRoot: string, worktreePath: string): boolean => {
   if (existsSync(worktreePath)) return false;
@@ -88,20 +104,27 @@ const worktreePaths = (porcelain: string): readonly string[] =>
     .filter((line) => line.startsWith("worktree "))
     .map((line) => resolve(line.slice("worktree ".length)));
 
+export const deleteDisposableWorkspaceRefWithDiagnostic = (
+  repoRoot: string,
+  tempRefName: string,
+): DisposableWorkspaceCleanupAttempt => {
+  const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
+
+  if (result.ok) return { state: "removed" };
+  if (!git(repoRoot, ["rev-parse", "--verify", `${tempRefName}^{commit}`]).ok) {
+    return { state: "removed" };
+  }
+  return {
+    state: "failed",
+    message: result.message || `Git could not delete disposable workspace ref: ${tempRefName}`,
+  };
+};
+
 export const deleteDisposableWorkspaceRef = (
   repoRoot: string,
   tempRefName: string,
-): DisposableWorkspaceCleanupState => {
-  const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
-
-  if (result.ok) {
-    return "removed";
-  }
-
-  return git(repoRoot, ["rev-parse", "--verify", `${tempRefName}^{commit}`]).ok
-    ? "failed"
-    : "removed";
-};
+): DisposableWorkspaceCleanupState =>
+  deleteDisposableWorkspaceRefWithDiagnostic(repoRoot, tempRefName).state;
 
 type GitResult =
   | {

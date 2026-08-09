@@ -270,6 +270,80 @@ it.scoped("completes a passing Task Review atomically and leaves the Task New", 
   ),
 );
 
+it.scoped("rejects outcome evidence that conflicts with persisted Review evidence", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Conflicting evidence", firstNow);
+      yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-conflicting-evidence",
+        now: firstNow,
+      });
+      yield* reviews.recordToolingFailure({
+        reviewId: "review-conflicting-evidence",
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "run_task_reviewer_agent",
+        errorMessage: "Reviewer process failed.",
+        now: secondNow,
+      });
+      yield* recordRemovedWorkspace(reviews, "review-conflicting-evidence", secondNow);
+
+      const completion = yield* Effect.either(
+        reviews.complete({
+          reviewId: "review-conflicting-evidence",
+          outcome: "passed",
+          now: secondNow,
+        }),
+      );
+      expect(completion).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+      expect(yield* reviews.getActiveForTask(task.id)).toBeDefined();
+    }),
+  ),
+);
+
+it.scoped("rejects malformed relational evidence when reading the latest Review", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Malformed latest Review", firstNow);
+      yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-malformed-latest",
+        now: firstNow,
+      });
+      yield* recordRemovedWorkspace(reviews, "review-malformed-latest", secondNow);
+      yield* reviews.complete({
+        reviewId: "review-malformed-latest",
+        outcome: "passed",
+        now: secondNow,
+      });
+      yield* reviews.recordToolingFailure({
+        reviewId: "review-malformed-latest",
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "late_corruption",
+        errorMessage: "Contradictory evidence.",
+        now: thirdNow,
+      });
+
+      const latest = yield* Effect.either(reviews.latestCompletedReviewForTask(task.id));
+      expect(latest).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+    }),
+  ),
+);
+
 it.scoped("records Findings and leaves the Task New for a blocked Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

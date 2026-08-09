@@ -281,7 +281,7 @@ describe("Validation Workspace scoped lifecycle", () => {
         ok: false,
         toolingError: {
           operationName: "create_sandcastle_workspace",
-          errorMessage: `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}`,
+          errorMessage: `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}; worktree cleanup failed`,
           worktreePath: expectedWorktreePath,
           cleanupResult: {
             worktree: "not_created",
@@ -668,6 +668,12 @@ const loadCreateValidationWorkspace = async (
       events.push("release:temp_ref");
       return options.tempRefCleanup ?? "removed";
     },
+    deleteDisposableWorkspaceRefWithDiagnostic: () => {
+      events.push("release:temp_ref");
+      return options.tempRefCleanup === "failed"
+        ? { state: "failed", message: "temporary ref cleanup failed" }
+        : { state: "removed" };
+    },
     inspectExistingWorktree: () =>
       existingWorktree === undefined
         ? worktreeExists
@@ -687,6 +693,22 @@ const loadCreateValidationWorkspace = async (
       }
 
       return removed;
+    },
+    removeDisposableWorktreeWithDiagnostic: () => {
+      events.push("remove:worktree");
+      removalCount += 1;
+      const removed =
+        options.worktreeCleanup !== "failed" ||
+        (options.worktreeDisappearsAfterFailedRemoval && removalCount > 1);
+
+      if (removed || options.worktreeDisappearsAfterFailedRemoval) {
+        existingWorktree = undefined;
+        worktreeExists = false;
+      }
+
+      return removed
+        ? { state: "removed" }
+        : { state: "failed", message: "worktree cleanup failed" };
     },
     isDisposableWorktreeRemoved: () => !worktreeExists && existingWorktree === undefined,
   }));

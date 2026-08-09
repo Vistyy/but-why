@@ -500,6 +500,7 @@ describe("Task Submission orchestration", () => {
                       worktreePath: "/leaked-worktree",
                       errorMessage: "setup failed",
                       cleanupResult: { worktree: "failed", tempRef: "removed" },
+                      cleanupDiagnostics: { worktree: "git worktree remove: device busy" },
                     },
                   }),
               }),
@@ -513,7 +514,7 @@ describe("Task Submission orchestration", () => {
               completionFailure: {
                 operationName: "cleanup_disposable_workspace",
                 errorMessage:
-                  "Disposable workspace cleanup failed after create_sandcastle_worktree: setup failed",
+                  "Disposable workspace cleanup failed after create_sandcastle_worktree: setup failed; worktree: git worktree remove: device busy",
               },
             });
             if (result.ok || result.code !== "review_cleanup_pending") {

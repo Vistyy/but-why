@@ -59,17 +59,26 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         getActiveByReviewId(sql, reviewId),
       ),
     getAbandonmentContext: (reviewId) =>
-      repository
-        .operation("read Task Review abandonment context", (sql) =>
-          getAbandonmentContext(sql, reviewId),
-        )
-        .pipe(Effect.flatMap(decodeAbandonmentContextOptional)),
+      repository.transaction("read Task Review abandonment context", (sql) =>
+        Effect.gen(function* () {
+          const context = yield* getAbandonmentContext(sql, reviewId).pipe(
+            Effect.flatMap(decodeAbandonmentContextOptional),
+          );
+          if (context !== undefined && context.reviewState === "complete") {
+            yield* validateStoredTaskReviewEvidence(sql, context.taskId);
+          }
+          return context;
+        }),
+      ),
     latestCompletedReviewForTask: (taskId) =>
-      repository
-        .operation("read latest completed Task Review", (sql) =>
-          latestCompletedReviewForTask(sql, taskId),
-        )
-        .pipe(Effect.flatMap(decodeReviewOptional)),
+      repository.transaction("read latest completed Task Review", (sql) =>
+        Effect.gen(function* () {
+          yield* validateStoredTaskReviewEvidence(sql, taskId);
+          return yield* latestCompletedReviewForTask(sql, taskId).pipe(
+            Effect.flatMap(decodeReviewOptional),
+          );
+        }),
+      ),
     listFindings: (reviewId) =>
       repository
         .operation("list Task Review Findings", (sql) => listFindings(sql, reviewId))
@@ -238,6 +247,18 @@ const complete = (
       (input.outcome === "tooling_failed" && findings.length === 0 && toolingFailure !== undefined);
     if (!evidenceIsValid) {
       return { ok: false as const, code: "invalid_outcome_evidence" as const };
+    }
+    const existingFindings = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_review_findings WHERE review_id = ${input.reviewId} LIMIT 1
+    `;
+    const existingToolingFailures = yield* sql<{ readonly sequence: number }>`
+      SELECT sequence FROM task_review_tooling_failures WHERE review_id = ${input.reviewId} LIMIT 1
+    `;
+    if (existingFindings.length > 0 || existingToolingFailures.length > 0) {
+      return yield* invalidData(
+        "complete Task Review",
+        `Running Task Review ${input.reviewId} already has terminal outcome evidence`,
+      );
     }
     const taskId = storedPublicTaskId(review.taskId);
     // Completion must apply to the exact Review that owns the Active marker for

@@ -11,11 +11,11 @@ import type {
   DisposableWorkspaceSetup,
 } from "./disposableWorkspace.js";
 import {
-  deleteDisposableWorkspaceRef,
+  deleteDisposableWorkspaceRefWithDiagnostic,
   ensureDisposableWorkspaceRef,
   inspectExistingWorktree,
   isDisposableWorktreeRemoved,
-  removeDisposableWorktree,
+  removeDisposableWorktreeWithDiagnostic,
 } from "./disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "./disposableWorkspacePath.js";
 
@@ -47,10 +47,7 @@ type DisposableExactCommitWorkspaceAdapters = {
     tempRefName: string,
     commitSha: string,
   ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
-  readonly deleteTempRef: (
-    repoRoot: string,
-    tempRefName: string,
-  ) => DisposableWorkspaceCleanupResult["tempRef"];
+  readonly deleteTempRef: (repoRoot: string, tempRefName: string) => CleanupAttempt;
   readonly allowlistedFileIsRegular: (repoRoot: string, path: string) => boolean;
   readonly inspectExistingWorktree: (worktreePath: string) => ExistingWorktree;
   readonly removeWorktree: (repoRoot: string, worktreePath: string) => CleanupAttempt;
@@ -84,6 +81,15 @@ type CommandResult = {
 };
 
 type CleanupAttempt = { readonly ok: true } | { readonly ok: false; readonly message: string };
+
+type CleanupStepResult =
+  | { readonly state: "not_created" | "removed" }
+  | { readonly state: "failed"; readonly diagnostic: string };
+
+type CleanupDiagnostics = {
+  readonly worktree?: string;
+  readonly tempRef?: string;
+};
 
 type ExistingWorktree =
   | { readonly exists: false }
@@ -138,6 +144,7 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
     const tempRefName = input.workspaceRef;
     const expectedWorktreePath = expectedDisposableWorkspacePath(input.repoRoot, tempRefName);
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
+    const cleanupDiagnostics = yield* Ref.make<CleanupDiagnostics>({});
     const state: WorkspaceScopeState = {
       tempRefName,
       expectedWorktreePath,
@@ -157,7 +164,7 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
     }
 
     const scopedSetup = Effect.scoped(
-      setupDisposableWorkspaceScope(input, state, adapters, cleanupResult),
+      setupDisposableWorkspaceScope(input, state, adapters, cleanupResult, cleanupDiagnostics),
     );
     const setupAttempt = yield* withInterruptedCleanupRecording(
       scopedSetup,
@@ -165,9 +172,11 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
       tempRefName,
       expectedWorktreePath,
       cleanupResult,
+      cleanupDiagnostics,
     );
 
     const finalCleanupResult = yield* Ref.get(cleanupResult);
+    const finalCleanupDiagnostics = yield* Ref.get(cleanupDiagnostics);
 
     if (!setupAttempt.ok) {
       return {
@@ -179,6 +188,9 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
           worktreePath: setupAttempt.worktreePath ?? expectedWorktreePath,
           errorMessage: setupAttempt.errorMessage,
           cleanupResult: finalCleanupResult,
+          ...(Object.keys(finalCleanupDiagnostics).length === 0
+            ? {}
+            : { cleanupDiagnostics: finalCleanupDiagnostics }),
         },
       };
     }
@@ -193,6 +205,9 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
           ...(state.worktreePath === undefined ? {} : { worktreePath: state.worktreePath }),
           errorMessage: "Disposable workspace cleanup failed after successful use.",
           cleanupResult: finalCleanupResult,
+          ...(Object.keys(finalCleanupDiagnostics).length === 0
+            ? {}
+            : { cleanupDiagnostics: finalCleanupDiagnostics }),
         },
       };
     }
@@ -212,6 +227,7 @@ const withInterruptedCleanupRecording = <Error>(
   tempRefName: string,
   expectedWorktreePath: string,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<WorkspaceSetupAttempt, Error> => {
   const recordInterruptedCleanupResult = input.recordInterruptedCleanupResult;
 
@@ -222,6 +238,7 @@ const withInterruptedCleanupRecording = <Error>(
   return Effect.onInterrupt(scopedSetup, () =>
     Effect.gen(function* () {
       const finalCleanupResult = yield* Ref.get(cleanupResult);
+      const finalCleanupDiagnostics = yield* Ref.get(cleanupDiagnostics);
       yield* recordInterruptedCleanupResult({
         operationName: "disposable_workspace_interrupted",
         tempRefName,
@@ -229,6 +246,9 @@ const withInterruptedCleanupRecording = <Error>(
         worktreePath: expectedWorktreePath,
         errorMessage: "Disposable workspace use was interrupted.",
         cleanupResult: finalCleanupResult,
+        ...(Object.keys(finalCleanupDiagnostics).length === 0
+          ? {}
+          : { cleanupDiagnostics: finalCleanupDiagnostics }),
       }).pipe(
         Effect.catchAllDefect(() => Effect.void),
         Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
@@ -243,9 +263,16 @@ const setupDisposableWorkspaceScope = <Error>(
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<WorkspaceSetupAttempt, Error, Scope.Scope> =>
   Effect.gen(function* () {
-    const tempRefAttempt = yield* acquireTempRef(input, state, adapters, cleanupResult);
+    const tempRefAttempt = yield* acquireTempRef(
+      input,
+      state,
+      adapters,
+      cleanupResult,
+      cleanupDiagnostics,
+    );
 
     if (!tempRefAttempt.ok) {
       return tempRefAttempt;
@@ -263,7 +290,13 @@ const setupDisposableWorkspaceScope = <Error>(
       return existingWorktreeAttempt;
     }
 
-    const worktreeAttempt = yield* acquireSandcastleWorktree(input, state, adapters, cleanupResult);
+    const worktreeAttempt = yield* acquireSandcastleWorktree(
+      input,
+      state,
+      adapters,
+      cleanupResult,
+      cleanupDiagnostics,
+    );
 
     if (!worktreeAttempt.ok) {
       return worktreeAttempt;
@@ -302,6 +335,7 @@ const acquireTempRef = <Error>(
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<{ readonly ok: true } | WorkspaceSetupFailure, never, Scope.Scope> =>
   Effect.gen(function* () {
     const tempRef = yield* adapters.createTempRef(
@@ -315,7 +349,13 @@ const acquireTempRef = <Error>(
     }
 
     yield* Effect.acquireRelease(Effect.succeed(state.tempRefName), () =>
-      releaseTempRef(input.repoRoot, state.tempRefName, adapters, cleanupResult),
+      releaseTempRef(
+        input.repoRoot,
+        state.tempRefName,
+        adapters,
+        cleanupResult,
+        cleanupDiagnostics,
+      ),
     );
 
     return { ok: true };
@@ -373,7 +413,12 @@ const prepareExistingWorktree = <Error>(
   if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
     return setupFailed(
       "create_sandcastle_workspace",
-      `Disposable worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
+      [
+        `Disposable worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
+        removed.ok
+          ? `Disposable worktree remains after removal: ${state.expectedWorktreePath}`
+          : removed.message,
+      ].join("; "),
       state.expectedWorktreePath,
     );
   }
@@ -387,6 +432,7 @@ const acquireSandcastleWorktree = <Error>(
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<
   { readonly ok: true; readonly sandbox: SandboxLike } | WorkspaceSetupFailure,
   Error,
@@ -394,7 +440,7 @@ const acquireSandcastleWorktree = <Error>(
 > =>
   Effect.gen(function* () {
     yield* Effect.acquireRelease(Effect.succeed(state.expectedWorktreePath), () =>
-      releaseWorktree(input.repoRoot, state, adapters, cleanupResult),
+      releaseWorktree(input.repoRoot, state, adapters, cleanupResult, cleanupDiagnostics),
     );
 
     state.worktreePath = state.expectedWorktreePath;
@@ -469,7 +515,10 @@ const verifyWorktreeHead = <Error>(
 const productionDisposableExactCommitWorkspaceAdapters: DisposableExactCommitWorkspaceAdapters = {
   createTempRef: (repoRoot, tempRefName, commitSha) =>
     Effect.sync(() => ensureDisposableWorkspaceRef(repoRoot, tempRefName, commitSha)),
-  deleteTempRef: (repoRoot, tempRefName) => deleteDisposableWorkspaceRef(repoRoot, tempRefName),
+  deleteTempRef: (repoRoot, tempRefName) => {
+    const result = deleteDisposableWorkspaceRefWithDiagnostic(repoRoot, tempRefName);
+    return result.state === "removed" ? { ok: true } : { ok: false, message: result.message };
+  },
   allowlistedFileIsRegular: (repoRoot, path) => {
     try {
       return lstatSync(join(repoRoot, path)).isFile();
@@ -478,10 +527,10 @@ const productionDisposableExactCommitWorkspaceAdapters: DisposableExactCommitWor
     }
   },
   inspectExistingWorktree,
-  removeWorktree: (repoRoot, worktreePath) =>
-    removeDisposableWorktree(repoRoot, worktreePath)
-      ? { ok: true }
-      : { ok: false, message: "Disposable worktree removal failed." },
+  removeWorktree: (repoRoot, worktreePath) => {
+    const result = removeDisposableWorktreeWithDiagnostic(repoRoot, worktreePath);
+    return result.state === "removed" ? { ok: true } : { ok: false, message: result.message };
+  },
   verifyWorktreeRemoved: isDisposableWorktreeRemoved,
   createSandcastleWorktree: (input) =>
     Effect.promise(async () => {
@@ -525,19 +574,26 @@ const releaseWorktree = (
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     const worktree = yield* cleanupWorktree(repoRoot, state, adapters);
-    yield* Ref.update(cleanupResult, (current) => ({ ...current, worktree }));
+    yield* Ref.update(cleanupResult, (current) => ({ ...current, worktree: worktree.state }));
+    if (worktree.state === "failed") {
+      yield* Ref.update(cleanupDiagnostics, (current) => ({
+        ...current,
+        worktree: worktree.diagnostic,
+      }));
+    }
   });
 
 const cleanupWorktree = (
   repoRoot: string,
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
-): Effect.Effect<DisposableWorkspaceCleanupResult["worktree"]> => {
+): Effect.Effect<CleanupStepResult> => {
   if (state.sandbox === undefined && state.worktreePath === undefined) {
-    return Effect.succeed("not_created");
+    return Effect.succeed({ state: "not_created" });
   }
 
   return Effect.gen(function* () {
@@ -547,29 +603,42 @@ const cleanupWorktree = (
         closeSandboxWithTimeout(sandbox, cleanupStepTimeoutMs),
       );
 
-      if (!closeAttempt.ok) return "failed";
+      if (!closeAttempt.ok) return { state: "failed" as const, diagnostic: closeAttempt.message };
 
       const cleanupPath = state.worktreePath ?? state.expectedWorktreePath;
 
-      if (adapters.verifyWorktreeRemoved(repoRoot, cleanupPath)) return "removed";
+      if (adapters.verifyWorktreeRemoved(repoRoot, cleanupPath))
+        return { state: "removed" as const };
 
       const removed = adapters.removeWorktree(repoRoot, cleanupPath);
-      return removed.ok && adapters.verifyWorktreeRemoved(repoRoot, cleanupPath)
-        ? "removed"
-        : "failed";
+      if (removed.ok && adapters.verifyWorktreeRemoved(repoRoot, cleanupPath)) {
+        return { state: "removed" as const };
+      }
+      return {
+        state: "failed" as const,
+        diagnostic: removed.ok
+          ? `Disposable worktree remains after removal: ${cleanupPath}`
+          : removed.message,
+      };
     }
 
     if (
       state.worktreePath === undefined ||
       !adapters.inspectExistingWorktree(state.worktreePath).exists
     ) {
-      return "not_created";
+      return { state: "not_created" as const };
     }
 
     const removed = adapters.removeWorktree(repoRoot, state.worktreePath);
-    return removed.ok && adapters.verifyWorktreeRemoved(repoRoot, state.worktreePath)
-      ? "removed"
-      : "failed";
+    if (removed.ok && adapters.verifyWorktreeRemoved(repoRoot, state.worktreePath)) {
+      return { state: "removed" as const };
+    }
+    return {
+      state: "failed" as const,
+      diagnostic: removed.ok
+        ? `Disposable worktree remains after removal: ${state.worktreePath}`
+        : removed.message,
+    };
   });
 };
 
@@ -577,7 +646,7 @@ type SandcastleCloseResult = { readonly preservedWorktreePath?: string };
 
 type SandcastleCloseAttempt =
   | { readonly ok: true; readonly result: SandcastleCloseResult }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly message: string };
 
 const closeSandboxWithTimeout = (
   sandbox: SandboxLike,
@@ -587,7 +656,7 @@ const closeSandboxWithTimeout = (
     let settled = false;
     const timeout = setTimeout(() => {
       settled = true;
-      resolve({ ok: false });
+      resolve({ ok: false, message: `Sandcastle close timed out after ${timeoutMs} ms.` });
     }, timeoutMs);
 
     void sandbox.close().then(
@@ -597,11 +666,11 @@ const closeSandboxWithTimeout = (
         clearTimeout(timeout);
         resolve({ ok: true, result });
       },
-      () => {
+      (error: unknown) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        resolve({ ok: false });
+        resolve({ ok: false, message: `Sandcastle close failed: ${errorMessage(error)}` });
       },
     );
   });
@@ -611,10 +680,20 @@ const releaseTempRef = (
   tempRefName: string,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
+  cleanupDiagnostics: Ref.Ref<CleanupDiagnostics>,
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     const tempRef = adapters.deleteTempRef(repoRoot, tempRefName);
-    yield* Ref.update(cleanupResult, (current) => ({ ...current, tempRef }));
+    yield* Ref.update(cleanupResult, (current) => ({
+      ...current,
+      tempRef: tempRef.ok ? ("removed" as const) : ("failed" as const),
+    }));
+    if (!tempRef.ok) {
+      yield* Ref.update(cleanupDiagnostics, (current) => ({
+        ...current,
+        tempRef: tempRef.message,
+      }));
+    }
   });
 
 const errorMessage = (error: unknown): string =>
