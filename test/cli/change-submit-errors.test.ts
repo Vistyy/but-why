@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { submitResult } from "../../src/cli/change/submitResult.js";
 
 describe("Change Submit validation-policy errors", () => {
-  it("serializes remote mismatch commits and bounded failure evidence", () => {
+  it("serializes remote mismatch commits and normalized failure evidence", () => {
     const result = submitResult(
       {
         ok: false,
@@ -12,7 +12,6 @@ describe("Change Submit validation-policy errors", () => {
           operation: "branch_push",
           classification: "rejected",
           exitStatus: 1,
-          stderr: "remote rejected",
         },
         expectedRemoteHeadSha: "expected-head",
         observedRemoteHeadSha: "observed-head",
@@ -42,7 +41,6 @@ describe("Change Submit validation-policy errors", () => {
           operation: "branch_push",
           classification: "rejected",
           exitStatus: 128,
-          stderr: "worktree unavailable",
         },
       },
       "change-1",
@@ -58,7 +56,7 @@ describe("Change Submit validation-policy errors", () => {
     });
   });
 
-  it("serializes bounded recovery failures with retry guidance", () => {
+  it("serializes normalized recovery failures with retry guidance", () => {
     for (const code of [
       "publication_creation_unconfirmed",
       "publication_lookup_ambiguous",
@@ -71,7 +69,6 @@ describe("Change Submit validation-policy errors", () => {
           evidence: {
             operation: "pull_request_creation",
             classification: "response_parse_failure",
-            parseFailure: "missing pull request facts",
           },
         },
         "change-1",
@@ -90,6 +87,68 @@ describe("Change Submit validation-policy errors", () => {
         },
       });
     }
+  });
+
+  it("gives destination-specific recovery guidance", () => {
+    expect(
+      submitResult(
+        {
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: {
+            operation: "push_destination",
+            classification: "rejected",
+            reason: "repository_mismatch",
+            destinationOwner: "other",
+            destinationRepo: "widgets",
+          },
+        },
+        "change-1",
+      ),
+    ).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "publication_tooling_failed",
+          message:
+            "Exactly one safe push destination could not be validated for the selected publication remote.",
+          evidence: {
+            operation: "push_destination",
+            reason: "repository_mismatch",
+          },
+        },
+        help: [
+          "Correct the selected publication remote's effective push destination, then retry Submit.",
+        ],
+      },
+    });
+
+    expect(
+      submitResult(
+        {
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: {
+            operation: "push_destination",
+            classification: "unavailable",
+            reason: "unavailable",
+          },
+        },
+        "change-1",
+      ),
+    ).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          message:
+            "Exactly one safe push destination could not be validated for the selected publication remote.",
+          evidence: { reason: "unavailable" },
+        },
+        help: [
+          "Correct the selected publication remote's effective push destination, then retry Submit.",
+        ],
+      },
+    });
   });
 
   it("serializes an exact validation-policy rejection with supplied message and help", () => {

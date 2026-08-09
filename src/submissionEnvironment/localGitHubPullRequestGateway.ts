@@ -29,31 +29,25 @@ export type PublicationCommandResult =
       readonly status?: number;
     };
 
-const bounded = (value: string): string =>
-  value
-    .replace(
-      /((?:token|password|secret|authorization)["']?\s*[:=]\s*)(?:\r?\n\s*)?[^\r\n]*/gi,
-      "$1[redacted]",
-    )
-    .replace(/https?:\/\/[^\s/@]+:[^\s@]+@/gi, "https://[redacted]@")
-    .slice(0, 1000);
 const classifyCommandFailure = (result: PublicationCommandResult): "rejected" | "unavailable" =>
   result.status === undefined && result.stdout === undefined && result.stderr === undefined
     ? "unavailable"
     : "rejected";
 
 const evidence = (
-  operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
+  operation:
+    | "remote_lookup"
+    | "push_destination"
+    | "branch_push"
+    | "pull_request_creation"
+    | "pull_request_update",
   result: PublicationCommandResult,
   classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable",
-  parseFailure?: string,
+  _parseFailure?: string,
 ) => ({
   operation,
   classification,
   ...(result.status === undefined ? {} : { exitStatus: result.status }),
-  ...(result.stdout === undefined ? {} : { stdout: bounded(result.stdout) }),
-  ...(result.stderr === undefined ? {} : { stderr: bounded(result.stderr) }),
-  ...(parseFailure === undefined ? {} : { parseFailure: bounded(parseFailure) }),
 });
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;
@@ -193,6 +187,16 @@ const remoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName
     ref(qualifiedName: $qualifiedName) {
       id
       name
+      target { oid }
+    }
+  }
+}`;
+
+const publicationRemoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName: String!) {
+  repository(owner: $owner, name: $repo) {
+    ref(qualifiedName: $qualifiedName) {
+      name
+      prefix
       target { oid }
     }
   }
@@ -383,7 +387,9 @@ const createPullRequest = (
       ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
     };
   }
-  const remoteHead = initialRemoteHeadState(runGit, request);
+  const destination = resolvePushDestination(runGit, request);
+  if (!destination.ok) return destination.failure;
+  const remoteHead = initialRemoteHeadState(runGh, request);
   if (remoteHead.kind === "unknown")
     return {
       ok: false,
@@ -403,7 +409,7 @@ const createPullRequest = (
   )
     return { ok: false, code: "remote_head_mismatch" };
   if (remoteHead.kind === "missing") {
-    const pushed = pushExactHead(runGit, request);
+    const pushed = pushExactHead(runGit, request, destination.url);
     if (!pushed.ok)
       return {
         ok: false,
@@ -462,7 +468,9 @@ const updatePullRequest = (
       ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
     };
   }
-  const pushed = pushExpectedHead(runGit, request);
+  const destination = resolvePushDestination(runGit, request);
+  if (!destination.ok) return destination.failure;
+  const pushed = pushExpectedHead(runGit, request, destination.url);
   if (!pushed.ok)
     return {
       ok: false,
@@ -519,60 +527,197 @@ const hasExpectedLocalHead = (
 };
 
 const initialRemoteHeadState = (
-  runGit: PublicationCommandRunner,
+  runGh: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
 ): {
   readonly kind: "missing" | "present" | "unknown";
   readonly sha?: string;
   readonly evidence?: ReturnType<typeof evidence>;
 } => {
-  const remoteHead = runGit([
-    "ls-remote",
-    "--heads",
-    requestRemote(request),
-    `refs/heads/${request.headBranch}`,
+  const qualifiedName = `refs/heads/${request.headBranch}`;
+  const result = runGh([
+    "api",
+    "graphql",
+    "-f",
+    `query=${publicationRemoteBranchQuery}`,
+    "-f",
+    `owner=${request.owner}`,
+    "-f",
+    `repo=${request.repo}`,
+    "-f",
+    `qualifiedName=${qualifiedName}`,
   ]);
-  if (!remoteHead.ok)
+  if (!result.ok)
     return {
       kind: "unknown",
-      evidence: evidence(
-        "remote_lookup",
-        remoteHead,
-        remoteHead.status === undefined &&
-          remoteHead.stdout === undefined &&
-          remoteHead.stderr === undefined
-          ? "unavailable"
-          : "rejected",
-      ),
+      evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
-  const sha = remoteHead.stdout.trim().split(/\s+/)[0] ?? "";
-  return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
+  const parsed = parseJson(result.stdout);
+  if (!isObjectRecord(parsed) || "errors" in parsed)
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const data = parsed["data"];
+  if (!isObjectRecord(data))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const repository = data["repository"];
+  if (!isObjectRecord(repository))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const ref = repository["ref"];
+  if (ref === null) return { kind: "missing" };
+  if (!isObjectRecord(ref) || ref["name"] !== request.headBranch || ref["prefix"] !== "refs/heads/")
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const target = ref["target"];
+  if (!isObjectRecord(target) || typeof target["oid"] !== "string")
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  const oid = target["oid"];
+  if (oid !== request.expectedHeadSha && !/^[0-9a-f]{40}$/u.test(oid))
+    return {
+      kind: "unknown",
+      evidence: evidence("remote_lookup", result, "response_parse_failure"),
+    };
+  return { kind: "present", sha: oid };
+};
+
+type PushDestinationFailureReason =
+  | "unavailable"
+  | "destination_count"
+  | "credentials"
+  | "malformed"
+  | "repository_mismatch";
+
+type PushDestinationResult =
+  | { readonly ok: true; readonly url: string }
+  | {
+      readonly ok: false;
+      readonly failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>;
+    };
+
+const resolvePushDestination = (
+  runGit: PublicationCommandRunner,
+  request: GitHubPullRequestRequest,
+): PushDestinationResult => {
+  const result = runGit(["remote", "get-url", "--push", "--all", request.remoteName]);
+  if (!result.ok)
+    return pushDestinationFailure("unavailable", {
+      ...(result.status === undefined ? {} : { exitStatus: result.status }),
+    });
+  const destinations = result.stdout.split(/\r?\n/u).filter((value) => value.length > 0);
+  if (destinations.length !== 1)
+    return pushDestinationFailure("destination_count", {
+      destinationCount: Math.min(destinations.length, 1000),
+    });
+  const decoded = decodeGitHubPushDestination(destinations[0] ?? "");
+  if (!decoded.ok) return pushDestinationFailure(decoded.reason);
+  if (
+    decoded.owner.toLowerCase() !== request.owner.toLowerCase() ||
+    decoded.repo.toLowerCase() !== request.repo.toLowerCase()
+  )
+    return pushDestinationFailure("repository_mismatch", {
+      destinationOwner: decoded.owner.slice(0, 100),
+      destinationRepo: decoded.repo.slice(0, 100),
+    });
+  return { ok: true, url: destinations[0] ?? "" };
+};
+
+const pushDestinationFailure = (
+  reason: PushDestinationFailureReason,
+  facts: {
+    readonly exitStatus?: number;
+    readonly destinationCount?: number;
+    readonly destinationOwner?: string;
+    readonly destinationRepo?: string;
+  } = {},
+): PushDestinationResult => ({
+  ok: false,
+  failure: {
+    ok: false,
+    code: "push_destination_failed",
+    evidence: {
+      operation: "push_destination",
+      classification: reason === "unavailable" ? "unavailable" : "rejected",
+      reason,
+      ...facts,
+    },
+  },
+});
+
+const decodeGitHubPushDestination = (
+  value: string,
+):
+  | { readonly ok: true; readonly owner: string; readonly repo: string }
+  | { readonly ok: false; readonly reason: "credentials" | "malformed" } => {
+  const scp = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/u.exec(value);
+  if (scp !== null)
+    return scp[1]?.length && scp[2]?.length
+      ? { ok: true, owner: scp[1], repo: scp[2] }
+      : { ok: false, reason: "malformed" };
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return { ok: false, reason: "malformed" };
+  }
+  const isHttps = parsed.protocol === "https:" && parsed.username === "";
+  const isSsh = parsed.protocol === "ssh:" && parsed.username === "git";
+  if (parsed.password !== "" || (!isHttps && !isSsh && parsed.username !== ""))
+    return { ok: false, reason: "credentials" };
+  if (
+    parsed.hostname.toLowerCase() !== "github.com" ||
+    (!isHttps && !isSsh) ||
+    parsed.port !== "" ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  )
+    return { ok: false, reason: "malformed" };
+  const parts = parsed.pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/");
+  const owner = parts[0] ?? "";
+  const repo = (parts[1] ?? "").replace(/\.git$/u, "");
+  return parts.length === 2 && owner.length > 0 && repo.length > 0
+    ? { ok: true, owner, repo }
+    : { ok: false, reason: "malformed" };
 };
 
 const pushExactHead = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
+  destination: string,
 ): PublicationCommandResult =>
   runGit([
+    "-c",
+    `url.${destination}.pushInsteadOf=${destination}`,
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:`,
-    requestRemote(request),
+    destination,
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
   ]);
 
 const pushExpectedHead = (
   runGit: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
+  destination: string,
 ): PublicationCommandResult =>
   runGit([
+    "-c",
+    `url.${destination}.pushInsteadOf=${destination}`,
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:${request.expectedCurrentHeadSha}`,
-    requestRemote(request),
+    destination,
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
   ]);
-
-const requestRemote = (request: Pick<GitHubPullRequestRequest, "remoteName">): string =>
-  request.remoteName;
 
 const runCommand = (
   command: string,
