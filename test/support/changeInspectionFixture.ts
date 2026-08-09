@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { Effect } from "effect";
 
+import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
@@ -110,6 +111,26 @@ export const captureCandidateFixture = (
       });
       if (!result.ok) throw new Error(result.code);
       return { id: result.candidateId, headSha };
+    }),
+  );
+
+export const recordImplementationDecisionFixture = (
+  root: string,
+  changeId: string,
+  input: { readonly choice: string; readonly rationale: string; readonly now: string },
+): Effect.Effect<ImplementationDecision, RepositoryStorageError> =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const changes = yield* openSqliteChangePersistence();
+      const result = yield* changes.recordImplementationDecision({
+        changeId,
+        choice: input.choice,
+        rationale: input.rationale,
+        now: input.now,
+      });
+      if (!result.ok) throw new Error(result.code);
+      return result.decision;
     }),
   );
 
