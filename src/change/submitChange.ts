@@ -546,9 +546,6 @@ const validateAndPublish = (
           : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
       });
     }
-    if (!validationResult.ok) {
-      return yield* Effect.die(new Error("Unexpected active Validation Run result."));
-    }
 
     const publication = yield* dependencies.publicationFor(change.worktreePath).publish({
       changeId: change.id,
