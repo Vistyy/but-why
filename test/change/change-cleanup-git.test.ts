@@ -483,7 +483,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
     ).toEqual({ state: "pending", blockingReason: "remote_branch_unavailable" });
   });
 
-  it("reports a Remote Change Branch deletion failure for retry", () => {
+  it("keeps cleanup pending when the Remote Change Branch remains present", () => {
     const repository = initializedRepository();
     let reads = 0;
 
@@ -517,7 +517,11 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
               remoteUrl: "origin-url",
             };
           },
-          deleteRemoteBranch: () => ({ state: "failed" }),
+          deleteRemoteBranch: () => ({
+            state: "present",
+            headSha: "candidate-head",
+            remoteUrl: "origin-url",
+          }),
         },
       ),
     ).toEqual({ state: "pending", blockingReason: "remote_branch_deletion_failed" });
