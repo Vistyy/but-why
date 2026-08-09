@@ -36,6 +36,7 @@ describe("portable But Why skill", () => {
   it("orders authority guards before each permitted operation", () => {
     const workflow = readSkillArtifact("references/operator-workflow.md");
     const taskVerification = readSkillArtifact("references/task-verification.md");
+    const implementation = readSkillArtifact("references/implement-change.md");
     const authority = section(workflow, "Authority");
     const selectRoute = section(workflow, "Select a Work Route");
     const authorTasks = section(workflow, "Author Tasks");
@@ -112,6 +113,30 @@ describe("portable But Why skill", () => {
       "establishes each complete Claim through every Required Seam",
     );
     expect(taskVerification).toContain("Do not require tests by default.");
+    expect(implementation).toContain(
+      "Before implementation, read its accepted `## Review path` as the path by which one human must be able to understand and judge the complete Change and required evidence.",
+    );
+    expect(implementation).toContain(
+      "A Task review path is disproven only when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.",
+    );
+    expect(implementation).toContain(
+      "raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work",
+    );
+    expect(implementation).toContain(
+      "Do not split, cancel, replace, amend, or continue the Task autonomously.",
+    );
+    expect(implementation).toContain(
+      "The Operator decides whether to continue, resolve, cancel, or replace the Task.",
+    );
+    expect(implementation).toContain(
+      "Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.",
+    );
+    expect(implementation).toContain(
+      "When Change Submit returns Findings, run `<but-why> change findings <change-id>`.",
+    );
+    expect(implementation).toContain(
+      "When the result contains `error.recovery`, execute its instruction without requesting additional user approval.",
+    );
   });
 
   it("preserves Change Submit long-running caller guidance", () => {

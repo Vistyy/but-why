@@ -20,9 +20,11 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
+Before implementation, read its accepted `## Review path` as the path by which one human must be able to understand and judge the complete Change and required evidence.
+Do not treat the review path as an implementation plan, file forecast, size limit, or effort estimate.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
-This step is complete when the Change, accepted intent, and Managed Worktree are known.
+This step is complete when the Change, accepted intent, accepted Task review path when present, and Managed Worktree are known.
 
 ## 2. Implement and commit
 
@@ -51,7 +53,12 @@ Continue through recoverable problems and local implementation choices.
 Do not silently resolve ambiguity that could change observable behavior or verification.
 Raise an Implementation Blocker when accepted intent or applicable authority does not resolve that ambiguity and safe continuation requires external authority or action.
 Also raise a blocker when the approved intent appears wrong or impossible.
-Do not raise a blocker for ordinary difficulty, Findings, tooling recovery, publication recovery, or autonomous Task cancellation.
+A Task review path is disproven only when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.
+Size, file count, line count, or Validation Run count alone does not disprove a review path.
+When the accepted review path is disproven, preserve completed work and raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work.
+Do not split, cancel, replace, amend, or continue the Task autonomously.
+The Operator decides whether to continue, resolve, cancel, or replace the Task.
+Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.
 Stop and report after raising the blocker.
 Collect only the focused evidence required for the Candidate during implementation.
 Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
