@@ -11,8 +11,8 @@ import type {
   CandidateValidationToolingFailure,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
-import { validationPhase, type ValidationPhase } from "../change/validationRun/validationRun.js";
 import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
+import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import {
@@ -394,7 +394,7 @@ export const decodeValidationArtifact = (
   };
 };
 
-export const decodeValidationPhase = (value: unknown): ValidationPhase => {
+const decodeValidationPhase = (value: unknown): ValidationPhase => {
   const phase = decodeStoredString(value, "Validation phase");
   if (
     phase !== validationPhase.prepare &&

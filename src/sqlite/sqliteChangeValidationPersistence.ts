@@ -16,8 +16,10 @@ import type { ChangeValidationPersistence } from "../change/validation/changeVal
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   candidateReadColumns,
+  type DecodedValidationRun,
   decodeAbandonmentContext,
   decodeActiveValidationRun,
   decodeCandidate,
@@ -27,7 +29,6 @@ import {
   decodeValidationRound,
   decodeValidationRun,
   findingReadColumns,
-  type DecodedValidationRun,
   type UnknownAbandonmentContextRow,
   type UnknownActiveValidationRunRow,
   type UnknownCandidateRow,
@@ -38,7 +39,6 @@ import {
   type UnknownValidationRunRow,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationBlockerHistory,
   implementationBlockerReadColumns,
