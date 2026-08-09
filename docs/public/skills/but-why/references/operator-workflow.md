@@ -57,6 +57,9 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Do not omit, replace, defer, or reduce approved behavior to make a Task smaller.
    Treat any such proposal as a requirements change that requires an explicit Operator decision.
    Each proposed Task must deliver one bounded supported result: a completed state that is distinguishable from the prior supported state, is independently acceptable progress toward approved intent, and can be implemented, reviewed, and verified coherently.
+   Before recording each Task, state its supported completion result in one sentence.
+   Identify any included behavior that can be delivered later while leaving that result safe, usable, and independently acceptable.
+   Assign that behavior to another Task with its own bounded supported result.
    A quality, theme, final objective, shared owner, implementation area, or preferred sequence is not by itself a Task result.
    Split approved intent when it contains multiple bounded supported results.
    Do not merge results to minimize Task count or because they contribute to one final objective.
@@ -71,6 +74,8 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Do not use generic gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
    Follow the Task verification reference to define proportionate implementation confidence.
 4. Before requesting Task Recording Authorization, review the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
+   Use each completed Task Verification Contract to confirm that one practical coherent implementation, review, and evidence path exists.
+   If it does not, reconsider the boundary or present the concern before requesting Task Recording Authorization.
    Task lifecycle state does not establish implementation readiness.
 5. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.
    Obtain Task Recording Authorization before any Task or Task Dependency mutation.
