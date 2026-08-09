@@ -1003,6 +1003,14 @@ describe("Task Submission orchestration", () => {
 
             const recorded = yield* reviews.getReviewById(result.reviewId);
             expect(recorded?.baseCommit).toBe(featureHead);
+
+            // The final cleanup result is persisted after scoped cleanup, so the
+            // Review carries accurate recovery evidence instead of the provisional
+            // not_created admission record.
+            const setup = yield* reviews.getAbandonmentContext(result.reviewId);
+            expect(setup?.submittedSha).toBe(featureHead);
+            expect(setup?.cleanupWorktree).toBe("removed");
+            expect(setup?.cleanupTempRef).toBe("removed");
           }),
         );
       }),

@@ -320,6 +320,13 @@ const submitTask = (
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
+    // Persist the final workspace cleanup result captured after scoped cleanup,
+    // replacing the provisional not_created admission record.
+    yield* dependencies.persistence.recordWorkspaceSetup({
+      ...workspace.setup,
+      createdAt: input.now,
+    });
+
     const indexed = yield* indexTaskReviewTranscripts(dependencies.persistence, {
       taskId: input.taskId,
       reviewerSessionsRoot: dependencies.reviewerSessionsRoot,

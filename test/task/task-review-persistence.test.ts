@@ -677,6 +677,62 @@ it.scoped("enforces one active Review per Task and rejects mutation and cancella
   ),
 );
 
+it.scoped("completion requires the Active Review marker and rejects passing Findings", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const missingMarker = yield* createTask(tasks, "Missing marker", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: missingMarker.id,
+        baseCommit,
+        policy,
+        reviewId: "review-missing-marker",
+        now: firstNow,
+      });
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "remove Active Review marker",
+        (sql) => sql`DELETE FROM active_task_reviews WHERE review_id = 'review-missing-marker'`,
+      );
+      const completed = yield* reviews.complete({
+        reviewId: "review-missing-marker",
+        outcome: "blocked",
+        now: secondNow,
+      });
+      expect(completed).toEqual({ ok: false, code: "review_not_active" });
+      expect(yield* tasks.getTaskById(missingMarker.id)).toMatchObject({ state: "new" });
+
+      const passingFindings = yield* createTask(tasks, "Passing with findings", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: passingFindings.id,
+        baseCommit,
+        policy,
+        reviewId: "review-passing-findings",
+        now: firstNow,
+      });
+      const rejected = yield* reviews.complete({
+        reviewId: "review-passing-findings",
+        outcome: "passed",
+        findings: [
+          {
+            id: "review-passing-findings-F1",
+            reviewId: "review-passing-findings",
+            title: "Blocking finding",
+            description: "A passing Review cannot retain Findings.",
+            evidence: "command: none",
+            files: [],
+          },
+        ],
+        now: secondNow,
+      });
+      expect(rejected).toEqual({ ok: false, code: "passed_with_findings" });
+      expect(yield* tasks.getTaskById(passingFindings.id)).toMatchObject({ state: "new" });
+      expect(yield* reviews.getActiveForTask(passingFindings.id)).toBeDefined();
+    }),
+  ),
+);
+
 it.scoped("compare-and-set completion rejects a second completion and unknown reviews", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
@@ -863,6 +919,24 @@ it.scoped("rejects malformed persisted values at each owning boundary", () =>
           ),
         ),
       ).toBe(true);
+
+      // Persisted workspace identifiers are decoded before abandonment cleanup.
+      yield* repository.operation(
+        "corrupt workspace submitted SHA",
+        (sql) => sql`UPDATE task_reviews SET base_commit = '' WHERE id = 'review-decoded'`,
+      );
+      expect(yield* Effect.isFailure(reviews.getAbandonmentContext("review-decoded"))).toBe(true);
+      yield* repository.operation(
+        "restore workspace submitted SHA",
+        (sql) =>
+          sql`UPDATE task_reviews SET base_commit = ${baseCommit} WHERE id = 'review-decoded'`,
+      );
+      yield* repository.operation(
+        "corrupt workspace temp ref",
+        (sql) =>
+          sql`UPDATE task_review_workspace_setups SET temp_ref_name = '' WHERE review_id = 'review-decoded'`,
+      );
+      expect(yield* Effect.isFailure(reviews.getAbandonmentContext("review-decoded"))).toBe(true);
 
       // Tooling Failure values are decoded at the owning boundary.
       yield* repository.operation(

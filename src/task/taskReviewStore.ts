@@ -70,7 +70,11 @@ export type CompleteTaskReviewResult =
   | { readonly ok: true; readonly review: TaskReviewRecord; readonly task: TaskReviewTaskFact }
   | {
       readonly ok: false;
-      readonly code: "review_not_found" | "review_not_active" | "task_state_changed";
+      readonly code:
+        | "review_not_found"
+        | "review_not_active"
+        | "task_state_changed"
+        | "passed_with_findings";
     };
 
 export type TaskReviewTaskFact = {

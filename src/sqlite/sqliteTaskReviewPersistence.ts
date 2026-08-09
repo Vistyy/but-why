@@ -430,6 +430,19 @@ const complete = (
     if (review.state !== "running") {
       return { ok: false as const, code: "review_not_active" as const };
     }
+    if (input.outcome === "passed" && (input.findings ?? []).length > 0) {
+      // A passing Review cannot retain Findings: approval and blocking findings
+      // are mutually exclusive lifecycle outcomes.
+      return { ok: false as const, code: "passed_with_findings" as const };
+    }
+    // Completion must apply to the exact Review that owns the Active marker, so
+    // a stale or corrupted running Review cannot approve without its marker.
+    const active = yield* sql<{ readonly reviewId: string }>`
+      SELECT review_id AS reviewId FROM active_task_reviews WHERE review_id = ${input.reviewId}
+    `;
+    if (active[0] === undefined) {
+      return { ok: false as const, code: "review_not_active" as const };
+    }
     const taskId = storedPublicTaskId(review.taskId);
 
     if (input.outcome === "passed") {
@@ -532,11 +545,15 @@ const decodeAbandonmentContextOptional = (
   if (row === undefined) return Effect.succeed(undefined);
   return Effect.try({
     try: (): TaskReviewAbandonmentContext => ({
-      reviewId: row.reviewId,
+      reviewId: Schema.decodeUnknownSync(nonBlankStringSchema)(row.reviewId),
       taskId: storedPublicTaskId(row.taskId),
-      submittedSha: row.submittedSha,
-      ...(row.tempRefName === null ? {} : { tempRefName: row.tempRefName }),
-      ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
+      submittedSha: Schema.decodeUnknownSync(nonBlankStringSchema)(row.submittedSha),
+      ...(row.tempRefName === null
+        ? {}
+        : { tempRefName: Schema.decodeUnknownSync(nonBlankStringSchema)(row.tempRefName) }),
+      ...(row.worktreePath === null
+        ? {}
+        : { worktreePath: Schema.decodeUnknownSync(nonBlankStringSchema)(row.worktreePath) }),
       cleanupWorktree: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupWorktree),
       cleanupTempRef: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupTempRef),
     }),
