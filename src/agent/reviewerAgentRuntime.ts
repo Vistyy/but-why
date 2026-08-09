@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 import {
+  type ReviewerOutputContractFailed,
   SandcastleToolingFailed,
   type ValidationToolingFailure,
 } from "../change/validation/validationToolingFailures.js";
@@ -49,6 +50,11 @@ export type ReviewerAgentInput = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
   readonly resumeSession?: string;
+  readonly decodeOutput?: (input: {
+    readonly reviewer: string;
+    readonly attempts: number;
+    readonly output: unknown;
+  }) => Effect.Effect<ReviewerOutput, ReviewerOutputContractFailed>;
 };
 
 export type ReviewerAgentResult =
@@ -264,7 +270,7 @@ const isolatedPiReviewerAgent = (
 };
 
 const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, attempts: number) =>
-  decodeReviewerOutputContract({
+  (input.decodeOutput ?? decodeReviewerOutputContract)({
     reviewer: input.reviewer,
     attempts,
     output: parseTaggedReviewerOutput(result.stdout),

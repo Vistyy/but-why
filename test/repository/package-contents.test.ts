@@ -92,7 +92,7 @@ describe("CLI package contents", () => {
     writeFileSync(
       join(tools, "pi"),
       `#!/usr/bin/env sh
-printf '<reviewer-output>{"findings":[]}</reviewer-output>\\n'
+printf '<reviewer-output>{"findings":[{"title":"Package finding","description":"Package-extracted decoder evidence.","evidence":"command: packaged reviewer","files":[]}]}</reviewer-output>\\n'
 `,
     );
     writeFileSync(
@@ -181,8 +181,12 @@ exit 1
       Math.max(0, submittedTask.stdout.lastIndexOf("\n{") + 1),
     );
     expect(JSON.parse(submittedOutput)).toMatchObject({
-      review: { outcome: "passed", task: { id: "BY-1", state: "todo" } },
-      nextAction: "by change start --task BY-1",
+      review: {
+        outcome: "blocked",
+        task: { id: "BY-1", state: "new" },
+        findings: [{ title: "Package finding" }],
+      },
+      nextAction: "by task context draft BY-1",
     });
     runTestProcess("git", ["checkout", "--", ".but-why/config.json"], {
       cwd: repository,

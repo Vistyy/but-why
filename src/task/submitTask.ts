@@ -21,6 +21,7 @@ import type {
 } from "./taskReview.js";
 import {
   decodeTaskReviewReviewerOutput,
+  decodeTaskReviewRuntimeOutput,
   resolveTaskReviewPolicy,
   reviewerOutputToFindings,
   type TaskReviewPolicy,
@@ -254,23 +255,29 @@ const submitTask = (
         operationName: toolingError.operationName,
         errorMessage: toolingError.errorMessage,
       });
-      yield* dependencies.persistence.complete({
+      const completed = yield* dependencies.persistence.complete({
         reviewId,
         outcome: "tooling_failed",
         toolingFailure: failure,
         now: input.now,
       });
+      if (!completed.ok) {
+        return { ok: false as const, code: "submission_in_progress" as const };
+      }
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
     const phase = workspace.activeWorkspaceResult;
     if (phase !== undefined && phase.toolingFailure !== undefined) {
-      yield* dependencies.persistence.complete({
+      const completed = yield* dependencies.persistence.complete({
         reviewId,
         outcome: "tooling_failed",
         toolingFailure: phase.toolingFailure,
         now: input.now,
       });
+      if (!completed.ok) {
+        return { ok: false as const, code: "submission_in_progress" as const };
+      }
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
     }
 
@@ -401,6 +408,7 @@ const runTaskReviewPhases = (input: {
       reviewer: "task_review",
       validationRunId: input.reviewId,
       availableArtifactRefs: [],
+      decodeOutput: decodeTaskReviewRuntimeOutput,
       prompt: buildTaskReviewerPrompt({
         reviewId: input.reviewId,
         baseCommit: input.baseCommit,
