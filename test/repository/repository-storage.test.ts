@@ -57,6 +57,7 @@ const installPublicationIdentity = (
   changeId: string,
   candidateId: string,
   validationRunId: string,
+  expectedHeadSha: string,
   now: string,
 ) =>
   Effect.gen(function* () {
@@ -67,7 +68,7 @@ const installPublicationIdentity = (
           INSERT OR IGNORE INTO candidates (
             id, change_id, change_base_sha, head_sha, created_at
           ) VALUES (
-            ${candidateId}, ${changeId}, ${`${candidateId}-base`}, ${`${candidateId}-head`}, ${now}
+            ${candidateId}, ${changeId}, ${`${candidateId}-base`}, ${expectedHeadSha}, ${now}
           )
         `;
         yield* sql`
@@ -726,6 +727,7 @@ describe("repository SQL storage", () => {
           publication.changeId,
           publication.candidateId,
           publication.validationRunId,
+          publication.expectedHeadSha,
           publication.now,
         );
         const begun = yield* changes.beginPublication(publication);
@@ -832,6 +834,7 @@ describe("repository SQL storage", () => {
           first.changeId,
           first.candidateId,
           first.validationRunId,
+          first.expectedHeadSha,
           first.now,
         );
         if (!(yield* changes.beginPublication(first)).ok) throw new Error("begin failed");
@@ -853,6 +856,7 @@ describe("repository SQL storage", () => {
           newer.changeId,
           newer.candidateId,
           newer.validationRunId,
+          newer.expectedHeadSha,
           newer.now,
         );
         const replaced = yield* changes.recordPublishedPullRequest({
@@ -949,6 +953,7 @@ describe("repository SQL storage", () => {
           publication.changeId,
           publication.candidateId,
           publication.validationRunId,
+          publication.expectedHeadSha,
           publication.now,
         );
         if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
@@ -1031,6 +1036,7 @@ describe("repository SQL storage", () => {
           publication.changeId,
           publication.candidateId,
           publication.validationRunId,
+          publication.expectedHeadSha,
           publication.now,
         );
         if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
@@ -1787,6 +1793,7 @@ describe("repository SQL storage", () => {
           pending.changeId,
           pending.candidateId,
           pending.validationRunId,
+          pending.expectedHeadSha,
           pending.now,
         );
         expect(yield* changes.beginPublication(pending)).toMatchObject({ ok: true, created: true });
@@ -1816,6 +1823,7 @@ describe("repository SQL storage", () => {
           replacement.changeId,
           replacement.candidateId,
           replacement.validationRunId,
+          replacement.expectedHeadSha,
           replacement.now,
         );
         expect(yield* changes.replacePendingPublication(replacement)).toMatchObject({ ok: true });
@@ -1852,6 +1860,7 @@ describe("repository SQL storage", () => {
             captured.changeId,
             captured.candidateId,
             "legacy-run",
+            "head-legacy",
             "2026-07-25T15:30:00.000Z",
           );
           yield* repository.operation("install legacy publication facts", (sql) =>
@@ -1900,6 +1909,7 @@ describe("repository SQL storage", () => {
                 captured.changeId,
                 captured.candidateId,
                 "legacy-run",
+                "head-legacy",
                 "2026-07-25T15:30:00.000Z",
               );
               expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
@@ -1934,6 +1944,7 @@ describe("repository SQL storage", () => {
                 captured.changeId,
                 next.candidateId,
                 "next-run",
+                "head-next",
                 "2026-07-25T15:31:00.000Z",
               );
               yield* repository.operation(
@@ -2015,6 +2026,7 @@ describe("repository SQL storage", () => {
           publication.changeId,
           publication.candidateId,
           publication.validationRunId,
+          publication.expectedHeadSha,
           publication.now,
         );
         expect(yield* changes.beginPublication(publication)).toMatchObject({ ok: true });
@@ -2038,6 +2050,7 @@ describe("repository SQL storage", () => {
           first.changeId,
           second.candidateId,
           "run-2",
+          "head-2",
           "2026-07-25T16:03:00.000Z",
         );
         const recorded = yield* changes.recordPublishedPullRequest({

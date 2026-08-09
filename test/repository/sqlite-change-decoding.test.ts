@@ -177,6 +177,79 @@ describe("SQLite Change decoding", () => {
         );
         yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
         yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+
+        yield* repository.operation("inject malformed publication evidence relationships", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+              VALUES (
+                'owned-candidate', 'change-malformed', 'base-sha', 'actual-head',
+                '2026-08-09T20:10:00.000Z'
+              )
+            `;
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
+              ) VALUES (
+                'owned-run', 'owned-candidate',
+                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                'complete', 'passed', '2026-08-09T20:10:00.000Z',
+                '2026-08-09T20:10:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = 'owned-candidate',
+                publication_validation_run_id = 'owned-run', publication_owner = 'acme',
+                publication_repo = 'repo', publication_base_branch = 'main',
+                publication_remote_name = 'origin', publication_head_branch = 'owned',
+                publication_expected_head_sha = 'different-head', publication_pr_number = 7,
+                publication_pr_url = 'https://github.test/pull/7'
+              WHERE id = 'change-malformed'
+            `;
+          }),
+        );
+        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* repository.operation("inject unsupported publication Run state", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE changes SET publication_expected_head_sha = 'actual-head' WHERE id = 'change-malformed'`;
+            yield* sql`PRAGMA ignore_check_constraints = ON`;
+            yield* sql`UPDATE candidate_validation_runs SET state = 'corrupt' WHERE id = 'owned-run'`;
+          }),
+        );
+        const publicationAuthority = {
+          changeBaseSha: "base-sha",
+          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          implementationDecisions: [],
+        };
+        yield* expectPersistedDataInvalid(
+          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE candidate_validation_runs SET state = 'complete' WHERE id = 'owned-run'`;
+            yield* sql`
+              INSERT INTO implementation_blockers (
+                id, change_id, reported_at, content, resolved_at, resolution_id,
+                resolution_recorded_at, resolution_content
+              ) VALUES (
+                'foreign-blocker', 'change-publication-owner',
+                '2026-08-09T20:10:00.000Z', 'Foreign blocker.',
+                '2026-08-09T20:10:01.000Z', 'foreign-resolution',
+                '2026-08-09T20:10:01.000Z', 'Resolved elsewhere.'
+              )
+            `;
+            yield* sql`
+              UPDATE candidate_validation_runs
+              SET latest_resolved_blocker_id = 'foreign-blocker'
+              WHERE id = 'owned-run'
+            `;
+          }),
+        );
+        yield* expectPersistedDataInvalid(
+          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+        );
         yield* repository.operation(
           "restore absent publication",
           (sql) => sql`
@@ -184,7 +257,8 @@ describe("SQLite Change decoding", () => {
               publication_candidate_id = NULL, publication_validation_run_id = NULL,
               publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL,
               publication_remote_name = NULL, publication_head_branch = NULL,
-              publication_expected_head_sha = NULL
+              publication_expected_head_sha = NULL, publication_pr_number = NULL,
+              publication_pr_url = NULL
             WHERE id = 'change-malformed'
           `,
         );
@@ -211,6 +285,18 @@ describe("SQLite Change decoding", () => {
           "restore taskless context",
           (sql) =>
             sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
+        );
+
+        yield* repository.operation(
+          "inject open Change terminal cleanup",
+          (sql) => sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
+        );
+        yield* expectPersistedDataInvalid(
+          changes.listChangesForReconciliation(input.commonDirectory),
+        );
+        yield* repository.operation(
+          "restore open Change cleanup",
+          (sql) => sql`UPDATE changes SET cleanup_state = 'complete' WHERE id = 'change-malformed'`,
         );
 
         yield* repository.operation("inject hidden lifecycle corruption", (sql) =>

@@ -27,6 +27,7 @@ import {
 import {
   decodeImplementationBlockerHistory,
   implementationBlockerReadColumns,
+  latestResolvedBlockerId,
   type UnknownImplementationBlockerRow,
 } from "./sqliteChangeReadModel.js";
 import {
@@ -176,9 +177,6 @@ const candidateColumns = `
   head_sha AS headSha, created_at AS createdAt
 `;
 
-const compareStoredStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
-
 const getCandidateById = (sql: SqlClient.SqlClient, candidateId: string) =>
   Effect.map(
     sql.unsafe<CandidateRecord>(`SELECT ${candidateColumns} FROM candidates WHERE id = ?`, [
@@ -242,17 +240,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         blocked: true,
       } satisfies StartCandidateValidationRunResult;
     }
-    const latestResolvedBlockerId =
-      [...blockerHistory.blockers]
-        .filter(
-          (blocker): blocker is typeof blocker & { readonly resolvedAt: string } =>
-            blocker.resolvedAt !== null,
-        )
-        .sort(
-          (left, right) =>
-            compareStoredStrings(right.resolvedAt, left.resolvedAt) ||
-            right.sequence - left.sequence,
-        )[0]?.id ?? null;
+    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const policySnapshot = yield* Effect.try({
       try: () => encodeSqliteCandidateValidationPolicy(input.policy),
       catch: (cause) =>
@@ -270,8 +258,8 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         AND state = 'complete'
         AND outcome = 'passed'
         AND (
-          (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
-          OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
+          (latest_resolved_blocker_id IS NULL AND ${currentLatestResolvedBlockerId} IS NULL)
+          OR latest_resolved_blocker_id = ${currentLatestResolvedBlockerId}
         )
       LIMIT 1
     `;
@@ -304,7 +292,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         state, created_at, updated_at
       ) VALUES (
         ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${decisionsSnapshot},
-        ${latestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
+        ${currentLatestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
       )
     `;
     yield* sql`

@@ -35,12 +35,17 @@ import {
   decodeReviewerSession,
   decodeReviewerTranscript,
   implementationBlockerReadColumns,
+  latestResolvedBlockerId,
   type UnknownChangeRow,
   type UnknownImplementationBlockerRow,
   type UnknownImplementationDecisionRow,
   validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
-import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
+import {
+  decodePersisted,
+  decodeStoredNullableString,
+  decodeStoredString,
+} from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangePersistence = (): Effect.Effect<
   ChangePersistence,
@@ -299,56 +304,79 @@ const getPassingPublicationEvidence = (
   Effect.gen(function* () {
     const change = yield* getById(sql, changeId);
     if (change === undefined || change.publication === null) return undefined;
+    if (change.publication.pullRequest === null) return undefined;
     const rows = yield* sql<PassingPublicationEvidenceRow>`
-      SELECT
-        candidate.id AS candidateId,
-        run.id AS validationRunId,
-        candidate.change_base_sha AS changeBaseSha,
-        candidate.head_sha AS headSha,
+      SELECT candidate.id AS candidateId, run.id AS validationRunId,
+        candidate.change_base_sha AS changeBaseSha, candidate.head_sha AS headSha,
         run.policy_snapshot AS policySnapshot,
-        run.implementation_decisions AS implementationDecisions
-      FROM changes AS change
-      JOIN candidates AS candidate
-        ON candidate.id = change.publication_candidate_id
-        AND candidate.change_id = change.id
-      JOIN candidate_validation_runs AS run
-        ON run.id = change.publication_validation_run_id
-        AND run.candidate_id = candidate.id
-      WHERE change.id = ${changeId}
-        AND change.publication_pr_number IS NOT NULL
-        AND run.state = 'complete'
-        AND run.outcome = 'passed'
-        AND candidate.change_base_sha = ${authority.changeBaseSha}
-        AND (
-          (run.latest_resolved_blocker_id IS NULL AND NOT EXISTS (
-            SELECT 1
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-          ))
-          OR run.latest_resolved_blocker_id = (
-            SELECT blocker.id
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-            ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-            LIMIT 1
-          )
-        )
+        run.implementation_decisions AS implementationDecisions,
+        run.state, run.outcome, run.latest_resolved_blocker_id AS latestResolvedBlockerId
+      FROM candidates AS candidate
+      JOIN candidate_validation_runs AS run ON run.id = ${change.publication.validationRunId}
+      WHERE candidate.id = ${change.publication.candidateId}
     `;
     const row = rows[0];
-    if (row === undefined) return undefined;
-    const decoded = yield* decodePersisted("get passing publication evidence", () => ({
-      candidateId: decodeStoredString(row.candidateId, "publication Candidate ID"),
-      validationRunId: decodeStoredString(row.validationRunId, "publication Validation Run ID"),
-      changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
-      headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
-      policySnapshot: decodeStoredString(row.policySnapshot, "Validation Policy Snapshot"),
-      implementationDecisions: decodeStoredString(
-        row.implementationDecisions,
-        "Implementation Decision Snapshot",
-      ),
-    }));
+    if (row === undefined) {
+      return yield* invalidData(
+        "get passing publication evidence",
+        "Publication identity disappeared",
+      );
+    }
+    const decoded = yield* decodePersisted("get passing publication evidence", () => {
+      const state = decodeStoredString(row.state, "Validation Run state");
+      const outcome = decodeStoredNullableString(row.outcome, "Validation Run outcome");
+      if (state !== "running" && state !== "complete") {
+        throw new Error("Stored Validation Run state is unsupported");
+      }
+      if (
+        outcome !== null &&
+        outcome !== "passed" &&
+        outcome !== "blocked" &&
+        outcome !== "tooling_failed"
+      ) {
+        throw new Error("Stored Validation Run outcome is unsupported");
+      }
+      if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
+        throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
+      }
+      return {
+        candidateId: decodeStoredString(row.candidateId, "publication Candidate ID"),
+        validationRunId: decodeStoredString(row.validationRunId, "publication Validation Run ID"),
+        changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
+        headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
+        policySnapshot: decodeStoredString(row.policySnapshot, "Validation Policy Snapshot"),
+        implementationDecisions: decodeStoredString(
+          row.implementationDecisions,
+          "Implementation Decision Snapshot",
+        ),
+        state,
+        outcome,
+        latestResolvedBlockerId: decodeStoredNullableString(
+          row.latestResolvedBlockerId,
+          "Validation Run latest resolved Blocker ID",
+        ),
+      };
+    });
+    const blockerHistory = yield* readBlockers(sql, change.id, "get passing publication evidence");
+    if (
+      decoded.latestResolvedBlockerId !== null &&
+      !blockerHistory.blockers.some(
+        (blocker) => blocker.id === decoded.latestResolvedBlockerId && blocker.resolution !== null,
+      )
+    ) {
+      return yield* invalidData(
+        "get passing publication evidence",
+        "Validation Run latest resolved Blocker belongs to another Change",
+      );
+    }
+    if (
+      decoded.state !== "complete" ||
+      decoded.outcome !== "passed" ||
+      decoded.changeBaseSha !== authority.changeBaseSha ||
+      decoded.latestResolvedBlockerId !== latestResolvedBlockerId(blockerHistory)
+    ) {
+      return undefined;
+    }
     const expectedPolicySnapshot = yield* Effect.try({
       try: () => encodeSqliteCandidateValidationPolicy(authority.policy),
       catch: (cause) =>
@@ -690,7 +718,14 @@ const mapRow = (
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
-type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
-  readonly policySnapshot: string;
-  readonly implementationDecisions: string;
+type PassingPublicationEvidenceRow = {
+  readonly candidateId: unknown;
+  readonly validationRunId: unknown;
+  readonly changeBaseSha: unknown;
+  readonly headSha: unknown;
+  readonly policySnapshot: unknown;
+  readonly implementationDecisions: unknown;
+  readonly state: unknown;
+  readonly outcome: unknown;
+  readonly latestResolvedBlockerId: unknown;
 };

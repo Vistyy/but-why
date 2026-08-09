@@ -145,6 +145,9 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
   if (cleanupState === "complete" && cleanupBlockingReason !== null) {
     throw new Error("Stored completed Change cleanup has a blocking reason");
   }
+  if (state === changeState.open && cleanupState !== "complete") {
+    throw new Error("Stored open Change has terminal cleanup state");
+  }
 
   const publicationPrNumber = decodeNullablePositiveInteger(
     row.publicationPrNumber,
@@ -377,6 +380,17 @@ export const decodeImplementationBlockerHistory = (
   };
 };
 
+export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): string | null =>
+  [...history.blockers]
+    .filter(
+      (blocker): blocker is typeof blocker & { readonly resolvedAt: string } =>
+        blocker.resolvedAt !== null,
+    )
+    .sort(
+      (left, right) =>
+        compareStoredStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
+    )[0]?.id ?? null;
+
 export const decodeReviewerSession = (
   row: Record<string, unknown>,
   changeId: string,
@@ -423,7 +437,7 @@ export const validateChangeRelationships = (
 
     if (change.publication !== null) {
       const publicationRows = yield* sql<Record<string, unknown>>`
-        SELECT candidate.change_id AS candidateChangeId,
+        SELECT candidate.change_id AS candidateChangeId, candidate.head_sha AS candidateHeadSha,
           validation_run.candidate_id AS validationRunCandidateId
         FROM candidates AS candidate
         LEFT JOIN candidate_validation_runs AS validation_run
@@ -436,6 +450,10 @@ export const validateChangeRelationships = (
           row?.["candidateChangeId"],
           "publication Candidate Change ID",
         );
+        const candidateHeadSha = decodeStoredString(
+          row?.["candidateHeadSha"],
+          "publication Candidate head SHA",
+        );
         const validationRunCandidateId = decodeStoredString(
           row?.["validationRunCandidateId"],
           "publication Validation Run Candidate ID",
@@ -445,6 +463,9 @@ export const validateChangeRelationships = (
         }
         if (validationRunCandidateId !== change.publication?.candidateId) {
           throw new Error("Publication Validation Run belongs to another Candidate");
+        }
+        if (candidateHeadSha !== change.publication?.expectedHeadSha) {
+          throw new Error("Publication expected head does not match its Candidate");
         }
       });
     }
@@ -476,6 +497,9 @@ const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] => {
   }
   return reason;
 };
+
+const compareStoredStrings = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
 
 const decodeNullablePositiveInteger = (
   value: unknown,
