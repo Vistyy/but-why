@@ -527,6 +527,60 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
     expect(reads).toBe(1);
   });
 
+  it("classifies missing and unavailable Remote Change Branch deletion results", () => {
+    const repository = initializedRepository();
+    const cases = [
+      {
+        name: "missing after deletion race",
+        deletion: { state: "missing" as const },
+        expected: { state: "complete" as const },
+      },
+      {
+        name: "unavailable during deletion",
+        deletion: { state: "unavailable" as const },
+        expected: {
+          state: "pending" as const,
+          blockingReason: "remote_branch_unavailable" as const,
+        },
+      },
+    ];
+
+    for (const scenario of cases) {
+      expect(
+        cleanupChangeResources(
+          {
+            repositoryCommonDirectory: git(
+              repository,
+              "rev-parse",
+              "--path-format=absolute",
+              "--git-common-dir",
+            ),
+            worktreePath: null,
+            branchRef: "refs/heads/but-why/feature",
+            remoteChangeBranch: {
+              owner: "acme",
+              repo: "widgets",
+              remoteName: "origin",
+              remoteUrl: "origin-url",
+              branchName: "but-why/feature",
+              targetBranch: "main",
+              expectedHeadSha: "candidate-head",
+            },
+          },
+          {
+            readRemoteBranchHead: () => ({
+              state: "present",
+              headSha: "candidate-head",
+              remoteUrl: "origin-url",
+            }),
+            deleteRemoteBranch: () => scenario.deletion,
+          },
+        ),
+        scenario.name,
+      ).toEqual(scenario.expected);
+    }
+  });
+
   it("keeps discard pending when the Remote Change Branch is excluded", () => {
     const repository = initializedRepository();
     let deleted = false;
