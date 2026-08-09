@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildContinuationMessage,
+  containsVisibleChangeSubmit,
+  countVisibleChangeSubmits,
   decideContinuation,
   extractChangeId,
   nextRetryState,
@@ -102,6 +104,63 @@ describe("Change Implement continuation policy", () => {
     expect(message).toContain("linked Task Context when present");
     expect(message).toContain("complete accepted intent");
     expect(message).toContain("until Change Submit passes");
+  });
+
+  it.each([
+    "just by change submit change-123",
+    "pnpx but-why change submit change-123",
+    "npx -y but-why change submit change-123",
+    "just by --json change submit change-123",
+    "pnpx but-why --json change submit change-123",
+    "npx -y but-why --json change submit change-123",
+    "git status && just by change submit change-123",
+    "git status\n npx -y but-why change submit change-123",
+    "{ just by change submit change-123; }",
+    "if true; then just by change submit change-123; fi",
+    `printf '%s\\n' "$(just by change submit change-123)"`,
+    "echo `just by change submit change-123`",
+    `printf '%s\\n' "\`just by change submit change-123\`"`,
+    "printf '<<DATA'; just by change submit change-123",
+    "commands=($(just by change submit change-123))",
+    "commands=(<(just by change submit change-123))",
+    "commands=(>(just by change submit change-123))",
+    "cat <<END-MARKER\ntext\nEND-MARKER\njust by change submit change-123",
+    "echo $((1 << 2))\njust by change submit change-123",
+    "(( value = 1 << 2 ))\njust by change submit change-123",
+    "value=$((\n  1 << 2\n))\njust by change submit change-123",
+    "commands=(foo\\()\njust by change submit change-123",
+    'output="$(\n  echo ready # )\n  just by change submit change-123\n)"',
+  ])("detects a visible canonical Change Submit in %j", (command) => {
+    expect(containsVisibleChangeSubmit(command)).toBe(true);
+  });
+
+  it.each([
+    "git status",
+    "just by change show change-123",
+    'printf "just by change submit change-123"',
+    "printf 'line one\\njust by change submit change-123\\n'",
+    "printf 'line one\njust by change submit change-123\n'",
+    'submit="just by change submit change-123"',
+    "# just by change submit change-123\ngit status",
+    "commands=(just by change submit change-123)",
+    "commands=(npx -y but-why change submit change-123)",
+    "commands=(pnpx but-why --json change submit change-123)",
+    "commands=(\n  just by change submit change-123\n)",
+    "commands=(\n  # Keep ) in this comment\n  just by change submit change-123\n)",
+    "commands=(\n  foo\\)\n  just by change submit change-123\n)",
+    "cat <<'DATA'\njust by change submit change-123\nDATA",
+    "cat <<\\EOF\njust by change submit change-123\nEOF",
+    "./submit-change.sh",
+  ])("does not classify unrelated Bash command %j as Change Submit", (command) => {
+    expect(containsVisibleChangeSubmit(command)).toBe(false);
+  });
+
+  it("counts every directly visible Change Submit invocation", () => {
+    expect(
+      countVisibleChangeSubmits(
+        "just by change submit change-123; npx -y but-why change submit change-123",
+      ),
+    ).toBe(2);
   });
 
   it("extracts the Change identity from the implementer prompt", () => {
