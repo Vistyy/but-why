@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
@@ -3638,6 +3638,7 @@ describe("repository SQL storage", () => {
   const runHelperProcess = (
     args: readonly string[],
     cwd: string,
+    onOpening?: () => void,
   ): Promise<{ readonly status: number | null; readonly stdout: string }> =>
     new Promise((resolveResult) => {
       const child = startTestProcess(
@@ -3647,19 +3648,24 @@ describe("repository SQL storage", () => {
       );
       let stdout = "";
       let stderr = "";
+      let openingObserved = false;
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();
       });
       child.stderr.on("data", (chunk: Buffer) => {
         stderr += chunk.toString();
+        if (!openingObserved && stderr.includes("opening")) {
+          openingObserved = true;
+          onOpening?.();
+        }
       });
-      child.on("close", (status) => resolveResult({ status, stdout: `${stdout}${stderr}`.trim() }));
+      child.on("close", (status) => resolveResult({ status, stdout: (stdout || stderr).trim() }));
     });
 
-  const startMigrationLockHolder = (statePath: string, holdMs: number) => {
+  const startMigrationLockHolder = (statePath: string, releasePath: string) => {
     const child = startTestProcess(
       process.execPath,
-      ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, String(holdMs)],
+      ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, releasePath],
       { cwd: dirname(statePath), timeout: 30_000 },
     );
     let output = "";
@@ -3691,22 +3697,30 @@ describe("repository SQL storage", () => {
       timeoutMs: 15_000,
     });
 
-  it.effect("serializes Shared Repository State creation and migration across real processes", () =>
+  it.effect("serializes real-process migration and opens after release before the bound", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-concurrent-init-"))),
       (directory) =>
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
+          const releasePath = join(directory, "release-migration-lock");
+          const holder = startMigrationLockHolder(statePath, releasePath);
+          yield* Effect.promise(() => waitForMigrationLock(holder));
+
           const results = yield* Effect.promise(() =>
             Promise.all(
-              ["ConcurrentA", "ConcurrentB", "ConcurrentC"].map((title) =>
+              ["ConcurrentA", "ConcurrentB", "ConcurrentC"].map((title, index) =>
                 runHelperProcess(
                   ["open-state", statePath, directory, "5000", "30000", "50", title],
                   directory,
+                  index === 0 ? () => writeFileSync(releasePath, "release\n") : undefined,
                 ),
               ),
             ),
           );
+          const released = yield* Effect.promise(() => holder.done);
+          expect(released.status).toBe(0);
+          expect(released.stdout).toContain("released");
           for (const result of results) {
             expect(result.status).toBe(0);
             expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, found: true });
@@ -3757,7 +3771,8 @@ describe("repository SQL storage", () => {
       (directory) =>
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
-          const holder = startMigrationLockHolder(statePath, 2_500);
+          const releasePath = join(directory, "release-migration-lock");
+          const holder = startMigrationLockHolder(statePath, releasePath);
           try {
             yield* Effect.promise(() => waitForMigrationLock(holder));
 
@@ -3773,6 +3788,7 @@ describe("repository SQL storage", () => {
               error: { _tag: "RepositoryStateUnavailable" },
             });
 
+            writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);
             expect(released.status).toBe(0);
             expect(released.stdout).toContain("released");
@@ -3808,7 +3824,8 @@ describe("repository SQL storage", () => {
           expect(primed.status).toBe(0);
           expect(JSON.parse(primed.stdout)).toMatchObject({ ok: true, found: true });
 
-          const holder = startMigrationLockHolder(statePath, 2_500);
+          const releasePath = join(directory, "release-current-state-lock");
+          const holder = startMigrationLockHolder(statePath, releasePath);
           try {
             yield* Effect.promise(() => waitForMigrationLock(holder));
 
@@ -3823,6 +3840,9 @@ describe("repository SQL storage", () => {
               ok: true,
               migrationCount: 25,
             });
+            writeFileSync(releasePath, "release\n");
+            const released = yield* Effect.promise(() => holder.done);
+            expect(released.status).toBe(0);
           } finally {
             if (holder.child.exitCode === null) holder.child.kill("SIGTERM");
           }
