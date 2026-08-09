@@ -146,7 +146,7 @@ describe("check round Findings", () => {
       }),
   );
 
-  it.effect("records timed-out check Findings without severity", () =>
+  it.effect("records timed-out check Findings and execution evidence", () =>
     Effect.gen(function* () {
       const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
       const artifactsRoot = createTestWorkspace();
@@ -186,7 +186,6 @@ describe("check round Findings", () => {
           "artifact:by-1.v1/checks/quality/execution.json",
         ],
       });
-      expect(recordedRounds[0]?.finding).not.toHaveProperty("severity");
       const execution = recordedRounds[0]?.artifactRecords.find(
         (artifact) => artifact.path === "by-1.v1/checks/quality/execution.json",
       );

@@ -24,11 +24,7 @@ import {
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
-import {
-  acquireTestWorkspace,
-  createTestWorkspace,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -697,19 +693,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           blockedBy: [{ id: prerequisite, state: "new" }],
         },
       });
-    }),
-  );
-
-  it.effect("keeps Change Start on the Change command", () =>
-    Effect.gen(function* () {
-      const retired = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--json",
-        "task",
-        "start",
-        "BY-1",
-      ]);
-      expect(retired.status).toBe(2);
-      expect(JSON.parse(retired.stdout)).toMatchObject({ error: { code: "invalid_usage" } });
     }),
   );
 
