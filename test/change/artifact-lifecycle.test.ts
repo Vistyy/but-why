@@ -5,14 +5,18 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { CandidateRecord } from "../../src/change/candidate/candidate.js";
-import type { CandidateValidationRunRecord } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
+import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
+import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
+import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
-import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../src/contracts/repositoryStorageError.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
@@ -32,6 +36,45 @@ const policy = {
   prepare: { command: "true", timeoutSeconds: 10 },
   checks: [],
   copyFiles: [],
+};
+
+type RawRunRow = {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly policySnapshot: string;
+  readonly implementationDecisions: string;
+  readonly latestResolvedBlockerId: string | null;
+  readonly state: string;
+  readonly outcome: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+type RawArtifactRow = {
+  readonly ref: string;
+  readonly validationRunId: string;
+  readonly phase: string;
+  readonly producer: string;
+  readonly path: string;
+  readonly originalBytes: number;
+  readonly storedBytes: number;
+  readonly truncated: number;
+  readonly createdAt: string;
+};
+
+const unusedGitHubGateway: GitHubPullRequestGateway = {
+  findPullRequests: () => {
+    throw new Error("Closed Change reconciliation must not observe pull requests");
+  },
+  getPullRequest: () => {
+    throw new Error("Closed Change reconciliation must not observe pull requests");
+  },
+  createPullRequest: () => {
+    throw new Error("Reconciliation must not create a pull request");
+  },
+  updatePullRequest: () => {
+    throw new Error("Reconciliation must not update a pull request");
+  },
 };
 
 let candidateValidationRepoTemplate: string;
@@ -106,6 +149,175 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
       ),
   );
 
+  it.effect(
+    "reconciles discard cleanup for an exact Closed Change with an unsupported Validation Policy Snapshot and removes only its Artifact Content",
+    () =>
+      withArtifactLifecycleFixture((fixture) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+
+          // Install one extra Validation Run under the selected Change whose stored
+          // Validation Policy Snapshot is unsupported by the strict current decoder.
+          // Its Artifact Content and metadata are real rows on disk and in SQLite.
+          const unsupportedRunId = "run-unsupported";
+          const unsupportedSnapshot =
+            '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceReview":{"ok":true,"instructions":"Review.","instructionsSource":"built_in","profile":{"agentProfile":"acceptance","scope":"global","profile":{"agentRuntime":"pi"}}}}';
+          yield* repository.operation(
+            "install unsupported Validation Policy Snapshot",
+            (sql) =>
+              sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
+              ) VALUES (
+                ${unsupportedRunId}, ${fixture.first.candidateId}, ${unsupportedSnapshot}, '[]',
+                NULL, 'complete', 'passed', ${now}, ${now}
+              )
+            `,
+          );
+          const unsupportedPath = join(unsupportedRunId, "checks", "check", "retired.txt");
+          mkdirSync(join(fixture.artifactsRoot, unsupportedRunId, "checks", "check"), {
+            recursive: true,
+          });
+          writeFileSync(join(fixture.artifactsRoot, unsupportedPath), "retired content\n");
+          yield* fixture.validation.recordCheckRound({
+            validationRunId: unsupportedRunId,
+            producer: "check",
+            roundNumber: 1,
+            roundStatus: "passed",
+            artifactRecords: [
+              {
+                ref: `artifact:${unsupportedRunId}/checks/check/retired.txt`,
+                validationRunId: unsupportedRunId,
+                phase: "checks",
+                producer: "check",
+                path: unsupportedPath,
+                originalBytes: Buffer.byteLength("retired content\n"),
+                storedBytes: Buffer.byteLength("retired content\n"),
+                truncated: false,
+              },
+            ],
+            now,
+          });
+
+          const readRawRuns = () =>
+            repository.operation(
+              "read raw Validation Run rows",
+              (sql) =>
+                sql<RawRunRow>`
+                SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
+                  implementation_decisions AS implementationDecisions,
+                  latest_resolved_blocker_id AS latestResolvedBlockerId,
+                  state, outcome, created_at AS createdAt, updated_at AS updatedAt
+                FROM candidate_validation_runs
+                ORDER BY id
+              `,
+            );
+          const readRawArtifacts = () =>
+            repository.operation(
+              "read raw Artifact metadata rows",
+              (sql) =>
+                sql<RawArtifactRow>`
+                SELECT ref, validation_run_id AS validationRunId, phase, producer, path,
+                  original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated,
+                  created_at AS createdAt
+                FROM candidate_validation_artifacts
+                ORDER BY ref
+              `,
+            );
+          const rawRunsBefore = yield* readRawRuns();
+          const rawArtifactsBefore = yield* readRawArtifacts();
+
+          const closed = yield* fixture.changes.cancelChange({
+            changeId: fixture.first.changeId,
+            reason: "Stop",
+            now,
+          });
+          if (!closed.ok) throw new Error(closed.code);
+
+          const reconciliation = openChangeReconciliation({
+            persistence: fixture.changes,
+            github: unusedGitHubGateway,
+            cleanupTerminal: openTerminalCleanup({
+              persistence: fixture.changes,
+              cleanup: (input) => cleanupChangeResources(input),
+              artifactLifecycle: openArtifactLifecycle({
+                persistence: fixture.validation,
+                artifactsRoot: fixture.artifactsRoot,
+              }),
+            }),
+          });
+
+          const result = yield* reconciliation.reconcile({
+            repositoryCommonDirectory: fixture.commonDirectory,
+            changeId: fixture.first.changeId,
+            now,
+            discardWork: true,
+          });
+
+          expect(result).toEqual({
+            rejected: false,
+            changes: [
+              {
+                changeId: fixture.first.changeId,
+                status: "cleanup_complete",
+                cleanup: { state: "complete", blockingReason: null },
+              },
+            ],
+          });
+
+          // All and only the selected Change's Validation Run content is removed.
+          expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
+            false,
+          );
+          expect(existsSync(join(fixture.artifactsRoot, unsupportedRunId))).toBe(false);
+          expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(
+            true,
+          );
+          expect(
+            existsSync(
+              join(
+                fixture.artifactsRoot,
+                fixture.second.validationRunId,
+                "checks",
+                "check",
+                "two.txt",
+              ),
+            ),
+          ).toBe(true);
+
+          // Validation Run rows and Artifact metadata are unchanged by cleanup.
+          expect(yield* readRawRuns()).toEqual(rawRunsBefore);
+          expect(yield* readRawArtifacts()).toEqual(rawArtifactsBefore);
+
+          // The unsupported Run stays rejected through both full read paths.
+          const runError = yield* fixture.validation.getRunById(unsupportedRunId).pipe(Effect.flip);
+          expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          const historyError = yield* fixture.validation
+            .listRunsForCandidate(fixture.first.candidateId)
+            .pipe(Effect.flip);
+          expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+          // The retained Change's Run and metadata remain readable.
+          expect(
+            yield* fixture.validation.getRunById(fixture.second.validationRunId),
+          ).toBeDefined();
+          expect(
+            (yield* fixture.validation.listRunsForCandidate(fixture.second.candidateId)).length,
+          ).toBe(1);
+          expect(
+            (yield* fixture.validation.listArtifacts(fixture.second.validationRunId)).map(
+              (artifact) => artifact.ref,
+            ),
+          ).toEqual([`artifact:${fixture.second.validationRunId}/checks/check/two.txt`]);
+
+          const recorded = yield* fixture.changes.getChangeById(fixture.first.changeId);
+          expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });
+        }),
+      ),
+    30_000,
+  );
+
   it.effect("treats already-removed Artifact Content as success on retry", () =>
     withArtifactLifecycleFixture((fixture) =>
       Effect.gen(function* () {
@@ -163,9 +375,7 @@ describe("Artifact Content removal safety", () => {
 
       const lifecycle = openArtifactLifecycle({
         persistence: {
-          listCandidatesForChange: () => Effect.succeed([candidateRecord]),
-          listRunsForCandidate: () =>
-            Effect.succeed([{ ...validationRunRecord, id: "../outside" }]),
+          listRunIdsForChange: () => Effect.succeed(["../outside"]),
         },
         artifactsRoot,
       });
@@ -175,25 +385,6 @@ describe("Artifact Content removal safety", () => {
     }),
   );
 });
-
-const candidateRecord: CandidateRecord = {
-  id: "candidate-1",
-  changeId: "change-1",
-  changeBaseSha: "target-sha",
-  headSha: "head-one",
-  createdAt: now,
-};
-
-const validationRunRecord: CandidateValidationRunRecord = {
-  id: "run-1",
-  candidateId: "candidate-1",
-  policy,
-  implementationDecisions: [],
-  state: "complete",
-  outcome: "passed",
-  createdAt: now,
-  updatedAt: now,
-};
 
 const withArtifactLifecycleFixture = <A, E>(
   use: (fixture: {
@@ -214,7 +405,7 @@ const withArtifactLifecycleFixture = <A, E>(
       readonly validationRunId: string;
       readonly path: string;
     };
-  }) => Effect.Effect<A, E>,
+  }) => Effect.Effect<A, E, RepositorySql>,
 ): Effect.Effect<A, E | RepositoryStorageError> =>
   Effect.gen(function* () {
     const root = yield* cloneInitializedTestRepository(candidateValidationRepoTemplate);
