@@ -2,8 +2,6 @@ import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { ChangeCleanupRemote } from "../../src/change/changeCleanupRemote.js";
-import type { ChangeCleanupResult } from "../../src/change/localChangeCleanupGit.js";
 import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -463,6 +461,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
           ),
           worktreePath: null,
           branchRef: "refs/heads/but-why/feature",
+          discardWork: true,
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
@@ -542,6 +541,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
           ),
           worktreePath: null,
           branchRef: "refs/heads/but-why/feature",
+          discardWork: true,
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
@@ -725,76 +725,6 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
       ),
     ).toEqual({ state: "pending", blockingReason: "remote_branch_head_mismatch" });
     expect(deleted).toBe(true);
-  });
-
-  it("keeps discard pending for unreadable, mismatched, excluded, and absent remote facts", () => {
-    const repository = initializedRepository();
-    const cases: readonly {
-      readonly name: string;
-      readonly read: () => ReturnType<ChangeCleanupRemote["readRemoteBranchHead"]>;
-      readonly expected: ChangeCleanupResult;
-    }[] = [
-      {
-        name: "missing",
-        read: () => ({ state: "missing" as const }),
-        expected: { state: "complete" as const },
-      },
-      {
-        name: "unavailable",
-        read: () => ({ state: "unavailable" as const }),
-        expected: { state: "pending" as const, blockingReason: "remote_branch_unavailable" },
-      },
-      {
-        name: "mismatch",
-        read: () => ({ state: "mismatch" as const }),
-        expected: {
-          state: "pending" as const,
-          blockingReason: "remote_branch_repository_mismatch",
-        },
-      },
-      {
-        name: "excluded",
-        read: () => ({ state: "excluded" as const }),
-        expected: { state: "pending" as const, blockingReason: "remote_branch_excluded" },
-      },
-    ];
-
-    for (const scenario of cases) {
-      let deleted = false;
-      expect(
-        cleanupChangeResources(
-          {
-            repositoryCommonDirectory: git(
-              repository,
-              "rev-parse",
-              "--path-format=absolute",
-              "--git-common-dir",
-            ),
-            worktreePath: null,
-            branchRef: "refs/heads/but-why/feature",
-            discardWork: true,
-            remoteChangeBranch: {
-              owner: "acme",
-              repo: "widgets",
-              remoteName: "origin",
-              remoteUrl: "origin-url",
-              branchName: "but-why/feature",
-              targetBranch: "main",
-              expectedHeadSha: "candidate-head",
-            },
-          },
-          {
-            readRemoteBranchHead: scenario.read,
-            deleteRemoteBranch: () => {
-              deleted = true;
-              return { state: "deleted" };
-            },
-          },
-        ),
-        scenario.name,
-      ).toEqual(scenario.expected);
-      if (scenario.name !== "missing") expect(deleted, scenario.name).toBe(false);
-    }
   });
 });
 

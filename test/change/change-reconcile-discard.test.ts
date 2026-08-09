@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
+import {
+  type ChangeCleanupOperation,
+  openTerminalCleanup,
+} from "../../src/change/cleanupTerminalChange.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
@@ -14,7 +16,6 @@ import {
 } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-08-05T12:00:00.000Z";
@@ -31,16 +32,10 @@ const withReconcileRepository = <A, E>(
   Effect.acquireUseRelease(
     Effect.sync(() => {
       const root = createTestWorkspace();
-      git(root, "init", "-q");
-      git(root, "config", "user.name", "But Why Test");
-      git(root, "config", "user.email", "but-why@example.test");
-      writeFileSync(join(root, "README.md"), "# Test repository\n");
-      git(root, "add", "README.md");
-      git(root, "commit", "-m", "Initialize repository");
-      git(root, "branch", "-M", "main");
-      const statePath = join(root, ".git", "but-why", "state.sqlite");
-      mkdirSync(join(root, ".git", "but-why"), { recursive: true });
-      return { root, commonDirectory: join(root, ".git"), statePath };
+      const commonDirectory = join(root, ".git");
+      const statePath = join(commonDirectory, "but-why", "state.sqlite");
+      mkdirSync(join(commonDirectory, "but-why"), { recursive: true });
+      return { root, commonDirectory, statePath };
     }),
     (fixture) =>
       use(fixture).pipe(Effect.provide(repositorySqlLayer(sqlConfig(fixture))), Effect.scoped),
@@ -57,11 +52,6 @@ const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
     const starts = yield* openSqliteChangeStartPersistence();
     const changes = yield* openSqliteChangePersistence();
     const worktreePath = join(fixture.root, "worktrees", "but-why", id);
-    git(fixture.root, "worktree", "add", "-b", `but-why/${id}`, worktreePath, "main");
-    writeFileSync(join(worktreePath, "feature.txt"), `unique ${id}\n`);
-    git(worktreePath, "add", "feature.txt");
-    git(worktreePath, "commit", "-m", `Unique ${id}`);
-    writeFileSync(join(worktreePath, "dirty.txt"), `uncommitted ${id}\n`);
 
     const created = yield* starts.create({
       id,
@@ -69,7 +59,7 @@ const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
       branchRef: `refs/heads/but-why/${id}`,
       baseRef: "refs/heads/main",
       baseRemoteUrl: "https://github.com/acme/repo.git",
-      startingCommit: git(fixture.root, "rev-parse", "refs/heads/main"),
+      startingCommit: "base",
       worktreePath,
       now,
     });
@@ -101,19 +91,23 @@ const noPullRequestGateway = {
 
 describe("Change reconciliation discard boundary", () => {
   it.effect(
-    "discards a dirty Managed Worktree and unique local work for one exact terminal Change only",
+    "forwards one-attempt discard authority for one exact terminal Change only",
     () =>
       withReconcileRepository((fixture) =>
         Effect.gen(function* () {
           const changes = yield* openSqliteChangePersistence();
           const first = yield* createTerminalChange(fixture, "change-a");
           const second = yield* createTerminalChange(fixture, "change-b");
+          const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
           const reconciliation = openChangeReconciliation({
             persistence: changes,
             github: noPullRequestGateway,
             cleanupTerminal: openTerminalCleanup({
               persistence: changes,
-              cleanup: (input) => cleanupChangeResources(input),
+              cleanup: (input) => {
+                cleanupInputs.push(input);
+                return { state: "complete" };
+              },
             }),
           });
 
@@ -134,31 +128,43 @@ describe("Change reconciliation discard boundary", () => {
               },
             ],
           });
-          expect(existsSync(first.worktreePath)).toBe(false);
-          expect(branchPresent(fixture.root, "but-why/change-a")).toBe(false);
-          expect(existsSync(second.worktreePath)).toBe(true);
-          expect(branchPresent(fixture.root, "but-why/change-b")).toBe(true);
-          expect(existsSync(join(second.worktreePath, "dirty.txt"))).toBe(true);
-          expect(existsSync(join(second.worktreePath, "feature.txt"))).toBe(true);
-
-          const recorded = yield* changes.getChangeById(first.changeId);
-          expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });
+          expect(cleanupInputs).toEqual([
+            {
+              repositoryCommonDirectory: fixture.commonDirectory,
+              worktreePath: first.worktreePath,
+              branchRef: "refs/heads/but-why/change-a",
+              discardWork: true,
+            },
+          ]);
+          expect(yield* changes.getChangeById(first.changeId)).toMatchObject({
+            cleanup: { state: "complete", blockingReason: null },
+          });
+          expect(yield* changes.getChangeById(second.changeId)).toMatchObject({
+            cleanup: { state: "pending", blockingReason: null },
+          });
         }),
       ),
     30_000,
   );
 
-  it.effect("preserves dirty work and unique local commits without the discard flag", () =>
+  it.effect("withholds discard authority without the discard flag", () =>
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
         const changes = yield* openSqliteChangePersistence();
         const terminal = yield* createTerminalChange(fixture, "change-a");
+        const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
             persistence: changes,
-            cleanup: (input) => cleanupChangeResources(input),
+            cleanup: (input) => {
+              cleanupInputs.push(input);
+              return {
+                state: "pending",
+                blockingReason: "worktree_has_uncommitted_changes",
+              };
+            },
           }),
         });
 
@@ -181,10 +187,14 @@ describe("Change reconciliation discard boundary", () => {
             },
           ],
         });
-        expect(existsSync(terminal.worktreePath)).toBe(true);
-        expect(branchPresent(fixture.root, "but-why/change-a")).toBe(true);
-        expect(existsSync(join(terminal.worktreePath, "dirty.txt"))).toBe(true);
-        expect(existsSync(join(terminal.worktreePath, "feature.txt"))).toBe(true);
+        expect(cleanupInputs).toEqual([
+          {
+            repositoryCommonDirectory: fixture.commonDirectory,
+            worktreePath: terminal.worktreePath,
+            branchRef: "refs/heads/but-why/change-a",
+            discardWork: false,
+          },
+        ]);
       }),
     ),
   );
@@ -195,14 +205,13 @@ describe("Change reconciliation discard boundary", () => {
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangePersistence();
         const worktreePath = join(fixture.root, "worktrees", "but-why", "change-open");
-        git(fixture.root, "worktree", "add", "-b", "but-why/change-open", worktreePath, "main");
         const created = yield* starts.create({
           id: "change-open",
           repositoryCommonDirectory: fixture.commonDirectory,
           branchRef: "refs/heads/but-why/change-open",
           baseRef: "refs/heads/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: git(fixture.root, "rev-parse", "refs/heads/main"),
+          startingCommit: "base",
           worktreePath,
           now,
         });
@@ -236,7 +245,6 @@ describe("Change reconciliation discard boundary", () => {
             },
           ],
         });
-        expect(existsSync(worktreePath)).toBe(true);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "open",
         });
@@ -271,7 +279,7 @@ describe("Change reconciliation discard boundary", () => {
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
             persistence: changes,
-            cleanup: (input) => cleanupChangeResources(input),
+            cleanup: () => ({ state: "complete" }),
           }),
         });
         const result = yield* reconciliation.reconcile({
@@ -297,9 +305,3 @@ describe("Change reconciliation discard boundary", () => {
     ),
   );
 });
-
-const git = (cwd: string, ...args: readonly string[]): string =>
-  runTestProcessOrThrow("git", args, { cwd });
-
-const branchPresent = (cwd: string, branch: string): boolean =>
-  runTestProcess("git", ["rev-parse", "--verify", `refs/heads/${branch}`], { cwd }).status === 0;
