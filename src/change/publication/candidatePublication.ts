@@ -8,11 +8,7 @@ import type {
   ChangeRecord,
 } from "../change.js";
 import { branchNameForRef } from "../changeBranch.js";
-import type {
-  CandidatePublicationPort,
-  ChangeAuthorityPort,
-  ChangeReadPort,
-} from "../changePorts.js";
+import type { CandidatePublicationPort } from "../changePorts.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import {
   classifyOwnedPullRequest,
@@ -81,7 +77,7 @@ export type PublishCandidateResult =
     };
 
 type Dependencies = {
-  readonly changePersistence: CandidatePublicationPort & ChangeAuthorityPort & ChangeReadPort;
+  readonly changePersistence: CandidatePublicationPort;
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
   readonly delayBeforeConfirmation?: (milliseconds: number) => Effect.Effect<void>;

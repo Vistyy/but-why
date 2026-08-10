@@ -12,11 +12,16 @@ import {
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
+  ChangeCancellationPort,
   ChangeDeliveryPort,
   ChangePublicationEvidence,
+  ChangeQueryStore,
   ChangeReadPort,
+  ChangeReconciliationPort,
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
+  ChangeSubmissionPort,
+  TerminalChangeCleanupPort,
   CurrentChangeEvidenceQuery,
   RecordImplementationDecisionInput,
 } from "../change/changePorts.js";
@@ -220,6 +225,59 @@ export const openSqliteChangeDeliveryPort = () =>
     };
   });
 
+export const openSqliteChangeSubmissionPort = () =>
+  Effect.map(RepositorySql, (repository): ChangeSubmissionPort => {
+    const adapter = makeSqliteChangeAdapter(repository);
+    return {
+      getChangeById: adapter.getChangeById,
+      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
+      completeMergedChange: adapter.completeMergedChange,
+    };
+  });
+
+export const openSqliteChangeReconciliationPort = () =>
+  Effect.map(RepositorySql, (repository): ChangeReconciliationPort => {
+    const adapter = makeSqliteChangeAdapter(repository);
+    return {
+      getChangeById: adapter.getChangeById,
+      listChangesForReconciliation: adapter.listChangesForReconciliation,
+      completeMergedChange: adapter.completeMergedChange,
+    };
+  });
+
+export const openSqliteChangeCancellationPort = () =>
+  Effect.map(RepositorySql, (repository): ChangeCancellationPort => {
+    const adapter = makeSqliteChangeAdapter(repository);
+    return {
+      getChangeById: adapter.getChangeById,
+      getChangeByTaskId: adapter.getChangeByTaskId,
+      completeMergedChange: adapter.completeMergedChange,
+      cancelChange: adapter.cancelChange,
+    };
+  });
+
+export const openSqliteChangeQueryStore = () =>
+  Effect.map(RepositorySql, (repository): ChangeQueryStore => {
+    const adapter = makeSqliteChangeAdapter(repository);
+    return {
+      getChangeById: adapter.getChangeById,
+      getChangeByTaskId: adapter.getChangeByTaskId,
+      listChanges: adapter.listChanges,
+      listImplementationBlockers: adapter.listImplementationBlockers,
+      listImplementationDecisions: adapter.listImplementationDecisions,
+      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
+    };
+  });
+
+export const openSqliteTerminalChangeCleanupPort = () =>
+  Effect.map(RepositorySql, (repository): TerminalChangeCleanupPort => {
+    const adapter = makeSqliteChangeAdapter(repository);
+    return {
+      recordCleanup: adapter.recordCleanup,
+      removeReviewerSessions: adapter.removeReviewerSessions,
+    };
+  });
+
 export const openSqliteChangeReviewerSessionPort = () =>
   Effect.map(RepositorySql, (repository) => {
     const adapter = makeSqliteChangeAdapter(repository);
@@ -244,6 +302,8 @@ export const openSqliteCandidatePublicationPort = () =>
   Effect.map(RepositorySql, (repository) => {
     const adapter = makeSqliteChangeAdapter(repository);
     return {
+      getChangeById: adapter.getChangeById,
+      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
       beginPublication: adapter.beginPublication,
       replacePendingPublication: adapter.replacePendingPublication,
       releasePendingPublication: adapter.releasePendingPublication,

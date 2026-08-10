@@ -5,10 +5,9 @@ import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/re
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
-  openSqliteChangeDeliveryPort,
-  openSqliteChangeReadPort,
-  openSqliteChangeReviewerSessionPort,
+  openSqliteChangeReconciliationPort,
   openSqliteChangeReviewerTranscriptPort,
+  openSqliteTerminalChangeCleanupPort,
 } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../sqlite/sqliteChangeValidationPersistence.js";
@@ -192,25 +191,23 @@ export const withChangeReconciliation = <A, E, R>(
     context.paths.statePath,
     context.commonDirectory,
     Effect.all({
-      changeDelivery: openSqliteChangeDeliveryPort(),
-      changeReads: openSqliteChangeReadPort(),
-      reviewerSessions: openSqliteChangeReviewerSessionPort(),
+      reconciliationStore: openSqliteChangeReconciliationPort(),
+      terminalCleanup: openSqliteTerminalChangeCleanupPort(),
       reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
       artifactLifecyclePersistence: openSqliteValidationArtifactLifecyclePort(),
     }).pipe(
       Effect.flatMap(
         ({
-          changeDelivery,
-          changeReads,
-          reviewerSessions,
+          reconciliationStore,
+          terminalCleanup,
           reviewerTranscripts,
           artifactLifecyclePersistence,
         }) => {
           const reconciliation = openChangeReconciliation({
-            persistence: { ...changeDelivery, ...changeReads },
+            persistence: reconciliationStore,
             github,
             cleanupTerminal: openTerminalCleanup({
-              persistence: { ...changeDelivery, ...reviewerSessions },
+              persistence: terminalCleanup,
               cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
               indexTranscripts: openReviewerTranscriptIndex({ persistence: reviewerTranscripts }),
               reviewerSessionPathFor: (changeId) =>

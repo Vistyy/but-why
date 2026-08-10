@@ -83,6 +83,14 @@ export type ActiveValidationRunPort = {
   ) => StorageEffect<ActiveCandidateValidationRun | undefined>;
 };
 
+export type ChangeQueryValidationStore = {
+  readonly getActiveForChange: ActiveValidationRunPort["getActiveForChange"];
+  readonly listCandidatesForChange: ChangeValidationReadPort["listCandidatesForChange"];
+  readonly listRunsForCandidate: ChangeValidationReadPort["listRunsForCandidate"];
+  readonly listFindings: ChangeValidationReadPort["listFindings"];
+  readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
+};
+
 export type ValidationRunAbandonmentPort = {
   readonly getAbandonmentContext: (
     validationRunId: string,

@@ -26,7 +26,7 @@ import {
   type CandidateValidationService,
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
-import type { ChangeAuthorityPort, ChangeDeliveryPort, ChangeReadPort } from "./changePorts.js";
+import type { ChangeSubmissionPort } from "./changePorts.js";
 import {
   type OwnedPullRequestUnavailableReason,
   observedMergedChangeEvidence,
@@ -173,7 +173,7 @@ type CaptureCandidate = (
 export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
-  readonly persistence: ChangeAuthorityPort & ChangeDeliveryPort & ChangeReadPort;
+  readonly persistence: ChangeSubmissionPort;
   readonly github: GitHubPullRequestGateway;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
@@ -617,7 +617,7 @@ const githubTargetFailure = (
 });
 
 const selectOpenChange = (
-  persistence: ChangeAuthorityPort & ChangeDeliveryPort & ChangeReadPort,
+  persistence: ChangeSubmissionPort,
   changeId: string,
 ): Effect.Effect<
   | { readonly ok: true; readonly change: ChangeRecord & { readonly worktreePath: string } }

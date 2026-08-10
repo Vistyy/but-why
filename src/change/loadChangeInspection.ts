@@ -5,12 +5,9 @@ import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/re
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
   openSqliteChangeAuthorityPort,
-  openSqliteChangeReadPort,
+  openSqliteChangeQueryStore,
 } from "../sqlite/sqliteChangePersistence.js";
-import {
-  openSqliteActiveValidationRunPort,
-  openSqliteChangeValidationReadPort,
-} from "../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeQueryValidationStore } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import type {
   ChangeAuthorityPort,
@@ -61,10 +58,8 @@ export const loadChangeInspection = (input: {
     commonDirectory: context.commonDirectory,
   });
   const queryPorts = Effect.all({
-    authority: openSqliteChangeAuthorityPort(),
-    changes: openSqliteChangeReadPort(),
-    activeValidation: openSqliteActiveValidationRunPort(),
-    validationReads: openSqliteChangeValidationReadPort(),
+    changes: openSqliteChangeQueryStore(),
+    validation: openSqliteChangeQueryValidationStore(),
   });
   const runQuery = <A, E>(
     use: (ports: Effect.Effect.Success<typeof queryPorts>) => Effect.Effect<A, E>,
@@ -93,10 +88,7 @@ export const loadChangeInspection = (input: {
         ),
       );
 
-  const dependencies = (ports: Effect.Effect.Success<typeof queryPorts>) => ({
-    changePersistence: { ...ports.authority, ...ports.changes },
-    persistence: { ...ports.activeValidation, ...ports.validationReads },
-  });
+  const dependencies = (ports: Effect.Effect.Success<typeof queryPorts>) => ports;
 
   return {
     ok: true,
@@ -111,19 +103,19 @@ export const loadChangeInspection = (input: {
       validationRuns: (changeId) =>
         runQuery((ports) => queryChangeValidationRuns(dependencies(ports), changeId)),
       decisions: (changeId) =>
-        runQuery(({ authority, changes }) =>
+        runQuery(({ changes }) =>
           changes
             .getChangeById(changeId)
             .pipe(
               Effect.flatMap((change) =>
                 change === undefined
                   ? Effect.succeed(undefined)
-                  : authority.listImplementationDecisions(changeId),
+                  : changes.listImplementationDecisions(changeId),
               ),
             ),
         ),
       blockers: (changeId) =>
-        runQuery(({ authority }) => authority.listImplementationBlockers(changeId)),
+        runQuery(({ changes }) => changes.listImplementationBlockers(changeId)),
     },
     authority: {
       raiseBlocker: (command) =>

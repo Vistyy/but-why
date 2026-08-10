@@ -15,6 +15,7 @@ import type {
 import type {
   ActiveValidationRunPort,
   CandidateValidationExecutionPort,
+  ChangeQueryValidationStore,
   ChangeValidationReadPort,
   ValidationArtifactLifecyclePort,
   ValidationRunAbandonmentPort,
@@ -210,6 +211,18 @@ export const openSqliteChangeValidationReadPort = () =>
       listFindings: adapter.listFindings,
       listToolingFailures: adapter.listToolingFailures,
       listArtifacts: adapter.listArtifacts,
+    };
+  });
+
+export const openSqliteChangeQueryValidationStore = () =>
+  Effect.map(RepositorySql, (repository): ChangeQueryValidationStore => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      getActiveForChange: adapter.getActiveForChange,
+      listCandidatesForChange: adapter.listCandidatesForChange,
+      listRunsForCandidate: adapter.listRunsForCandidate,
+      listFindings: adapter.listFindings,
+      listToolingFailures: adapter.listToolingFailures,
     };
   });
 

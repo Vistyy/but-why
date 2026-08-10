@@ -7,7 +7,7 @@ import {
   changeState,
   type RemoteChangeBranch,
 } from "./change.js";
-import type { ChangeDeliveryPort, ChangeReviewerSessionPort } from "./changePorts.js";
+import type { TerminalChangeCleanupPort } from "./changePorts.js";
 import type {
   TranscriptIndexOperation,
   TranscriptIndexResult,
@@ -45,10 +45,7 @@ export type TerminalCleanupOperation = (
 
 export const openTerminalCleanup =
   (dependencies: {
-    readonly persistence: Pick<
-      ChangeDeliveryPort & ChangeReviewerSessionPort,
-      "recordCleanup" | "removeReviewerSessions"
-    >;
+    readonly persistence: TerminalChangeCleanupPort;
     readonly cleanup: ChangeCleanupOperation;
     readonly indexTranscripts: TranscriptIndexOperation;
     readonly reviewerSessionPathFor: (changeId: string) => string;

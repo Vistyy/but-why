@@ -141,7 +141,42 @@ export type ChangeReviewerTranscriptPort = {
   }) => StorageEffect<void>;
 };
 
+export type ChangeSubmissionPort = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
+  readonly completeMergedChange: ChangeDeliveryPort["completeMergedChange"];
+};
+
+export type ChangeReconciliationPort = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly listChangesForReconciliation: ChangeDeliveryPort["listChangesForReconciliation"];
+  readonly completeMergedChange: ChangeDeliveryPort["completeMergedChange"];
+};
+
+export type ChangeCancellationPort = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly getChangeByTaskId: ChangeReadPort["getChangeByTaskId"];
+  readonly completeMergedChange: ChangeDeliveryPort["completeMergedChange"];
+  readonly cancelChange: ChangeDeliveryPort["cancelChange"];
+};
+
+export type TerminalChangeCleanupPort = {
+  readonly recordCleanup: ChangeDeliveryPort["recordCleanup"];
+  readonly removeReviewerSessions: ChangeReviewerSessionPort["removeReviewerSessions"];
+};
+
+export type ChangeQueryStore = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly getChangeByTaskId: ChangeReadPort["getChangeByTaskId"];
+  readonly listChanges: ChangeReadPort["listChanges"];
+  readonly listImplementationBlockers: ChangeAuthorityPort["listImplementationBlockers"];
+  readonly listImplementationDecisions: ChangeAuthorityPort["listImplementationDecisions"];
+  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
+};
+
 export type CandidatePublicationPort = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;

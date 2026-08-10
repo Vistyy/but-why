@@ -6,7 +6,7 @@ import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { ChangeCleanup, ChangeRecord } from "./change.js";
-import type { ChangeDeliveryPort, ChangeReadPort } from "./changePorts.js";
+import type { ChangeCancellationPort } from "./changePorts.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
   classifyOwnedPullRequest,
@@ -38,10 +38,7 @@ export type CancellationUseCases = {
 export type CancellationDependencies = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
-  readonly changes: Pick<
-    ChangeDeliveryPort & ChangeReadPort,
-    "getChangeById" | "getChangeByTaskId" | "completeMergedChange" | "cancelChange"
-  >;
+  readonly changes: ChangeCancellationPort;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
   readonly validation: ActiveValidationRunPort;
   readonly executionLock: ExecutionLock;

@@ -6,10 +6,9 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import { loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
-  openSqliteChangeDeliveryPort,
-  openSqliteChangeReadPort,
-  openSqliteChangeReviewerSessionPort,
+  openSqliteChangeCancellationPort,
   openSqliteChangeReviewerTranscriptPort,
+  openSqliteTerminalChangeCleanupPort,
 } from "../sqlite/sqliteChangePersistence.js";
 import {
   openSqliteActiveValidationRunPort,
@@ -57,9 +56,8 @@ export const withCancellation = <A, R>(
 
   const github = localGitHubPullRequestGateway({ cwd: context.context.root });
   const program = Effect.all({
-    delivery: openSqliteChangeDeliveryPort(),
-    changeReads: openSqliteChangeReadPort(),
-    reviewerSessions: openSqliteChangeReviewerSessionPort(),
+    changes: openSqliteChangeCancellationPort(),
+    terminalCleanup: openSqliteTerminalChangeCleanupPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
     activeValidation: openSqliteActiveValidationRunPort(),
@@ -67,15 +65,13 @@ export const withCancellation = <A, R>(
   }).pipe(
     Effect.flatMap(
       ({
-        delivery,
-        changeReads,
-        reviewerSessions,
+        changes,
+        terminalCleanup,
         reviewerTranscripts,
         tasks,
         activeValidation,
         artifactLifecycle,
       }) => {
-        const changes = { ...delivery, ...changeReads };
         return use(
           openCancellationUseCases({
             resolveTaskId: (taskId) => resolveRepoTaskId(context.context, taskId),
@@ -87,7 +83,7 @@ export const withCancellation = <A, R>(
             }),
             github,
             cleanupTerminal: openTerminalCleanup({
-              persistence: { ...delivery, ...reviewerSessions },
+              persistence: terminalCleanup,
               cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
               indexTranscripts: openReviewerTranscriptIndex({
                 persistence: reviewerTranscripts,
