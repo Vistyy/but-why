@@ -119,13 +119,17 @@ export const validateValidationRunAuthorityRelationships = (
   changeId: string,
   blockers: ImplementationBlockerHistory,
 ): void => {
-  if (
-    run.latestResolvedBlockerId !== null &&
-    !blockers.blockers.some(
-      (blocker) => blocker.id === run.latestResolvedBlockerId && blocker.resolution !== null,
+  const expectedLatestResolvedBlockerId = [...blockers.blockers]
+    .filter(
+      (blocker): blocker is typeof blocker & { readonly resolvedAt: string } =>
+        blocker.resolvedAt !== null && blocker.resolvedAt <= run.record.createdAt,
     )
-  ) {
-    throw new Error("Validation Run latest resolved Blocker belongs to another Change");
+    .sort(
+      (left, right) =>
+        compareStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
+    )[0]?.id;
+  if (run.latestResolvedBlockerId !== (expectedLatestResolvedBlockerId ?? null)) {
+    throw new Error("Validation Run latest resolved Blocker identity is inconsistent");
   }
   const decisionIds = new Set<string>();
   const decisionSequences = new Set<number>();
@@ -494,3 +498,6 @@ const decodeStoredFlag = (value: unknown, storageType: unknown, field: string): 
   if (flag !== 0 && flag !== 1) throw new Error(`${field} must be zero or one`);
   return flag === 1;
 };
+
+const compareStrings = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;

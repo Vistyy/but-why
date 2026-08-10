@@ -345,6 +345,36 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
 
+        yield* repository.operation("install resolved Blocker history", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('older-blocker', ${prior.changeId}, '2026-08-09T22:00:00.000Z', 'Older blocker.', '2026-08-09T22:01:00.000Z', 'older-resolution', '2026-08-09T22:01:00.000Z', 'Older resolution.')`;
+            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('latest-blocker', ${prior.changeId}, '2026-08-09T23:00:00.000Z', 'Latest blocker.', '2026-08-09T23:01:00.000Z', 'latest-resolution', '2026-08-09T23:01:00.000Z', 'Latest resolution.')`;
+          }),
+        );
+        expect(
+          yield* validation.getRunById(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* repository.operation(
+          "install older Blocker identity",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = 'older-blocker' WHERE id = ${started.validationRunId}`,
+        );
+        expect(
+          yield* validation.getRunById(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* repository.operation(
+          "install exact latest Blocker identity",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = 'latest-blocker' WHERE id = ${started.validationRunId}`,
+        );
+        expect(yield* validation.getRunById(started.validationRunId)).toBeDefined();
+        yield* repository.operation("restore absent Blocker history", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = NULL WHERE id = ${started.validationRunId}`;
+            yield* sql`DELETE FROM implementation_blockers WHERE change_id = ${prior.changeId}`;
+          }),
+        );
+
         yield* repository.operation(
           "install malformed Finding files",
           (sql) =>
