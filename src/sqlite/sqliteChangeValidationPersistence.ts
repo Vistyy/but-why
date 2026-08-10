@@ -340,17 +340,6 @@ const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
     );
   });
 
-const selectCurrentValidationAdmission = (
-  sql: SqlClient.SqlClient,
-  candidateId: string,
-  validationRunId: string,
-) =>
-  sql`
-    INSERT INTO candidate_validation_admissions (candidate_id, validation_run_id)
-    VALUES (${candidateId}, ${validationRunId})
-    ON CONFLICT(candidate_id) DO UPDATE SET validation_run_id = excluded.validation_run_id
-  `;
-
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
   Effect.gen(function* () {
     const candidate = yield* readCandidateById(
@@ -466,7 +455,8 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const historyRows = yield* sql.unsafe<UnknownValidationRunRow>(
       `SELECT ${validationRunReadColumns}
        FROM candidate_validation_runs
-       WHERE candidate_id = ?`,
+       WHERE candidate_id = ?
+       ORDER BY created_at DESC, id DESC`,
       [candidate.id],
     );
     const history = yield* decodePersisted("start Candidate Validation Run", () =>
@@ -488,7 +478,6 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         run.latestResolvedBlockerId === currentLatestResolvedBlockerId,
     );
     if (reusable !== undefined) {
-      yield* selectCurrentValidationAdmission(sql, candidate.id, reusable.record.id);
       return {
         reused: true,
         validationRunId: reusable.record.id,
@@ -520,7 +509,6 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
       VALUES (${candidate.changeId}, ${validationRunId}, ${input.now})
     `;
-    yield* selectCurrentValidationAdmission(sql, candidate.id, validationRunId);
     if (input.workspaceSetup !== undefined) {
       yield* sql`
         INSERT INTO candidate_validation_workspace_setups (

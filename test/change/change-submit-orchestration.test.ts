@@ -43,7 +43,7 @@ const tasklessPolicy = {
 } as const;
 
 describe("Change Submit orchestration", () => {
-  it.effect("reports the exact Active Validation Run rejected at admission", () =>
+  it.effect("reports the exact Active Validation Run rejected at start-or-reuse", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const submit = openChangeSubmit(dependencies({ events, change: readyChange() }));
@@ -1036,7 +1036,7 @@ describe("Change Submit orchestration", () => {
   );
 
   it.effect(
-    "returns an existing owned pull request without duplicate validation or publication",
+    "returns completed publication before fetching the Change Base or resolving configuration",
     () =>
       Effect.gen(function* () {
         const events: string[] = [];
@@ -1055,6 +1055,12 @@ describe("Change Submit orchestration", () => {
             events,
             change,
             trackPolicyResolution: true,
+            refreshResult: {
+              ok: false,
+              code: "publication_remote_unreachable",
+              remoteName: "origin",
+            },
+            baselineRepoConfigError: "Later Change Base Repo Config is invalid.",
             publication: {
               publish: () => {
                 throw new Error("Duplicate publication");
@@ -1075,15 +1081,7 @@ describe("Change Submit orchestration", () => {
           .pipe(Effect.provide(validationLayer));
 
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
-        expect(events).toEqual([
-          "observe_pull_request",
-          "capture",
-          "load_base_repo_config",
-          "load_candidate_repo_config",
-          "resolve_policy",
-          "detect_target",
-          "read_publication_evidence",
-        ]);
+        expect(events).toEqual(["observe_pull_request", "read_publication_evidence"]);
       }),
   );
 
@@ -1136,9 +1134,9 @@ describe("Change Submit orchestration", () => {
       });
       expect(events).toEqual([
         "observe_pull_request",
+        "read_publication_evidence",
         "capture",
         "detect_target",
-        "read_publication_evidence",
         "validate_taskless",
         "publish",
       ]);
@@ -1448,7 +1446,7 @@ const dependencies = (input: {
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
-      getCurrentPassingEvidence: () =>
+      getCompletedPublicationEvidence: () =>
         Effect.sync(() => {
           events.push("read_publication_evidence");
           if (input.publicationEvidence === null) return undefined;

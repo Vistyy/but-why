@@ -81,10 +81,6 @@ const installPublicationIdentity = (
             'complete', 'passed', ${now}, ${now}
           )
         `;
-        yield* sql`
-          INSERT OR REPLACE INTO candidate_validation_admissions (candidate_id, validation_run_id)
-          VALUES (${candidateId}, ${validationRunId})
-        `;
       }),
     );
   });
@@ -1175,6 +1171,7 @@ describe("repository SQL storage", () => {
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
+          candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
           policy: simplifiedReviewPolicy,
@@ -1193,10 +1190,6 @@ describe("repository SQL storage", () => {
               )
             `;
             yield* sql`
-              INSERT INTO candidate_validation_admissions (candidate_id, validation_run_id)
-              VALUES (${captured.candidateId}, 'run-1')
-            `;
-            yield* sql`
               UPDATE changes SET
                 publication_candidate_id = ${captured.candidateId},
                 publication_validation_run_id = 'run-1',
@@ -1209,14 +1202,15 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        expect(
-          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
-        ).toEqual({
+        const exactPublicationEvidence = {
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-        });
+        };
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toEqual(exactPublicationEvidence);
 
         yield* repository.operation("install repaired passed publication evidence", (sql) =>
           Effect.gen(function* () {
@@ -1232,11 +1226,6 @@ describe("repository SQL storage", () => {
               )
             `;
             yield* sql`
-              UPDATE candidate_validation_admissions
-              SET validation_run_id = 'run-repaired-publication'
-              WHERE candidate_id = ${captured.candidateId}
-            `;
-            yield* sql`
               UPDATE changes SET
                 publication_validation_run_id = 'run-repaired-publication'
               WHERE id = ${captured.changeId}
@@ -1245,6 +1234,7 @@ describe("repository SQL storage", () => {
         );
         expect(
           yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
+            candidateId: captured.candidateId,
             validationRunId: "run-repaired-publication",
             changeBaseSha: "base-sha",
             policy: repairedAcceptancePolicy,
@@ -1255,17 +1245,13 @@ describe("repository SQL storage", () => {
           changeBaseSha: "base-sha",
           headSha: "head-sha",
         });
-        yield* repository.operation("restore publication evidence reference", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`
-              UPDATE candidate_validation_admissions SET validation_run_id = 'run-1'
-              WHERE candidate_id = ${captured.candidateId}
-            `;
-            yield* sql`
+        yield* repository.operation(
+          "restore publication evidence reference",
+          (sql) =>
+            sql`
               UPDATE changes SET publication_validation_run_id = 'run-1'
               WHERE id = ${captured.changeId}
-            `;
-          }),
+            `,
         );
 
         yield* repository.operation(
@@ -1347,12 +1333,29 @@ describe("repository SQL storage", () => {
         );
         expect(
           yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
-        ).toEqual({
-          candidateId: captured.candidateId,
-          validationRunId: "run-1",
-          changeBaseSha: "base-sha",
+        ).toEqual(exactPublicationEvidence);
+        const newerBaseCandidate = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          expectedChangeId: captured.changeId,
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "advanced-base-sha",
           headSha: "head-sha",
+          now: "2026-07-25T15:01:45.000Z",
         });
+        if (!newerBaseCandidate.ok) throw new Error(newerBaseCandidate.code);
+        expect(newerBaseCandidate.candidateId).not.toBe(captured.candidateId);
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
+        ).toBeUndefined();
+        expect(
+          yield* changes.submission.getCompletedPublicationEvidence(
+            captured.changeId,
+            captured.candidateId,
+            "run-1",
+          ),
+        ).toEqual(exactPublicationEvidence);
+
         yield* changes.authority.recordImplementationDecision({
           changeId: captured.changeId,
           choice: "Choose the passing path",
@@ -1508,13 +1511,6 @@ describe("repository SQL storage", () => {
             (sql) =>
               sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${simplifiedCurrent.validationRunId}`,
           );
-          expect(
-            yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
-          ).toBeUndefined();
-          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
-            reused: true,
-            validationRunId: first.validationRunId,
-          });
           const currentEvidence = {
             candidateId: captured.candidateId,
             validationRunId: first.validationRunId,
@@ -1524,6 +1520,18 @@ describe("repository SQL storage", () => {
           expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
             currentEvidence,
           );
+          yield* repository.operation(
+            "make the later policy-distinct Run tooling-failed",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET outcome = 'tooling_failed' WHERE id = ${simplifiedCurrent.validationRunId}`,
+          );
+          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
+            currentEvidence,
+          );
+          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
+            reused: true,
+            validationRunId: first.validationRunId,
+          });
           expect(
             yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
               candidateId: captured.candidateId,
@@ -1734,7 +1742,7 @@ describe("repository SQL storage", () => {
       ),
   );
 
-  it.scoped("rejects Validation admission for an unresolved Implementation Blocker", () =>
+  it.scoped("rejects validation start-or-reuse for an unresolved Implementation Blocker", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
@@ -1928,7 +1936,7 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 27`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -2226,6 +2234,7 @@ describe("repository SQL storage", () => {
           { migration_id: 24, name: "remove_task_comments" },
           { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
           { migration_id: 26, name: "current_candidate_validation_admissions" },
+          { migration_id: 27, name: "remove_candidate_validation_admissions" },
         ]);
         expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -2479,7 +2488,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2668,16 +2677,14 @@ describe("repository SQL storage", () => {
                   ORDER BY created_at
                 `,
               );
-              const admissions = yield* repository.operation(
-                "read migrated current validation admission",
-                (sql) => sql<{ readonly candidateId: string; readonly validationRunId: string }>`
-                  SELECT candidate_id AS candidateId, validation_run_id AS validationRunId
-                  FROM candidate_validation_admissions
+              const retiredAdmissionTables = yield* repository.operation(
+                "confirm retired validation admission storage is absent",
+                (sql) => sql<{ readonly name: string }>`
+                  SELECT name FROM sqlite_schema
+                  WHERE type = 'table' AND name = 'candidate_validation_admissions'
                 `,
               );
-              expect(admissions).toEqual([
-                { candidateId: "candidate-repair", validationRunId: "run-current" },
-              ]);
+              expect(retiredAdmissionTables).toEqual([]);
               const byId = new Map(rows.map((row) => [row.id, row.policySnapshot]));
               expect(byId.get("run-affected")).toBe(affectedCorrectedText);
               expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedBuggyText);
@@ -2738,7 +2745,7 @@ describe("repository SQL storage", () => {
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
             yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (22, 23, 24, 25, 26)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 27`;
           }),
         );
 
@@ -2847,7 +2854,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2923,7 +2930,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2997,7 +3004,7 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 27`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -3263,7 +3270,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3341,7 +3348,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3452,7 +3459,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 27`;
                   }),
                 );
               }).pipe(
@@ -3558,7 +3565,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3644,7 +3651,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 27`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3924,8 +3931,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(26);
-          expect(yield* readMigrationCount).toBe(26);
+          expect(yield* readMigrationCount).toBe(27);
+          expect(yield* readMigrationCount).toBe(27);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -4025,9 +4032,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(26);
+              expect(migrations.length).toBe(27);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 26 }, (_, index) => index + 1),
+                Array.from({ length: 27 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -4126,7 +4133,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 26,
+              migrationCount: 27,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

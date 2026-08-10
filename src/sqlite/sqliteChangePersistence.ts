@@ -12,6 +12,7 @@ import {
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
+  CompletedPublicationEvidencePort,
   ChangeCancellationPort,
   ChangeDeliveryPort,
   ChangePublicationEvidence,
@@ -65,7 +66,8 @@ const makeSqliteChangeAdapter = (
   ChangeDeliveryPort &
   ChangeReviewerSessionPort &
   ChangeReviewerTranscriptPort &
-  CandidatePublicationPort => ({
+  CandidatePublicationPort &
+  CompletedPublicationEvidencePort => ({
   raiseImplementationBlocker: (input) =>
     repository.transactionImmediate("raise Implementation Blocker", (sql) =>
       raiseBlocker(sql, input),
@@ -88,7 +90,11 @@ const makeSqliteChangeAdapter = (
     ),
   getCurrentPassingEvidence: (changeId, query) =>
     repository.transaction("read current passing Change evidence", (sql) =>
-      getCurrentPassingEvidence(sql, changeId, query),
+      getPassingEvidence(sql, changeId, query, false),
+    ),
+  getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
+    repository.transaction("read completed Candidate Publication evidence", (sql) =>
+      getPassingEvidence(sql, changeId, { candidateId, validationRunId }, true),
     ),
   listChanges: (input) => repository.transaction("list Changes", (sql) => listChanges(sql, input)),
   listChangesForReconciliation: (commonDirectory) =>
@@ -229,7 +235,7 @@ export const openSqliteChangeSubmissionPort = () =>
     const adapter = makeSqliteChangeAdapter(repository);
     return {
       getChangeById: adapter.getChangeById,
-      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
+      getCompletedPublicationEvidence: adapter.getCompletedPublicationEvidence,
       completeMergedChange: adapter.completeMergedChange,
     };
   });
@@ -411,19 +417,23 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
     (rows) => mapRow(rows[0], "read Change by Task", sql),
   );
 
-const getCurrentPassingEvidence = (
+const getPassingEvidence = (
   sql: SqlClient.SqlClient,
   changeId: string,
   query: CurrentChangeEvidenceQuery | undefined,
+  allowHistoricalCandidate: boolean,
 ) =>
   Effect.gen(function* () {
+    const operationName = allowHistoricalCandidate
+      ? "read completed Candidate Publication evidence"
+      : "read current passing Change evidence";
     const authorityRows = yield* sql<{
       readonly id: unknown;
       readonly state: unknown;
       readonly acceptanceContext: unknown;
     }>`SELECT id, state, acceptance_context AS acceptanceContext
        FROM changes WHERE id = ${changeId}`;
-    const authority = yield* decodePersisted("read current passing Change evidence", () => {
+    const authority = yield* decodePersisted(operationName, () => {
       const row = authorityRows[0];
       if (row === undefined) return undefined;
       const id = decodeStoredString(row.id, "Change ID");
@@ -442,9 +452,20 @@ const getCurrentPassingEvidence = (
     });
     if (authority === undefined) return undefined;
     const implementationDecisions = yield* listDecisions(sql, authority.id);
+    const candidatePredicate =
+      query?.candidateId === undefined || !allowHistoricalCandidate
+        ? `candidate.id = (
+             SELECT current.id FROM candidates AS current
+             WHERE current.change_id = ?
+             ORDER BY current.created_at DESC, current.id DESC LIMIT 1
+           )`
+        : "candidate.change_id = ? AND candidate.id = ?";
     const runPredicate = query?.validationRunId === undefined ? "1 = 1" : "run.id = ?";
-    const parameters =
-      query?.validationRunId === undefined ? [authority.id] : [authority.id, query.validationRunId];
+    const parameters = [
+      authority.id,
+      ...(query?.candidateId === undefined || !allowHistoricalCandidate ? [] : [query.candidateId]),
+      ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
+    ];
     const rows = yield* sql.unsafe<PassingPublicationEvidenceRow>(
       `SELECT candidate.id AS publicationCandidateId,
         candidate.change_base_sha AS changeBaseSha, candidate.head_sha AS headSha,
@@ -453,26 +474,18 @@ const getCurrentPassingEvidence = (
         run.latest_resolved_blocker_id AS latestResolvedBlockerId,
         run.state, run.outcome, run.created_at AS createdAt, run.updated_at AS updatedAt
        FROM candidates AS candidate
-       JOIN candidate_validation_admissions AS admission ON admission.candidate_id = candidate.id
-       JOIN candidate_validation_runs AS run ON run.id = admission.validation_run_id
-       WHERE candidate.id = (
-         SELECT current.id FROM candidates AS current
-         WHERE current.change_id = ?
-         ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-       ) AND ${runPredicate}`,
+       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
+       WHERE ${candidatePredicate} AND ${runPredicate}
+       ORDER BY run.created_at DESC, run.id DESC`,
       parameters,
     );
-    const blockerHistory = yield* readBlockers(
-      sql,
-      authority.id,
-      "read current passing Change evidence",
-    );
-    const decoded = yield* decodePersisted("read current passing Change evidence", () =>
+    const blockerHistory = yield* readBlockers(sql, authority.id, operationName);
+    const decoded = yield* decodePersisted(operationName, () =>
       rows.map((row) => {
         const evidence = {
           publicationCandidateId: decodeStoredString(
             row.publicationCandidateId,
-            "current Candidate ID",
+            "evidence Candidate ID",
           ),
           changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
           headSha: decodeStoredString(row.headSha, "Candidate head SHA"),

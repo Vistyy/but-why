@@ -242,6 +242,12 @@ const submitChange = (
     }
     const decision = yield* observeBeforeSubmission(dependencies, change, input.now);
     if (!decision.proceed) return decision.result;
+    const completedPublication = yield* completedPublicationEvidence(
+      dependencies,
+      change,
+      decision.ownedPullRequestOpen,
+    );
+    if (completedPublication.ok) return completedPublication.result;
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -298,14 +304,6 @@ const submitChange = (
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
-    const current = yield* currentPublicationEvidence(
-      dependencies,
-      change,
-      candidate,
-      policy.resolved,
-      decision.ownedPullRequestOpen,
-    );
-    if (current.ok) return current.result;
     return yield* validateAndPublish(
       dependencies,
       change,
@@ -448,11 +446,9 @@ const publicationPolicySnapshot = (
   ...(change.acceptanceContext === null ? {} : { acceptanceContext: change.acceptanceContext }),
 });
 
-const currentPublicationEvidence = (
+const completedPublicationEvidence = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
-  candidate: CapturedCandidate,
-  policy: ResolvedCandidateValidationPolicy,
   ownedPullRequestOpen: boolean,
 ): Effect.Effect<
   { readonly ok: true; readonly result: ChangeSubmitResult } | { readonly ok: false },
@@ -465,12 +461,11 @@ const currentPublicationEvidence = (
     const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
     if (!branchHead.ok) return { ok: false };
     if (branchHead.headSha !== change.publication.expectedHeadSha) return { ok: false };
-    const evidence = yield* dependencies.persistence.getCurrentPassingEvidence(change.id, {
-      candidateId: change.publication.candidateId,
-      validationRunId: change.publication.validationRunId,
-      changeBaseSha: candidate.changeBaseSha,
-      policy: publicationPolicySnapshot(change, policy),
-    });
+    const evidence = yield* dependencies.persistence.getCompletedPublicationEvidence(
+      change.id,
+      change.publication.candidateId,
+      change.publication.validationRunId,
+    );
     if (
       evidence === undefined ||
       evidence.candidateId !== change.publication.candidateId ||
