@@ -33,7 +33,7 @@ const now = "2026-08-05T10:00:00.000Z";
 
 const policy = {
   prepare: { command: "true", timeoutSeconds: 10 },
-  checks: [],
+  checks: [{ id: "check", command: "true", timeoutSeconds: 10 }],
   copyFiles: [],
 };
 
