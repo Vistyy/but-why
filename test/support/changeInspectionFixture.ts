@@ -302,6 +302,14 @@ export const createFindingFixture = (
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
       yield* repository.operation(
+        "create Finding round inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidate_validation_rounds (
+            validation_run_id, phase, producer, round_number, status, created_at
+          ) VALUES (${input.validationRunId}, 'checks', 'types', 1, 'failed', ${input.createdAt})
+        `,
+      );
+      yield* repository.operation(
         "create Finding inspection fixture",
         (sql) => sql`
           INSERT INTO candidate_validation_findings (
