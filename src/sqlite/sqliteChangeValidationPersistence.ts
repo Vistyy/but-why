@@ -770,11 +770,17 @@ const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
       FROM candidate_validation_artifacts
       WHERE validation_run_id = ${validationRunId}
     `;
-    return yield* decodePersisted("list Candidate validation Artifacts", () =>
+    const artifacts = yield* decodePersisted("list Candidate validation Artifacts", () =>
       rows
         .map((row) => assertRunOwner(decodeValidationArtifact(row), validationRunId))
         .sort(compareArtifacts),
     );
+    if (artifacts.length === 0) return artifacts;
+    const rounds = yield* listRounds(sql, validationRunId);
+    yield* decodePersisted("list Candidate validation Artifacts", () =>
+      validateArtifactRoundRelationships(artifacts, rounds),
+    );
+    return artifacts;
   });
 
 const assertRunOwner = <A extends { readonly validationRunId: string }>(
@@ -808,20 +814,42 @@ const validateRoundPolicyRelationships = (
   rounds: readonly CandidateValidationRound[],
   runs: ReadonlyMap<string, CandidateValidationRunRecord>,
 ): void => {
+  const roundKeys = new Set<string>();
   for (const round of rounds) {
     const run = runs.get(round.validationRunId);
     if (run === undefined) throw new Error("Validation round belongs to an unknown Run");
-    const configured =
-      (round.phase === validationPhase.prepare && run.policy.prepare !== undefined) ||
-      (round.phase === validationPhase.checks &&
-        run.policy.checks.some((check) => check.id === round.producer)) ||
-      (round.phase === validationPhase.acceptanceReview &&
-        run.policy.acceptanceReview !== undefined) ||
-      (round.phase === validationPhase.specialistReview &&
-        (run.policy.specialistReviews ?? []).some(
-          (specialist) => specialist.id === round.producer,
-        ));
-    if (!configured) throw new Error("Validation round is not configured by its Run policy");
+    const expectedRoundNumber = configuredRoundNumber(round, run);
+    if (expectedRoundNumber === undefined) {
+      throw new Error("Validation round is not configured by its Run policy");
+    }
+    if (round.roundNumber !== expectedRoundNumber) {
+      throw new Error("Validation round ordering does not match its Run policy");
+    }
+    const key = `${round.validationRunId}\u0000${round.phase}\u0000${round.producer}`;
+    if (roundKeys.has(key)) throw new Error("Validation round relationship is duplicated");
+    roundKeys.add(key);
+  }
+};
+
+const configuredRoundNumber = (
+  round: CandidateValidationRound,
+  run: CandidateValidationRunRecord,
+): number | undefined => {
+  switch (round.phase) {
+    case validationPhase.prepare:
+      return run.policy.prepare === undefined ? undefined : 1;
+    case validationPhase.checks: {
+      const index = run.policy.checks.findIndex((check) => check.id === round.producer);
+      return index < 0 ? undefined : index + 1;
+    }
+    case validationPhase.acceptanceReview:
+      return run.policy.acceptanceReview === undefined ? undefined : 1;
+    case validationPhase.specialistReview: {
+      const index = (run.policy.specialistReviews ?? []).findIndex(
+        (specialist) => specialist.id === round.producer,
+      );
+      return index < 0 ? undefined : index + 1;
+    }
   }
 };
 
@@ -872,6 +900,23 @@ const compareArtifacts = (
   compareStrings(left.producer, right.producer) ||
   artifactPathOrder(left.path) - artifactPathOrder(right.path) ||
   compareStrings(left.ref, right.ref);
+
+const validateArtifactRoundRelationships = (
+  artifacts: readonly CandidateValidationArtifact[],
+  rounds: readonly CandidateValidationRound[],
+): void => {
+  for (const artifact of artifacts) {
+    const relatedRounds = rounds.filter(
+      (round) =>
+        round.validationRunId === artifact.validationRunId &&
+        round.phase === artifact.phase &&
+        round.producer === artifact.producer,
+    );
+    if (relatedRounds.length !== 1) {
+      throw new Error("Artifact does not belong to exactly one Validation round");
+    }
+  }
+};
 
 const compareCandidatesAscending = (left: CandidateRecord, right: CandidateRecord): number =>
   compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id);
