@@ -51,17 +51,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
             now: "2026-08-10T00:01:00.000Z",
           });
           if (!prior.ok) throw new Error(`Candidate capture failed: ${prior.code}`);
-          const current = yield* capture.commitCapture({
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/decoding",
-            baseRef: "refs/remotes/origin/main",
-            changeBaseSha: "base",
-            headSha: "current",
-            expectedChangeId: prior.changeId,
-            now: "2026-08-10T00:02:00.000Z",
-          });
-          if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
-
           const priorRun = yield* validation.startOrReuse({
             candidateId: prior.candidateId,
             changeBaseSha: "base",
@@ -137,6 +126,17 @@ describe("SQLite Candidate and Validation read decoding", () => {
             outcome: "blocked",
             now: "2026-08-10T00:04:00.000Z",
           });
+
+          const current = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/decoding",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base",
+            headSha: "current",
+            expectedChangeId: prior.changeId,
+            now: "2026-08-10T00:04:30.000Z",
+          });
+          if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
 
           const active = yield* validation.startOrReuse({
             candidateId: current.candidateId,
@@ -228,16 +228,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
           now: "2026-08-10T01:01:00.000Z",
         });
         if (!prior.ok) throw new Error(`Candidate capture failed: ${prior.code}`);
-        const current = yield* capture.commitCapture({
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/malformed-decoding",
-          baseRef: "refs/remotes/origin/main",
-          changeBaseSha: "base",
-          headSha: "current",
-          expectedChangeId: prior.changeId,
-          now: "2026-08-10T01:02:00.000Z",
-        });
-        if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
         const started = yield* validation.startOrReuse({
           candidateId: prior.candidateId,
           changeBaseSha: "base",
@@ -290,6 +280,17 @@ describe("SQLite Candidate and Validation read decoding", () => {
           outcome: "blocked",
           now,
         });
+
+        const current = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/malformed-decoding",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base",
+          headSha: "current",
+          expectedChangeId: prior.changeId,
+          now: "2026-08-10T01:02:00.000Z",
+        });
+        if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
 
         yield* repository.operation("install orphan Tooling Failure", (sql) =>
           Effect.gen(function* () {
