@@ -17,7 +17,9 @@ The source hierarchy follows these owners:
 
 - `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
-- `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production. `ChangeUseCases.implement` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`. `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeUseCases.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
+- `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production.
+  `implementChange` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`.
+  `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeLifecycle.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
 - `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
 - `src/agent/` owns reviewer-agent execution Adapters and Agent Profile resolution.
 - `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
@@ -79,6 +81,9 @@ Validation persistence owns one-active-run uniqueness and unresolved-Blocker rej
 Validation admission refuses a Change with an unresolved Implementation Blocker, and each admitted Validation Run records the exact Candidate, Change Base, Validation Policy Snapshot (including the current Acceptance Context when present), Implementation Decision input, and the latest resolved Implementation Blocker identity at admission.
 Validation Run reuse and publication require the exact stored Candidate identity, complete state, a passed outcome, and the current authority: the exact Change Base, current Acceptance Context when present, the resolved Validation Policy Snapshot, the current Implementation Decisions, and the same latest resolved Implementation Blocker identity.
 A changed Candidate, Resolution, Acceptance Context, policy, or implementation input invalidates current validity without deleting historical evidence.
+Candidate Publication and Change Activity use the same Change-owned current-evidence rule.
+Change Activity derives that evidence from persisted Change authority and does not resolve current configuration again.
+Implementation Decision and Implementation Blocker mutations use the Submission execution lock so admission cannot race those authority changes.
 For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review.
 Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
 Change Submit performs no duplicate admission precheck and performs no transient Task state transitions.

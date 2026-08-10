@@ -44,7 +44,7 @@ export type RecordImplementationDecisionResult =
   | { readonly ok: true; readonly decision: ImplementationDecision }
   | {
       readonly ok: false;
-      readonly code: "change_not_found" | "change_not_open";
+      readonly code: "change_not_found" | "change_not_open" | "submission_in_progress";
     };
 
 export type RaiseImplementationBlockerInput = {
@@ -69,16 +69,18 @@ export type ImplementationBlockerMutationResult =
         | "change_not_found"
         | "change_not_open"
         | "change_blocked"
-        | "no_active_blocker";
+        | "no_active_blocker"
+        | "submission_in_progress";
     };
 
-export type CurrentPublicationAuthority = {
-  readonly changeBaseSha: string;
-  readonly policy: CandidateValidationPolicySnapshot;
-  readonly implementationDecisions: readonly ImplementationDecision[];
+export type CurrentChangeEvidenceQuery = {
+  readonly candidateId?: string;
+  readonly validationRunId?: string;
+  readonly changeBaseSha?: string;
+  readonly policy?: CandidateValidationPolicySnapshot;
 };
 
-export type ChangePersistence = {
+export type ChangeAuthorityPort = {
   readonly raiseImplementationBlocker: (
     input: RaiseImplementationBlockerInput,
   ) => StorageEffect<ImplementationBlockerMutationResult>;
@@ -88,19 +90,25 @@ export type ChangePersistence = {
   readonly listImplementationBlockers: (
     changeId: string,
   ) => StorageEffect<ImplementationBlockerHistory | undefined>;
-  readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
-  readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly listImplementationDecisions: (
     changeId: string,
   ) => StorageEffect<readonly ImplementationDecision[]>;
   readonly recordImplementationDecision: (
     input: RecordImplementationDecisionInput,
   ) => StorageEffect<RecordImplementationDecisionResult>;
-  readonly getPassingPublicationEvidence: (
+  readonly getCurrentPassingEvidence: (
     changeId: string,
-    authority: CurrentPublicationAuthority,
+    query?: CurrentChangeEvidenceQuery,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
+};
+
+export type ChangeReadPort = {
+  readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
+  readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeRecord[]>;
+};
+
+export type ChangeDeliveryPort = {
   readonly listChangesForReconciliation: (
     repositoryCommonDirectory: string,
   ) => StorageEffect<readonly ChangeRecord[]>;
@@ -111,6 +119,9 @@ export type ChangePersistence = {
   readonly recordCleanup: (
     input: RecordChangeCleanupInput,
   ) => StorageEffect<RecordChangeCleanupResult>;
+};
+
+export type ChangeReviewerSessionPort = {
   readonly getReviewerSession: (
     changeId: string,
     producer: string,
@@ -118,6 +129,9 @@ export type ChangePersistence = {
   readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
   readonly removeReviewerSession: (changeId: string, producer: string) => StorageEffect<void>;
   readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
+};
+
+export type ChangeReviewerTranscriptPort = {
   readonly listReviewerTranscripts: (
     changeId: string,
   ) => StorageEffect<readonly ReviewerTranscript[]>;
@@ -125,6 +139,9 @@ export type ChangePersistence = {
     readonly changeId: string;
     readonly transcripts: readonly ReviewerTranscript[];
   }) => StorageEffect<void>;
+};
+
+export type CandidatePublicationPort = {
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;

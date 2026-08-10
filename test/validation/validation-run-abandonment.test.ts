@@ -2,14 +2,12 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
 
-import {
-  type AbandonValidationPersistence,
-  openAbandonValidationRun,
-} from "../../src/change/abandonValidationRun.js";
+import { openAbandonValidationRun } from "../../src/change/abandonValidationRun.js";
 import type {
   CandidateValidationRunAbandonmentContext,
   CandidateValidationRunRecord,
 } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import type { ValidationRunAbandonmentPort } from "../../src/change/validation/changeValidationPorts.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const validationRunId = "run-1";
@@ -44,9 +42,9 @@ const passThroughLock: ExecutionLock = {
 };
 
 const persistenceFor = (overrides: {
-  readonly recordToolingFailure?: AbandonValidationPersistence["recordToolingFailure"];
-  readonly abandon?: AbandonValidationPersistence["abandon"];
-}): AbandonValidationPersistence => ({
+  readonly recordToolingFailure?: ValidationRunAbandonmentPort["recordToolingFailure"];
+  readonly abandon?: ValidationRunAbandonmentPort["abandon"];
+}): ValidationRunAbandonmentPort => ({
   getAbandonmentContext: () => Effect.succeed(abandonmentContext),
   getRunById: () => Effect.succeed(runningRun),
   recordToolingFailure: overrides.recordToolingFailure ?? (() => Effect.succeed(undefined)),

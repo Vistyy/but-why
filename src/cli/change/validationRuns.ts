@@ -17,7 +17,7 @@ export const runValidationRuns = (
       cwd: environment.cwd,
     });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.validationRuns(changeId).pipe(
+    return loaded.queries.validationRuns(changeId).pipe(
       Effect.map((result) =>
         result === undefined
           ? support.changeNotFound()

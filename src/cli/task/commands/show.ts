@@ -31,7 +31,7 @@ export const runTaskShowCommand = (
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
       const projection =
-        change === undefined ? null : yield* change.inspection.inspectTaskProjection(taskId.taskId);
+        change === undefined ? null : yield* change.queries.taskProjection(taskId.taskId);
       return success({
         task: {
           id: task.id,

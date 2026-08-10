@@ -4,7 +4,7 @@ import { basename, join, relative } from "node:path";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ChangePersistence } from "../changePersistence.js";
+import type { ChangeReviewerTranscriptPort } from "../changePorts.js";
 
 export type ReviewerTranscript = {
   readonly changeId: string;
@@ -27,7 +27,7 @@ export type TranscriptIndexOperation = (input: {
 }) => Effect.Effect<TranscriptIndexResult, RepositoryStorageError>;
 
 export const openReviewerTranscriptIndex = (dependencies: {
-  readonly persistence: Pick<ChangePersistence, "recordReviewerTranscripts">;
+  readonly persistence: Pick<ChangeReviewerTranscriptPort, "recordReviewerTranscripts">;
 }): TranscriptIndexOperation => {
   const index = (input: {
     readonly changeId: string;

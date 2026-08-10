@@ -26,7 +26,7 @@ import {
   type CandidateValidationService,
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { ChangeAuthorityPort, ChangeDeliveryPort, ChangeReadPort } from "./changePorts.js";
 import {
   type OwnedPullRequestUnavailableReason,
   observedMergedChangeEvidence,
@@ -173,7 +173,7 @@ type CaptureCandidate = (
 export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
-  readonly persistence: ChangePersistence;
+  readonly persistence: ChangeAuthorityPort & ChangeDeliveryPort & ChangeReadPort;
   readonly github: GitHubPullRequestGateway;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
@@ -203,29 +203,25 @@ export const openChangeSubmit = (dependencies: {
     baseRemoteUrl: string,
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
-  readonly executionLock?: ExecutionLock;
+  readonly executionLock: ExecutionLock;
 }): CandidateValidationChangeSubmit => ({
-  submit: (input) => {
-    const operation = submitChange(dependencies, input);
-    const locked =
-      dependencies.executionLock === undefined
-        ? operation
-        : dependencies.executionLock.withLock({
-            owner: "change_submission",
-            key: input.changeId,
-            effect: operation,
-          });
-    return locked.pipe(
-      Effect.catchTag("ExecutionLockUnavailable", () =>
-        Effect.succeed({
-          ok: false,
-          code: "submission_in_progress",
-          changeId: input.changeId,
-          validationRunId: null,
-        } as const),
+  submit: (input) =>
+    dependencies.executionLock
+      .withLock({
+        owner: "change_submission",
+        key: input.changeId,
+        effect: submitChange(dependencies, input),
+      })
+      .pipe(
+        Effect.catchTag("ExecutionLockUnavailable", () =>
+          Effect.succeed({
+            ok: false,
+            code: "submission_in_progress",
+            changeId: input.changeId,
+            validationRunId: null,
+          } as const),
+        ),
       ),
-    );
-  },
 });
 
 type OpenChangeWithWorktree = ChangeRecord & { readonly worktreePath: string };
@@ -469,10 +465,11 @@ const currentPublicationEvidence = (
     const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
     if (!branchHead.ok) return { ok: false };
     if (branchHead.headSha !== change.publication.expectedHeadSha) return { ok: false };
-    const evidence = yield* dependencies.persistence.getPassingPublicationEvidence(change.id, {
+    const evidence = yield* dependencies.persistence.getCurrentPassingEvidence(change.id, {
+      candidateId: change.publication.candidateId,
+      validationRunId: change.publication.validationRunId,
       changeBaseSha: candidate.changeBaseSha,
       policy: publicationPolicySnapshot(change, policy),
-      implementationDecisions: change.implementationDecisions ?? [],
     });
     if (
       evidence === undefined ||
@@ -502,13 +499,6 @@ const validateAndPublish = (
             changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
-            acceptanceContext: change.acceptanceContext,
-            blockerHistory: (yield* dependencies.persistence.listImplementationBlockers?.(
-              change.id,
-            ) ?? Effect.succeed(undefined)) ?? { blockers: [], resolutions: [], active: null },
-            ...(change.implementationDecisions === undefined
-              ? {}
-              : { implementationDecisions: change.implementationDecisions }),
             policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
             now,
@@ -517,9 +507,6 @@ const validateAndPublish = (
             changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
-            ...(change.implementationDecisions === undefined
-              ? {}
-              : { implementationDecisions: change.implementationDecisions }),
             policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
             now,
@@ -630,7 +617,7 @@ const githubTargetFailure = (
 });
 
 const selectOpenChange = (
-  persistence: ChangePersistence,
+  persistence: ChangeAuthorityPort & ChangeDeliveryPort & ChangeReadPort,
   changeId: string,
 ): Effect.Effect<
   | { readonly ok: true; readonly change: ChangeRecord & { readonly worktreePath: string } }

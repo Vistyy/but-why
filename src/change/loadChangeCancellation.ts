@@ -5,8 +5,16 @@ import { type CliResult, repoStateLoadError, repositoryStorageErrorResult } from
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import {
+  openSqliteChangeDeliveryPort,
+  openSqliteChangeReadPort,
+  openSqliteChangeReviewerSessionPort,
+  openSqliteChangeReviewerTranscriptPort,
+} from "../sqlite/sqliteChangePersistence.js";
+import {
+  openSqliteActiveValidationRunPort,
+  openSqliteValidationArtifactLifecyclePort,
+} from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import {
@@ -49,36 +57,51 @@ export const withCancellation = <A, R>(
 
   const github = localGitHubPullRequestGateway({ cwd: context.context.root });
   const program = Effect.all({
-    changes: openSqliteChangePersistence(),
+    delivery: openSqliteChangeDeliveryPort(),
+    changeReads: openSqliteChangeReadPort(),
+    reviewerSessions: openSqliteChangeReviewerSessionPort(),
+    reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
-    validation: openSqliteChangeValidationPersistence(),
+    activeValidation: openSqliteActiveValidationRunPort(),
+    artifactLifecycle: openSqliteValidationArtifactLifecyclePort(),
   }).pipe(
-    Effect.flatMap(({ changes, tasks, validation }) =>
-      use(
-        openCancellationUseCases({
-          resolveTaskId: (taskId) => resolveRepoTaskId(context.context, taskId),
-          changes,
-          tasks,
-          validation,
-          executionLock: openSqliteExecutionLock({
-            commonDirectory: context.context.commonDirectory,
-          }),
-          github,
-          cleanupTerminal: openTerminalCleanup({
-            persistence: changes,
-            cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
-            indexTranscripts: openReviewerTranscriptIndex({
-              persistence: changes,
+    Effect.flatMap(
+      ({
+        delivery,
+        changeReads,
+        reviewerSessions,
+        reviewerTranscripts,
+        tasks,
+        activeValidation,
+        artifactLifecycle,
+      }) => {
+        const changes = { ...delivery, ...changeReads };
+        return use(
+          openCancellationUseCases({
+            resolveTaskId: (taskId) => resolveRepoTaskId(context.context, taskId),
+            changes,
+            tasks,
+            validation: activeValidation,
+            executionLock: openSqliteExecutionLock({
+              commonDirectory: context.context.commonDirectory,
             }),
-            reviewerSessionPathFor: (changeId) =>
-              reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
-            artifactLifecycle: openArtifactLifecycle({
-              persistence: validation,
-              artifactsRoot: context.context.paths.artifactsPath,
+            github,
+            cleanupTerminal: openTerminalCleanup({
+              persistence: { ...delivery, ...reviewerSessions },
+              cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              indexTranscripts: openReviewerTranscriptIndex({
+                persistence: reviewerTranscripts,
+              }),
+              reviewerSessionPathFor: (changeId) =>
+                reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
+              artifactLifecycle: openArtifactLifecycle({
+                persistence: artifactLifecycle,
+                artifactsRoot: context.context.paths.artifactsPath,
+              }),
             }),
           }),
-        }),
-      ),
+        );
+      },
     ),
   );
   return program.pipe(

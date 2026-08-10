@@ -5,11 +5,17 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+  ChangeReviewerTranscriptPort,
+} from "../../src/change/changePorts.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
 import {
   RepositoryPersistedDataInvalid,
@@ -17,17 +23,28 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import {
+  type ChangeValidationTestPorts,
+  openSqliteChangeValidationTestPorts,
+} from "../support/changeValidationPorts.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
+
+type ChangeTestPorts = CandidatePublicationPort &
+  ChangeAuthorityPort &
+  ChangeDeliveryPort &
+  ChangeReadPort &
+  ChangeReviewerSessionPort &
+  ChangeReviewerTranscriptPort;
 
 const now = "2026-08-05T10:00:00.000Z";
 
@@ -101,6 +118,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           if (!closed.ok) throw new Error(closed.code);
 
           const cleanup = openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: fixture.changes,
             cleanup: () => ({ state: "complete", blockingReason: null }),
             artifactLifecycle: openArtifactLifecycle({
@@ -238,6 +256,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
             persistence: fixture.changes,
             github: unusedGitHubGateway,
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: fixture.changes,
               cleanup: () => ({ state: "complete" }),
               artifactLifecycle: openArtifactLifecycle({
@@ -390,8 +409,8 @@ const withArtifactLifecycleFixture = <A, E>(
     readonly root: string;
     readonly commonDirectory: string;
     readonly artifactsRoot: string;
-    readonly changes: ChangePersistence;
-    readonly validation: ChangeValidationPersistence;
+    readonly changes: ChangeTestPorts;
+    readonly validation: ChangeValidationTestPorts;
     readonly first: {
       readonly changeId: string;
       readonly candidateId: string;
@@ -416,8 +435,8 @@ const withArtifactLifecycleFixture = <A, E>(
     });
     return yield* Effect.gen(function* () {
       const capture = yield* openSqliteCandidateCapturePersistence();
-      const changes = yield* openSqliteChangePersistence();
-      const validation = yield* openSqliteChangeValidationPersistence();
+      const changes = yield* openSqliteChangeTestPorts();
+      const validation = yield* openSqliteChangeValidationTestPorts();
 
       const createChangeWithRun = (branchRef: string, marker: string) =>
         Effect.gen(function* () {

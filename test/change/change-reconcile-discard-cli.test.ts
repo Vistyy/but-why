@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
@@ -49,7 +49,7 @@ describe("by change reconcile --discard-work", () => {
           root,
           Effect.gen(function* () {
             const starts = yield* openSqliteChangeStartPersistence();
-            const changes = yield* openSqliteChangePersistence();
+            const changes = yield* openSqliteChangeTestPorts();
             const created = yield* starts.create({
               id: "change-pending",
               repositoryCommonDirectory: commonDirectory,

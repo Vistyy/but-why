@@ -7,9 +7,9 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -23,7 +23,7 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
           id: "change-decoded",
@@ -78,7 +78,7 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
           id: "change-malformed",
@@ -229,7 +229,7 @@ describe("SQLite Change decoding", () => {
           implementationDecisions: [],
         };
         yield* expectPersistedDataInvalid(
-          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject malformed publication snapshots",
@@ -240,7 +240,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject malformed Implementation Decision Snapshot",
@@ -252,7 +252,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject foreign publication Implementation Decision",
@@ -263,7 +263,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
@@ -287,7 +287,7 @@ describe("SQLite Change decoding", () => {
           }),
         );
         yield* expectPersistedDataInvalid(
-          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "restore absent publication",
@@ -370,8 +370,8 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const changes = yield* openSqliteChangeTestPorts();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,

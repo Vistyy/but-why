@@ -6,7 +6,7 @@ import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { ChangeCleanup, ChangeRecord } from "./change.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { ChangeDeliveryPort, ChangeReadPort } from "./changePorts.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
   classifyOwnedPullRequest,
@@ -19,7 +19,7 @@ import type {
   GitHubPullRequestGateway,
   PublicationFailureEvidence,
 } from "./ownedPullRequestGateway.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { ActiveValidationRunPort } from "./validation/changeValidationPorts.js";
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
@@ -39,12 +39,12 @@ export type CancellationDependencies = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
   readonly changes: Pick<
-    ChangePersistence,
+    ChangeDeliveryPort & ChangeReadPort,
     "getChangeById" | "getChangeByTaskId" | "completeMergedChange" | "cancelChange"
   >;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
-  readonly validation?: Pick<ChangeValidationPersistence, "getActiveForChange">;
-  readonly executionLock?: ExecutionLock;
+  readonly validation: ActiveValidationRunPort;
+  readonly executionLock: ExecutionLock;
   readonly cleanupTerminal: TerminalCleanupOperation;
 };
 
@@ -112,18 +112,19 @@ const cancelTaskWithLock = (
   input: Parameters<CancellationUseCases["cancelTask"]>[0],
 ): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (dependencies.executionLock === undefined) {
-      return yield* cancelTask(dependencies, input);
-    }
+    const task = yield* dependencies.tasks.getTaskById(input.taskId);
+    if (task === undefined) return { ok: false, code: "task_not_found", taskId: input.taskId };
+    if (task.state === "done")
+      return { ok: false, code: "task_already_done", taskId: input.taskId };
     const change = yield* dependencies.changes.getChangeByTaskId(input.taskId);
     if (change === undefined) {
-      return yield* cancelTask(dependencies, input);
+      return yield* cancelTask(dependencies, input, { task, change });
     }
     return yield* dependencies.executionLock
       .withLock({
         owner: "change_submission",
         key: change.id,
-        effect: cancelTask(dependencies, input),
+        effect: cancelTask(dependencies, input, { task, change }),
       })
       .pipe(
         Effect.catchTag("ExecutionLockUnavailable", () =>
@@ -141,9 +142,6 @@ const cancelChangeWithLock = (
   input: Parameters<CancellationUseCases["cancelChange"]>[0],
 ): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (dependencies.executionLock === undefined) {
-      return yield* cancelChange(dependencies, input);
-    }
     const change = yield* dependencies.changes.getChangeById(input.changeId);
     if (change === undefined) {
       return yield* cancelChange(dependencies, input);
@@ -168,14 +166,18 @@ const cancelChangeWithLock = (
 const cancelTask = (
   dependencies: CancellationDependencies,
   input: Parameters<CancellationUseCases["cancelTask"]>[0],
+  selected?: { readonly task: TaskRecord; readonly change: ChangeRecord | undefined },
 ): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const task = yield* dependencies.tasks.getTaskById(input.taskId);
+    const task = selected?.task ?? (yield* dependencies.tasks.getTaskById(input.taskId));
     if (task === undefined) return { ok: false, code: "task_not_found", taskId: input.taskId };
     if (task.state === "done")
       return { ok: false, code: "task_already_done", taskId: input.taskId };
 
-    const change = yield* dependencies.changes.getChangeByTaskId(input.taskId);
+    const change =
+      selected === undefined
+        ? yield* dependencies.changes.getChangeByTaskId(input.taskId)
+        : selected.change;
     if (change === undefined) {
       const cancelled = yield* dependencies.tasks.cancelTask(input);
       return cancelled.ok
@@ -243,8 +245,7 @@ const cancelChange = (
       };
     }
 
-    const active = yield* dependencies.validation?.getActiveForChange(change.id) ??
-      Effect.succeed(undefined);
+    const active = yield* dependencies.validation.getActiveForChange(change.id);
     if (active !== undefined) {
       return {
         ok: false,

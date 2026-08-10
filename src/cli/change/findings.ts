@@ -18,7 +18,7 @@ export const runFindings = (
       cwd: environment.cwd,
     });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.findings(changeId).pipe(
+    return loaded.queries.findings(changeId).pipe(
       Effect.map((result) =>
         result === undefined
           ? support.changeNotFound()

@@ -3,15 +3,40 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
-import { type ChangeInspection, openChangeInspection } from "./inspectChange.js";
+import {
+  openSqliteChangeAuthorityPort,
+  openSqliteChangeReadPort,
+} from "../sqlite/sqliteChangePersistence.js";
+import {
+  openSqliteActiveValidationRunPort,
+  openSqliteChangeValidationReadPort,
+} from "../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import type {
+  ChangeAuthorityPort,
+  ImplementationBlockerMutationResult,
+  RecordImplementationDecisionResult,
+} from "./changePorts.js";
+import {
+  type ChangeQueryPort,
+  queryChangeDetail,
+  queryChangeFindings,
+  queryChangeTaskProjection,
+  queryChangeValidationRuns,
+} from "./inspectChange.js";
+
+export type ChangeAuthorityCommands = {
+  readonly raiseBlocker: ChangeAuthorityPort["raiseImplementationBlocker"];
+  readonly resolveBlocker: ChangeAuthorityPort["resolveImplementationBlocker"];
+  readonly addDecision: ChangeAuthorityPort["recordImplementationDecision"];
+};
 
 export type LoadChangeInspectionResult =
   | {
       readonly ok: true;
       readonly commonDirectory: string;
-      readonly inspection: ChangeInspection;
+      readonly queries: ChangeQueryPort;
+      readonly authority: ChangeAuthorityCommands;
     }
   | { readonly ok: false; readonly error: LoadRepoLocalContextError };
 
@@ -35,28 +60,82 @@ export const loadChangeInspection = (input: {
     statePath: context.paths.statePath,
     commonDirectory: context.commonDirectory,
   });
-  const inspectionFor = Effect.all({
-    changePersistence: openSqliteChangePersistence(),
-    persistence: openSqliteChangeValidationPersistence(),
-  }).pipe(Effect.map(openChangeInspection));
-  const run = <A, E>(use: (inspection: ChangeInspection) => Effect.Effect<A, E>) =>
-    Effect.flatMap(inspectionFor, use).pipe(Effect.provide(repositoryLayer));
+  const queryPorts = Effect.all({
+    authority: openSqliteChangeAuthorityPort(),
+    changes: openSqliteChangeReadPort(),
+    activeValidation: openSqliteActiveValidationRunPort(),
+    validationReads: openSqliteChangeValidationReadPort(),
+  });
+  const runQuery = <A, E>(
+    use: (ports: Effect.Effect.Success<typeof queryPorts>) => Effect.Effect<A, E>,
+  ) => Effect.flatMap(queryPorts, use).pipe(Effect.provide(repositoryLayer));
+
+  const executionLock = openSqliteExecutionLock({ commonDirectory: context.commonDirectory });
+  const runMutation = <
+    A extends ImplementationBlockerMutationResult | RecordImplementationDecisionResult,
+  >(
+    changeId: string,
+    use: (
+      authority: Effect.Effect.Success<ReturnType<typeof openSqliteChangeAuthorityPort>>,
+    ) => Effect.Effect<A, import("../contracts/repositoryStorageError.js").RepositoryStorageError>,
+  ) =>
+    executionLock
+      .withLock({
+        owner: "change_submission",
+        key: changeId,
+        effect: Effect.flatMap(openSqliteChangeAuthorityPort(), use).pipe(
+          Effect.provide(repositoryLayer),
+        ),
+      })
+      .pipe(
+        Effect.catchTag("ExecutionLockUnavailable", () =>
+          Effect.succeed({ ok: false as const, code: "submission_in_progress" as const }),
+        ),
+      );
+
+  const dependencies = (ports: Effect.Effect.Success<typeof queryPorts>) => ({
+    changePersistence: { ...ports.authority, ...ports.changes },
+    persistence: { ...ports.activeValidation, ...ports.validationReads },
+  });
 
   return {
     ok: true,
     commonDirectory: context.commonDirectory,
-    inspection: {
-      list: (listInput) => run((inspection) => inspection.list(listInput)),
-      inspectTaskProjection: (taskId) =>
-        run((inspection) => inspection.inspectTaskProjection(taskId)),
-      inspect: (changeId) => run((inspection) => inspection.inspect(changeId)),
-      findings: (changeId) => run((inspection) => inspection.findings(changeId)),
-      validationRuns: (changeId) => run((inspection) => inspection.validationRuns(changeId)),
-      decisions: (changeId) => run((inspection) => inspection.decisions(changeId)),
-      blockers: (changeId) => run((inspection) => inspection.blockers(changeId)),
-      raiseBlocker: (input) => run((inspection) => inspection.raiseBlocker(input)),
-      resolveBlocker: (input) => run((inspection) => inspection.resolveBlocker(input)),
-      addDecision: (input) => run((inspection) => inspection.addDecision(input)),
+    queries: {
+      list: (listInput) => runQuery(({ changes }) => changes.listChanges(listInput)),
+      taskProjection: (taskId) =>
+        runQuery((ports) => queryChangeTaskProjection(dependencies(ports), taskId)),
+      detail: (changeId) => runQuery((ports) => queryChangeDetail(dependencies(ports), changeId)),
+      findings: (changeId) =>
+        runQuery((ports) => queryChangeFindings(dependencies(ports), changeId)),
+      validationRuns: (changeId) =>
+        runQuery((ports) => queryChangeValidationRuns(dependencies(ports), changeId)),
+      decisions: (changeId) =>
+        runQuery(({ authority, changes }) =>
+          changes
+            .getChangeById(changeId)
+            .pipe(
+              Effect.flatMap((change) =>
+                change === undefined
+                  ? Effect.succeed(undefined)
+                  : authority.listImplementationDecisions(changeId),
+              ),
+            ),
+        ),
+      blockers: (changeId) =>
+        runQuery(({ authority }) => authority.listImplementationBlockers(changeId)),
+    },
+    authority: {
+      raiseBlocker: (command) =>
+        runMutation(command.changeId, (authority) => authority.raiseImplementationBlocker(command)),
+      resolveBlocker: (command) =>
+        runMutation(command.changeId, (authority) =>
+          authority.resolveImplementationBlocker(command),
+        ),
+      addDecision: (command) =>
+        runMutation(command.changeId, (authority) =>
+          authority.recordImplementationDecision(command),
+        ),
     },
   };
 };

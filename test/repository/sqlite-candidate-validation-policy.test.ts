@@ -7,7 +7,7 @@ import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositorySt
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-07-25T16:00:00.000Z";
@@ -100,7 +100,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -145,7 +145,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -200,7 +200,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,

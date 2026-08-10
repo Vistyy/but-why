@@ -13,8 +13,14 @@ import {
 } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import {
+  openSqliteCandidatePublicationPort,
+  openSqliteChangeAuthorityPort,
+  openSqliteChangeDeliveryPort,
+  openSqliteChangeReadPort,
+  openSqliteChangeReviewerSessionPort,
+} from "../sqlite/sqliteChangePersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -28,6 +34,13 @@ import {
 } from "./candidateCapture/localGitCandidate.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { resolveCandidateValidationPolicy } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+} from "./changePorts.js";
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
 import {
@@ -36,7 +49,7 @@ import {
   type ManagedRepoConfigResolution,
   openChangeSubmit,
 } from "./submitChange.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { CandidateValidationExecutionPort } from "./validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
@@ -62,8 +75,11 @@ export const loadChangeSubmit = (input: {
 
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
-    validationPersistence: ChangeValidationPersistence,
-    changePersistence: import("./changePersistence.js").ChangePersistence,
+    changePersistence: CandidatePublicationPort &
+      ChangeAuthorityPort &
+      ChangeDeliveryPort &
+      ChangeReadPort &
+      ChangeReviewerSessionPort,
   ) => {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
@@ -116,7 +132,6 @@ export const loadChangeSubmit = (input: {
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence,
-          validationPersistence,
           git: localCandidatePublicationGit({ cwd }),
           github: localGitHubPullRequestGateway({ cwd }),
         }),
@@ -133,8 +148,12 @@ export const loadChangeSubmit = (input: {
     });
   };
   const layerFor = (
-    persistence: ChangeValidationPersistence,
-    changePersistence: import("./changePersistence.js").ChangePersistence,
+    persistence: CandidateValidationExecutionPort,
+    changePersistence: CandidatePublicationPort &
+      ChangeAuthorityPort &
+      ChangeDeliveryPort &
+      ChangeReadPort &
+      ChangeReviewerSessionPort,
   ) =>
     candidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
@@ -163,13 +182,34 @@ export const loadChangeSubmit = (input: {
       submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
-          validation: openSqliteChangeValidationPersistence(),
-          change: openSqliteChangePersistence(),
+          validation: openSqliteCandidateValidationExecutionPort(),
+          authority: openSqliteChangeAuthorityPort(),
+          delivery: openSqliteChangeDeliveryPort(),
+          changes: openSqliteChangeReadPort(),
+          reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          publication: openSqliteCandidatePublicationPort(),
         }).pipe(
-          Effect.flatMap(({ capture, validation, change }) =>
-            programFor(capture, validation, change)
-              .submit(submitInput)
-              .pipe(Effect.provide(layerFor(validation, change))),
+          Effect.flatMap(
+            ({
+              capture,
+              validation,
+              authority,
+              delivery,
+              changes,
+              reviewerSessions,
+              publication,
+            }) => {
+              const change = {
+                ...authority,
+                ...delivery,
+                ...changes,
+                ...reviewerSessions,
+                ...publication,
+              };
+              return programFor(capture, change)
+                .submit(submitInput)
+                .pipe(Effect.provide(layerFor(validation, change)));
+            },
           ),
           Effect.provide(repositoryLayer),
         ),

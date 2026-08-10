@@ -25,7 +25,7 @@ export const resolveChangeId = (
   const facts = findCurrentWorktreeFacts(cwd);
   if (!facts.ok) return Effect.succeed(unresolvedChangeTarget(commandName));
 
-  return loaded.inspection
+  return loaded.queries
     .list({
       repositoryCommonDirectory: loaded.commonDirectory,
       includeClosed: false,

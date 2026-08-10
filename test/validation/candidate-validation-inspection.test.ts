@@ -5,15 +5,18 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import {
   expectedSandcastleWorktreePath,
   validationTempRefName,
 } from "../../src/change/validation/validationWorkspacePath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import {
+  type ChangeValidationTestPorts,
+  openSqliteChangeValidationTestPorts,
+} from "../support/changeValidationPorts.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -131,7 +134,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now: later,
       });
 
-      expect(started).toEqual({
+      expect(started).toMatchObject({
         reused: false,
         validationRunId: "run-with-atomic-workspace",
       });
@@ -189,17 +192,23 @@ describe("Candidate-owned Validation Run inspection", () => {
         choice: "Keep rationale separate from intent",
         rationale: "Preserve rationale separately from approved intent.",
       };
+      yield* fixture.recordDecision(decision.choice, decision.rationale);
       const first = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy,
-        implementationDecisions: [decision],
         now,
       });
       expect(first.reused).toBe(false);
       if ("blocked" in first) throw new Error("Expected a new Validation Run");
       const stored = yield* fixture.runStore.getRunById(first.validationRunId);
-      expect(stored?.implementationDecisions).toEqual([decision]);
+      expect(stored?.implementationDecisions).toEqual([
+        expect.objectContaining({
+          changeId: fixture.changeId,
+          choice: decision.choice,
+          rationale: decision.rationale,
+        }),
+      ]);
     }),
   );
 
@@ -673,9 +682,9 @@ const candidateValidationFixture = () =>
       commonDirectory,
     });
     const withPersistence = <A, E>(
-      use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
+      use: (persistence: ChangeValidationTestPorts) => Effect.Effect<A, E>,
     ) =>
-      Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+      Effect.flatMap(openSqliteChangeValidationTestPorts(), use).pipe(
         Effect.provide(repositoryLayer),
       );
     const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
@@ -726,28 +735,39 @@ const candidateValidationFixture = () =>
         truncated: false,
       };
     };
+    const recordDecision = (choice: string, rationale: string) =>
+      openSqliteChangeTestPorts().pipe(
+        Effect.flatMap((changes) =>
+          changes.recordImplementationDecision({
+            changeId: candidateResult.changeId,
+            choice,
+            rationale,
+            now,
+          }),
+        ),
+        Effect.provide(repositoryLayer),
+      );
     const runStore = {
-      startOrReuse: (input: Parameters<ChangeValidationPersistence["startOrReuse"]>[0]) =>
+      startOrReuse: (input: Parameters<ChangeValidationTestPorts["startOrReuse"]>[0]) =>
         withPersistence((persistence) => persistence.startOrReuse(input)),
       getRunById: (runId: string) =>
         withPersistence((persistence) => persistence.getRunById(runId)),
-      recordPrepareRound: (
-        input: Parameters<ChangeValidationPersistence["recordPrepareRound"]>[0],
-      ) => withPersistence((persistence) => persistence.recordPrepareRound(input)),
-      recordCheckRound: (input: Parameters<ChangeValidationPersistence["recordCheckRound"]>[0]) =>
+      recordPrepareRound: (input: Parameters<ChangeValidationTestPorts["recordPrepareRound"]>[0]) =>
+        withPersistence((persistence) => persistence.recordPrepareRound(input)),
+      recordCheckRound: (input: Parameters<ChangeValidationTestPorts["recordCheckRound"]>[0]) =>
         withPersistence((persistence) => persistence.recordCheckRound(input)),
       recordAcceptanceRound: (
-        input: Parameters<ChangeValidationPersistence["recordAcceptanceRound"]>[0],
+        input: Parameters<ChangeValidationTestPorts["recordAcceptanceRound"]>[0],
       ) => withPersistence((persistence) => persistence.recordAcceptanceRound(input)),
       recordToolingFailure: (
-        input: Parameters<ChangeValidationPersistence["recordToolingFailure"]>[0],
+        input: Parameters<ChangeValidationTestPorts["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.recordToolingFailure(input)),
       recordWorkspaceSetup: (
-        input: Parameters<ChangeValidationPersistence["recordWorkspaceSetup"]>[0],
+        input: Parameters<ChangeValidationTestPorts["recordWorkspaceSetup"]>[0],
       ) => withPersistence((persistence) => persistence.recordWorkspaceSetup(input)),
       getAbandonmentContext: (runId: string) =>
         withPersistence((persistence) => persistence.getAbandonmentContext(runId)),
-      complete: (input: Parameters<ChangeValidationPersistence["complete"]>[0]) =>
+      complete: (input: Parameters<ChangeValidationTestPorts["complete"]>[0]) =>
         withPersistence((persistence) => persistence.complete(input)),
     };
 
@@ -759,5 +779,6 @@ const candidateValidationFixture = () =>
       validationRunId: runResult.validationRunId,
       candidateId: candidateResult.candidateId,
       changeId: candidateResult.changeId,
+      recordDecision,
     };
   });

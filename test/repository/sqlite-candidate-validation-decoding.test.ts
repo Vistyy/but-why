@@ -5,7 +5,7 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const reviewerProfile = {
@@ -40,7 +40,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const validation = yield* openSqliteChangeValidationPersistence();
+          const validation = yield* openSqliteChangeValidationTestPorts();
           const repository = yield* RepositorySql;
           const prior = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
@@ -217,7 +217,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const repository = yield* RepositorySql;
         const prior = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,

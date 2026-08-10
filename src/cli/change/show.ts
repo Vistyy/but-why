@@ -17,7 +17,7 @@ export const runShow = (
       cwd: environment.cwd,
     });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.inspect(changeId).pipe(
+    return loaded.queries.detail(changeId).pipe(
       Effect.map((detail) =>
         detail === undefined
           ? support.changeNotFound()

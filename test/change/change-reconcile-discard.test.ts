@@ -14,8 +14,9 @@ import {
   type RepositorySqlConfig,
   repositorySqlLayer,
 } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-08-05T12:00:00.000Z";
@@ -50,7 +51,7 @@ const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
 const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
   Effect.gen(function* () {
     const starts = yield* openSqliteChangeStartPersistence();
-    const changes = yield* openSqliteChangePersistence();
+    const changes = yield* openSqliteChangeTestPorts();
     const worktreePath = join(fixture.root, "worktrees", "but-why", id);
 
     const created = yield* starts.create({
@@ -95,7 +96,7 @@ describe("Change reconciliation discard boundary", () => {
     () =>
       withReconcileRepository((fixture) =>
         Effect.gen(function* () {
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const first = yield* createTerminalChange(fixture, "change-a");
           const second = yield* createTerminalChange(fixture, "change-b");
           const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
@@ -109,6 +110,7 @@ describe("Change reconciliation discard boundary", () => {
             persistence: changes,
             github: noPullRequestGateway,
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: changes,
               cleanup: cleanupDirtyManagedWorktreeAndUniqueBranch,
             }),
@@ -153,13 +155,14 @@ describe("Change reconciliation discard boundary", () => {
   it.effect("withholds discard authority without the discard flag", () =>
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: changes,
             cleanup: (input) => {
               cleanupInputs.push(input);
@@ -206,7 +209,7 @@ describe("Change reconciliation discard boundary", () => {
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const worktreePath = join(fixture.root, "worktrees", "but-why", "change-open");
         const created = yield* starts.create({
           id: "change-open",
@@ -224,6 +227,7 @@ describe("Change reconciliation discard boundary", () => {
           persistence: changes,
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: changes,
             cleanup: () => {
               throw new Error("Open Changes must not be cleaned");
@@ -275,12 +279,13 @@ describe("Change reconciliation discard boundary", () => {
         const schemaBefore = yield* readSchema("read schema before discard");
         const columnsBefore = yield* readChangesColumns("read changes columns before discard");
 
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: changes,
             cleanup: () => ({ state: "complete" }),
           }),

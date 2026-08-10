@@ -22,7 +22,7 @@ export const runBlocker = (
   if (action === "list") {
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.blockers(changeId).pipe(
+    return loaded.queries.blockers(changeId).pipe(
       Effect.map((history) =>
         history === undefined ? support.changeNotFound() : success({ changeId, ...history }),
       ),
@@ -34,7 +34,7 @@ export const runBlocker = (
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const operation =
-    action === "raise" ? loaded.inspection.raiseBlocker : loaded.inspection.resolveBlocker;
+    action === "raise" ? loaded.authority.raiseBlocker : loaded.authority.resolveBlocker;
   return operation({
     changeId,
     content: content.content,
@@ -45,9 +45,15 @@ export const runBlocker = (
         ? success({ changeId, blocker: result.blocker, change: result.change })
         : runtimeError({
             code: result.code,
-            message: `Cannot ${action} an Implementation Blocker in this Change.`,
+            message:
+              result.code === "submission_in_progress"
+                ? "Change Submission is in progress."
+                : `Cannot ${action} an Implementation Blocker in this Change.`,
             details: { changeId },
-            help: ["Inspect the Change and use the applicable blocker lifecycle command."],
+            help:
+              result.code === "submission_in_progress"
+                ? ["Wait for Change Submit to finish, then retry the blocker command."]
+                : ["Inspect the Change and use the applicable blocker lifecycle command."],
           }),
     ),
     support.inspectionFailure,

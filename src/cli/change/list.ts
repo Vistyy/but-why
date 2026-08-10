@@ -17,7 +17,7 @@ export const runList = (
   });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const now = environment.now().getTime();
-  return loaded.inspection
+  return loaded.queries
     .list({
       repositoryCommonDirectory: loaded.commonDirectory,
       includeClosed: command.all,

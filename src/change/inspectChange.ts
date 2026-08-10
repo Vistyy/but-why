@@ -7,20 +7,20 @@ import type {
   CandidateValidationToolingFailure,
 } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "./change.js";
-import type { ChangePersistence, RecordImplementationDecisionResult } from "./changePersistence.js";
+import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type {
+  ActiveValidationRunPort,
+  ChangeValidationReadPort,
+} from "./validation/changeValidationPorts.js";
 
-export type ChangeInspection = {
-  readonly list: (input: {
-    readonly repositoryCommonDirectory: string;
-    readonly includeClosed: boolean;
-  }) => Effect.Effect<readonly ChangeRecord[], RepositoryStorageError>;
-  readonly inspect: (
+export type ChangeQueryPort = {
+  readonly list: ChangeReadPort["listChanges"];
+  readonly detail: (
     changeId: string,
   ) => Effect.Effect<ChangeDetail | undefined, RepositoryStorageError>;
-  readonly inspectTaskProjection: (
+  readonly taskProjection: (
     taskId: string,
   ) => Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError>;
   readonly findings: (
@@ -35,25 +35,6 @@ export type ChangeInspection = {
   readonly blockers: (
     changeId: string,
   ) => Effect.Effect<ImplementationBlockerHistory | undefined, RepositoryStorageError>;
-  readonly raiseBlocker: (input: {
-    readonly changeId: string;
-    readonly content: string;
-    readonly now: string;
-  }) => Effect.Effect<
-    import("./changePersistence.js").ImplementationBlockerMutationResult,
-    RepositoryStorageError
-  >;
-  readonly resolveBlocker: (input: {
-    readonly changeId: string;
-    readonly content: string;
-    readonly now: string;
-  }) => Effect.Effect<
-    import("./changePersistence.js").ImplementationBlockerMutationResult,
-    RepositoryStorageError
-  >;
-  readonly addDecision: (
-    input: import("./changePersistence.js").RecordImplementationDecisionInput,
-  ) => Effect.Effect<RecordImplementationDecisionResult, RepositoryStorageError>;
 };
 
 export type ChangeActivity = "blocked" | "validating" | "ready" | "implementing";
@@ -84,36 +65,13 @@ export type ChangeValidationRunHistory = {
   readonly validationRuns: readonly CandidateValidationRunRecord[];
 };
 
-export const openChangeInspection = (input: {
-  readonly changePersistence: ChangePersistence;
-  readonly persistence: ChangeValidationPersistence;
-}): ChangeInspection => ({
-  list: input.changePersistence.listChanges,
-  inspect: (changeId) => inspectChange(input, changeId),
-  inspectTaskProjection: (taskId) => inspectTaskProjection(input, taskId),
-  findings: (changeId) => inspectFindings(input, changeId),
-  validationRuns: (changeId) => inspectValidationRuns(input, changeId),
-  decisions: (changeId) =>
-    input.changePersistence
-      .getChangeById(changeId)
-      .pipe(
-        Effect.flatMap((change) =>
-          change === undefined
-            ? Effect.succeed(undefined)
-            : input.changePersistence.listImplementationDecisions(changeId),
-        ),
-      ),
-  blockers: input.changePersistence.listImplementationBlockers,
-  raiseBlocker: input.changePersistence.raiseImplementationBlocker,
-  resolveBlocker: input.changePersistence.resolveImplementationBlocker,
-  addDecision: (decision) => input.changePersistence.recordImplementationDecision(decision),
-});
+type ChangeQueryDependencies = {
+  readonly changePersistence: ChangeAuthorityPort & ChangeReadPort;
+  readonly persistence: ActiveValidationRunPort & ChangeValidationReadPort;
+};
 
-const inspectTaskProjection = (
-  dependencies: {
-    readonly changePersistence: ChangePersistence;
-    readonly persistence: ChangeValidationPersistence;
-  },
+export const queryChangeTaskProjection = (
+  dependencies: ChangeQueryDependencies,
   taskId: string,
 ): Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -127,29 +85,15 @@ const inspectTaskProjection = (
       return { id: change.id, activity: "validating" };
     }
 
-    const candidates = yield* dependencies.persistence.listCandidatesForChange(change.id);
-    const currentCandidate = candidates.at(-1);
-    if (currentCandidate === undefined) {
-      return { id: change.id, activity: "implementing" };
-    }
-    const validationRuns = yield* dependencies.persistence.listRunsForCandidate(
-      currentCandidate.id,
-    );
-    const currentValidationRun = validationRuns.at(-1);
+    const evidence = yield* dependencies.changePersistence.getCurrentPassingEvidence(change.id);
     return {
       id: change.id,
-      activity:
-        currentValidationRun?.state === "complete" && currentValidationRun.outcome === "passed"
-          ? "ready"
-          : "implementing",
+      activity: evidence === undefined ? "implementing" : "ready",
     };
   });
 
-const inspectChange = (
-  dependencies: {
-    readonly changePersistence: ChangePersistence;
-    readonly persistence: ChangeValidationPersistence;
-  },
+export const queryChangeDetail = (
+  dependencies: ChangeQueryDependencies,
   changeId: string,
 ): Effect.Effect<ChangeDetail | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -175,14 +119,11 @@ const inspectChange = (
     };
   });
 
-const inspectFindings = (
-  dependencies: {
-    readonly changePersistence: ChangePersistence;
-    readonly persistence: ChangeValidationPersistence;
-  },
+export const queryChangeFindings = (
+  dependencies: ChangeQueryDependencies,
   changeId: string,
 ): Effect.Effect<ChangeFindings | undefined, RepositoryStorageError> =>
-  Effect.map(inspectChange(dependencies, changeId), (detail) =>
+  Effect.map(queryChangeDetail(dependencies, changeId), (detail) =>
     detail === undefined
       ? undefined
       : {
@@ -194,11 +135,8 @@ const inspectFindings = (
         },
   );
 
-const inspectValidationRuns = (
-  dependencies: {
-    readonly changePersistence: ChangePersistence;
-    readonly persistence: ChangeValidationPersistence;
-  },
+export const queryChangeValidationRuns = (
+  dependencies: ChangeQueryDependencies,
   changeId: string,
 ): Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -220,7 +158,7 @@ const inspectValidationRuns = (
   });
 
 const currentCandidate = (
-  persistence: ChangeValidationPersistence,
+  persistence: ActiveValidationRunPort & ChangeValidationReadPort,
   changeId: string,
 ): Effect.Effect<CandidateRecord | null, RepositoryStorageError> =>
   Effect.map(
@@ -229,7 +167,7 @@ const currentCandidate = (
   );
 
 const currentValidationRun = (
-  persistence: ChangeValidationPersistence,
+  persistence: ActiveValidationRunPort & ChangeValidationReadPort,
   candidateId: string,
 ): Effect.Effect<CandidateValidationRunRecord | null, RepositoryStorageError> =>
   Effect.map(persistence.listRunsForCandidate(candidateId), (runs) => runs.at(-1) ?? null);

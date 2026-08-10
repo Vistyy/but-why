@@ -46,7 +46,7 @@ export const runListCommand = (
             result.tasks,
             changeInspection === undefined
               ? () => Effect.succeed(null)
-              : changeInspection.inspection.inspectTaskProjection,
+              : changeInspection.queries.taskProjection,
           ),
           (rows) =>
             success({

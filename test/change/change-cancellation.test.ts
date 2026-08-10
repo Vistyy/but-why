@@ -20,6 +20,7 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cancellation", () => {
@@ -872,17 +873,18 @@ const cancellationDependencies = (input: {
       },
     },
     changes,
-    ...(input.activeValidationRunId === undefined
-      ? {}
-      : {
-          validation: {
-            getActiveForChange: () =>
-              Effect.succeed({
-                validationRunId: input.activeValidationRunId ?? "",
+    validation: {
+      getActiveForChange: () =>
+        Effect.succeed(
+          input.activeValidationRunId === undefined
+            ? undefined
+            : {
+                validationRunId: input.activeValidationRunId,
                 changeId: currentChange.id,
-              }),
-          },
-        }),
+              },
+        ),
+    },
+    executionLock: { withLock: ({ effect }) => effect },
     github: {
       getPullRequest: () => {
         input.events.push("read-pr");
@@ -895,6 +897,7 @@ const cancellationDependencies = (input: {
       },
     },
     cleanupTerminal: openTerminalCleanup({
+      ...noOpTerminalCleanupDependencies,
       persistence: changes,
       cleanup: (cleanupInput) => {
         input.events.push("cleanup");

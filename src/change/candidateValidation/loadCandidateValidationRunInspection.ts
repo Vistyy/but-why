@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../../init/repoContext.js";
 import { repositorySqlLayer } from "../../sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import {
   type CandidateValidationRunInspectionUseCases,
   openCandidateValidationRunInspection,
@@ -39,8 +39,8 @@ export const loadCandidateValidationRunInspection = (input: {
     commonDirectory: context.commonDirectory,
   });
   const inspectionFor = Effect.all({
-    persistence: openSqliteChangeValidationPersistence(),
-    changePersistence: openSqliteChangePersistence(),
+    persistence: openSqliteChangeValidationReadPort(),
+    changePersistence: openSqliteChangeReadPort(),
   }).pipe(
     Effect.map(({ persistence, changePersistence }) =>
       openCandidateValidationRunInspection({

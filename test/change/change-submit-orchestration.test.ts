@@ -9,7 +9,14 @@ import type {
 import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+  ChangeReviewerTranscriptPort,
+} from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
@@ -25,6 +32,13 @@ import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contract
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+
+type ChangeTestPorts = CandidatePublicationPort &
+  ChangeAuthorityPort &
+  ChangeDeliveryPort &
+  ChangeReadPort &
+  ChangeReviewerSessionPort &
+  ChangeReviewerTranscriptPort;
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -673,7 +687,8 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-1",
       });
       expect(seenValidationInput).toMatchObject({
-        implementationDecisions: change.implementationDecisions,
+        changeId: change.id,
+        candidateId: "candidate-1",
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -685,7 +700,7 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("uses Acceptance Context for a Task-backed Candidate", () =>
+  it.effect("selects authority-backed validation for a Task-backed Candidate", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const change = readyChange({
@@ -704,7 +719,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: (input) =>
           Effect.sync(() => {
             events.push("validate_task_backed");
-            expect(input.acceptanceContext.title).toBe("Approved intent");
+            expect(input.changeId).toBe(change.id);
             return {
               ok: true,
               reused: false,
@@ -1447,7 +1462,7 @@ const dependencies = (input: {
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
-      getPassingPublicationEvidence: () =>
+      getCurrentPassingEvidence: () =>
         Effect.sync(() => {
           events.push("read_publication_evidence");
           if (input.publicationEvidence === null) return undefined;
@@ -1470,7 +1485,7 @@ const dependencies = (input: {
           events.push("complete_merged_change");
           return { ok: true as const, changed: true, change: input.change };
         }),
-    } as unknown as ChangePersistence,
+    } as unknown as ChangeTestPorts,
     github: pullRequestGateway(input, events, pullRequestObservations),
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
@@ -1586,7 +1601,7 @@ const dependencies = (input: {
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
-    ...(input.executionLock === undefined ? {} : { executionLock: input.executionLock }),
+    executionLock: input.executionLock ?? { withLock: ({ effect }) => effect },
   };
 };
 

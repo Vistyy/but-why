@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { ChangeDeliveryPort, ChangeReadPort } from "./changePorts.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
   observedMergedChangeEvidence,
@@ -41,7 +41,7 @@ export type ChangeReconciliation = {
 };
 
 export const openChangeReconciliation = (input: {
-  readonly persistence: ChangePersistence;
+  readonly persistence: ChangeDeliveryPort & ChangeReadPort;
   readonly github: GitHubPullRequestGateway;
   readonly cleanupTerminal: TerminalCleanupOperation;
 }): ChangeReconciliation => ({

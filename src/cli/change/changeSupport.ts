@@ -3,8 +3,7 @@
 import { Effect } from "effect";
 import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "../../change/change.js";
-import type { ChangeUseCases } from "../../change/changeUseCases.js";
-import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
+import type { LoadedChangeOperationResult } from "../../change/loadChangeLifecycle.js";
 import type { RepoStateLoadError } from "../../cliResults.js";
 import {
   type CliResult,
@@ -90,21 +89,19 @@ export const inspectionFailure = <A>(
     Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable("repository"))),
   );
 
-export const withChanges = (
-  environment: ChangeCommandEnvironment,
-  use: (changes: ChangeUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+export const changeOperationInput = (environment: ChangeCommandEnvironment) => ({
+  cwd: environment.cwd,
+  ...(environment.interactiveSessionHost === undefined
+    ? {}
+    : { interactiveSessionHost: environment.interactiveSessionHost }),
+  globalConfigPath: environment.globalConfigPath,
+});
+
+export const loadedChangeOperation = (
+  operation: Effect.Effect<LoadedChangeOperationResult<CliResult>, RepositoryStorageError>,
   unexpectedFailure: () => CliResult = () => stateStoreUnavailable("repository"),
 ): Effect.Effect<CliResult> =>
-  withChangeUseCases(
-    {
-      cwd: environment.cwd,
-      ...(environment.interactiveSessionHost === undefined
-        ? {}
-        : { interactiveSessionHost: environment.interactiveSessionHost }),
-      globalConfigPath: environment.globalConfigPath,
-    },
-    use,
-  ).pipe(
+  operation.pipe(
     Effect.map((result) => (result.ok ? result.value : loadError(result.error))),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
     Effect.catchAllCause(() => Effect.succeed(unexpectedFailure())),

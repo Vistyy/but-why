@@ -2,6 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
+import { withChangeImplement } from "../../change/loadChangeLifecycle.js";
 import type { CliResult } from "../../cliResults.js";
 import { runtimeError } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
@@ -27,16 +28,16 @@ export const runImplement = (
     return Effect.succeed(implementerPromptFileError(implementerPrompt.error));
 
   return support.withResolvedChangeId(command.changeId, environment, "implement", (changeId) =>
-    support.withChanges(
-      environment,
-      (changes) =>
+    support.loadedChangeOperation(
+      withChangeImplement(support.changeOperationInput(environment), (implement) =>
         Effect.map(
-          changes.implement(
+          implement(
             changeId,
             implementerPrompt === undefined ? undefined : implementerPrompt.content,
           ),
           implementResult,
         ),
+      ),
       () =>
         runtimeError({
           code: "launch_failed",

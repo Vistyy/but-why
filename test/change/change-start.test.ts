@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { prepareChange, startChange } from "../../src/change/changeLifecycle.js";
 import type { ChangeStartGitOperations } from "../../src/change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../../src/change/changeStartPersistence.js";
 import type {
@@ -8,8 +9,6 @@ import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
-import { openChangeUseCases } from "../../src/change/changeUseCases.js";
-import type { RepoLocalContext } from "../../src/init/repoContext.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
 
@@ -102,16 +101,12 @@ const fixture = (options: FixtureOptions = {}) => {
     async () => ({ exitCode: 0, stdout: "", stderr: "" }),
     { effect },
   );
-  const useCases = openChangeUseCases(
-    { commonDirectory: "/repo/.git", root: "/repo" } as RepoLocalContext,
-    store,
-    git,
-    executor,
-    { reconcile: () => Effect.die("unused") },
-    { launch: async () => Promise.reject(new Error("unused")) },
-    "/global/config.json",
-  );
-  return { useCases, events, current: () => current };
+  const operations = {
+    start: (input: Parameters<typeof startChange>[3]) => startChange(store, git, executor, input),
+    prepare: (changeId: string, preparedAt: string) =>
+      prepareChange(store, git, executor, changeId, preparedAt),
+  };
+  return { operations: operations, events, current: () => current };
 };
 
 describe("Change Start orchestration", () => {
@@ -120,7 +115,7 @@ describe("Change Start orchestration", () => {
     () =>
       Effect.gen(function* () {
         const taskless = fixture();
-        const tasklessResult = yield* taskless.useCases.start({ now });
+        const tasklessResult = yield* taskless.operations.start({ now });
         expect(tasklessResult).toMatchObject({
           ok: true,
           change: { taskId: null, acceptanceContext: null },
@@ -133,7 +128,7 @@ describe("Change Start orchestration", () => {
         ]);
 
         const backed = fixture();
-        const backedResult = yield* backed.useCases.start({ taskId, baseBranch: "main", now });
+        const backedResult = yield* backed.operations.start({ taskId, baseBranch: "main", now });
         expect(backedResult).toMatchObject({
           ok: true,
           change: {
@@ -168,7 +163,7 @@ describe("Change Start orchestration", () => {
       ];
       for (const failure of failures) {
         const captured = fixture({ eligibility: failure });
-        expect(yield* captured.useCases.start({ taskId, now })).toEqual(failure);
+        expect(yield* captured.operations.start({ taskId, now })).toEqual(failure);
         expect(captured.events).toEqual(["prepareTask"]);
       }
     }),
@@ -184,7 +179,7 @@ describe("Change Start orchestration", () => {
         now,
       });
       const captured = fixture({ existing });
-      const result = yield* captured.useCases.start({ taskId, now });
+      const result = yield* captured.operations.start({ taskId, now });
       expect(result).toMatchObject({ ok: true, change: { id: existing.id, taskId } });
       expect(captured.current()?.acceptanceContext).toBe(existing.acceptanceContext);
       expect(captured.events).toEqual([
@@ -199,7 +194,7 @@ describe("Change Start orchestration", () => {
     Effect.gen(function* () {
       const existing = recordFrom({ id: "existing", ...intent, taskId, now });
       const captured = fixture({ existing });
-      expect(yield* captured.useCases.start({ taskId, baseBranch: "release", now })).toEqual({
+      expect(yield* captured.operations.start({ taskId, baseBranch: "release", now })).toEqual({
         ok: false,
         code: "requested_base_conflict",
         requestedBaseBranch: "release",
@@ -212,7 +207,7 @@ describe("Change Start orchestration", () => {
   it.effect("attaches provisioning failure to the same newly persisted Change", () =>
     Effect.gen(function* () {
       const captured = fixture({ provision: { ok: false, code: "git_tooling_error" } });
-      const result = yield* captured.useCases.start({ now });
+      const result = yield* captured.operations.start({ now });
       expect(result).toMatchObject({
         ok: false,
         code: "git_tooling_error",
@@ -259,24 +254,24 @@ describe("Change Start orchestration", () => {
           },
         });
 
-        const started = yield* captured.useCases.start({ now });
+        const started = yield* captured.operations.start({ now });
         expect(started).toMatchObject({
           ok: true,
           change: { prepareFailure: { exitCode: 7, timedOut: false } },
         });
         const id = required(captured.current(), "Change Start did not capture a Change").id;
-        expect(yield* captured.useCases.prepare(id, now)).toMatchObject({
+        expect(yield* captured.operations.prepare(id, now)).toMatchObject({
           ok: true,
           change: { id, prepareFailure: { exitCode: 124, timedOut: true, stderr: "timed out" } },
         });
-        expect(yield* captured.useCases.prepare(id, now)).toMatchObject({
+        expect(yield* captured.operations.prepare(id, now)).toMatchObject({
           ok: true,
           change: {
             id,
             prepareFailure: { exitCode: 1, timedOut: false, stderr: "executor unavailable" },
           },
         });
-        expect(yield* captured.useCases.prepare(id, now)).toMatchObject({
+        expect(yield* captured.operations.prepare(id, now)).toMatchObject({
           ok: true,
           change: { id, prepareFailure: null },
         });

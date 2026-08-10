@@ -2,6 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
+import { withChangeStart } from "../../change/loadChangeLifecycle.js";
 import type { CliResult } from "../../cliResults.js";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import * as support from "./changeSupport.js";
@@ -21,14 +22,16 @@ export const runStart = (
     command.taskId === undefined ? undefined : parseCliTaskIdValue(command.taskId);
   if (parsedTaskId !== undefined && !parsedTaskId.ok) return Effect.succeed(parsedTaskId.result);
 
-  return support.withChanges(environment, (changes) =>
-    Effect.map(
-      changes.start({
-        ...(parsedTaskId === undefined ? {} : { taskId: parsedTaskId.taskId }),
-        ...(command.baseBranch === undefined ? {} : { baseBranch: command.baseBranch }),
-        now: environment.now().toISOString(),
-      }),
-      startResult,
+  return support.loadedChangeOperation(
+    withChangeStart(support.changeOperationInput(environment), (start) =>
+      Effect.map(
+        start({
+          ...(parsedTaskId === undefined ? {} : { taskId: parsedTaskId.taskId }),
+          ...(command.baseBranch === undefined ? {} : { baseBranch: command.baseBranch }),
+          now: environment.now().toISOString(),
+        }),
+        startResult,
+      ),
     ),
   );
 };

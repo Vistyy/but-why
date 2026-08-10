@@ -6,7 +6,7 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { describe } from "vitest";
-import type { CurrentPublicationAuthority } from "../../src/change/changePersistence.js";
+import type { CurrentChangeEvidenceQuery } from "../../src/change/changePorts.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -43,12 +43,12 @@ import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { repoRoot } from "../support/by-cli.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
 import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import { startTestProcess } from "../support/testProcess.js";
@@ -315,7 +315,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Raise blocker without lifecycle writes",
           description: "One unresolved row must be the active Blocker authority.",
@@ -366,7 +366,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Reject duplicate blocker",
           description: "One unresolved Implementation Blocker may exist for an open Change.",
@@ -418,7 +418,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Raise after publication",
           description: "Publication and earlier passing evidence must not prevent a Blocker.",
@@ -492,7 +492,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Resolve blocker",
           description: "Resume implementation with approved intent.",
@@ -552,7 +552,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const started = yield* starts.create({
           id: "change-taskless-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -594,7 +594,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const started = yield* starts.create({
           id: "change-no-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -629,7 +629,7 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const tasks = yield* openSqliteTaskPersistence("BY");
           const starts = yield* openSqliteChangeStartPersistence();
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const created = yield* tasks.createTask({
             title: "Cancel Task-backed Change atomically",
             description: "The linked Task mutation and Change close share one transaction.",
@@ -687,7 +687,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Stale merge evidence",
           description: "Observed facts must match current publication.",
@@ -793,7 +793,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Newer publication wins",
           description: "Only the current publication can complete.",
@@ -913,7 +913,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const created = yield* tasks.createTask({
           title: "Atomic terminal completion",
           description: "Change and Task terminal writes commit together.",
@@ -1005,7 +1005,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const started = yield* starts.create({
           id: "change-concurrent-completion",
           repositoryCommonDirectory: input.commonDirectory,
@@ -1143,7 +1143,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1154,10 +1154,10 @@ describe("repository SQL storage", () => {
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
+          validationRunId: "run-1",
           changeBaseSha: "base-sha",
           policy: simplifiedReviewPolicy,
-          implementationDecisions: [],
-        } satisfies CurrentPublicationAuthority;
+        } satisfies CurrentChangeEvidenceQuery;
         yield* repository.operation("install passing publication evidence", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -1184,7 +1184,7 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        expect(yield* changes.getPassingPublicationEvidence(captured.changeId, authority)).toEqual({
+        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
@@ -1212,10 +1212,10 @@ describe("repository SQL storage", () => {
           }),
         );
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+          yield* changes.getCurrentPassingEvidence(captured.changeId, {
+            validationRunId: "run-repaired-publication",
             changeBaseSha: "base-sha",
             policy: repairedAcceptancePolicy,
-            implementationDecisions: [],
           }),
         ).toEqual({
           candidateId: captured.candidateId,
@@ -1234,7 +1234,7 @@ describe("repository SQL storage", () => {
           (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
         );
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
         yield* repository.operation(
           "restore publication evidence outcome",
@@ -1247,7 +1247,7 @@ describe("repository SQL storage", () => {
             sql`UPDATE candidate_validation_runs SET state = 'running', outcome = NULL WHERE id = 'run-1'`,
         );
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
         yield* repository.operation(
           "restore publication evidence state",
@@ -1256,13 +1256,13 @@ describe("repository SQL storage", () => {
         );
 
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+          yield* changes.getCurrentPassingEvidence(captured.changeId, {
             ...authority,
             changeBaseSha: "advanced-base",
           }),
         ).toBeUndefined();
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+          yield* changes.getCurrentPassingEvidence(captured.changeId, {
             ...authority,
             policy: {
               checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
@@ -1293,35 +1293,31 @@ describe("repository SQL storage", () => {
               `;
             }),
         );
-        const malformedSnapshotError = yield* changes
-          .getPassingPublicationEvidence(captured.changeId, authority)
-          .pipe(Effect.flip);
-        expect(malformedSnapshotError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "restore publication evidence reference",
-          (sql) =>
-            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
-        );
-        expect(yield* changes.getPassingPublicationEvidence(captured.changeId, authority)).toEqual({
+        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
         });
+        yield* repository.operation(
+          "restore publication evidence reference",
+          (sql) =>
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
+        );
+        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-1",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+        yield* changes.recordImplementationDecision({
+          changeId: captured.changeId,
+          choice: "Choose the passing path",
+          rationale: "Prove that decisions are part of current evidence identity.",
+          now: "2026-07-25T15:01:00.000Z",
+        });
         expect(
-          yield* changes.getPassingPublicationEvidence(captured.changeId, {
-            ...authority,
-            implementationDecisions: [
-              {
-                id: "decision-1",
-                changeId: captured.changeId,
-                sequence: 1,
-                recordedAt: "2026-07-25T15:01:00.000Z",
-                choice: "Choose the passing path",
-                rationale: "Prove that decisions are part of publication identity.",
-              },
-            ],
-          }),
+          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
 
         const other = yield* capture.commitCapture({
@@ -1354,10 +1350,9 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        const ownershipError = yield* changes
-          .getPassingPublicationEvidence(captured.changeId, authority)
-          .pipe(Effect.flip);
-        expect(ownershipError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toBeUndefined();
       }),
     ),
   );
@@ -1369,8 +1364,8 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const changes = yield* openSqliteChangePersistence();
-          const validation = yield* openSqliteChangeValidationPersistence();
+          const changes = yield* openSqliteChangeTestPorts();
+          const validation = yield* openSqliteChangeValidationTestPorts();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1380,25 +1375,36 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:10:00.000Z",
           });
           if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-          const decision = {
-            id: "decision-1",
+          const recordedDecision = yield* changes.recordImplementationDecision({
             changeId: captured.changeId,
-            sequence: 1,
-            recordedAt: "2026-07-25T16:10:00.000Z",
             choice: "Choose the passing path",
             rationale: "Prove that decisions are part of Validation Run identity.",
-          };
+            now: "2026-07-25T16:10:00.000Z",
+          });
+          if (!recordedDecision.ok) throw new Error(recordedDecision.code);
           const policy = { checks: [], copyFiles: [], specialistReviews: [] };
           const exact = {
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
             policy,
-            implementationDecisions: [decision],
             now: "2026-07-25T16:11:00.000Z",
           };
           const first = yield* validation.startOrReuse(exact);
-          if (first.reused || "blocked" in first) throw new Error("Expected a new Validation Run");
+          if (first.reused || "blocked" in first || "active" in first)
+            throw new Error("Expected a new Validation Run");
+          expect(first.authority).toMatchObject({
+            candidate: {
+              id: captured.candidateId,
+              changeId: captured.changeId,
+              changeBaseSha: "base-sha",
+              headSha: "head-sha",
+            },
+            policy,
+            implementationDecisions: [recordedDecision.decision],
+            blockerHistory: { active: null, blockers: [], resolutions: [] },
+            latestResolvedBlockerId: null,
+          });
           yield* validation.complete({
             validationRunId: first.validationRunId,
             outcome: "passed",
@@ -1431,7 +1437,6 @@ describe("repository SQL storage", () => {
               changeBaseSha: "base-sha",
               headSha: "head-sha",
               policy: simplifiedReviewPolicy,
-              implementationDecisions: [],
               now: "2026-07-25T16:12:40.000Z",
             })
             .pipe(Effect.flip);
@@ -1446,7 +1451,6 @@ describe("repository SQL storage", () => {
             changeBaseSha: "base-sha",
             headSha: "head-sha",
             policy: simplifiedReviewPolicy,
-            implementationDecisions: [],
             now: "2026-07-25T16:12:40.000Z",
           });
           if (simplifiedCurrent.reused || "blocked" in simplifiedCurrent)
@@ -1478,10 +1482,14 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:13:00.000Z",
           });
 
-          const decisionsMismatch = yield* validation.startOrReuse({
-            ...exact,
-            implementationDecisions: [],
+          const addedDecision = yield* changes.recordImplementationDecision({
+            changeId: captured.changeId,
+            choice: "Add a second authority input",
+            rationale: "A persisted decision requires fresh Validation evidence.",
+            now: "2026-07-25T16:13:30.000Z",
           });
+          if (!addedDecision.ok) throw new Error(addedDecision.code);
+          const decisionsMismatch = yield* validation.startOrReuse(exact);
           expect(decisionsMismatch.reused).toBe(false);
           if (decisionsMismatch.reused || "blocked" in decisionsMismatch)
             throw new Error("Expected a decision-distinct Validation Run");
@@ -1490,75 +1498,6 @@ describe("repository SQL storage", () => {
             outcome: "passed",
             now: "2026-07-25T16:14:00.000Z",
           });
-
-          const contextMismatch = yield* validation.startOrReuse({
-            ...exact,
-            policy: {
-              ...policy,
-              acceptanceContext: {
-                version: 1,
-                title: "Changed approved intent",
-                description: "The acceptance context changed after review.",
-              },
-            },
-          });
-          expect(contextMismatch.reused).toBe(false);
-          if (contextMismatch.reused || "blocked" in contextMismatch)
-            throw new Error("Expected a context-distinct Validation Run");
-          yield* validation.complete({
-            validationRunId: contextMismatch.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:15:00.000Z",
-          });
-
-          yield* repository.operation(
-            "install repaired passed Validation Run evidence",
-            (sql) =>
-              sql`
-              INSERT INTO candidate_validation_runs (
-                id, candidate_id, policy_snapshot, implementation_decisions,
-                latest_resolved_blocker_id, state, outcome, created_at, updated_at
-              ) VALUES (
-                'run-repaired', ${captured.candidateId},
-                ${encodeSqliteCandidateValidationPolicy(repairedAcceptancePolicy)},
-                '[]', NULL, 'complete', 'passed',
-                '2026-07-25T16:15:30.000Z', '2026-07-25T16:15:30.000Z'
-              )
-            `,
-          );
-          expect(
-            yield* validation.startOrReuse({
-              candidateId: captured.candidateId,
-              changeBaseSha: "base-sha",
-              headSha: "head-sha",
-              policy: repairedAcceptancePolicy,
-              implementationDecisions: [],
-              now: "2026-07-25T16:15:40.000Z",
-            }),
-          ).toMatchObject({ reused: true, validationRunId: "run-repaired" });
-
-          yield* repository.operation(
-            "invalidate run state",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET state = 'running', outcome = NULL WHERE id = ${first.validationRunId}`,
-          );
-          expect(yield* validation.startOrReuse(exact)).toMatchObject({ reused: false });
-          yield* repository.operation(
-            "restore run state",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET state = 'complete', outcome = 'passed' WHERE id = ${first.validationRunId}`,
-          );
-          yield* repository.operation(
-            "invalidate run outcome",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${first.validationRunId}`,
-          );
-          expect(yield* validation.startOrReuse(exact)).toMatchObject({ reused: false });
-          yield* repository.operation(
-            "restore run outcome",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET outcome = 'passed' WHERE id = ${first.validationRunId}`,
-          );
 
           const identityError = yield* validation
             .startOrReuse({ ...exact, headSha: "other-head" })
@@ -1577,11 +1516,24 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:16:00.000Z",
           });
           expect(resolved.ok).toBe(true);
-          const afterResolution = yield* validation.startOrReuse(exact);
+          if (!resolved.ok) throw new Error(resolved.code);
+          const afterResolution = yield* validation.startOrReuse({
+            ...exact,
+            now: "2026-07-25T16:17:00.000Z",
+          });
           expect(afterResolution.reused).toBe(false);
-          if (afterResolution.reused || "blocked" in afterResolution)
+          if (afterResolution.reused || "blocked" in afterResolution || "active" in afterResolution)
             throw new Error("Expected a fresh Validation Run after Resolution");
           expect(afterResolution.validationRunId).not.toBe(first.validationRunId);
+          expect(afterResolution.authority).toMatchObject({
+            candidate: { id: captured.candidateId, changeId: captured.changeId },
+            blockerHistory: {
+              active: null,
+              blockers: [{ id: resolved.blocker.id }],
+              resolutions: [{ blockerId: resolved.blocker.id }],
+            },
+            latestResolvedBlockerId: resolved.blocker.id,
+          });
 
           const history = yield* validation.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
@@ -1595,7 +1547,8 @@ describe("repository SQL storage", () => {
       withTemporaryState((input) =>
         Effect.gen(function* () {
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const validation = yield* openSqliteChangeValidationPersistence();
+          const changes = yield* openSqliteChangeTestPorts();
+          const validation = yield* openSqliteChangeValidationTestPorts();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1605,30 +1558,24 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T17:00:00.000Z",
           });
           if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-          const decisions = [
-            {
-              id: "decision-1",
-              changeId: captured.changeId,
-              sequence: 1,
-              recordedAt: "2026-07-25T17:01:00.000Z",
-              choice: "Keep rationale separate from intent",
-              rationale: "Preserve rationale separately from approved intent.",
-            },
-            {
-              id: "decision-2",
-              changeId: captured.changeId,
-              sequence: 2,
-              recordedAt: "2026-07-25T17:02:00.000Z",
-              choice: "Use the current snapshot schema",
-              rationale: "Reject retired content without rewriting stored rows.",
-            },
-          ];
+          yield* changes.recordImplementationDecision({
+            changeId: captured.changeId,
+            choice: "Keep rationale separate from intent",
+            rationale: "Preserve rationale separately from approved intent.",
+            now: "2026-07-25T17:01:00.000Z",
+          });
+          yield* changes.recordImplementationDecision({
+            changeId: captured.changeId,
+            choice: "Use the current snapshot schema",
+            rationale: "Reject retired content without rewriting stored rows.",
+            now: "2026-07-25T17:02:00.000Z",
+          });
+          const decisions = yield* changes.listImplementationDecisions(captured.changeId);
           const started = yield* validation.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
             policy: { checks: [], copyFiles: [], specialistReviews: [] },
-            implementationDecisions: decisions,
             now: "2026-07-25T17:03:00.000Z",
           });
           if (started.reused || "blocked" in started)
@@ -1654,7 +1601,7 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const validation = yield* openSqliteChangeValidationPersistence();
+          const validation = yield* openSqliteChangeValidationTestPorts();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1723,8 +1670,8 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const changes = yield* openSqliteChangeTestPorts();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1774,7 +1721,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1914,7 +1861,7 @@ describe("repository SQL storage", () => {
           );
           yield* Effect.scoped(
             Effect.gen(function* () {
-              const upgraded = yield* openSqliteChangePersistence();
+              const upgraded = yield* openSqliteChangeTestPorts();
               yield* installPublicationIdentity(
                 captured.changeId,
                 captured.candidateId,
@@ -2011,7 +1958,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/revision",
@@ -2632,7 +2579,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationPersistence();
+              const validation = yield* openSqliteChangeValidationTestPorts();
               const rows = yield* repository.operation(
                 "read repaired Validation Policy Snapshot text",
                 (sql) => sql<{ readonly id: string; readonly policySnapshot: string }>`
@@ -2705,7 +2652,7 @@ describe("repository SQL storage", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            const upgraded = yield* openSqliteChangePersistence();
+            const upgraded = yield* openSqliteChangeTestPorts();
             expect(yield* upgraded.getChangeById(created.change.id)).toMatchObject({
               id: created.change.id,
               state: "open",
@@ -2817,7 +2764,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationPersistence();
+              const validation = yield* openSqliteChangeValidationTestPorts();
               const findings = yield* validation.listFindings("run-severity");
               expect(findings).toEqual([
                 {
@@ -2893,7 +2840,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangePersistence();
+              const changes = yield* openSqliteChangeTestPorts();
               const session = yield* changes.getReviewerSession("change-session", "acceptance");
               expect(session).toEqual({
                 changeId: "change-session",
@@ -2977,7 +2924,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangePersistence();
+              const changes = yield* openSqliteChangeTestPorts();
               const session = yield* changes.getReviewerSession(
                 "change-session-retained",
                 "acceptance",
@@ -3041,7 +2988,7 @@ describe("repository SQL storage", () => {
     withTemporaryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         yield* repository.operation("insert transcript Changes", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -3126,7 +3073,7 @@ describe("repository SQL storage", () => {
     withTemporaryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         yield* repository.operation("insert transcript Change", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -3300,7 +3247,7 @@ describe("repository SQL storage", () => {
                 (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
               );
               expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
-              const changes = yield* openSqliteChangePersistence();
+              const changes = yield* openSqliteChangeTestPorts();
               const stored = yield* changes.getChangeById("change-with-failure");
               expect(stored).toMatchObject({
                 id: "change-with-failure",
@@ -3416,7 +3363,7 @@ describe("repository SQL storage", () => {
                   `,
                 );
                 expect(tables).toEqual([]);
-                const changes = yield* openSqliteChangePersistence();
+                const changes = yield* openSqliteChangeTestPorts();
                 const stored = yield* changes.getChangeById("change-with-context");
                 expect(stored?.acceptanceContext).toEqual({
                   version: 1,
@@ -3512,7 +3459,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangePersistence();
+              const changes = yield* openSqliteChangeTestPorts();
               const decisions = yield* changes.listImplementationDecisions("change-decisions");
               expect(decisions).toEqual([
                 {
@@ -3748,7 +3695,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const started = yield* starts.create({
           id: "change-malformed",
           repositoryCommonDirectory: input.commonDirectory,

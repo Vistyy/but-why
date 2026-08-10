@@ -12,10 +12,17 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
+import type {
+  ActiveValidationRunPort,
+  CandidateValidationExecutionPort,
+  ChangeValidationReadPort,
+  ValidationArtifactLifecyclePort,
+  ValidationRunAbandonmentPort,
+} from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   candidateReadColumns,
@@ -41,62 +48,65 @@ import {
 } from "./sqliteCandidateValidationReadModel.js";
 import {
   decodeImplementationBlockerHistory,
+  decodeImplementationDecisions,
   implementationBlockerReadColumns,
   latestResolvedBlockerId,
   type UnknownImplementationBlockerRow,
+  type UnknownImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
 import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
 
-export const openSqliteChangeValidationPersistence = (): Effect.Effect<
-  ChangeValidationPersistence,
-  never,
-  RepositorySql
-> =>
-  Effect.map(RepositorySql, (repository) => ({
-    getCandidateById: (candidateId) =>
-      repository.transaction("read Candidate for validation history", (sql) =>
-        readCandidateById(sql, candidateId, "read Candidate for validation history"),
-      ),
-    listCandidatesForChange: (changeId) =>
-      repository.transaction("list Candidates for validation history", (sql) =>
-        readCandidatesForChange(sql, changeId, "list Candidates for validation history"),
-      ),
-    listRunIdsForChange: (changeId) =>
-      repository.transaction("list Candidate Validation Run IDs", (sql) =>
-        listRunIdsForChange(sql, changeId),
-      ),
-    startOrReuse: (input) =>
-      repository.transactionImmediate("start Candidate Validation Run", (sql) =>
-        startOrReuse(sql, input),
-      ),
-    complete: (input) =>
-      repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
-        complete(sql, input),
-      ),
-    getActiveForChange: (changeId) =>
-      repository.transaction("read Active Candidate Validation Run", (sql) =>
-        getActiveForChange(sql, changeId),
-      ),
-    getAbandonmentContext: (validationRunId) =>
-      repository.transaction("read Candidate Validation Run abandonment context", (sql) =>
-        getAbandonmentContext(sql, validationRunId),
-      ),
-    abandon: (input) =>
-      repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
-        abandon(sql, input),
-      ),
-    getRunById: (validationRunId) =>
-      repository.transaction("read Candidate Validation Run", (sql) =>
-        getRunById(sql, validationRunId),
-      ),
-    listRunsForCandidate: (candidateId) =>
-      repository.transaction("list Candidate Validation Runs", (sql) =>
-        listRunsForCandidate(sql, candidateId),
-      ),
-    recordWorkspaceSetup: (input) =>
-      repository.operation("record Candidate validation workspace setup", (sql) =>
-        Effect.asVoid(sql`
+const makeSqliteChangeValidationAdapter = (
+  repository: import("effect").Context.Tag.Service<typeof RepositorySql>,
+): CandidateValidationExecutionPort &
+  ChangeValidationReadPort &
+  ActiveValidationRunPort &
+  ValidationRunAbandonmentPort &
+  ValidationArtifactLifecyclePort => ({
+  getCandidateById: (candidateId) =>
+    repository.transaction("read Candidate for validation history", (sql) =>
+      readCandidateById(sql, candidateId, "read Candidate for validation history"),
+    ),
+  listCandidatesForChange: (changeId) =>
+    repository.transaction("list Candidates for validation history", (sql) =>
+      readCandidatesForChange(sql, changeId, "list Candidates for validation history"),
+    ),
+  listRunIdsForChange: (changeId) =>
+    repository.transaction("list Candidate Validation Run IDs", (sql) =>
+      listRunIdsForChange(sql, changeId),
+    ),
+  startOrReuse: (input) =>
+    repository.transactionImmediate("start Candidate Validation Run", (sql) =>
+      startOrReuse(sql, input),
+    ),
+  complete: (input) =>
+    repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
+      complete(sql, input),
+    ),
+  getActiveForChange: (changeId) =>
+    repository.transaction("read Active Candidate Validation Run", (sql) =>
+      getActiveForChange(sql, changeId),
+    ),
+  getAbandonmentContext: (validationRunId) =>
+    repository.transaction("read Candidate Validation Run abandonment context", (sql) =>
+      getAbandonmentContext(sql, validationRunId),
+    ),
+  abandon: (input) =>
+    repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
+      abandon(sql, input),
+    ),
+  getRunById: (validationRunId) =>
+    repository.transaction("read Candidate Validation Run", (sql) =>
+      getRunById(sql, validationRunId),
+    ),
+  listRunsForCandidate: (candidateId) =>
+    repository.transaction("list Candidate Validation Runs", (sql) =>
+      listRunsForCandidate(sql, candidateId),
+    ),
+  recordWorkspaceSetup: (input) =>
+    repository.operation("record Candidate validation workspace setup", (sql) =>
+      Effect.asVoid(sql`
           INSERT INTO candidate_validation_workspace_setups (
             validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
             cleanup_worktree, cleanup_temp_ref, created_at
@@ -114,10 +124,10 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
             cleanup_temp_ref = excluded.cleanup_temp_ref,
             created_at = excluded.created_at
         `),
-      ),
-    recordToolingFailure: (input) =>
-      repository.operation("record Candidate validation Tooling Failure", (sql) =>
-        Effect.asVoid(sql`
+    ),
+  recordToolingFailure: (input) =>
+    repository.operation("record Candidate validation Tooling Failure", (sql) =>
+      Effect.asVoid(sql`
           INSERT INTO candidate_validation_tooling_failures (
             validation_run_id, error_kind, operation_name, error_message, created_at
           ) VALUES (
@@ -125,48 +135,110 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
             ${input.errorMessage}, ${input.now}
           )
         `),
-      ),
-    recordPrepareRound: (input) =>
-      repository.transactionImmediate("record Candidate validation Prepare round", (sql) =>
-        recordRound(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
-      ),
-    recordCheckRound: (input) =>
-      repository.transactionImmediate("record Candidate validation Check round", (sql) =>
-        recordRound(sql, { ...input, phase: validationPhase.checks }),
-      ),
-    recordAcceptanceRound: (input) =>
-      repository.transactionImmediate("record Candidate Acceptance Review round", (sql) =>
-        recordRound(sql, {
-          ...input,
-          phase: validationPhase.acceptanceReview,
-          producer: "acceptance",
-        }),
-      ),
-    recordSpecialistRound: (input) =>
-      repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
-        recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
-      ),
-    listRounds: (validationRunId) =>
-      repository.transaction("list Candidate validation rounds", (sql) =>
-        listRounds(sql, validationRunId),
-      ),
-    listFindings: (validationRunId) =>
-      repository.transaction("list Candidate validation Findings", (sql) =>
-        listFindings(sql, validationRunId),
-      ),
-    listPreviousCandidateReviewerFindings: (input) =>
-      repository.transaction("list previous Candidate reviewer Findings", (sql) =>
-        listPreviousCandidateReviewerFindings(sql, input),
-      ),
-    listToolingFailures: (validationRunId) =>
-      repository.transaction("list Candidate validation Tooling Failures", (sql) =>
-        listToolingFailures(sql, validationRunId),
-      ),
-    listArtifacts: (validationRunId) =>
-      repository.transaction("list Candidate validation Artifacts", (sql) =>
-        listArtifacts(sql, validationRunId),
-      ),
-  }));
+    ),
+  recordPrepareRound: (input) =>
+    repository.transactionImmediate("record Candidate validation Prepare round", (sql) =>
+      recordRound(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
+    ),
+  recordCheckRound: (input) =>
+    repository.transactionImmediate("record Candidate validation Check round", (sql) =>
+      recordRound(sql, { ...input, phase: validationPhase.checks }),
+    ),
+  recordAcceptanceRound: (input) =>
+    repository.transactionImmediate("record Candidate Acceptance Review round", (sql) =>
+      recordRound(sql, {
+        ...input,
+        phase: validationPhase.acceptanceReview,
+        producer: "acceptance",
+      }),
+    ),
+  recordSpecialistRound: (input) =>
+    repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
+      recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
+    ),
+  listRounds: (validationRunId) =>
+    repository.transaction("list Candidate validation rounds", (sql) =>
+      listRounds(sql, validationRunId),
+    ),
+  listFindings: (validationRunId) =>
+    repository.transaction("list Candidate validation Findings", (sql) =>
+      listFindings(sql, validationRunId),
+    ),
+  listPreviousCandidateReviewerFindings: (input) =>
+    repository.transaction("list previous Candidate reviewer Findings", (sql) =>
+      listPreviousCandidateReviewerFindings(sql, input),
+    ),
+  listToolingFailures: (validationRunId) =>
+    repository.transaction("list Candidate validation Tooling Failures", (sql) =>
+      listToolingFailures(sql, validationRunId),
+    ),
+  listArtifacts: (validationRunId) =>
+    repository.transaction("list Candidate validation Artifacts", (sql) =>
+      listArtifacts(sql, validationRunId),
+    ),
+});
+
+export const openSqliteCandidateValidationExecutionPort = () =>
+  Effect.map(RepositorySql, (repository) => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      startOrReuse: adapter.startOrReuse,
+      complete: adapter.complete,
+      recordWorkspaceSetup: adapter.recordWorkspaceSetup,
+      recordToolingFailure: adapter.recordToolingFailure,
+      recordPrepareRound: adapter.recordPrepareRound,
+      recordCheckRound: adapter.recordCheckRound,
+      recordAcceptanceRound: adapter.recordAcceptanceRound,
+      recordSpecialistRound: adapter.recordSpecialistRound,
+      listRounds: adapter.listRounds,
+      listFindings: adapter.listFindings,
+      listPreviousCandidateReviewerFindings: adapter.listPreviousCandidateReviewerFindings,
+      listToolingFailures: adapter.listToolingFailures,
+      listArtifacts: adapter.listArtifacts,
+    };
+  });
+
+export const openSqliteChangeValidationReadPort = () =>
+  Effect.map(RepositorySql, (repository) => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      getCandidateById: adapter.getCandidateById,
+      listCandidatesForChange: adapter.listCandidatesForChange,
+      getRunById: adapter.getRunById,
+      listRunsForCandidate: adapter.listRunsForCandidate,
+      listRounds: adapter.listRounds,
+      listFindings: adapter.listFindings,
+      listToolingFailures: adapter.listToolingFailures,
+      listArtifacts: adapter.listArtifacts,
+    };
+  });
+
+export const openSqliteActiveValidationRunPort = () =>
+  Effect.map(RepositorySql, (repository) => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      getActiveForChange: adapter.getActiveForChange,
+    };
+  });
+
+export const openSqliteValidationRunAbandonmentPort = () =>
+  Effect.map(RepositorySql, (repository) => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      getAbandonmentContext: adapter.getAbandonmentContext,
+      getRunById: adapter.getRunById,
+      recordToolingFailure: adapter.recordToolingFailure,
+      abandon: adapter.abandon,
+    };
+  });
+
+export const openSqliteValidationArtifactLifecyclePort = () =>
+  Effect.map(RepositorySql, (repository) => {
+    const adapter = makeSqliteChangeValidationAdapter(repository);
+    return {
+      listRunIdsForChange: adapter.listRunIdsForChange,
+    };
+  });
 
 type CandidateOwnerRow = UnknownCandidateRow & { readonly storedChangeId: unknown };
 
@@ -285,6 +357,64 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         "Candidate validation requires the exact stored Candidate identity.",
       );
     }
+    const currentCandidateRows = yield* sql<{ readonly id: unknown }>`
+      SELECT id FROM candidates
+      WHERE change_id = ${candidate.changeId}
+      ORDER BY created_at DESC, id DESC LIMIT 1
+    `;
+    const currentCandidateId = yield* decodePersisted("start Candidate Validation Run", () => {
+      const row = currentCandidateRows[0];
+      if (row === undefined) throw new Error("Candidate validation requires a current Candidate");
+      return decodeStoredString(row.id, "current Candidate ID");
+    });
+    if (currentCandidateId !== candidate.id) {
+      return yield* invalidData(
+        "start Candidate Validation Run",
+        "Candidate validation requires the current Candidate for its Change.",
+      );
+    }
+
+    const changeRows = yield* sql<{
+      readonly id: unknown;
+      readonly state: unknown;
+      readonly taskId: unknown;
+      readonly acceptanceContext: unknown;
+    }>`SELECT id, state, task_id AS taskId, acceptance_context AS acceptanceContext
+       FROM changes WHERE id = ${candidate.changeId}`;
+    const changeAuthority = yield* decodePersisted("start Candidate Validation Run", () => {
+      const row = changeRows[0];
+      if (row === undefined || decodeStoredString(row.id, "Change ID") !== candidate.changeId) {
+        throw new Error("Candidate validation requires the current owning Change");
+      }
+      if (decodeStoredString(row.state, "Change state") !== "open") {
+        throw new Error("Candidate validation requires an open Change");
+      }
+      const taskId = row.taskId;
+      if (taskId !== null && typeof taskId !== "string") {
+        throw new Error("Change Task ID must be stored as text or null");
+      }
+      const encodedAcceptanceContext = row.acceptanceContext;
+      if (encodedAcceptanceContext !== null && typeof encodedAcceptanceContext !== "string") {
+        throw new Error("Change Acceptance Context must be stored as text or null");
+      }
+      if ((taskId === null) !== (encodedAcceptanceContext === null)) {
+        throw new Error("Change Task and Acceptance Context authority is incomplete");
+      }
+      return {
+        acceptanceContext:
+          encodedAcceptanceContext === null
+            ? null
+            : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
+      };
+    });
+    const decisionRows = yield* sql<UnknownImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
+        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
+      FROM implementation_decisions WHERE change_id = ${candidate.changeId}
+    `;
+    const implementationDecisions = yield* decodePersisted("start Candidate Validation Run", () =>
+      decodeImplementationDecisions(decisionRows, candidate.changeId),
+    );
 
     const blockerRows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns}
@@ -299,15 +429,28 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       return { reused: false, blocked: true } satisfies StartCandidateValidationRunResult;
     }
     const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
+    const policy = {
+      ...input.policy,
+      ...(changeAuthority.acceptanceContext === null
+        ? {}
+        : { acceptanceContext: changeAuthority.acceptanceContext }),
+    };
+    const authority = {
+      candidate,
+      policy,
+      implementationDecisions,
+      blockerHistory,
+      latestResolvedBlockerId: currentLatestResolvedBlockerId,
+    };
     const policySnapshot = yield* Effect.try({
-      try: () => encodeSqliteCandidateValidationPolicy(input.policy),
+      try: () => encodeSqliteCandidateValidationPolicy(policy),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "start Candidate Validation Run",
           cause,
         }),
     });
-    const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
+    const decisionsSnapshot = JSON.stringify(implementationDecisions);
 
     const historyRows = yield* sql.unsafe<UnknownValidationRunRow>(
       `SELECT ${validationRunReadColumns}
@@ -338,6 +481,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         reused: true,
         validationRunId: reusable.record.id,
         outcome: "passed",
+        authority,
       } satisfies StartCandidateValidationRunResult;
     }
 
@@ -370,12 +514,16 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
           validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
           cleanup_worktree, cleanup_temp_ref, created_at
         ) VALUES (
-          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${input.headSha}, ${input.headSha},
+          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${candidate.headSha}, ${candidate.headSha},
           ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
         )
       `;
     }
-    return { reused: false, validationRunId } satisfies StartCandidateValidationRunResult;
+    return {
+      reused: false,
+      validationRunId,
+      authority,
+    } satisfies StartCandidateValidationRunResult;
   });
 
 const complete = (

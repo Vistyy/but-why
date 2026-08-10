@@ -2,17 +2,32 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+  ChangeReviewerTranscriptPort,
+} from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+
+type ChangeTestPorts = CandidatePublicationPort &
+  ChangeAuthorityPort &
+  ChangeDeliveryPort &
+  ChangeReadPort &
+  ChangeReviewerSessionPort &
+  ChangeReviewerTranscriptPort;
 
 const now = "2026-07-24T10:00:00.000Z";
 
@@ -58,7 +73,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -99,6 +114,7 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: changes,
               cleanup: () => {
                 throw new Error("Open Changes must not be cleaned");
@@ -149,7 +165,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -205,6 +221,7 @@ describe("by change reconcile", () => {
                 },
               },
               cleanupTerminal: openTerminalCleanup({
+                ...noOpTerminalCleanupDependencies,
                 persistence: changes,
                 cleanup: () => {
                   throw new Error("Rejected Changes must not be cleaned");
@@ -259,7 +276,7 @@ describe("by change reconcile", () => {
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
 
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestPorts();
         const publication = {
           changeId: created.change.id,
           candidateId: "candidate-1",
@@ -307,6 +324,7 @@ describe("by change reconcile", () => {
             },
           },
           cleanupTerminal: openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: changes,
             cleanup: () => cleanupResults[cleanupAttempts++] ?? { state: "complete" },
           }),
@@ -388,7 +406,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -429,6 +447,7 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: changes,
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -492,7 +511,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const raised = yield* changes.raiseImplementationBlocker({
             changeId: created.change.id,
             content: "Wait for an external decision that never arrived.",
@@ -539,6 +558,7 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: changes,
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -606,7 +626,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -628,7 +648,7 @@ describe("by change reconcile", () => {
 
           let pullRequestObservations = 0;
           let capturedInput: CompleteMergedChangeInput | undefined;
-          const persistence: ChangePersistence = {
+          const persistence: ChangeTestPorts = {
             ...changes,
             completeMergedChange: (input) => {
               capturedInput = input;
@@ -660,6 +680,7 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: changes,
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),

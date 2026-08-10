@@ -2,6 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
+import { withChangeReconciliation } from "../../change/loadChangeLifecycle.js";
 import type { CliResult } from "../../cliResults.js";
 import { usageError } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
@@ -22,10 +23,12 @@ export const runReconcile = (
       }),
     );
   }
-  return support.withChanges(environment, (changes) =>
-    Effect.map(
-      changes.reconcile(changeId, environment.now().toISOString(), command.discardWork),
-      (result) => reconcileResult(changeId, result, command.discardWork),
+  return support.loadedChangeOperation(
+    withChangeReconciliation(support.changeOperationInput(environment), (reconcile) =>
+      Effect.map(
+        reconcile(changeId, environment.now().toISOString(), command.discardWork),
+        (result) => reconcileResult(changeId, result, command.discardWork),
+      ),
     ),
   );
 };

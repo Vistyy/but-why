@@ -12,8 +12,9 @@ import {
   type ReviewerTranscript,
 } from "../../src/change/reviewerSession/reviewerTranscript.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const sessionFile = (producerRoot: string, relativePath: string, sessionId: string): string => {
@@ -172,7 +173,7 @@ describe("Reviewer Transcript discovery", () => {
       withTemporaryState((input) =>
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestPorts();
           const changeId = "change-e2e";
           yield* repository.operation(
             "insert terminal Change",
@@ -212,6 +213,7 @@ describe("Reviewer Transcript discovery", () => {
           });
 
           const cleanup = openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
             persistence: changes,
             cleanup: () => ({ state: "complete" as const, blockingReason: null }),
             indexTranscripts: openReviewerTranscriptIndex({ persistence: changes }),

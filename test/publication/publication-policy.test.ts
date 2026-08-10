@@ -3,22 +3,38 @@ import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+  ChangeReviewerTranscriptPort,
+} from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
+import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import {
+  type ChangeValidationTestPorts,
+  openSqliteChangeValidationTestPorts,
+} from "../support/changeValidationPorts.js";
 import { cloneInitializedRepositoryState } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+
+type ChangeTestPorts = CandidatePublicationPort &
+  ChangeAuthorityPort &
+  ChangeDeliveryPort &
+  ChangeReadPort &
+  ChangeReviewerSessionPort &
+  ChangeReviewerTranscriptPort;
 
 const now = "2026-07-22T10:00:00.000Z";
 const policy = { checks: [], copyFiles: [], specialistReviews: [] };
@@ -58,7 +74,7 @@ const publicationTemplateLayer = Layer.effect(
           WHERE id = ${captured.changeId}
         `,
         );
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         return yield* completeValidation(validation, captured, now);
       }),
     );
@@ -73,8 +89,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const requests: unknown[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({
               ok: true,
@@ -114,8 +130,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let readbacks = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -166,8 +182,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let createCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => currentHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Retry publication" }),
           },
@@ -213,8 +229,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let historyAvailable = false;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () =>
               historyAvailable
@@ -260,12 +276,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           fixture.validation,
           fixture.captured,
           "2026-07-22T10:02:00.000Z",
-          [recorded.decision, second.decision],
         );
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Decision publication" }),
           },
@@ -320,11 +335,21 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         WHERE id = ${fixture.captured.changeId}
       `,
         );
+        const acceptanceContext = {
+          version: 1 as const,
+          title: "Publish exact Candidate",
+          description: "Description",
+        };
+        const validationRunId = yield* completeValidation(
+          fixture.validation,
+          fixture.captured,
+          "2026-07-22T10:03:00.000Z",
+        );
         const requests: unknown[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => {
               throw new Error("Task-backed metadata must not read commit history");
@@ -332,7 +357,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           },
           github: successfulCreation(requests),
         });
-        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            validationRunId,
+            policy: { ...policy, acceptanceContext },
+          }),
+        ).toMatchObject({ ok: true });
         expect(requests).toContainEqual(
           expect.objectContaining({
             title: "Publish exact Candidate",
@@ -352,8 +383,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -434,8 +465,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let readBacks = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -501,8 +532,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updateCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -563,8 +594,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updateCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -627,8 +658,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -684,8 +715,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updateCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -732,8 +763,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updateCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -783,8 +814,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let remote: GitHubPullRequest | undefined = pullRequest(branchHead);
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -837,8 +868,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let createCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({
               ok: true,
@@ -897,8 +928,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const remote = pullRequest(fixture.captured.headSha);
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             containsCommit: () => false,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
@@ -942,8 +973,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let creates = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -998,8 +1029,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updates = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -1056,8 +1087,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updates = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             containsCommit: () => true,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
@@ -1105,8 +1136,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           let updates = 0;
           const publication = openCandidatePublication({
             changePersistence: fixture.changes,
-            validationPersistence: fixture.validation,
             git: {
+              ...publicationGitDefaults,
               readBranchHead: () => fixture.captured.headSha,
               readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
             },
@@ -1133,13 +1164,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             now: "2026-07-25T15:20:00.000Z",
           });
           expect(recorded.ok).toBe(true);
-          const decisions =
-            (yield* fixture.changes.listImplementationDecisions(fixture.captured.changeId)) ?? [];
           const freshRunId = yield* completeValidation(
             fixture.validation,
             fixture.captured,
             "2026-07-25T15:21:00.000Z",
-            decisions,
           );
 
           const refreshed = yield* publication.publish({
@@ -1171,8 +1199,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let createCalls = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => branchHead,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -1234,8 +1262,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       Effect.gen(function* () {
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -1273,8 +1301,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let creates = 0;
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
-          validationPersistence: fixture.validation,
           git: {
+            ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
@@ -1306,8 +1334,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 type Fixture = {
   readonly root: string;
   readonly captured: Captured;
-  readonly changes: ChangePersistence;
-  readonly validation: ChangeValidationPersistence;
+  readonly changes: ChangeTestPorts;
+  readonly validation: ChangeValidationTestPorts;
   readonly validationRunId: string;
 };
 
@@ -1318,8 +1346,8 @@ const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, Reposi
     return yield* withTestRepository(
       root,
       Effect.gen(function* () {
-        const changes = yield* openSqliteChangePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const changes = yield* openSqliteChangeTestPorts();
+        const validation = yield* openSqliteChangeValidationTestPorts();
         return yield* use({
           root,
           captured: template.captured,
@@ -1331,18 +1359,12 @@ const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, Reposi
     );
   });
 
-function completeValidation(
-  validation: ChangeValidationPersistence,
-  captured: Captured,
-  at: string,
-  implementationDecisions: readonly import("../../src/change/implementationDecision.js").ImplementationDecision[] = [],
-) {
+function completeValidation(validation: ChangeValidationTestPorts, captured: Captured, at: string) {
   return Effect.gen(function* () {
     const run = yield* validation.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
       policy,
-      implementationDecisions,
       now: at,
     });
     if (run.reused) throw new Error("Expected a new Validation Run");
@@ -1379,9 +1401,7 @@ const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
       headSha,
       trackedTreeMatchesChangeBase: false,
     };
-    const decisions =
-      (yield* fixture.changes.listImplementationDecisions(fixture.captured.changeId)) ?? [];
-    const validationRunId = yield* completeValidation(fixture.validation, captured, at, decisions);
+    const validationRunId = yield* completeValidation(fixture.validation, captured, at);
     return { captured, validationRunId };
   });
 
@@ -1417,3 +1437,4 @@ const successfulCreation = (requests: unknown[]) => ({
     throw new Error("Unexpected PR update");
   },
 });
+const publicationGitDefaults = { containsCommit: () => true };

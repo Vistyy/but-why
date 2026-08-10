@@ -10,6 +10,7 @@ import {
   type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -213,7 +214,8 @@ describe("Candidate validation", () => {
         writeFileSync(join(candidateCheckout, "candidate.txt"), "second\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "second candidate");
-        const second = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        const secondNow = "2026-07-15T12:01:00.000Z";
+        const second = yield* captureLocalCandidate({ cwd: candidateCheckout, now: secondNow });
         expect(second.ok).toBe(true);
         if (!second.ok) return;
         const secondPolicy = validationPolicy(second.headSha, "second");
@@ -223,22 +225,22 @@ describe("Candidate validation", () => {
           changeBaseSha: second.changeBaseSha,
           headSha: second.headSha,
           policy: secondPolicy,
-          now,
+          now: secondNow,
         });
         expect(secondResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
         if (!secondResult.ok) throw new Error("Expected a passed second Validation Run");
         expect(secondResult).not.toMatchObject({ validationRunId: firstResult.validationRunId });
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
 
-        const reused = yield* validateCandidate(validation, {
+        const historicalCandidateError = yield* validateCandidate(validation, {
           changeId: first.changeId,
           candidateId: first.candidateId,
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
           policy: firstPolicy,
-          now,
-        });
-        expect(reused).toMatchObject({ ok: true, outcome: "passed", reused: true });
+          now: secondNow,
+        }).pipe(Effect.flip);
+        expect(historicalCandidateError).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
 
         const workspaces = yield* withTestRepository(
@@ -289,6 +291,27 @@ describe("Candidate validation", () => {
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout, now });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
+        yield* withTestRepository(
+          mainCheckout,
+          Effect.flatMap(RepositorySql, (repository) =>
+            repository.operation("install current Acceptance Context", (sql) =>
+              Effect.gen(function* () {
+                yield* sql`
+                  INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
+                  VALUES ('BY-1', 1, 'Validate the fixed Gate',
+                    'Run each eligible phase in its fixed order.', 'todo', ${now}, ${now})
+                `;
+                yield* sql`
+                  UPDATE changes SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({
+                    version: 1,
+                    title: "Validate the fixed Gate",
+                    description: "Run each eligible phase in its fixed order.",
+                  })} WHERE id = ${captured.changeId}
+                `;
+              }),
+            ),
+          ),
+        );
         const callLog = join(createTestWorkspace(), "gate-calls");
         const reviewWorkspaces: string[] = [];
         const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(
@@ -343,11 +366,6 @@ describe("Candidate validation", () => {
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
-          acceptanceContext: {
-            version: 1,
-            title: "Validate the fixed Gate",
-            description: "Run each eligible phase in its fixed order.",
-          },
           policy: {
             prepare: {
               command: `gitdir="$(git rev-parse --git-dir)"; printf P >> "${callLog}"; printf P > "$gitdir/.gate-order"`,

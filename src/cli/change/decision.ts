@@ -38,7 +38,7 @@ export const runDecision = (
   if (command.action === "list") {
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.decisions(command.changeId).pipe(
+    return loaded.queries.decisions(command.changeId).pipe(
       Effect.map((decisions) =>
         decisions === undefined
           ? support.changeNotFound()
@@ -51,7 +51,7 @@ export const runDecision = (
   if (!validation.ok) return Effect.succeed(decisionInputError(validation.code));
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-  return loaded.inspection
+  return loaded.authority
     .addDecision({
       changeId: command.changeId,
       choice: command.choice,

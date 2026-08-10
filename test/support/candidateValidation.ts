@@ -6,15 +6,17 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   CandidateReviewerAgentRuntime,
+  CandidateValidationExecution,
   CandidateValidationLive,
   CandidateValidationPaths,
-  CandidateValidationPersistence,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import {
+  type ChangeValidationTestPorts,
+  openSqliteChangeValidationTestPorts,
+} from "../support/changeValidationPorts.js";
 
 export const candidateValidationForTest = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
@@ -26,8 +28,8 @@ export const candidateValidationForTest = (input: {
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
-    CandidateValidationPersistence,
-    openSqliteChangeValidationPersistence(),
+    CandidateValidationExecution,
+    openSqliteChangeValidationTestPorts(),
   ).pipe(Layer.provide(repositoryLayer));
   const layer = CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -49,9 +51,9 @@ export const candidateValidationForTest = (input: {
     ),
   );
   const withPersistence = <A>(
-    use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, unknown>,
+    use: (persistence: ChangeValidationTestPorts) => Effect.Effect<A, unknown>,
   ) =>
-    Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+    Effect.flatMap(openSqliteChangeValidationTestPorts(), use).pipe(
       Effect.provide(repositoryLayer),
     );
 

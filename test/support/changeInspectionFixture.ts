@@ -237,6 +237,20 @@ export const createValidationRunFixture = (
     Effect.gen(function* () {
       const id = randomUUID();
       const repository = yield* RepositorySql;
+      const authority = yield* repository.operation(
+        "read Validation Run authority fixture",
+        (sql) => sql<{ readonly acceptance_context: string | null }>`
+          SELECT acceptance_context FROM changes WHERE id = ${input.changeId}
+        `,
+      );
+      const acceptanceContext = authority[0]?.acceptance_context;
+      const policy = {
+        checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }],
+        copyFiles: [],
+        ...(acceptanceContext === null || acceptanceContext === undefined
+          ? {}
+          : { acceptanceContext: JSON.parse(acceptanceContext) as unknown }),
+      };
       yield* repository.operation(
         "create Validation Run inspection fixture",
         (sql) => sql`
@@ -244,7 +258,7 @@ export const createValidationRunFixture = (
             id, candidate_id, policy_snapshot, implementation_decisions,
             latest_resolved_blocker_id, state, outcome, created_at, updated_at
           ) VALUES (
-            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }], copyFiles: [] })}, '[]',
+            ${id}, ${input.candidateId}, ${JSON.stringify(policy)}, '[]',
             (
               SELECT id FROM implementation_blockers
               WHERE change_id = ${input.changeId} AND resolved_at <= ${input.createdAt}
