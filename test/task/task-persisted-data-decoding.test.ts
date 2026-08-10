@@ -154,6 +154,21 @@ it.scoped("rejects unsafe Task ordering identity before next-ID derivation", () 
   ),
 );
 
+it.scoped("rejects a non-integer maximum before next-ID derivation", () =>
+  withCorruptedTaskState((tasks) =>
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation("corrupt maximum Task numeric identity", (sql) =>
+        sql.unsafe("UPDATE tasks SET numeric_id = x'00' WHERE id = 'BY-1'"),
+      );
+
+      yield* expectPersistedDataInvalid(
+        tasks.createTask({ title: "Next", description: "Next", now: secondNow }),
+      );
+    }),
+  ),
+);
+
 it.scoped("rejects a wrong Task scalar primitive before lookup and mutation policy", () =>
   withCorruptedTaskState((tasks) =>
     Effect.gen(function* () {
@@ -254,7 +269,7 @@ it.scoped("rejects an incomplete linked Implementation Blocker Resolution", () =
           resolution_id, resolution_recorded_at, resolution_content
         ) VALUES (
           'blocker-malformed', 'change-malformed-resolution', '${secondNow}', 'Question',
-          '${secondNow}', 'resolution-malformed', NULL, 'Partial resolution'
+          '${secondNow}', 'resolution-malformed', '${secondNow}', NULL
         )
       `),
       );

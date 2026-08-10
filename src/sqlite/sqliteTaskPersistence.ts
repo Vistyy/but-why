@@ -288,7 +288,12 @@ const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       FROM implementation_blockers
       JOIN changes ON changes.id = implementation_blockers.change_id
       WHERE changes.task_id = ${taskId}
-        AND implementation_blockers.resolution_content IS NOT NULL
+        AND (
+          implementation_blockers.resolved_at IS NOT NULL
+          OR implementation_blockers.resolution_id IS NOT NULL
+          OR implementation_blockers.resolution_recorded_at IS NOT NULL
+          OR implementation_blockers.resolution_content IS NOT NULL
+        )
       ORDER BY implementation_blockers.sequence ASC
     `;
     return yield* decodePersisted("read Task Context", () => {
@@ -542,18 +547,25 @@ const dependencyFacts = (
 
 const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownNumericIdRow>`
-      SELECT CAST(COALESCE(MAX(numeric_id), 0) + 1 AS TEXT) AS numericId,
-        typeof(COALESCE(MAX(numeric_id), 0) + 1) AS numericIdType
+    const rows = yield* sql<UnknownMaximumNumericIdRow>`
+      SELECT CAST(MAX(numeric_id) AS TEXT) AS maximumNumericId,
+        typeof(MAX(numeric_id)) AS maximumNumericIdType
       FROM tasks
     `;
-    return yield* decodePersisted("create Task", () =>
-      decodeStoredSqlitePositiveInteger(
-        rows[0]?.numericId,
-        rows[0]?.numericIdType,
-        "next Task numeric ID",
-      ),
-    );
+    return yield* decodePersisted("create Task", () => {
+      const row = rows[0];
+      const maximum =
+        row?.maximumNumericId === null && row.maximumNumericIdType === "null"
+          ? 0
+          : decodeStoredSqlitePositiveInteger(
+              row?.maximumNumericId,
+              row?.maximumNumericIdType,
+              "maximum Task numeric ID",
+            );
+      const next = maximum + 1;
+      if (!Number.isSafeInteger(next)) throw new Error("Next Task numeric ID must be safe");
+      return next;
+    });
   });
 
 const rowToTaskSummary = (
@@ -599,9 +611,9 @@ const invalidData = (operationName: string, message: string) =>
     }),
   );
 
-type UnknownNumericIdRow = {
-  readonly numericId: unknown;
-  readonly numericIdType: unknown;
+type UnknownMaximumNumericIdRow = {
+  readonly maximumNumericId: unknown;
+  readonly maximumNumericIdType: unknown;
 };
 
 type UnknownCountRow = {
