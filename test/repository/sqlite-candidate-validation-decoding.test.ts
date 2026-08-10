@@ -8,7 +8,29 @@ import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCa
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
-const policy = { checks: [], copyFiles: [], specialistReviews: [] } as const;
+const reviewerProfile = {
+  agentProfile: "test-reviewer",
+  scope: "global",
+  profile: { agentRuntime: "pi" },
+} as const;
+const policy = {
+  prepare: { command: "prepare", timeoutSeconds: 60 },
+  checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }],
+  copyFiles: [],
+  acceptanceReview: {
+    instructions: "Review acceptance.",
+    instructionsSource: "built_in",
+    profile: reviewerProfile,
+  },
+  specialistReviews: [
+    {
+      id: "security",
+      instructions: "Review security.",
+      instructionsSource: "repo",
+      profile: reviewerProfile,
+    },
+  ],
+} as const;
 const now = "2026-08-10T00:00:00.000Z";
 
 describe("SQLite Candidate and Validation read decoding", () => {
@@ -255,6 +277,14 @@ describe("SQLite Candidate and Validation read decoding", () => {
           ],
           now,
         });
+        yield* validation.recordCheckRound({
+          validationRunId: started.validationRunId,
+          producer: "types",
+          roundNumber: 1,
+          roundStatus: "passed",
+          artifactRecords: [],
+          now,
+        });
         yield* validation.complete({
           validationRunId: started.validationRunId,
           outcome: "blocked",
@@ -371,7 +401,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
         yield* repository.operation(
           "attach Finding to passed round",
           (sql) =>
-            sql`UPDATE candidate_validation_rounds SET status = 'passed' WHERE validation_run_id = ${started.validationRunId}`,
+            sql`UPDATE candidate_validation_rounds SET status = 'passed' WHERE validation_run_id = ${started.validationRunId} AND phase = 'acceptance_review'`,
         );
         expect(
           yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
@@ -388,7 +418,30 @@ describe("SQLite Candidate and Validation read decoding", () => {
         yield* repository.operation(
           "restore failed Finding round",
           (sql) =>
-            sql`UPDATE candidate_validation_rounds SET status = 'failed' WHERE validation_run_id = ${started.validationRunId}`,
+            sql`UPDATE candidate_validation_rounds SET status = 'failed' WHERE validation_run_id = ${started.validationRunId} AND phase = 'acceptance_review'`,
+        );
+
+        yield* repository.operation(
+          "install unconfigured Check producer",
+          (sql) =>
+            sql`UPDATE candidate_validation_rounds SET producer = 'retired-check' WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
+        );
+        expect(
+          yield* validation.listRounds(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* validation
+            .listPreviousCandidateReviewerFindings({
+              candidateId: current.candidateId,
+              phase: "acceptance_review",
+              producer: "acceptance",
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* repository.operation(
+          "restore Check producer",
+          (sql) =>
+            sql`UPDATE candidate_validation_rounds SET producer = 'types' WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
         );
 
         yield* repository.operation(

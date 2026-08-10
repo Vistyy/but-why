@@ -244,7 +244,7 @@ export const createValidationRunFixture = (
             id, candidate_id, policy_snapshot, implementation_decisions,
             latest_resolved_blocker_id, state, outcome, created_at, updated_at
           ) VALUES (
-            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [], copyFiles: [] })}, '[]',
+            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }], copyFiles: [] })}, '[]',
             NULL, ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
           )
         `,

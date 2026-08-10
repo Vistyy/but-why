@@ -7,6 +7,7 @@ import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
+  CandidateValidationRunRecord,
   RecordCandidateValidationCommandRoundInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
@@ -587,11 +588,23 @@ const listRounds = (sql: SqlClient.SqlClient, validationRunId: string) =>
       FROM candidate_validation_rounds
       WHERE validation_run_id = ${validationRunId}
     `;
-    return yield* decodePersisted("list Candidate validation rounds", () =>
+    const rounds = yield* decodePersisted("list Candidate validation rounds", () =>
       rows
         .map((row) => assertRunOwner(decodeValidationRound(row), validationRunId))
         .sort(compareRounds),
     );
+    if (rounds.length === 0) return rounds;
+    const run = yield* getRunById(sql, validationRunId);
+    if (run === undefined) {
+      return yield* invalidData(
+        "list Candidate validation rounds",
+        "Validation rounds belong to an unknown Run",
+      );
+    }
+    yield* decodePersisted("list Candidate validation rounds", () =>
+      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]])),
+    );
+    return rounds;
   });
 
 const listFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
@@ -687,6 +700,7 @@ const listPreviousCandidateReviewerFindings = (
           throw new Error("Validation round belongs to a foreign Run");
         return round;
       });
+      validateRoundPolicyRelationships(rounds, new Map(runs.map((run) => [run.id, run])));
       const findings = findingRows.map((row) => {
         const finding = decodeValidationFinding(row);
         if (!runIds.has(finding.validationRunId))
@@ -789,6 +803,27 @@ const compareRounds = (left: CandidateValidationRound, right: CandidateValidatio
   phaseOrder(left.phase) - phaseOrder(right.phase) ||
   left.roundNumber - right.roundNumber ||
   compareStrings(left.producer, right.producer);
+
+const validateRoundPolicyRelationships = (
+  rounds: readonly CandidateValidationRound[],
+  runs: ReadonlyMap<string, CandidateValidationRunRecord>,
+): void => {
+  for (const round of rounds) {
+    const run = runs.get(round.validationRunId);
+    if (run === undefined) throw new Error("Validation round belongs to an unknown Run");
+    const configured =
+      (round.phase === validationPhase.prepare && run.policy.prepare !== undefined) ||
+      (round.phase === validationPhase.checks &&
+        run.policy.checks.some((check) => check.id === round.producer)) ||
+      (round.phase === validationPhase.acceptanceReview &&
+        run.policy.acceptanceReview !== undefined) ||
+      (round.phase === validationPhase.specialistReview &&
+        (run.policy.specialistReviews ?? []).some(
+          (specialist) => specialist.id === round.producer,
+        ));
+    if (!configured) throw new Error("Validation round is not configured by its Run policy");
+  }
+};
 
 const compareEvidence = (
   left: CandidateValidationFinding,

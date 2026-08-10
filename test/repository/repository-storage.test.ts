@@ -2782,7 +2782,9 @@ describe("repository SQL storage", () => {
                       id, candidate_id, policy_snapshot, state, outcome,
                       created_at, updated_at
                     ) VALUES (
-                      'run-severity', 'candidate-severity', '{}', 'complete', 'passed',
+                      'run-severity', 'candidate-severity',
+                      '{"checks":[{"id":"quality","command":"just quality","timeoutSeconds":60}],"copyFiles":[]}',
+                      'complete', 'passed',
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
