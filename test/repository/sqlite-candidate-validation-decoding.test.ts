@@ -369,6 +369,29 @@ describe("SQLite Candidate and Validation read decoding", () => {
         );
 
         yield* repository.operation(
+          "attach Finding to passed round",
+          (sql) =>
+            sql`UPDATE candidate_validation_rounds SET status = 'passed' WHERE validation_run_id = ${started.validationRunId}`,
+        );
+        expect(
+          yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* validation
+            .listPreviousCandidateReviewerFindings({
+              candidateId: current.candidateId,
+              phase: "acceptance_review",
+              producer: "acceptance",
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* repository.operation(
+          "restore failed Finding round",
+          (sql) =>
+            sql`UPDATE candidate_validation_rounds SET status = 'failed' WHERE validation_run_id = ${started.validationRunId}`,
+        );
+
+        yield* repository.operation(
           "install malformed skipped history round",
           (sql) =>
             sql`UPDATE candidate_validation_rounds SET phase = 'retired_phase' WHERE validation_run_id = ${started.validationRunId}`,

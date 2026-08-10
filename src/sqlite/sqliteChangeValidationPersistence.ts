@@ -817,6 +817,7 @@ const findingRound = (
       candidate.producer === finding.producer,
   );
   if (round === undefined) throw new Error("Finding has no related Validation round");
+  if (round.status !== "failed") throw new Error("Finding belongs to a passed Validation round");
   return round.roundNumber;
 };
 
