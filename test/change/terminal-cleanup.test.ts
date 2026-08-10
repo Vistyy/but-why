@@ -508,7 +508,6 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
       ]);
     }),
   );
-
 });
 
 const pendingCleanup: ChangeCleanup = { state: "pending", blockingReason: null };
