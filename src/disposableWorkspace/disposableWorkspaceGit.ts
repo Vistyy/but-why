@@ -103,6 +103,164 @@ export const deleteDisposableWorkspaceRef = (
     : "removed";
 };
 
+export type ExactDisposableWorkspaceCleanupInput = {
+  readonly expectedTempRefName: string;
+  readonly expectedWorktreePath: string;
+  readonly expectedCommitSha: string;
+  readonly recordedTempRefName?: string;
+  readonly recordedWorktreePath?: string;
+};
+
+export type ExactDisposableWorkspaceCleanupResult = {
+  readonly worktree: DisposableWorkspaceCleanupState;
+  readonly tempRef: DisposableWorkspaceCleanupState;
+  readonly errorMessage?: string;
+};
+
+export const cleanupExactDisposableWorkspace = (
+  repoRoot: string,
+  input: ExactDisposableWorkspaceCleanupInput,
+): ExactDisposableWorkspaceCleanupResult => {
+  if (
+    input.recordedTempRefName !== input.expectedTempRefName ||
+    input.recordedWorktreePath === undefined ||
+    resolve(input.recordedWorktreePath) !== resolve(input.expectedWorktreePath)
+  ) {
+    return {
+      worktree: "failed",
+      tempRef: "failed",
+      errorMessage:
+        "Recorded Validation Workspace identity does not match its selected Validation Run.",
+    };
+  }
+
+  const tempRef = inspectExactTempRef(repoRoot, input.expectedTempRefName, input.expectedCommitSha);
+  const worktree = inspectExactWorktree(repoRoot, input);
+  if (tempRef === "failed" || worktree === "failed") {
+    return {
+      worktree: worktree === "ready" ? "failed" : worktree,
+      tempRef: tempRef === "ready" ? "failed" : tempRef,
+      errorMessage:
+        "Live Validation Workspace identity does not match its selected Validation Run.",
+    };
+  }
+
+  const cleanedWorktree =
+    worktree === "removed"
+      ? "removed"
+      : removeDisposableWorktree(repoRoot, input.expectedWorktreePath)
+        ? "removed"
+        : "failed";
+  const cleanedTempRef =
+    tempRef === "removed"
+      ? "removed"
+      : deleteExactDisposableWorkspaceRef(
+          repoRoot,
+          input.expectedTempRefName,
+          input.expectedCommitSha,
+        );
+
+  return {
+    worktree: cleanedWorktree,
+    tempRef: cleanedTempRef,
+    ...(cleanedWorktree === "failed" || cleanedTempRef === "failed"
+      ? { errorMessage: "Exact Validation Workspace cleanup did not complete." }
+      : {}),
+  };
+};
+
+type ExactResourceState = "ready" | DisposableWorkspaceCleanupState;
+
+const inspectExactTempRef = (
+  repoRoot: string,
+  tempRefName: string,
+  expectedCommitSha: string,
+): ExactResourceState => {
+  const inspected = git(repoRoot, [
+    "for-each-ref",
+    "--format=%(refname) %(objectname)",
+    "--",
+    tempRefName,
+  ]);
+  if (!inspected.ok) return "failed";
+
+  const matching = inspected.stdout
+    .trim()
+    .split("\n")
+    .filter((line) => line.startsWith(`${tempRefName} `));
+  if (matching.length === 0) return "removed";
+  return matching.length === 1 && matching[0] === `${tempRefName} ${expectedCommitSha}`
+    ? "ready"
+    : "failed";
+};
+
+const inspectExactWorktree = (
+  repoRoot: string,
+  input: ExactDisposableWorkspaceCleanupInput,
+): ExactResourceState => {
+  const inspected = git(repoRoot, ["worktree", "list", "--porcelain"]);
+  if (!inspected.ok) return "failed";
+
+  const expectedPath = resolve(input.expectedWorktreePath);
+  const matching = worktreeRecords(inspected.stdout).filter(
+    (record) => resolve(record.path) === expectedPath,
+  );
+  if (matching.length === 0) {
+    return existsSync(input.expectedWorktreePath) ? "failed" : "removed";
+  }
+  if (matching.length !== 1) return "failed";
+
+  const [record] = matching;
+  return record?.head === input.expectedCommitSha &&
+    (record.branch === input.expectedTempRefName || record.detached === true)
+    ? "ready"
+    : "failed";
+};
+
+const worktreeRecords = (
+  porcelain: string,
+): readonly {
+  readonly path: string;
+  readonly head?: string;
+  readonly branch?: string;
+  readonly detached: boolean;
+}[] =>
+  porcelain
+    .trim()
+    .split(/\n\n+/)
+    .map((entry) => {
+      const fields = new Map(
+        entry.split("\n").map((line) => {
+          const separator = line.indexOf(" ");
+          return separator === -1
+            ? ([line, ""] as const)
+            : ([line.slice(0, separator), line.slice(separator + 1)] as const);
+        }),
+      );
+      const head = fields.get("HEAD");
+      const branch = fields.get("branch");
+      return {
+        path: fields.get("worktree") ?? "",
+        ...(head === undefined ? {} : { head }),
+        ...(branch === undefined ? {} : { branch }),
+        detached: fields.has("detached"),
+      };
+    })
+    .filter((record) => record.path.length > 0);
+
+const deleteExactDisposableWorkspaceRef = (
+  repoRoot: string,
+  tempRefName: string,
+  expectedCommitSha: string,
+): DisposableWorkspaceCleanupState => {
+  const result = git(repoRoot, ["update-ref", "-d", tempRefName, expectedCommitSha]);
+  if (result.ok) return "removed";
+
+  return inspectExactTempRef(repoRoot, tempRefName, expectedCommitSha) === "removed"
+    ? "removed"
+    : "failed";
+};
+
 type GitResult =
   | {
       readonly ok: true;

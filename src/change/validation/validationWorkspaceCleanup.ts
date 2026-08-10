@@ -1,7 +1,10 @@
-import type { CleanupState } from "../validationRun/cleanup.js";
+import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
 export type ValidationWorkspaceCleanup = {
-  readonly tempRefName: (validationRunId: string) => string;
-  readonly removeWorktree: (worktreePath: string) => boolean;
-  readonly deleteTempRef: (tempRefName: string) => CleanupState;
+  readonly cleanup: (input: {
+    readonly validationRunId: string;
+    readonly submittedSha: string;
+    readonly recordedTempRefName?: string;
+    readonly recordedWorktreePath?: string;
+  }) => ValidationWorkspaceCleanupResult & { readonly errorMessage?: string };
 };

@@ -63,14 +63,11 @@ describe("Validation Run abandonment cleanup seam", () => {
         }),
         executionLock: passThroughLock,
         workspaceCleanup: {
-          tempRefName: () => tempRefName,
-          removeWorktree: (path) => {
-            calls.push(`worktree:${path}`);
-            return true;
-          },
-          deleteTempRef: (ref) => {
-            calls.push(`temp-ref:${ref}`);
-            return "removed";
+          cleanup: (input) => {
+            calls.push(
+              `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedTempRefName}:${input.recordedWorktreePath}`,
+            );
+            return { worktree: "removed", tempRef: "removed" };
           },
         },
       }).abandon({
@@ -80,7 +77,10 @@ describe("Validation Run abandonment cleanup seam", () => {
       });
 
       expect(abandoned).toEqual({ ok: true, status: "abandoned", validationRunId });
-      expect(calls).toEqual([`temp-ref:${tempRefName}`, `worktree:${worktreePath}`, "abandon"]);
+      expect(calls).toEqual([
+        `cleanup:${validationRunId}:head-sha:${tempRefName}:${worktreePath}`,
+        "abandon",
+      ]);
     }),
   );
 
@@ -98,9 +98,7 @@ describe("Validation Run abandonment cleanup seam", () => {
         }),
         executionLock: passThroughLock,
         workspaceCleanup: {
-          tempRefName: () => tempRefName,
-          removeWorktree: () => false,
-          deleteTempRef: () => "removed",
+          cleanup: () => ({ worktree: "failed", tempRef: "removed" }),
         },
       }).abandon({
         validationRunId,

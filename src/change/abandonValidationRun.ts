@@ -116,45 +116,22 @@ const abandonWhileLocked = (
       } as const;
     }
 
-    const tempRefName =
-      context.tempRefName ?? input.workspaceCleanup.tempRefName(command.validationRunId);
-    const tempRef =
-      context.cleanupTempRef === "removed"
-        ? "removed"
-        : input.workspaceCleanup.deleteTempRef(tempRefName);
-    const worktreePath = context.worktreePath;
-    if (worktreePath === undefined && context.cleanupWorktree !== "removed") {
-      const cleanup = { worktree: "failed", tempRef } as const;
+    const cleanupAttempt = input.workspaceCleanup.cleanup({
+      validationRunId: command.validationRunId,
+      submittedSha: context.submittedSha,
+      ...(context.tempRefName === undefined ? {} : { recordedTempRefName: context.tempRefName }),
+      ...(context.worktreePath === undefined ? {} : { recordedWorktreePath: context.worktreePath }),
+    });
+    const cleanup = {
+      worktree: cleanupAttempt.worktree,
+      tempRef: cleanupAttempt.tempRef,
+    } as const;
+    if (cleanup.worktree === "failed" || cleanup.tempRef === "failed") {
       yield* input.persistence.recordToolingFailure({
         validationRunId: command.validationRunId,
         errorKind: "infrastructure_tooling_failed",
         operationName: "abandon_validation_run_cleanup",
-        errorMessage: `${command.reason} Cleanup worktree=failed; temporary ref=${tempRef}. Validation Workspace path was not recorded.`,
-        now: command.now,
-      });
-      return {
-        ok: false,
-        status: "cleanup_failed",
-        validationRunId: command.validationRunId,
-        changeId: context.changeId,
-        cleanup,
-      } as const;
-    }
-    const worktree =
-      context.cleanupWorktree === "removed"
-        ? "removed"
-        : worktreePath === undefined
-          ? "failed"
-          : input.workspaceCleanup.removeWorktree(worktreePath)
-            ? "removed"
-            : "failed";
-    const cleanup = { worktree, tempRef } as const;
-    if (worktree === "failed" || tempRef === "failed") {
-      yield* input.persistence.recordToolingFailure({
-        validationRunId: command.validationRunId,
-        errorKind: "infrastructure_tooling_failed",
-        operationName: "abandon_validation_run_cleanup",
-        errorMessage: `${command.reason} Cleanup worktree=${worktree}; temporary ref=${tempRef}.`,
+        errorMessage: `${command.reason} Cleanup worktree=${cleanup.worktree}; temporary ref=${cleanup.tempRef}.${cleanupAttempt.errorMessage === undefined ? "" : ` ${cleanupAttempt.errorMessage}`}`,
         now: command.now,
       });
       return {
