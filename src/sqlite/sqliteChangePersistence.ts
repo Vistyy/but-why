@@ -12,7 +12,6 @@ import {
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
-  CompletedPublicationEvidencePort,
   ChangeCancellationPort,
   ChangeDeliveryPort,
   ChangePublicationEvidence,
@@ -21,6 +20,7 @@ import type {
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
   ChangeSubmissionPort,
+  CompletedPublicationEvidencePort,
   CurrentChangeEvidenceQuery,
   RecordImplementationDecisionInput,
   TerminalChangeCleanupPort,
