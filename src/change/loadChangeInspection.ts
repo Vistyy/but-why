@@ -29,11 +29,11 @@ import {
   queryChangeValidationRuns,
 } from "./inspectChange.js";
 
-export type LoadChangeInspectionError =
+type LoadChangeInspectionError =
   | LoadRepoLocalContextError
   | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
 
-export type LoadedChangeInspectionOperation<A> =
+type LoadedChangeInspectionOperation<A> =
   | {
       readonly ok: true;
       readonly commonDirectory: string;
