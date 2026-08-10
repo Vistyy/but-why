@@ -20,7 +20,8 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
-Before implementation, read its accepted `## Review path` as the path by which one human must be able to understand and judge the complete Change and required evidence.
+Before implementation, read its accepted `## Review path` as the one coherent judgment that relates the complete result's behavior groups, state relationships, interface changes, and required evidence and shows why they form one bounded supported result that a human can understand and judge.
+A sequence of review areas, passes, or verification mechanisms does not supply that judgment.
 Do not treat the review path as an implementation plan, file forecast, size limit, or effort estimate.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
@@ -53,7 +54,10 @@ Continue through recoverable problems and local implementation choices.
 Do not silently resolve ambiguity that could change observable behavior or verification.
 Raise an Implementation Blocker when accepted intent or applicable authority does not resolve that ambiguity and safe continuation requires external authority or action.
 Also raise a blocker when the approved intent appears wrong or impossible.
-A Task review path is disproven only when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.
+For a Task-backed Change, reassess the accepted review path as soon as the implementation shape becomes concrete, before continuing materially dependent work, immediately before the first Change Submit, and after later work materially changes that shape.
+Compare the actual behavior groups, state relationships, interface changes, and verification arguments with the one coherent judgment stated by the accepted review path.
+A Task review path is disproven when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.
+Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring a blocker unless concrete evidence shows that they form the one bounded supported result stated by the accepted review path.
 Size, file count, line count, or Validation Run count alone does not disprove a review path.
 When the accepted review path is disproven, preserve completed work and raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work.
 Do not split, cancel, replace, amend, or continue the Task autonomously.

@@ -59,8 +59,12 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    A quality, theme, final objective, shared owner, implementation area, or preferred sequence is not by itself a Task result.
    Split approved intent when it contains multiple bounded supported results.
    Do not merge results to minimize Task count or because they contribute to one final objective.
+   Calling several results one subsystem or lifecycle does not establish one Task result.
    Do not split solely by files, modules, layers, commands, test categories, or implementation effort.
+   Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring either a split or concrete evidence that they form one bounded supported result.
+   Calling them one subsystem or lifecycle is not that evidence.
    Treat implementation, review, or verification difficulty as evidence that the proposed boundary must be reconsidered.
+   No single file, line, effort, or verification count determines the boundary.
    If no practical bounded result is clear, present the evidence and obtain an Operator decision before recording the Task.
    A migration stage or caller population can be a Task when it ends in an approved coherent supported state with a bounded passing condition.
    A preparatory activity is a Task only when its output is itself an approved bounded supported result.
@@ -70,8 +74,10 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Do not use generic gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
    Follow the Task verification reference to define proportionate implementation confidence.
    Include a `## Review path` section in every proposed Task Context.
-   State a concise path by which one human can understand and judge the complete implementation and required evidence as one coherent Change.
+   State the one coherent judgment that relates the complete result's behavior groups, state relationships, interface changes, and required evidence and shows why they form one bounded supported result that a human can understand and judge.
+   A sequence of review areas, passes, or verification mechanisms does not supply that judgment.
    Use available repository evidence, including evidence from prior implementation attempts, to decide whether the path is practical.
+   When available evidence has disproved a review path, do not reuse that path or a materially equivalent Task boundary unless concrete evidence shows why the observed mismatch no longer applies.
    Files, modules, layers, verification areas, and expected effort can inform this judgment, but none determines it alone.
    Do not turn the review path into a detailed implementation plan, an exact file forecast, a line estimate, or an effort estimate.
 4. Before requesting Task Recording Authorization, review the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
