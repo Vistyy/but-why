@@ -1,12 +1,11 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
-
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import {
   type ReviewerAgentResult,
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
   buildReviewerOutputCorrectionPrompt,
   buildReviewerRevisionPrompt,
@@ -14,6 +13,7 @@ import {
   buildSpecialistReviewerPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   decodeReviewerOutputContract,
@@ -33,7 +33,7 @@ import {
 } from "../validation/submitProgress.js";
 import {
   ReviewerOutputContractFailed,
-  SandcastleToolingFailed,
+  ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
@@ -52,8 +52,8 @@ const translateRuntimeResult = <Output>(
     }) => {
   if (result.ok) return result;
   const failure: ValidationToolingFailure =
-    result.failure.operationName === "run_reviewer_agent"
-      ? new SandcastleToolingFailed({
+    result.failure.kind === "process_execution"
+      ? new ReviewerProcessToolingFailed({
           operationName: result.failure.operationName,
           message: result.failure.message,
         })
@@ -87,7 +87,8 @@ export type RunSpecialistReviewPhaseInput = {
   readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly sandbox: Pick<Sandbox, "exec" | "run">;
+  readonly commandExecutor: WorkspaceCommandExecutor;
+  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
@@ -235,7 +236,7 @@ const runSpecialist = (
     const execution = yield* executeReviewerSession({
       identity,
       runtime: input.runtime,
-      sandbox: input.sandbox,
+      reviewerExecutor: input.reviewerExecutor,
       decodeOutput: (output, reviewCall) =>
         decodeReviewerOutputContract({
           reviewer: policy.id,
@@ -254,6 +255,7 @@ const runSpecialist = (
           Effect.mapError(
             (failure) =>
               new ReviewerExecutionFailed({
+                kind: "output_contract",
                 operationName: failure.operationName,
                 message: failure.message,
                 diagnostics: failure.diagnostics,
@@ -347,7 +349,7 @@ const verifyIntegrity = (
   input: RunSpecialistReviewPhaseInput,
 ): Effect.Effect<void, ValidationToolingFailure> =>
   verifyCandidateIntegrity({
-    sandbox: input.sandbox,
+    commandExecutor: input.commandExecutor,
     commandCwd: input.commandCwd,
     expectedHeadSha: input.candidate.headSha,
     allowedUntrackedFiles: input.allowedUntrackedFiles,

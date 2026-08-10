@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Context, Effect, Layer } from "effect";
-
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -26,8 +23,9 @@ import {
   ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
+import type { ActiveValidationWorkspace } from "../validation/validationWorkspace.js";
 import {
-  expectedSandcastleWorktreePath,
+  expectedValidationWorkspacePath,
   validationTempRefName,
 } from "../validation/validationWorkspacePath.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
@@ -171,7 +169,7 @@ const makeCandidateValidation = (dependencies: {
       validationRunId,
       workspaceSetup: {
         tempRefName,
-        worktreePath: expectedSandcastleWorktreePath(
+        worktreePath: expectedValidationWorkspacePath(
           dependencies.localRepositoryMainCheckoutRoot,
           tempRefName,
         ),
@@ -330,10 +328,7 @@ const runCandidatePhases = (
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
   validationRunId: string,
-  activeWorkspace: {
-    readonly sandbox: Pick<Sandbox, "exec" | "run">;
-    readonly worktreePath: string;
-  },
+  activeWorkspace: ActiveValidationWorkspace,
 ): Effect.Effect<
   {
     readonly outcome: CandidateValidationOutcome;
@@ -379,7 +374,7 @@ const runCandidatePhases = (
               runPreparePhase({
                 validationRunId,
                 prepare,
-                sandbox: activeWorkspace.sandbox,
+                commandExecutor: activeWorkspace.commandExecutor,
                 artifactsRoot: dependencies.artifactsRoot,
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
@@ -394,7 +389,7 @@ const runCandidatePhases = (
         runCheckPhase({
           validationRunId,
           checks: policy.checks,
-          sandbox: activeWorkspace.sandbox,
+          commandExecutor: activeWorkspace.commandExecutor,
           artifactsRoot: dependencies.artifactsRoot,
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
@@ -420,7 +415,8 @@ const runCandidatePhases = (
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 runtime: dependencies.reviewerAgentRuntime,
-                sandbox: activeWorkspace.sandbox,
+                reviewerExecutor: activeWorkspace.reviewerExecutor,
+                commandExecutor: activeWorkspace.commandExecutor,
                 artifactsRoot: dependencies.artifactsRoot,
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
@@ -444,7 +440,8 @@ const runCandidatePhases = (
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
           runtime: dependencies.reviewerAgentRuntime,
-          sandbox: activeWorkspace.sandbox,
+          reviewerExecutor: activeWorkspace.reviewerExecutor,
+          commandExecutor: activeWorkspace.commandExecutor,
           artifactsRoot: dependencies.artifactsRoot,
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,

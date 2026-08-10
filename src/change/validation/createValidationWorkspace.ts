@@ -59,7 +59,7 @@ export const createValidationWorkspace = (
       ValidationWorkspaceSetupFailed: toolingFailureResult,
       InfrastructureToolingFailed: toolingFailureResult,
       GitToolingFailed: toolingFailureResult,
-      SandcastleToolingFailed: toolingFailureResult,
+      ReviewerProcessToolingFailed: toolingFailureResult,
       PrepareCommandExecutionToolingFailed: toolingFailureResult,
       CheckCommandExecutionToolingFailed: toolingFailureResult,
       ReviewerOutputContractFailed: toolingFailureResult,
@@ -144,7 +144,7 @@ const validationError = (error: DisposableWorkspaceError): ValidationWorkspaceTo
   tempRefName: error.tempRefName,
   submittedSha: error.commitSha,
   ...(error.worktreePath === undefined ? {} : { worktreePath: error.worktreePath }),
-  errorMessage: validationErrorMessage(error.errorMessage),
+  errorMessage: error.errorMessage,
   cleanupResult: error.cleanupResult,
 });
 
@@ -155,27 +155,6 @@ const validationOperation = (operationName: string): string => {
   }
   return operationName;
 };
-
-const validationErrorMessage = (message: string): string =>
-  message
-    .replace("Disposable workspace ref", "Validation temp ref")
-    .replace("Allowlisted workspace file", "Allowlisted validation workspace file")
-    .replace(
-      "Disposable worktree already exists for a different workspace reference",
-      "Validation worktree already exists for a different Validation Run",
-    )
-    .replace("Disposable worktree already exists", "Validation worktree already exists")
-    .replace("Disposable worktree HEAD", "Validation worktree HEAD")
-    .replace("Disposable worktree removal failed.", "Validation worktree removal failed.")
-    .replace("requested commit", "submitted SHA")
-    .replace(
-      "Disposable workspace cleanup failed after successful use.",
-      "Validation workspace cleanup failed after successful setup.",
-    )
-    .replace(
-      "Disposable workspace use was interrupted.",
-      "Validation workspace setup was interrupted.",
-    );
 
 const toolingFailureResult = (toolingFailure: ValidationToolingFailure) =>
   Effect.succeed({ ok: false as const, toolingFailure });

@@ -48,7 +48,7 @@ describe("repository-authored blocking diagnostics", () => {
       'const childProcess = await import("node:child_process/promises");',
     ],
     [
-      "sandcastle-factories-belong-to-workspace",
+      "sandcastle-dependency-belongs-to-runtime-adapter",
       'import { createSandbox } from "@ai-hero/sandcastle";',
     ],
     ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],

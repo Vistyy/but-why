@@ -1,14 +1,13 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
-
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
@@ -19,7 +18,7 @@ import type {
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import {
   ReviewerOutputContractFailed,
-  SandcastleToolingFailed,
+  ReviewerProcessToolingFailed,
 } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
@@ -204,7 +203,7 @@ describe("Acceptance Review phase", () => {
         review: () =>
           Effect.succeed({
             ok: false,
-            failure: new SandcastleToolingFailed({
+            failure: new ReviewerProcessToolingFailed({
               operationName: "run_reviewer_agent",
               message: "Reviewer launch failed.",
             }),
@@ -219,7 +218,7 @@ describe("Acceptance Review phase", () => {
       expect(result).toMatchObject({
         findings: 0,
         toolingFailure: {
-          _tag: "SandcastleToolingFailed",
+          _tag: "ReviewerProcessToolingFailed",
           operationName: "run_reviewer_agent",
         },
       });
@@ -296,7 +295,7 @@ describe("Acceptance Review phase", () => {
         const firstResult = yield* first.run();
         expect(firstResult.reviewerEvidence).toMatchObject({ continuity: "fresh", reviewCalls: 1 });
 
-        const temporaryFailure = new SandcastleToolingFailed({
+        const temporaryFailure = new ReviewerProcessToolingFailed({
           operationName: "run_reviewer_agent",
           message: "Temporary reviewer failure.",
         });
@@ -326,7 +325,7 @@ describe("Acceptance Review phase", () => {
 
         expect(result).toMatchObject({
           findings: 0,
-          toolingFailure: { _tag: "SandcastleToolingFailed" },
+          toolingFailure: { _tag: "ReviewerProcessToolingFailed" },
           reviewerEvidence: { continuity: "resumed", reviewCalls: 1 },
         });
         expect(resumedReview.mock.calls[0]?.[0].resumeSession).toBe("acceptance-session");
@@ -346,7 +345,7 @@ describe("Acceptance Review phase", () => {
       );
       yield* initial.run();
 
-      const unusable = new SandcastleToolingFailed({
+      const unusable = new ReviewerProcessToolingFailed({
         operationName: "run_reviewer_agent",
         message: "Stored session cannot continue.",
       });
@@ -405,6 +404,12 @@ type FixtureOptions = {
   readonly sessionStore?: ReviewerSessionStore;
 };
 
+const unusedReviewerExecutor: ReviewerProcessExecutor = {
+  execute: async () => {
+    throw new Error("Captured Reviewer Agent Runtime must not execute a reviewer process.");
+  },
+};
+
 const acceptancePhaseFixture = (
   runtime: ReviewerAgentRuntime<ReviewerOutput>,
   options: FixtureOptions = {},
@@ -412,16 +417,11 @@ const acceptancePhaseFixture = (
   const validationRunId = options.validationRunId ?? "validation-1";
   const exactCandidate = options.candidate ?? candidate;
   const rounds: RecordCandidateAcceptanceRoundInput[] = [];
-  const sandbox: Pick<Sandbox, "exec" | "run"> = {
-    exec: async () => ({
-      exitCode: 0,
-      stdout: `${options.observedHeadSha ?? exactCandidate.headSha}\n`,
-      stderr: "",
-    }),
-    run: async () => {
-      throw new Error("Captured Reviewer Agent Runtime must not call Sandbox.run.");
-    },
-  };
+  const commandExecutor = async () => ({
+    exitCode: 0,
+    stdout: `${options.observedHeadSha ?? exactCandidate.headSha}\n`,
+    stderr: "",
+  });
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
 
   return {
@@ -437,7 +437,8 @@ const acceptancePhaseFixture = (
         policy,
         agentEnvironment: ["nix", "develop", "-c"],
         runtime,
-        sandbox,
+        commandExecutor,
+        reviewerExecutor: unusedReviewerExecutor,
         artifactsRoot,
         commandCwd: "/captured/validation-workspace",
         resourceRoot: "/captured/validation-workspace",

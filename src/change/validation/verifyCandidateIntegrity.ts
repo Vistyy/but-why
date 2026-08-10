@@ -1,5 +1,5 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
@@ -8,7 +8,7 @@ import {
 } from "./validationToolingFailures.js";
 
 export const verifyCandidateIntegrity = (input: {
-  readonly sandbox: Pick<Sandbox, "exec">;
+  readonly commandExecutor: WorkspaceCommandExecutor;
   readonly commandCwd: string;
   readonly expectedHeadSha: string;
   readonly allowedUntrackedFiles: readonly string[];
@@ -17,7 +17,7 @@ export const verifyCandidateIntegrity = (input: {
   Effect.tryPromise({
     try: () =>
       ensureCandidateIntegrity({
-        sandbox: input.sandbox,
+        commandExecutor: input.commandExecutor,
         commandCwd: input.commandCwd,
         expectedHeadSha: input.expectedHeadSha,
         allowedUntrackedFiles: input.allowedUntrackedFiles,

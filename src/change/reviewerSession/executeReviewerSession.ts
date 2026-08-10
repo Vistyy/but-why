@@ -1,12 +1,12 @@
 import { chmodSync, readdirSync, statSync } from "node:fs";
 
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
   ReviewerOutputDecoder,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   type ReviewerContinuity,
@@ -27,7 +27,7 @@ export type ReviewerExecutionEvidence = {
 export type ExecuteReviewerSessionInput<Output, ReviewBoundaryError> = {
   readonly identity: ReviewerSessionIdentity;
   readonly runtime: ReviewerAgentRuntime<Output>;
-  readonly sandbox: Pick<Sandbox, "run">;
+  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly decodeOutput: (
     output: unknown,
     reviewCall: number,
@@ -88,7 +88,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
       reviewCalls += 1;
       const reviewCall = reviewCalls;
       return input.runtime.review({
-        sandbox: input.sandbox,
+        reviewerExecutor: input.reviewerExecutor,
         reviewer: input.identity.producer,
         decodeOutput: (output) => input.decodeOutput(output, reviewCall),
         prompt,

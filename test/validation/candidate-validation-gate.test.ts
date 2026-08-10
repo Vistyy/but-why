@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { runCandidateValidationGate } from "../../src/change/candidateValidation/runCandidateValidationGate.js";
-import { SandcastleToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
+import { ReviewerProcessToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 
 const passed = { findings: 0 as const };
 const blocked = { findings: 1 as const };
@@ -71,7 +71,7 @@ describe("Candidate Validation Gate", () => {
       expect(calls).toEqual(["checks", "acceptance"]);
 
       calls.length = 0;
-      const failure = new SandcastleToolingFailed({
+      const failure = new ReviewerProcessToolingFailed({
         operationName: "run_reviewer_agent",
         message: "Acceptance Review tooling failed.",
       });
@@ -95,7 +95,7 @@ describe("Candidate Validation Gate", () => {
 
   it.effect("translates final passing, blocking, and Tooling Failure results truthfully", () =>
     Effect.gen(function* () {
-      const failure = new SandcastleToolingFailed({
+      const failure = new ReviewerProcessToolingFailed({
         operationName: "run_reviewer_agent",
         message: "Specialist tooling failed.",
       });
@@ -105,7 +105,7 @@ describe("Candidate Validation Gate", () => {
           | {
               readonly findings: 1;
               readonly reviewerEvidence: readonly [];
-              readonly toolingFailures: readonly [] | readonly [SandcastleToolingFailed];
+              readonly toolingFailures: readonly [] | readonly [ReviewerProcessToolingFailed];
             },
       ) =>
         runCandidateValidationGate({

@@ -1,7 +1,7 @@
 import { cleanupExactDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspaceGit.js";
 import type { ValidationWorkspaceCleanup } from "./validationWorkspaceCleanup.js";
 import {
-  expectedSandcastleWorktreePath,
+  expectedValidationWorkspacePath,
   validationTempRefName,
 } from "./validationWorkspacePath.js";
 
@@ -10,7 +10,7 @@ export const validationWorkspaceCleanupGit = (repoRoot: string): ValidationWorks
     const expectedTempRefName = validationTempRefName(input.validationRunId);
     return cleanupExactDisposableWorkspace(repoRoot, {
       expectedTempRefName,
-      expectedWorktreePath: expectedSandcastleWorktreePath(repoRoot, expectedTempRefName),
+      expectedWorktreePath: expectedValidationWorkspacePath(repoRoot, expectedTempRefName),
       expectedCommitSha: input.submittedSha,
       ...(input.recordedTempRefName === undefined
         ? {}

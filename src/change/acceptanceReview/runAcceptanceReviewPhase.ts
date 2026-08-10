@@ -1,4 +1,3 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import {
@@ -6,11 +5,13 @@ import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
   buildAcceptanceReviewerPrompt,
   buildReviewerOutputCorrectionPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   decodeReviewerOutputContract,
@@ -35,7 +36,7 @@ import {
 } from "../validation/submitProgress.js";
 import {
   ReviewerOutputContractFailed,
-  SandcastleToolingFailed,
+  ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
@@ -54,8 +55,8 @@ const translateRuntimeResult = <Output>(
     }) => {
   if (result.ok) return result;
   const failure =
-    result.failure.operationName === "run_reviewer_agent"
-      ? new SandcastleToolingFailed({
+    result.failure.kind === "process_execution"
+      ? new ReviewerProcessToolingFailed({
           operationName: result.failure.operationName,
           message: result.failure.message,
         })
@@ -91,7 +92,8 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly policy: AcceptanceReviewPolicy;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly sandbox: Pick<Sandbox, "exec" | "run">;
+  readonly commandExecutor: WorkspaceCommandExecutor;
+  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
@@ -204,7 +206,7 @@ const runAcceptanceReviewPhaseImpl = (
     const execution = yield* executeReviewerSession({
       identity,
       runtime: input.runtime,
-      sandbox: input.sandbox,
+      reviewerExecutor: input.reviewerExecutor,
       decodeOutput: (output, reviewCall) =>
         decodeReviewerOutputContract({
           reviewer: "acceptance",
@@ -223,6 +225,7 @@ const runAcceptanceReviewPhaseImpl = (
           Effect.mapError(
             (failure) =>
               new ReviewerExecutionFailed({
+                kind: "output_contract",
                 operationName: failure.operationName,
                 message: failure.message,
                 diagnostics: failure.diagnostics,
@@ -300,7 +303,7 @@ const verifyIntegrity = (
   input: RunAcceptanceReviewPhaseInput,
 ): Effect.Effect<void, ValidationToolingFailure> =>
   verifyCandidateIntegrity({
-    sandbox: input.sandbox,
+    commandExecutor: input.commandExecutor,
     commandCwd: input.commandCwd,
     expectedHeadSha: input.candidate.headSha,
     allowedUntrackedFiles: input.allowedUntrackedFiles,

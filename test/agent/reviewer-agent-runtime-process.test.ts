@@ -12,12 +12,14 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
+import { createReviewerProcessExecutor } from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
     Effect.mapError(
       (failure) =>
         new ReviewerExecutionFailed({
+          kind: "output_contract",
           operationName: failure.operationName,
           message: failure.message,
           diagnostics: failure.diagnostics,
@@ -170,7 +172,10 @@ describe("Pi reviewer agent runtime process boundary", () => {
 
         try {
           const result = yield* piReviewerAgentRuntime.review({
-            sandbox: { run } as unknown as Pick<Sandbox, "run">,
+            reviewerExecutor: createReviewerProcessExecutor({ run } as unknown as Pick<
+              Sandbox,
+              "run"
+            >),
             reviewer: "acceptance",
             decodeOutput: decodeEmptyFindings,
             prompt: "Review the Candidate.",
