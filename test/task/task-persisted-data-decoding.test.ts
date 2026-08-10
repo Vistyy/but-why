@@ -87,11 +87,11 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
   ),
 );
 
-it.scoped("rejects an unsupported lifecycle row hidden by the former actionable predicate", () =>
+it.scoped("does not decode a malformed Task outside the actionable selection", () =>
   withCorruptedTaskState((tasks) =>
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
-      yield* repository.operation("corrupt hidden Task lifecycle", (sql) =>
+      yield* repository.operation("corrupt unrelated Task lifecycle", (sql) =>
         Effect.gen(function* () {
           yield* sql.unsafe("PRAGMA ignore_check_constraints = ON");
           yield* sql.unsafe("UPDATE tasks SET state = 'retired' WHERE id = 'BY-1'");
@@ -99,7 +99,42 @@ it.scoped("rejects an unsupported lifecycle row hidden by the former actionable 
         }),
       );
 
-      yield* expectPersistedDataInvalid(tasks.listActionableTasks());
+      expect(yield* tasks.listActionableTasks()).toEqual([]);
+      expect(yield* tasks.listTasks({ includeDone: false })).toEqual({ tasks: [], total: 0 });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-404"))).toBeUndefined();
+    }),
+  ),
+);
+
+it.scoped("does not decode a malformed unrelated Task during point operations", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const starts = yield* openSqliteChangeStartPersistence();
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "Point target");
+      yield* createTask(tasks, "Unrelated Task");
+      yield* repository.operation("corrupt unrelated Task title", (sql) =>
+        sql.unsafe("UPDATE tasks SET title = x'00' WHERE id = 'BY-2'"),
+      );
+
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({
+        id: "BY-1",
+        title: "Point target",
+      });
+      expect(yield* tasks.getTaskContextById(publicTaskId("BY-1"))).toEqual({
+        id: "BY-1",
+        title: "Point target",
+        description: "Description for Point target",
+      });
+      expect(yield* tasks.listTasks({ includeDone: false, limit: 1 })).toMatchObject({
+        total: 2,
+        tasks: [{ id: "BY-1", title: "Point target" }],
+      });
+      expect(
+        yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow }),
+      ).toMatchObject({ ok: true, task: { id: "BY-1", state: "todo" } });
+      expect(yield* starts.prepareTask(publicTaskId("BY-1"))).toMatchObject({ ok: true });
     }),
   ),
 );
@@ -110,6 +145,21 @@ it.scoped("rejects unsafe Task ordering identity before next-ID derivation", () 
       const repository = yield* RepositorySql;
       yield* repository.operation("corrupt Task numeric identity", (sql) =>
         sql.unsafe("UPDATE tasks SET numeric_id = 9007199254740992 WHERE id = 'BY-1'"),
+      );
+
+      yield* expectPersistedDataInvalid(
+        tasks.createTask({ title: "Next", description: "Next", now: secondNow }),
+      );
+    }),
+  ),
+);
+
+it.scoped("rejects a non-integer maximum before next-ID derivation", () =>
+  withCorruptedTaskState((tasks) =>
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation("corrupt maximum Task numeric identity", (sql) =>
+        sql.unsafe("UPDATE tasks SET numeric_id = x'00' WHERE id = 'BY-1'"),
       );
 
       yield* expectPersistedDataInvalid(
@@ -192,25 +242,6 @@ it.scoped("rejects malformed dependency relationships before Task and Change Sta
   ),
 );
 
-it.scoped("rejects a persisted multi-Task dependency cycle", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const repository = yield* RepositorySql;
-      yield* createTask(tasks, "First cycle Task");
-      yield* createTask(tasks, "Second cycle Task");
-      yield* repository.operation("insert cyclic Task dependencies", (sql) =>
-        sql.unsafe(`
-          INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-          VALUES ('BY-1', 'BY-2'), ('BY-2', 'BY-1')
-        `),
-      );
-
-      yield* expectPersistedDataInvalid(tasks.listTasks({ includeDone: true }));
-    }),
-  ),
-);
-
 it.scoped("rejects an incomplete linked Implementation Blocker Resolution", () =>
   withTemporaryRepositoryState(({ commonDirectory }) =>
     Effect.gen(function* () {
@@ -238,7 +269,7 @@ it.scoped("rejects an incomplete linked Implementation Blocker Resolution", () =
           resolution_id, resolution_recorded_at, resolution_content
         ) VALUES (
           'blocker-malformed', 'change-malformed-resolution', '${secondNow}', 'Question',
-          '${secondNow}', 'resolution-malformed', NULL, 'Partial resolution'
+          '${secondNow}', 'resolution-malformed', '${secondNow}', NULL
         )
       `),
       );
