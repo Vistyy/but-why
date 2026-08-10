@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import {
@@ -202,6 +202,7 @@ const prepareHostPiSession = async (
   if (rewritten === content) return;
   const temporaryPath = `${located.path}.but-why-tmp`;
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
+  chmodSync(temporaryPath, 0o600);
   renameSync(temporaryPath, located.path);
 };
 
