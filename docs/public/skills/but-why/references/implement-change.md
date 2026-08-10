@@ -22,28 +22,17 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
-Before implementation, read its accepted `## Review path` as the authority for how a human can review and verify the Task as one bounded supported result.
-Do not treat the review path as an implementation plan, file forecast, size limit, or effort estimate.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
-This step is complete when the Change, accepted intent, accepted Task review path when present, and Managed Worktree are known.
+This step is complete when the Change, accepted intent, and Managed Worktree are known.
 
 ## 2. Implement and commit
 
 Follow the repository instructions in the Managed Worktree.
-Use task-specific verification requirements in accepted Task Context when present.
+Use explicit verification constraints in accepted Task Context when present.
 Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
-Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
-Before selecting or adding Verification Evidence, read [Task verification](task-verification.md) completely.
-A requirement, code change, branch, scenario, or Verification Claim does not by itself require new durable automation.
-Start with accepted mandatory gates, retained evidence, and proportionate one-time evidence.
-Do not add a durable automated test unless accepted verification requirements require maintained automation.
-For each additional test case, including each parameterized case, identify a plausible regression that other evidence for the Candidate would not reveal.
-A different input, fixture, branch, assertion, or code path does not make a regression distinct by itself.
-Confirm that the selected seam observes the required behavior reliably and that retained and one-time evidence are insufficient.
-Prefer updating, reusing, consolidating, or removing retained evidence when that provides sufficient confidence at lower lifecycle cost.
-Updating an existing expectation because the accepted contract changed does not by itself justify another test case or suite.
-Remove or consolidate an additional test case whose regression protection does not justify its Lifecycle Cost over the least-cost feasible alternative.
+Before selecting or adding verification evidence, read [Task verification](task-verification.md) completely.
+Select focused evidence at the owning seam after the implementation shape is known.
 When multiple approaches remain compliant with accepted intent, select one.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
@@ -55,14 +44,10 @@ Continue through recoverable problems and local implementation choices.
 Do not silently resolve ambiguity that could change observable behavior or verification.
 Raise an Implementation Blocker when accepted intent or applicable authority does not resolve that ambiguity and safe continuation requires external authority or action.
 Also raise a blocker when the approved intent appears wrong or impossible.
-For a Task-backed Change, reassess the actual implementation against the accepted bounded result and `## Review path` only when it materially differs from either or the current Acceptance Context materially changes.
-Do not repeat the assessment until the actual work or Acceptance Context changes materially again.
-A Task review path is disproven only when actual evidence identifies another independently acceptable bounded supported result or shows that a human can no longer understand and judge the complete Change through the accepted path.
-Multiple independently understandable behavior groups, state relationships, interface changes, implementation areas, or verification arguments do not alone disprove the review path or require a blocker.
-When the accepted review path is disproven, preserve completed work and raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work.
+If actual evidence shows that the work no longer fits the accepted Task as one coherent supported result, preserve completed work and raise an Implementation Blocker that states the concrete mismatch.
 Do not split, cancel, replace, amend, or continue the Task autonomously.
 The Operator decides whether to continue, resolve, cancel, or replace the Task.
-Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.
+Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery.
 Stop and report after raising the blocker.
 Collect only the focused evidence required for the Candidate during implementation.
 Do not manually run a repository-wide quality command, unfiltered test or coverage workload, or review before Submission.

@@ -11,22 +11,19 @@ When the selected route conflicts with a higher-priority instruction, supported 
 _Avoid_: Agent-selected workflow, Task Approval, Change Start
 
 **Task Recording Authorization**:
-The Operator's explicit permission to persist one proposed set of Task Contexts and Task Dependencies.
+The Operator's explicit permission to persist agreed Task outcomes and their actual Task Dependencies for selected work.
+It permits clear Task description wording and dependency encoding within the agreed scope.
 It does not authorize Task Approval, Change Start, or Implementation Authorization.
-_Avoid_: Task Approval, approval to implement, automatic Change Start
+_Avoid_: Approval of exact prose, Task Approval, approval to implement, automatic Change Start
 
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
 _Avoid_: Change, issue draft, implementation session
 
 **Task Context**:
-The current Task title and description before Change Start.
+The current Task title and freeform description before Change Start.
+The description has no required section structure.
 _Avoid_: Acceptance Context, operational metadata
-
-**Task Verification Contract**:
-The Task Context section that identifies Material Risks, required Verification Claims and evidence, escalation conditions, and explicit exclusions for implementation confidence.
-It is preserved in Acceptance Context when the Task starts.
-_Avoid_: Validation Policy Snapshot, Check list, coverage target
 
 **Task Context Draft**:
 A disposable editable copy of a Task description prepared before the description is applied.
