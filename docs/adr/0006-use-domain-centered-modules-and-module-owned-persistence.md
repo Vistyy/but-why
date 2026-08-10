@@ -7,7 +7,8 @@ status: accepted
 But Why is a modular monolith organized around Task and Change behavior.
 A Task owns requested intent, dependencies, and user-facing lifecycle.
 A Change owns code lineage, Candidates, Validation Runs, Findings, publication, and delivery.
-Each behavior module owns cohesive persistence ports and named operations required to preserve its invariants.
+Task and Change are the current behavior modules.
+Each behavior module owns its workflows, cohesive persistence ports, composition, and named operations required to preserve its invariants.
 
 ## Considered Options
 
@@ -18,7 +19,7 @@ Each behavior module owns cohesive persistence ports and named operations requir
 ## Consequences
 
 CLI modules select operations and translate results without constructing storage or coordinating persistence.
-Task and Change composition select concrete Adapters and construct their owner workflows.
+Each behavior module's composition selects concrete Adapters and constructs its owner workflows.
 Repository Runtime composition resolves Local Repository identity and owns Shared Repository State creation, compatibility, migration, connection lifetime, and closure.
 Repository Runtime composition provides the scoped database capability and does not return an Adapter registry or application container.
 The private SQLite implementation owns SQL and transaction mechanics and may implement several cohesive owner-defined ports.
