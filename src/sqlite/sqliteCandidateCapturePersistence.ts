@@ -9,12 +9,13 @@ import type {
 import { changeState } from "../change/change.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import {
+  candidateReadColumns,
+  decodeCandidate,
+  type UnknownCandidateRow,
+} from "./sqliteCandidateValidationReadModel.js";
 import { decodeCandidateCaptureChange } from "./sqliteChangeReadModel.js";
-import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
-
-type StoredCandidate = {
-  readonly id: unknown;
-};
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
   CandidateCapturePersistence,
@@ -160,19 +161,27 @@ const captureStoredCandidate = (
   input: CommitCandidateCaptureInput,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<StoredCandidate>`
-      SELECT id
-      FROM candidates
-      WHERE change_id = ${changeId}
-        AND change_base_sha = ${input.changeBaseSha}
-        AND head_sha = ${input.headSha}
-    `;
-    const existing = rows[0];
+    const rows = yield* sql.unsafe<UnknownCandidateRow>(
+      `SELECT ${candidateReadColumns}
+       FROM candidates AS candidate
+       WHERE candidate.change_id = ?`,
+      [changeId],
+    );
+    const candidates = yield* decodePersisted("commit Candidate capture", () =>
+      rows.map((row) => {
+        const candidate = decodeCandidate(row);
+        if (candidate.changeId !== changeId) {
+          throw new Error("Candidate belongs to another Change");
+        }
+        return candidate;
+      }),
+    );
+    const existing = candidates.find(
+      (candidate) =>
+        candidate.changeBaseSha === input.changeBaseSha && candidate.headSha === input.headSha,
+    );
     if (existing !== undefined) {
-      const candidateId = yield* decodePersisted("commit Candidate capture", () =>
-        decodeStoredString(existing.id, "Candidate ID"),
-      );
-      return { ok: true, candidateId, reused: true } as const;
+      return { ok: true, candidateId: existing.id, reused: true } as const;
     }
 
     const candidateId = randomUUID();

@@ -244,8 +244,13 @@ export const createValidationRunFixture = (
             id, candidate_id, policy_snapshot, implementation_decisions,
             latest_resolved_blocker_id, state, outcome, created_at, updated_at
           ) VALUES (
-            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [], copyFiles: [] })}, '[]',
-            NULL, ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
+            ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }], copyFiles: [] })}, '[]',
+            (
+              SELECT id FROM implementation_blockers
+              WHERE change_id = ${input.changeId} AND resolved_at <= ${input.createdAt}
+              ORDER BY resolved_at DESC, sequence DESC LIMIT 1
+            ),
+            ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
           )
         `,
       );
@@ -301,6 +306,14 @@ export const createFindingFixture = (
     root,
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Finding round inspection fixture",
+        (sql) => sql`
+          INSERT INTO candidate_validation_rounds (
+            validation_run_id, phase, producer, round_number, status, created_at
+          ) VALUES (${input.validationRunId}, 'checks', 'types', 1, 'failed', ${input.createdAt})
+        `,
+      );
       yield* repository.operation(
         "create Finding inspection fixture",
         (sql) => sql`

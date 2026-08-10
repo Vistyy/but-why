@@ -254,6 +254,17 @@ describe("SQLite Change decoding", () => {
         yield* expectPersistedDataInvalid(
           changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
         );
+        yield* repository.operation(
+          "inject foreign publication Implementation Decision",
+          (sql) => sql`
+            UPDATE candidate_validation_runs
+            SET implementation_decisions = '[{"id":"decision-1","changeId":"change-publication-owner","sequence":1,"recordedAt":"2026-08-09T20:10:00.000Z","choice":"Foreign choice","rationale":"Foreign rationale"}]'
+            WHERE id = 'owned-run'
+          `,
+        );
+        yield* expectPersistedDataInvalid(
+          changes.getPassingPublicationEvidence("change-malformed", publicationAuthority),
+        );
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE candidate_validation_runs SET implementation_decisions = '[]' WHERE id = 'owned-run'`;

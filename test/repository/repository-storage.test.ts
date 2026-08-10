@@ -1425,7 +1425,23 @@ describe("repository SQL storage", () => {
                 )
               `,
           );
-          const simplifiedCurrentRejected = yield* validation.startOrReuse({
+          const malformedHistoryError = yield* validation
+            .startOrReuse({
+              candidateId: captured.candidateId,
+              changeBaseSha: "base-sha",
+              headSha: "head-sha",
+              policy: simplifiedReviewPolicy,
+              implementationDecisions: [],
+              now: "2026-07-25T16:12:40.000Z",
+            })
+            .pipe(Effect.flip);
+          expect(malformedHistoryError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* repository.operation(
+            "remove malformed Validation Run fixture",
+            (sql) =>
+              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-duplicate-representation'`,
+          );
+          const simplifiedCurrent = yield* validation.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
@@ -1433,11 +1449,10 @@ describe("repository SQL storage", () => {
             implementationDecisions: [],
             now: "2026-07-25T16:12:40.000Z",
           });
-          expect(simplifiedCurrentRejected.reused).toBe(false);
-          if (simplifiedCurrentRejected.reused || "blocked" in simplifiedCurrentRejected)
-            throw new Error("Expected the duplicate representation to be rejected");
+          if (simplifiedCurrent.reused || "blocked" in simplifiedCurrent)
+            throw new Error("Expected a policy-distinct Validation Run");
           yield* validation.complete({
-            validationRunId: simplifiedCurrentRejected.validationRunId,
+            validationRunId: simplifiedCurrent.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:12:45.000Z",
           });
@@ -1568,14 +1583,8 @@ describe("repository SQL storage", () => {
             throw new Error("Expected a fresh Validation Run after Resolution");
           expect(afterResolution.validationRunId).not.toBe(first.validationRunId);
 
-          const historyError = yield* validation
-            .listRunsForCandidate(captured.candidateId)
-            .pipe(Effect.flip);
-          expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          expect(historyError).toMatchObject({
-            _tag: "RepositoryPersistedDataInvalid",
-            operationName: "decode Candidate Validation Run",
-          });
+          const history = yield* validation.listRunsForCandidate(captured.candidateId);
+          expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
         }),
       ),
   );
@@ -2773,8 +2782,18 @@ describe("repository SQL storage", () => {
                       id, candidate_id, policy_snapshot, state, outcome,
                       created_at, updated_at
                     ) VALUES (
-                      'run-severity', 'candidate-severity', '{}', 'complete', 'passed',
+                      'run-severity', 'candidate-severity',
+                      '{"checks":[{"id":"quality","command":"just quality","timeoutSeconds":60}],"copyFiles":[]}',
+                      'complete', 'passed',
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidate_validation_rounds (
+                      validation_run_id, phase, producer, round_number, status, created_at
+                    ) VALUES (
+                      'run-severity', 'checks', 'quality', 1, 'failed',
+                      '2026-07-25T16:30:00.000Z'
                     )
                   `;
                   yield* sql`

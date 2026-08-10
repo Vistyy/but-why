@@ -98,9 +98,7 @@ describe("portable But Why skill", () => {
     expect(authorTasks).toContain(
       "Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring either a split or concrete evidence that they form one bounded supported result.",
     );
-    expect(authorTasks).toContain(
-      "Calling them one subsystem or lifecycle is not that evidence.",
-    );
+    expect(authorTasks).toContain("Calling them one subsystem or lifecycle is not that evidence.");
     expect(authorTasks).toContain(
       "No single file, line, effort, or verification count determines the boundary.",
     );
