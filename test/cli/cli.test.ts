@@ -379,6 +379,7 @@ describe("by CLI", () => {
           Effect.tap((rows) => {
             expect(rows).toEqual([
               { name: "active_validation_runs" },
+              { name: "candidate_validation_admissions" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
               { name: "candidate_validation_rounds" },
@@ -454,6 +455,7 @@ describe("by CLI", () => {
         { migration_id: 23, name: "restrict_lifecycle_states" },
         { migration_id: 24, name: "remove_task_comments" },
         { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
+        { migration_id: 26, name: "current_candidate_validation_admissions" },
       ]);
     }),
   );
