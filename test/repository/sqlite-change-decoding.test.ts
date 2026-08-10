@@ -228,9 +228,12 @@ describe("SQLite Change decoding", () => {
           policy: { checks: [], copyFiles: [], specialistReviews: [] },
           implementationDecisions: [],
         };
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation(
           "inject malformed publication snapshots",
           (sql) => sql`
