@@ -32,7 +32,7 @@ Follow the repository instructions in the Managed Worktree.
 Use explicit verification constraints in accepted Task Context when present.
 Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Before selecting or adding verification evidence, read [Task verification](task-verification.md) completely.
-Select focused evidence at the owning seam after the implementation shape is known.
+Select proportionate evidence after the implementation shape is known.
 When multiple approaches remain compliant with accepted intent, select one.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.

@@ -22,6 +22,8 @@ export const currentCandidateReReviewInstructions = [
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context.",
+  "Judge whether available evidence could distinguish a materially incorrect Candidate from the accepted result.",
+  "Do not require a preferred verification mechanism or a durable test by default.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");
@@ -29,6 +31,8 @@ export const defaultAcceptanceInstructions = [
 const universalAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context.",
+  "Judge whether available evidence could distinguish a materially incorrect Candidate from the accepted result.",
+  "Do not require a preferred verification mechanism or a durable test by default.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");

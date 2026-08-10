@@ -1,27 +1,57 @@
 # Task verification
 
-Verification establishes justified confidence that a Candidate satisfies accepted intent.
+Accepted intent defines the required result.
+Implementation creates that result.
+Verification establishes justified confidence that the Candidate satisfies it, and review judges whether the Candidate and its evidence are sufficient.
 A test is one possible source of evidence, not the default output.
 Task Context has no required verification section or template.
-A Task may state a special verification constraint when approved intent requires one, but verification is normally selected after the implementation shape is known.
 
-Start from the actual Candidate and the plausible ways it could materially be wrong.
-Ask what observation would distinguish a correct result from an incorrect one.
-Understand the implementation, its boundaries, retained evidence, and mandatory gates before choosing how to observe the result.
-Use judgment rather than a fixed mapping from a change type to a verification mechanism.
-Use this reasoning to choose evidence, but do not require a verification plan or inventory unless the Operator requests one or software must parse it.
+## Philosophy
+
+Start from the actual work rather than a preferred verification mechanism.
+Consider what could materially be wrong and what observation would distinguish the accepted result from that failure.
+Choose evidence after understanding the implementation, the boundaries on which its behavior depends, retained evidence, and mandatory gates.
 
 Prefer evidence that observes the relevant behavior directly, would reveal the meaningful failure, and has proportionate creation and maintenance cost.
 A broader, slower, or more durable mechanism is not inherently stronger.
-Use a broader boundary only when the behavior being established depends on that boundary.
+Evidence establishes only what it actually observes.
 Treat missing, malformed, unavailable, or ambiguous observations as unknown rather than success.
 
-Do not require a test by default.
-Add a durable test when it protects accepted behavior from a plausible meaningful regression that the other selected evidence would not reveal, and when its ongoing value justifies its maintenance cost.
-A requirement, branch, scenario, or changed line does not create that need by itself.
-Do not create durable evidence whose only purpose is to prove exact documentation wording or the absence of a retired concept unless that fact is itself an executable supported contract.
-Prefer updating, reusing, consolidating, or removing retained evidence when that gives sufficient confidence at lower cost.
+Use this reasoning to guide judgment.
+Do not require a verification plan, inventory, or standard output structure unless the Operator requests one or software must parse it.
 
-Accepted repository mandatory gates remain binding.
-Do not duplicate a gate manually when its owning workflow will produce the required evidence.
-If proportionate evidence cannot establish a required result, report what remains unknown and why instead of inventing confidence or adding verification machinery by convention.
+## Select and produce evidence
+
+Read the accepted intent and applicable repository verification policy.
+Do not strengthen the product guarantee merely to make verification easier or more comprehensive.
+An Implementer may use any supported evidence that establishes the relevant behavior reliably.
+Use a broader system boundary only when the behavior being established depends on that boundary.
+When several mechanisms are credible, prefer the reliable one with lower execution, diagnosis, coupling, and maintenance cost.
+
+Produce evidence for the exact Candidate and relevant environment.
+Record only the command or procedure, relevant environment, and observation needed to interpret the result.
+Complete mandatory gates through their owning workflow instead of duplicating them manually.
+If an evidence mechanism fails, report the failed mechanism and remaining uncertainty.
+Do not interpret inability to collect evidence as either success or a Candidate failure.
+
+## Review verification
+
+Before implementation, review whether the accepted outcome is observable and whether any prescribed verification constraint is feasible and capable of observing that outcome.
+The absence of a prescribed mechanism is not itself a problem.
+
+After implementation, review the exact Candidate against accepted intent and available evidence.
+Ask whether the evidence could distinguish a materially incorrect Candidate from the accepted result, observes the boundaries on which that judgment depends, and corresponds to the exact Candidate and relevant environment.
+Do not reject sufficient evidence merely because another mechanism is more familiar or broader.
+Report only material confidence gaps and state what remains unsupported.
+Distinguish insufficient evidence from a tooling failure that prevents a trustworthy review.
+
+## Durable regression coverage
+
+Do not require a test by default.
+Add durable automation when it can repeatedly reveal a plausible meaningful regression that other retained or proportionate one-time evidence would miss, and when that protection justifies its authoring and maintenance cost.
+A requirement, branch, scenario, fixture, assertion, or changed line does not create that need by itself.
+Prefer updating, reusing, consolidating, or removing retained coverage when that gives sufficient confidence at lower cost.
+
+For a reproduced defect, demonstrating that a regression test fails against the defective behavior can strengthen the evidence when the supported environment makes that practical.
+Do not require historical execution, mutation, or sensitivity experiments by convention.
+Do not create durable evidence whose only purpose is to prove exact documentation wording or the absence of a retired concept unless that fact is itself an executable supported contract.
