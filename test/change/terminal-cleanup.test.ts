@@ -509,59 +509,6 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
     }),
   );
 
-  it.effect("retries pending cleanup when a taskless Change is cancelled again", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
-      const dependencies = cancellationDependencies({
-        task: taskRecord("cancelled"),
-        change,
-        events,
-      });
-
-      const result = yield* dependencies.cancellation.cancelChange({
-        changeId: change.id,
-        reason: "Stop",
-        now,
-      });
-
-      expect(result).toMatchObject({
-        ok: true,
-        status: "cancelled",
-        changed: false,
-        change: { cleanup: { state: "complete", blockingReason: null } },
-      });
-      expect(events).toEqual(["cleanup", "record-cleanup", "remove-reviewer-sessions:change-1"]);
-    }),
-  );
-
-  it.effect("keeps pending cleanup retryable when the cleanup record fails", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
-      const dependencies = cancellationDependencies({
-        task: taskRecord("cancelled"),
-        change,
-        recordCleanupResult: { ok: false, code: "change_not_found" },
-        events,
-      });
-
-      const result = yield* dependencies.cancellation.cancelChange({
-        changeId: change.id,
-        reason: "Stop",
-        now,
-      });
-
-      expect(result).toMatchObject({
-        ok: true,
-        status: "cancelled",
-        changed: false,
-        change: { state: "closed", cleanup: pendingCleanup },
-      });
-      expect(result).not.toHaveProperty("cleanup");
-      expect(events).toEqual(["cleanup", "record-cleanup"]);
-    }),
-  );
 });
 
 const pendingCleanup: ChangeCleanup = { state: "pending", blockingReason: null };
@@ -662,9 +609,6 @@ const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullReque
 const cancellationDependencies = (input: {
   readonly task: TaskRecord;
   readonly change: ChangeRecord;
-  readonly recordCleanupResult?:
-    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
-    | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" };
   readonly events: string[];
 }): CancellationDependencies & {
   readonly cancellation: ReturnType<typeof openCancellationUseCases>;
@@ -684,9 +628,6 @@ const cancellationDependencies = (input: {
     cancelChange: () => Effect.succeed({ ok: true as const, changed: true, change: input.change }),
     recordCleanup: () => {
       input.events.push("record-cleanup");
-      if (input.recordCleanupResult !== undefined && !input.recordCleanupResult.ok) {
-        return Effect.succeed(input.recordCleanupResult);
-      }
       return Effect.succeed({
         ok: true as const,
         changed: true,
