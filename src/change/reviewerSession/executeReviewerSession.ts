@@ -38,8 +38,13 @@ export type ExecuteReviewerSessionInput<Output, ReviewBoundaryError> = {
   readonly resourceRoot?: string;
   readonly sessionStorageRoot?: string;
   readonly sessionStore?: ReviewerSessionStore;
-  readonly afterReview: () => Effect.Effect<void, ReviewBoundaryError>;
-  readonly additionalPrompt?: (report: Output) => string | undefined;
+  readonly completeReview: (input: {
+    readonly initialResult: ReviewerAgentResult<Output>;
+    readonly review: (
+      prompt: string,
+      resumeSession?: string,
+    ) => Effect.Effect<ReviewerAgentResult<Output>>;
+  }) => Effect.Effect<ReviewerAgentResult<Output>, ReviewBoundaryError>;
 };
 
 export type ExecuteReviewerSessionResult<Output> = {
@@ -117,15 +122,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
         yield* input.sessionStore.remove(input.identity.changeId, input.identity.producer);
       result = yield* review(input.prompt);
     }
-    yield* input.afterReview();
-
-    if (result.ok && input.additionalPrompt !== undefined) {
-      const additionalPrompt = input.additionalPrompt(result.report);
-      if (additionalPrompt !== undefined) {
-        result = yield* review(additionalPrompt, result.sessionReference);
-        yield* input.afterReview();
-      }
-    }
+    result = yield* input.completeReview({ initialResult: result, review });
 
     if (result.ok && result.sessionReference === undefined && restartReason === undefined) {
       restartReason = "session_capture_unavailable";

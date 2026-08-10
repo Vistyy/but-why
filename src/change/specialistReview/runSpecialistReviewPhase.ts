@@ -279,17 +279,21 @@ const runSpecialist = (
         ? {}
         : { sessionStorageRoot: input.sessionStorageRoot }),
       ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
-      afterReview: () => verifyIntegrity(input),
-      ...(earlierFindings.length === 0
-        ? {}
-        : {
-            additionalPrompt: (provisionalReport: ReviewerOutput) =>
-              buildReviewerRevisionPrompt({
-                reviewPrompt: prompt,
-                provisionalReport,
-                earlierFindings,
-              }),
-          }),
+      completeReview: ({ initialResult, review }) =>
+        Effect.gen(function* () {
+          yield* verifyIntegrity(input);
+          if (!initialResult.ok || earlierFindings.length === 0) return initialResult;
+          const result = yield* review(
+            buildReviewerRevisionPrompt({
+              reviewPrompt: prompt,
+              provisionalReport: initialResult.report,
+              earlierFindings,
+            }),
+            initialResult.sessionReference,
+          );
+          yield* verifyIntegrity(input);
+          return result;
+        }),
     });
     const result = translateRuntimeResult(execution.result, policy.id);
     const reviewerEvidence = {

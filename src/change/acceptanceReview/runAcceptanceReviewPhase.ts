@@ -245,7 +245,7 @@ const runAcceptanceReviewPhaseImpl = (
         ? {}
         : { sessionStorageRoot: input.sessionStorageRoot }),
       ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
-      afterReview: () => verifyIntegrity(input),
+      completeReview: ({ initialResult }) => verifyIntegrity(input).pipe(Effect.as(initialResult)),
     });
     const result = translateRuntimeResult(execution.result, "acceptance");
     const reviewerEvidence = execution.evidence;
