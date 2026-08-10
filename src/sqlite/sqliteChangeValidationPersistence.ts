@@ -752,11 +752,20 @@ const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) 
       FROM candidate_validation_tooling_failures
       WHERE validation_run_id = ${validationRunId}
     `;
-    return yield* decodePersisted("list Candidate validation Tooling Failures", () =>
+    const failures = yield* decodePersisted("list Candidate validation Tooling Failures", () =>
       rows
         .map((row) => assertRunOwner(decodeToolingFailure(row), validationRunId))
         .sort((left, right) => left.sequence - right.sequence),
     );
+    if (failures.length === 0) return failures;
+    const run = yield* getRunById(sql, validationRunId);
+    if (run === undefined) {
+      return yield* invalidData(
+        "list Candidate validation Tooling Failures",
+        "Tooling Failures belong to an unknown Run",
+      );
+    }
+    return failures;
   });
 
 const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>

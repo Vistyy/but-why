@@ -291,6 +291,22 @@ describe("SQLite Candidate and Validation read decoding", () => {
           now,
         });
 
+        yield* repository.operation("install orphan Tooling Failure", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`PRAGMA foreign_keys = OFF`;
+            yield* sql`INSERT INTO candidate_validation_tooling_failures (validation_run_id, error_kind, operation_name, error_message, created_at) VALUES ('unknown-run', 'infrastructure_tooling_failed', 'orphan operation', 'orphan failure', ${now})`;
+            yield* sql`PRAGMA foreign_keys = ON`;
+          }),
+        );
+        expect(
+          yield* validation.listToolingFailures("unknown-run").pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* repository.operation(
+          "remove orphan Tooling Failure",
+          (sql) =>
+            sql`DELETE FROM candidate_validation_tooling_failures WHERE validation_run_id = 'unknown-run'`,
+        );
+
         yield* repository.operation(
           "install wrong Candidate scalar",
           (sql) => sql`UPDATE candidates SET head_sha = X'07' WHERE id = ${prior.candidateId}`,
