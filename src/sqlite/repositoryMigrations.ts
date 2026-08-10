@@ -25,6 +25,7 @@ import { changeCancelReasonMigration as changeCancelReason } from "./migrations/
 import { restrictLifecycleStatesMigration as restrictLifecycleStates } from "./migrations/0023_restrict_lifecycle_states.js";
 import { removeTaskCommentsMigration as removeTaskComments } from "./migrations/0024_remove_task_comments.js";
 import { repairValidationPolicySnapshotOkFieldMigration as repairValidationPolicySnapshotOkField } from "./migrations/0025_repair_validation_policy_snapshot_ok_field.js";
+import { currentCandidateValidationAdmissionsMigration as currentCandidateValidationAdmissions } from "./migrations/0026_current_candidate_validation_admissions.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -52,6 +53,7 @@ const migrations = {
   "0023_restrict_lifecycle_states": restrictLifecycleStates,
   "0024_remove_task_comments": removeTaskComments,
   "0025_repair_validation_policy_snapshot_ok_field": repairValidationPolicySnapshotOkField,
+  "0026_current_candidate_validation_admissions": currentCandidateValidationAdmissions,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

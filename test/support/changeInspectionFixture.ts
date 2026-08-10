@@ -251,22 +251,28 @@ export const createValidationRunFixture = (
           ? {}
           : { acceptanceContext: JSON.parse(acceptanceContext) as unknown }),
       };
-      yield* repository.operation(
-        "create Validation Run inspection fixture",
-        (sql) => sql`
-          INSERT INTO candidate_validation_runs (
-            id, candidate_id, policy_snapshot, implementation_decisions,
-            latest_resolved_blocker_id, state, outcome, created_at, updated_at
-          ) VALUES (
-            ${id}, ${input.candidateId}, ${JSON.stringify(policy)}, '[]',
-            (
-              SELECT id FROM implementation_blockers
-              WHERE change_id = ${input.changeId} AND resolved_at <= ${input.createdAt}
-              ORDER BY resolved_at DESC, sequence DESC LIMIT 1
-            ),
-            ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
-          )
-        `,
+      yield* repository.operation("create Validation Run inspection fixture", (sql) =>
+        Effect.gen(function* () {
+          yield* sql`
+            INSERT INTO candidate_validation_runs (
+              id, candidate_id, policy_snapshot, implementation_decisions,
+              latest_resolved_blocker_id, state, outcome, created_at, updated_at
+            ) VALUES (
+              ${id}, ${input.candidateId}, ${JSON.stringify(policy)}, '[]',
+              (
+                SELECT id FROM implementation_blockers
+                WHERE change_id = ${input.changeId} AND resolved_at <= ${input.createdAt}
+                ORDER BY resolved_at DESC, sequence DESC LIMIT 1
+              ),
+              ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
+            )
+          `;
+          yield* sql`
+            INSERT INTO candidate_validation_admissions (candidate_id, validation_run_id)
+            VALUES (${input.candidateId}, ${id})
+            ON CONFLICT(candidate_id) DO UPDATE SET validation_run_id = excluded.validation_run_id
+          `;
+        }),
       );
       if (input.state === "running") {
         yield* repository.operation(

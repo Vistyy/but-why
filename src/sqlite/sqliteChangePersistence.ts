@@ -467,13 +467,13 @@ const getCurrentPassingEvidence = (
         run.latest_resolved_blocker_id AS latestResolvedBlockerId,
         run.state, run.outcome, run.created_at AS createdAt, run.updated_at AS updatedAt
        FROM candidates AS candidate
-       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
+       JOIN candidate_validation_admissions AS admission ON admission.candidate_id = candidate.id
+       JOIN candidate_validation_runs AS run ON run.id = admission.validation_run_id
        WHERE candidate.id = (
          SELECT current.id FROM candidates AS current
          WHERE current.change_id = ?
          ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-       ) AND ${runPredicate}
-       ORDER BY run.created_at DESC, run.id DESC`,
+       ) AND ${runPredicate}`,
       parameters,
     );
     const blockerHistory = yield* readBlockers(
