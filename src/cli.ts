@@ -6,7 +6,6 @@ import type { TextInputStdin } from "./cli/input/textInput.js";
 import { runCommandTree } from "./cliCommandTree.js";
 import { type CliResult, runtimeError } from "./cliResults.js";
 import type { ReviewerOutput } from "./contracts/reviewerOutput.js";
-import type { OutputFormat } from "./output/structured.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
@@ -28,11 +27,9 @@ export const runCli = (
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> => runCommandTree(args, environment);
 
-export const mapRuntimeError = (outputFormat: OutputFormat = "toon"): CliResult => ({
-  ...runtimeError({
+export const mapRuntimeError = (): CliResult =>
+  runtimeError({
     code: "internal_error",
     message: "The command failed unexpectedly",
     help: ["Report this failure with the command and workspace path"],
-  }),
-  outputFormat,
-});
+  });

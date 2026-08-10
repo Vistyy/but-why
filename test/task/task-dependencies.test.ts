@@ -37,7 +37,6 @@ describe("Task dependency CLI", () => {
       const result = yield* runByInProcessEffect(
         root,
         [
-          "--json",
           "task",
           "create",
           "--title",
@@ -74,17 +73,7 @@ describe("Task dependency CLI", () => {
       let replacementDependencies: readonly string[] = [];
       const replacement = yield* runByInProcessEffect(
         root,
-        [
-          "--json",
-          "task",
-          "dependencies",
-          "replace",
-          "BY-3",
-          "--depends-on",
-          "BY-1",
-          "--depends-on",
-          "BY-2",
-        ],
+        ["task", "dependencies", "replace", "BY-3", "--depends-on", "BY-1", "--depends-on", "BY-2"],
         now,
         {
           taskUseCases: fakeTaskUseCases({
@@ -139,17 +128,7 @@ describe("Task dependency CLI", () => {
       writeFileSync(join(root, "cycle.md"), "Description for Cycle");
       const result = yield* runByInProcessEffect(
         root,
-        [
-          "--json",
-          "task",
-          "create",
-          "--title",
-          "Cycle",
-          "--file",
-          "cycle.md",
-          "--depends-on",
-          "BY-1",
-        ],
+        ["task", "create", "--title", "Cycle", "--file", "cycle.md", "--depends-on", "BY-1"],
         now,
         {
           taskUseCases: dependencyErrorTaskUseCases({
@@ -211,7 +190,6 @@ describe("Task dependency CLI", () => {
           const result = yield* runByInProcessEffect(
             root,
             [
-              "--json",
               "task",
               "create",
               "--title",
@@ -292,7 +270,6 @@ describe("Task dependency CLI", () => {
           const result = yield* runByInProcessEffect(
             root,
             [
-              "--json",
               "task",
               "dependencies",
               "replace",
@@ -321,7 +298,7 @@ describe("Task dependency CLI", () => {
 
         const missing = yield* runByInProcessEffect(
           root,
-          ["--json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
+          ["task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
           now,
           {
             taskUseCases: dependencyErrorTaskUseCases({
@@ -344,7 +321,7 @@ describe("Task dependency CLI", () => {
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "dependencies", "add", "BY-1", "--depends-on", "BY-2"],
+        ["task", "dependencies", "add", "BY-1", "--depends-on", "BY-2"],
         now,
         {
           taskUseCases: dependencyErrorTaskUseCases({

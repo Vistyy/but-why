@@ -79,7 +79,7 @@ export const changeNotFound = (): CliResult =>
   runtimeError({
     code: "change_not_found",
     message: "Change was not found.",
-    help: ["Use a Change ID returned by `by change list --all --json`."],
+    help: ["Use a Change ID returned by `by change list --all`."],
   });
 
 export const inspectionFailure = <A>(

@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0011-use-json-as-the-only-cli-result-format
 ---
 
 # Support JSON for programmatic CLI consumers

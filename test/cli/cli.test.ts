@@ -8,7 +8,6 @@ import { describe, it as ordinaryIt } from "vitest";
 import { collapseHome } from "../../src/cli/cliPath.js";
 import { mapRuntimeError } from "../../src/cli.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
-import { encodeToon } from "../../src/output/toon.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
@@ -75,33 +74,27 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain('help: "DESCRIPTION');
-      expect(result.stdout).toContain(
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.help).toContain(
         "Validate completed code changes against approved human intent.",
       );
-      expect(result.stdout).toContain("COMMANDS");
-      expect(result.stdout).toContain("--json");
+      expect(parsed.help).toContain("COMMANDS");
       for (const commandPath of expectedCommandPaths) {
-        expect(result.stdout, commandPath).toContain(`- ${commandPath}`);
+        expect(parsed.help, commandPath).toContain(`- ${commandPath}`);
       }
-      expect(result.stdout).not.toContain("task task");
-      expect(result.stdout).not.toContain("change change");
-      expect(result.stdout).toContain("(-h, --help)");
-      expect(result.stdout).toContain("--version");
-      expect(result.stdout).toContain("--wizard");
-      expect(result.stdout).toContain("--completions");
-      expect(result.stdout).toContain("--log-level");
+      expect(parsed.help).not.toContain("task task");
+      expect(parsed.help).not.toContain("change change");
+      expect(parsed.help).toContain("(-h, --help)");
+      expect(parsed.help).toContain("--version");
+      expect(parsed.help).toContain("--wizard");
+      expect(parsed.help).toContain("--completions");
+      expect(parsed.help).toContain("--log-level");
     }),
   );
 
   it.effect("classifies Change Submit as a long-running command in generated help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
-        "--json",
-        "change",
-        "submit",
-        "--help",
-      ]);
+      const result = yield* runByInProcessEffect(repoRoot, ["change", "submit", "--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -113,7 +106,7 @@ describe("by CLI", () => {
 
   it.effect("uses native help behavior for trailing arguments", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--json", "task", "--help", "extra"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "--help", "extra"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -123,13 +116,7 @@ describe("by CLI", () => {
 
   it.effect("uses native leaf help behavior for trailing arguments", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
-        "--json",
-        "task",
-        "list",
-        "--help",
-        "extra",
-      ]);
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "--help", "extra"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -140,7 +127,6 @@ describe("by CLI", () => {
   it.effect("uses native help behavior for trailing options", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
-        "--json",
         "task",
         "list",
         "--help",
@@ -154,32 +140,32 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("prints JSON help when selected after help", () =>
+  it.effect("frames default JSON help as one compact document", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout.endsWith("\n")).toBe(true);
       expect(result.stdout.trimEnd()).not.toContain("\n");
-      const parsed = JSON.parse(result.stdout);
+      expect(JSON.parse(result.stdout).help).toContain("COMMANDS");
+    }),
+  );
 
-      expect(parsed.help).toContain(
-        "Validate completed code changes against approved human intent.",
-      );
-      expect(parsed.help).toContain("COMMANDS");
-      expect(parsed.help).toContain("--json");
-      for (const commandPath of expectedCommandPaths) {
-        expect(parsed.help, commandPath).toContain(`- ${commandPath}`);
-      }
-      expect(parsed.help).not.toContain("task task");
-      expect(parsed.help).not.toContain("change change");
+  it.effect("prints the package version as one compact JSON document", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["--version"]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe('{"version":"0.0.1"}\n');
+      expect(JSON.parse(result.stdout)).toEqual({ version: "0.0.1" });
     }),
   );
 
   it.effect("prints JSON init help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--json", "init", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["init", "--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -192,7 +178,7 @@ describe("by CLI", () => {
   it.effect("prints JSON init guidance", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, ["--json", "init", "--task-prefix", "BY"]);
+      const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -219,44 +205,9 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("uses TOON output when JSON is false", () =>
+  it.effect("prints JSON usage errors by default", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json=false"]);
-
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain('help: "DESCRIPTION');
-      expect(() => JSON.parse(result.stdout)).toThrow();
-    }),
-  );
-
-  it.effect("accepts spaced native JSON boolean values", () =>
-    Effect.gen(function* () {
-      const json = yield* runByInProcessEffect(repoRoot, ["--json", "true", "--version"]);
-      const toon = yield* runByInProcessEffect(repoRoot, ["--json", "false", "--version"]);
-
-      expect(json.status).toBe(0);
-      expect(JSON.parse(json.stdout)).toEqual({ version: "0.0.1" });
-      expect(toon.status).toBe(0);
-      expect(toon.stdout).toBe("version: 0.0.1\n");
-    }),
-  );
-
-  it.effect("rejects invalid native JSON values without version fallback", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--json", "bad", "--version"]);
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "invalid_usage" },
-      });
-    }),
-  );
-
-  it.effect("prints JSON usage errors after a valid JSON selector", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--json", "--bad"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--bad"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
@@ -269,10 +220,10 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("prints JSON command errors after a valid JSON selector", () =>
+  it.effect("prints JSON command errors by default", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, ["--json", "task", "list"]);
+      const result = yield* runByInProcessEffect(root, ["task", "list"]);
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
@@ -292,11 +243,13 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_usage
-  message: "Received unknown argument: '--bad'"
-help[1]: Run \`by --help\` for generated command help.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_usage",
+          message: "Received unknown argument: '--bad'",
+        },
+        help: ["Run `by --help` for generated command help."],
+      });
     }),
   );
 
@@ -306,8 +259,7 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain('help: "DESCRIPTION');
-      expect(result.stdout).toContain("Create repo-local But Why? state.");
+      expect(JSON.parse(result.stdout).help).toContain("Create repo-local But Why? state.");
     }),
   );
 
@@ -317,8 +269,12 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Invalid subcommand for by");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: expect.stringContaining("Invalid subcommand for by"),
+        },
+      });
     }),
   );
 
@@ -328,8 +284,12 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Invalid subcommand for by");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: expect.stringContaining("Invalid subcommand for by"),
+        },
+      });
     }),
   );
 
@@ -340,22 +300,33 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`init:
-  status: initialized
-  root: ${root}
-  taskPrefix: BY
-created[3]: .but-why/config.json,<git-common-dir>/but-why/state.sqlite,.but-why/reviewers/
-updated[1]: .gitignore
-validationSetup:
-  policyFile: .but-why/config.json
-  policy: tracked repo policy
-  configDoc: ${expectedConfigDoc}
-  setupDoc: ${expectedSetupDoc}
-  guidance[3]{step,detail}:
-    inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        init: { status: "initialized", root, taskPrefix: "BY" },
+        created: [
+          ".but-why/config.json",
+          "<git-common-dir>/but-why/state.sqlite",
+          ".but-why/reviewers/",
+        ],
+        updated: [".gitignore"],
+        validationSetup: {
+          policyFile: ".but-why/config.json",
+          policy: "tracked repo policy",
+          configDoc: expectedConfigDoc,
+          setupDoc: expectedSetupDoc,
+          guidance: [
+            {
+              step: "inspect",
+              detail: "Inspect repo tooling before choosing validation commands.",
+            },
+            {
+              step: "configure",
+              detail:
+                "Configure top-level prepare and validation.checks to the best of your ability from observed tooling.",
+            },
+            { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
+          ],
+        },
+      });
       expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
         taskPrefix: "BY",
       });
@@ -386,7 +357,7 @@ validationSetup:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain(`root: ${root}`);
+      expect(JSON.parse(result.stdout)).toMatchObject({ init: { root } });
       expect(existsSync(join(root, ".but-why/config.json"))).toBe(true);
       expect(existsSync(join(subdirectory, ".but-why/config.json"))).toBe(false);
     }),
@@ -438,20 +409,15 @@ validationSetup:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`init:
-  status: unchanged
-  root: ${root}
-  taskPrefix: BY
-validationSetup:
-  policyFile: .but-why/config.json
-  policy: tracked repo policy
-  configDoc: ${expectedConfigDoc}
-  setupDoc: ${expectedSetupDoc}
-  guidance[3]{step,detail}:
-    inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.
-`);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        init: { status: "unchanged", root, taskPrefix: "BY" },
+        validationSetup: {
+          policyFile: ".but-why/config.json",
+          policy: "tracked repo policy",
+          configDoc: expectedConfigDoc,
+          setupDoc: expectedSetupDoc,
+        },
+      });
       const migrations = yield* withRepositorySql(root, (repository) =>
         repository.operation(
           "inspect repository migrations",
@@ -503,22 +469,11 @@ validationSetup:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`init:
-  status: repaired
-  root: ${root}
-  taskPrefix: BY
-created[1]: <git-common-dir>/but-why/state.sqlite
-updated[1]: .gitignore
-validationSetup:
-  policyFile: .but-why/config.json
-  policy: tracked repo policy
-  configDoc: ${expectedConfigDoc}
-  setupDoc: ${expectedSetupDoc}
-  guidance[3]{step,detail}:
-    inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.
-`);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        init: { status: "repaired", root, taskPrefix: "BY" },
+        created: ["<git-common-dir>/but-why/state.sqlite"],
+        updated: [".gitignore"],
+      });
     }),
   );
 
@@ -532,21 +487,10 @@ validationSetup:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`init:
-  status: repaired
-  root: ${root}
-  taskPrefix: BY
-created[1]: .but-why/reviewers/
-validationSetup:
-  policyFile: .but-why/config.json
-  policy: tracked repo policy
-  configDoc: ${expectedConfigDoc}
-  setupDoc: ${expectedSetupDoc}
-  guidance[3]{step,detail}:
-    inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.
-`);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        init: { status: "repaired", root, taskPrefix: "BY" },
+        created: [".but-why/reviewers/"],
+      });
     }),
   );
 
@@ -557,11 +501,13 @@ validationSetup:
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: not_git_work_tree
-  message: by init must be run inside a Git work tree.
-help[1]: "Run git init first, or cd into an existing Git repository."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "not_git_work_tree",
+          message: "by init must be run inside a Git work tree.",
+        },
+        help: ["Run git init first, or cd into an existing Git repository."],
+      });
     }),
   );
 
@@ -572,11 +518,13 @@ help[1]: "Run git init first, or cd into an existing Git repository."
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_usage
-  message: "Expected to find option: '--task-prefix'"
-help[1]: Run \`by --help\` for generated command help.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_usage",
+          message: "Expected to find option: '--task-prefix'",
+        },
+        help: ["Run `by --help` for generated command help."],
+      });
     }),
   );
 
@@ -587,12 +535,14 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_task_prefix
-  message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$."
-  taskPrefix: by
-help[1]: "Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_task_prefix",
+          message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
+          taskPrefix: "by",
+        },
+        help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
+      });
     }),
   );
 
@@ -605,14 +555,18 @@ help[1]: "Use 2 to 10 uppercase letters or digits, starting with a letter, such 
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: task_prefix_conflict
-  message: Repository is already initialized with task prefix OLD.
-  path: .but-why/config.json
-  existingTaskPrefix: OLD
-  requestedTaskPrefix: BY
-help[1]: "Keep using OLD, or manually migrate .but-why/config.json before running init again."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "task_prefix_conflict",
+          message: "Repository is already initialized with task prefix OLD.",
+          path: ".but-why/config.json",
+          existingTaskPrefix: "OLD",
+          requestedTaskPrefix: "BY",
+        },
+        help: [
+          "Keep using OLD, or manually migrate .but-why/config.json before running init again.",
+        ],
+      });
     }),
   );
 
@@ -626,10 +580,19 @@ help[1]: "Keep using OLD, or manually migrate .but-why/config.json before runnin
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_repo_config");
-      expect(result.stdout).toContain("expected: valid JSON");
-      expect(result.stdout).toContain('actual: "{"');
-      expect(result.stdout).toContain("Invalid JSON:");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_repo_config",
+          diagnostics: [
+            {
+              path: [],
+              expected: "valid JSON",
+              actual: "{",
+              message: expect.stringContaining("Invalid JSON:"),
+            },
+          ],
+        },
+      });
     }),
   );
 
@@ -646,10 +609,12 @@ help[1]: "Keep using OLD, or manually migrate .but-why/config.json before runnin
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_repo_config");
-      expect(result.stdout).toContain("path[1]: extra");
-      expect(result.stdout).toContain("actual: true");
-      expect(result.stdout).toContain("message: Unknown key.");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_repo_config",
+          diagnostics: [{ path: ["extra"], actual: true, message: "Unknown key." }],
+        },
+      });
     }),
   );
 
@@ -661,10 +626,6 @@ help[1]: "Keep using OLD, or manually migrate .but-why/config.json before runnin
       error: { code: "internal_error", message: "The command failed unexpectedly" },
       help: ["Report this failure with the command and workspace path"],
     });
-    expect(encodeToon(result.stdout)).toBe(`error:
-  code: internal_error
-  message: The command failed unexpectedly
-help[1]: Report this failure with the command and workspace path`);
   });
 
   ordinaryIt("collapses the home directory in executable paths", () => {

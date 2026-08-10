@@ -6,26 +6,23 @@ import type {
 } from "./contracts/repositoryStorageError.js";
 import type { LoadRepoLocalContextError } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
-import type { OutputFormat, StructuredObject } from "./output/structured.js";
+import type { StructuredObject } from "./output/structured.js";
 
 export type CliResult = CliSuccessResult | CliRuntimeErrorResult | CliUsageErrorResult;
 
 export type CliSuccessResult = {
   readonly exitCode: 0;
   readonly stdout: StructuredObject;
-  readonly outputFormat?: OutputFormat;
 };
 
 export type CliRuntimeErrorResult = {
   readonly exitCode: 1;
   readonly stdout: StructuredObject;
-  readonly outputFormat?: OutputFormat;
 };
 
 export type CliUsageErrorResult = {
   readonly exitCode: 2;
   readonly stdout: StructuredObject;
-  readonly outputFormat?: OutputFormat;
 };
 
 export type RepoStateLoadError =
@@ -37,7 +34,7 @@ export type RepoStateLoadError =
 
 /**
  * CLI routes should construct serializer-facing results here.
- * Keep TOON and JSON serialization outside domain modules and future validation workspace code.
+ * Keep JSON serialization outside domain modules and future validation workspace code.
  */
 export const success = (stdout: StructuredObject): CliSuccessResult => ({
   exitCode: 0,

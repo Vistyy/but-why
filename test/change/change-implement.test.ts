@@ -138,12 +138,9 @@ describe("by change implement", () => {
         },
       };
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", fixture.id],
-        now,
-        { interactiveSessionHost: host },
-      );
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        interactiveSessionHost: host,
+      });
 
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
@@ -183,14 +180,7 @@ describe("by change implement", () => {
       const received: string[] = [];
       const implementerPromptResult = yield* runByInProcessEffect(
         root,
-        [
-          "--json",
-          "change",
-          "implement",
-          fixture.id,
-          "--implementer-prompt-file",
-          implementerPromptPath,
-        ],
+        ["change", "implement", fixture.id, "--implementer-prompt-file", implementerPromptPath],
         now,
         {
           interactiveSessionHost: {
@@ -225,19 +215,14 @@ describe("by change implement", () => {
         },
       });
       let launchInput: unknown;
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", fixture.id],
-        now,
-        {
-          interactiveSessionHost: {
-            launch: async (input) => {
-              launchInput = input;
-              return { ok: true, host: "herdr", status: "started" };
-            },
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        interactiveSessionHost: {
+          launch: async (input) => {
+            launchInput = input;
+            return { ok: true, host: "herdr", status: "started" };
           },
         },
-      );
+      });
 
       expect(result.status).toBe(0);
       expect(launchInput).toMatchObject({
@@ -268,19 +253,14 @@ describe("by change implement", () => {
       );
       const fixture = yield* createChangeImplementFixture(root);
       let launches = 0;
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", fixture.id],
-        now,
-        {
-          interactiveSessionHost: {
-            launch: async () => {
-              launches += 1;
-              return { ok: true, host: "herdr", status: "started" };
-            },
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        interactiveSessionHost: {
+          launch: async () => {
+            launches += 1;
+            return { ok: true, host: "herdr", status: "started" };
           },
         },
-      );
+      });
 
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stdout)).toMatchObject({
@@ -316,7 +296,7 @@ describe("by change implement", () => {
       );
 
       try {
-        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+        const started = yield* runByInProcessEffect(root, ["change", "start"], now);
         const change = JSON.parse(started.stdout) as {
           readonly change: { readonly id: string };
           readonly worktreePath: string;
@@ -331,13 +311,13 @@ describe("by change implement", () => {
 
         const fromMain = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", change.change.id],
+          ["change", "implement", change.change.id],
           now,
           { interactiveSessionHost: host },
         );
         const fromLinked = yield* runByInProcessEffect(
           linkedCheckout,
-          ["--json", "change", "implement", change.change.id],
+          ["change", "implement", change.change.id],
           now,
           { interactiveSessionHost: host },
         );
@@ -383,20 +363,15 @@ describe("by change implement", () => {
       );
       const launches: unknown[] = [];
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", fixture.id],
-        now,
-        {
-          globalConfigPath,
-          interactiveSessionHost: {
-            launch: async (input) => {
-              launches.push(input);
-              return { ok: true, host: "herdr", status: "started" };
-            },
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        globalConfigPath,
+        interactiveSessionHost: {
+          launch: async (input) => {
+            launches.push(input);
+            return { ok: true, host: "herdr", status: "started" };
           },
         },
-      );
+      });
 
       expect(result.status).toBe(0);
       expect(launches).toEqual([
@@ -437,32 +412,19 @@ describe("by change implement", () => {
         const fixture = yield* createChangeImplementFixture(root);
         const globalConfigPath = join(root, "global-config.json");
         writeFileSync(globalConfigPath, JSON.stringify(globalConfig));
-        const before = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "show", fixture.id],
-          now,
-        );
+        const before = yield* runByInProcessEffect(root, ["change", "show", fixture.id], now);
         let launches = 0;
 
-        const result = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "implement", fixture.id],
-          now,
-          {
-            globalConfigPath,
-            interactiveSessionHost: {
-              launch: async () => {
-                launches += 1;
-                return { ok: true, host: "herdr", status: "started" };
-              },
+        const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+          globalConfigPath,
+          interactiveSessionHost: {
+            launch: async () => {
+              launches += 1;
+              return { ok: true, host: "herdr", status: "started" };
             },
           },
-        );
-        const after = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "show", fixture.id],
-          now,
-        );
+        });
+        const after = yield* runByInProcessEffect(root, ["change", "show", fixture.id], now);
 
         expect(result.status).toBe(1);
         expect(JSON.parse(result.stdout)).toMatchObject({
@@ -484,19 +446,14 @@ describe("by change implement", () => {
       });
       let launches = 0;
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", fixture.id],
-        now,
-        {
-          interactiveSessionHost: {
-            launch: async () => {
-              launches += 1;
-              return { ok: true, host: "herdr", status: "started" };
-            },
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        interactiveSessionHost: {
+          launch: async () => {
+            launches += 1;
+            return { ok: true, host: "herdr", status: "started" };
           },
         },
-      );
+      });
 
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stdout)).toMatchObject({
@@ -529,12 +486,9 @@ describe("by change implement", () => {
           },
         };
 
-        const result = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "implement", fixture.id],
-          now,
-          { interactiveSessionHost: host },
-        );
+        const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+          interactiveSessionHost: host,
+        });
 
         expect(result.status).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({
@@ -620,12 +574,9 @@ describe("by change implement", () => {
       ];
 
       for (const testCase of cases) {
-        const result = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "implement", fixture.id],
-          now,
-          { interactiveSessionHost: testCase.host },
-        );
+        const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+          interactiveSessionHost: testCase.host,
+        });
         expect(result.status).toBe(testCase.status);
         expect(JSON.parse(result.stdout)).toMatchObject(testCase.expected);
       }
@@ -650,7 +601,7 @@ describe("by change implement", () => {
       try {
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", fixture.id, "--implementer-prompt-file", "-"],
+          ["change", "implement", fixture.id, "--implementer-prompt-file", "-"],
           now,
           { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
         );
@@ -668,7 +619,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", "change-1", "--implementer-prompt-file", "-"],
+        ["change", "implement", "change-1", "--implementer-prompt-file", "-"],
         now,
         { stdin: { fd: -1, isTerminal: true } },
       );
@@ -697,14 +648,7 @@ describe("by change implement", () => {
 
         const result = yield* runByInProcessEffect(
           root,
-          [
-            "--json",
-            "change",
-            "implement",
-            "change-1",
-            "--implementer-prompt-file",
-            implementerPromptPath,
-          ],
+          ["change", "implement", "change-1", "--implementer-prompt-file", implementerPromptPath],
           now,
           { interactiveSessionHost: host },
         );

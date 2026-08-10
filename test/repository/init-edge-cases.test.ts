@@ -95,7 +95,7 @@ describe("by init edge cases", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("status: initialized");
+      expect(JSON.parse(result.stdout).init.status).toBe("initialized");
       expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
         taskPrefix: "BY",
       });
@@ -112,12 +112,14 @@ describe("by init edge cases", () => {
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_repo_state
-  message: .but-why/reviewers/ must be a directory.
-  path: .but-why/reviewers/
-help[1]: Move the conflicting path aside before running init again.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_repo_state",
+          message: ".but-why/reviewers/ must be a directory.",
+          path: ".but-why/reviewers/",
+        },
+        help: ["Move the conflicting path aside before running init again."],
+      });
       expect(existsSync(join(root, ".but-why/reviewers"))).toBe(true);
     }),
   );
@@ -141,7 +143,7 @@ help[1]: Move the conflicting path aside before running init again.
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("status: unchanged");
+      expect(JSON.parse(result.stdout).init.status).toBe("unchanged");
     }),
   );
 
@@ -168,13 +170,24 @@ help[1]: Move the conflicting path aside before running init again.
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: restored_transient_state
-  message: Shared But Why? state contains retired lifecycle states.
-  tasks[1]{id,numericId,title,state,changeId}:
-    BY-1,1,Restored Task,implementing,null
-help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "restored_transient_state",
+          message: "Shared But Why? state contains retired lifecycle states.",
+          tasks: [
+            {
+              id: "BY-1",
+              numericId: 1,
+              title: "Restored Task",
+              state: "implementing",
+              changeId: null,
+            },
+          ],
+        },
+        help: [
+          "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
+        ],
+      });
     }),
   );
 
@@ -187,11 +200,15 @@ help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, th
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: state_store_unavailable
-  message: Shared But Why? state is unavailable.
-help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "state_store_unavailable",
+          message: "Shared But Why? state is unavailable.",
+        },
+        help: [
+          "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix BY`.",
+        ],
+      });
     }),
   );
 
@@ -206,11 +223,15 @@ help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --ta
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: state_store_unavailable
-  message: Shared But Why? state is unavailable.
-help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "state_store_unavailable",
+          message: "Shared But Why? state is unavailable.",
+        },
+        help: [
+          "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix BY`.",
+        ],
+      });
     }),
   );
 });

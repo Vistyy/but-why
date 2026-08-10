@@ -6,21 +6,17 @@ The audience is an agent or program that must choose the next repository action 
 ## Output boundary
 
 Each command constructs one structured result before serialization.
-TOON and JSON serialize the same result fields and semantics.
-TOON is the default stdout format.
-Programmatic callers request JSON with `--json` before the command.
-Domain modules do not depend on either serialization format.
+The CLI serializes each result as one compact JSON document followed by one line feed.
+Domain modules do not depend on stdout serialization.
 
-`by --version` returns the authoritative package version in a structured `version` field.
-The default TOON result is `version: 0.0.1` for the current package version.
-`by --json --version` returns the equivalent JSON object `{"version":"0.0.1"}`.
+`by --version` returns the authoritative package version as `{"version":"0.0.1"}` for the current package version.
 The value comes from the packaged `package.json` metadata.
 
 ## Change Submit progress
 
 `by change submit` writes concise human-readable phase progress to stderr while it runs.
 The progress is not part of the structured result.
-The command continues to write one structured TOON or JSON result to stdout.
+The command continues to write one structured JSON result to stdout.
 
 Progress reports only phases that run for the Submission.
 A changed Candidate can report Prepare, each configured Check, Acceptance Review for a Task-backed Change, and each configured Specialist Review.
@@ -49,7 +45,7 @@ A complete result omits unnecessary expansion guidance.
 ## Shared Repository State errors
 
 Commands that read Shared Repository State classify storage failures into stable results.
-Each classification keeps the same meaning in TOON and JSON.
+Each classification keeps its current meaning in JSON.
 
 - `state_store_unavailable` reports that Shared Repository State cannot be opened or queried.
   It covers an unavailable state path, SQL operation failure, and migration failure.

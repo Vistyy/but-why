@@ -10,7 +10,6 @@ import {
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
 } from "../../src/contracts/repositoryStorageError.js";
-import { encodeToon } from "../../src/output/toon.js";
 
 describe("Shared Repository State error classification", () => {
   ordinaryIt(
@@ -34,11 +33,6 @@ describe("Shared Repository State error classification", () => {
           "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
         ],
       });
-      expect(encodeToon(result.stdout)).toBe(`error:
-  code: persisted_data_invalid
-  message: Shared But Why? state contains malformed persisted data.
-  operation: read Change
-help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command."`);
     },
   );
 
@@ -103,14 +97,6 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
       ],
     });
-    expect(encodeToon(result.stdout)).toBe(`error:
-  code: restored_transient_state
-  message: Shared But Why? state contains retired lifecycle states.
-  tasks[1]{id,numericId,title,state,changeId}:
-    BY-1,1,Restored Task,implementing,change-1
-  changes[1]{id,taskId,state}:
-    change-1,BY-1,blocked
-help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command."`);
   });
 
   ordinaryIt("keeps repository identity conflict as its own result", () => {

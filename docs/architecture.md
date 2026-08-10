@@ -118,9 +118,7 @@ An already-current Shared Repository State opens without migration coordination,
 ## CLI and configuration
 
 The public CLI is `by`.
-It returns structured results on stdout.
-TOON is the default format.
-Callers that parse output request JSON with `--json`.
+It returns each structured result as one compact JSON document on stdout.
 The output ownership and expansion rules are defined in [CLI output](cli-output.md).
 
 Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.

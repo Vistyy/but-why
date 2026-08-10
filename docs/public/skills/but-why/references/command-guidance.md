@@ -6,9 +6,8 @@ After But Why is published, use `pnpx but-why` or `npx -y but-why` from the publ
 Do not use the published-package prefixes for an unreleased Candidate.
 Use the resolved prefix for every But Why command in the session.
 
-Use the default TOON output when you read a command result directly.
-Use `--json` only when a program parses the command result.
-Put `--json` before the command.
+Every But Why command returns one compact JSON document on stdout.
+Decode the JSON before using result fields in a program.
 
 Use CLI `--help` output for exact command syntax.
 

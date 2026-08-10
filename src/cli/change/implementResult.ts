@@ -71,7 +71,7 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use an open Change ID returned by `by change start --json`."],
+      help: ["Use an open Change ID returned by `by change start`."],
     });
   }
   if (result.code === "repo_config_invalid") {

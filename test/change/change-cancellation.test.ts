@@ -44,13 +44,7 @@ describe("Change cancellation", () => {
           ])).status,
         ).toBe(0);
         expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
-        const started = yield* runByInProcessEffect(root, [
-          "--json",
-          "change",
-          "start",
-          "--task",
-          "BY-1",
-        ]);
+        const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
         expect(started.status).toBe(0);
         const changeId = (
           JSON.parse(started.stdout) as { readonly change: { readonly id: string } }
@@ -64,10 +58,11 @@ describe("Change cancellation", () => {
           "No longer needed",
         ]);
         expect(cancelled.status).toBe(0);
-        expect(cancelled.stdout).toContain("status: cancelled");
-        expect(cancelled.stdout).toContain("state: closed");
-        expect(cancelled.stdout).toContain("state: cancelled");
-        expect(cancelled.stdout).toContain("cancelReason: No longer needed");
+        expect(JSON.parse(cancelled.stdout)).toMatchObject({
+          status: "cancelled",
+          change: { state: "closed" },
+          task: { state: "cancelled", cancelReason: "No longer needed" },
+        });
 
         const repeated = yield* runByInProcessEffect(root, [
           "task",
@@ -77,8 +72,9 @@ describe("Change cancellation", () => {
           "A different reason",
         ]);
         expect(repeated.status).toBe(0);
-        expect(repeated.stdout).toContain("changed: false");
-        expect(repeated.stdout).toContain("reason: No longer needed");
+        expect(JSON.parse(repeated.stdout)).toMatchObject({
+          task: { changed: false, reason: "No longer needed" },
+        });
       }),
   );
 
@@ -101,13 +97,7 @@ describe("Change cancellation", () => {
         ])).status,
       ).toBe(0);
       expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
-      const started = yield* runByInProcessEffect(root, [
-        "--json",
-        "change",
-        "start",
-        "--task",
-        "BY-1",
-      ]);
+      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
       expect(started.status).toBe(0);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
@@ -120,10 +110,10 @@ describe("Change cancellation", () => {
         "No longer needed",
       ]);
       expect(cancelled.status).toBe(0);
-      expect(cancelled.stdout).toContain("state: cancelled");
-      expect(cancelled.stdout).toContain("reason: No longer needed");
-      expect(cancelled.stdout).toContain("state: closed");
-      expect(cancelled.stdout).toContain(`id: ${changeId}`);
+      expect(JSON.parse(cancelled.stdout)).toMatchObject({
+        task: { state: "cancelled", reason: "No longer needed" },
+        change: { id: changeId, state: "closed" },
+      });
     }),
   );
 
@@ -154,9 +144,9 @@ describe("Change cancellation", () => {
         "No longer needed",
       ]);
       expect(cancelled.status).toBe(0);
-      expect(cancelled.stdout).toContain("state: cancelled");
-      expect(cancelled.stdout).toContain("reason: No longer needed");
-      expect(cancelled.stdout).not.toContain("change:");
+      const output = JSON.parse(cancelled.stdout);
+      expect(output).toMatchObject({ task: { state: "cancelled", reason: "No longer needed" } });
+      expect(output).not.toHaveProperty("change");
     }),
   );
 
@@ -167,7 +157,7 @@ describe("Change cancellation", () => {
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
 
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["change", "start"]);
       expect(started.status).toBe(0);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
@@ -180,15 +170,16 @@ describe("Change cancellation", () => {
         "Not needed",
       ]);
       expect(cancelled.status).toBe(0);
-      expect(cancelled.stdout).toContain("status: cancelled");
-      expect(cancelled.stdout).toContain("state: closed");
-      expect(cancelled.stdout).toContain("cancelReason: Not needed");
+      expect(JSON.parse(cancelled.stdout)).toMatchObject({
+        status: "cancelled",
+        change: { state: "closed", cancelReason: "Not needed" },
+      });
 
       const shown = yield* runByInProcessEffect(root, ["change", "show", changeId]);
       expect(shown.status).toBe(0);
-      expect(shown.stdout).toContain("state: closed");
-      expect(shown.stdout).toContain("closeReason: cancelled");
-      expect(shown.stdout).toContain("cancelReason: Not needed");
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        change: { state: "closed", closeReason: "cancelled", cancelReason: "Not needed" },
+      });
     }),
   );
 
@@ -210,7 +201,7 @@ describe("Change cancellation", () => {
           "task.md",
         ])).status,
       ).toBe(0);
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["change", "start"]);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
 
@@ -222,7 +213,7 @@ describe("Change cancellation", () => {
         "   ",
       ]);
       expect(changeEmpty.status).toBe(2);
-      expect(changeEmpty.stdout).toContain("code: empty_reason");
+      expect(JSON.parse(changeEmpty.stdout).error.code).toBe("empty_reason");
 
       const taskEmpty = yield* runByInProcessEffect(root, [
         "task",
@@ -232,7 +223,7 @@ describe("Change cancellation", () => {
         "",
       ]);
       expect(taskEmpty.status).toBe(2);
-      expect(taskEmpty.stdout).toContain("code: empty_reason");
+      expect(JSON.parse(taskEmpty.stdout).error.code).toBe("empty_reason");
     }),
   );
 
@@ -243,7 +234,7 @@ describe("Change cancellation", () => {
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
 
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["change", "start"]);
       expect(started.status).toBe(0);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
@@ -265,9 +256,10 @@ describe("Change cancellation", () => {
         "A different reason",
       ]);
       expect(repeated.status).toBe(0);
-      expect(repeated.stdout).toContain("changed: false");
-      expect(repeated.stdout).toContain("cancelReason: Not needed");
-      expect(repeated.stdout).toContain("state: complete");
+      expect(JSON.parse(repeated.stdout)).toMatchObject({
+        changed: false,
+        change: { cancelReason: "Not needed", cleanup: { state: "complete" } },
+      });
     }),
   );
 
@@ -290,7 +282,7 @@ describe("Change cancellation", () => {
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("status: cancelled");
+      expect(JSON.parse(result.stdout).status).toBe("cancelled");
       expect(events).toEqual([
         "read-pr",
         "close-pr",
@@ -322,45 +314,50 @@ describe("Change cancellation", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("code: github_close_failed");
-      expect(result.stdout).toContain("Change remains open");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "github_close_failed",
+          message: expect.stringContaining("Change remains open"),
+        },
+      });
       expect(events).toEqual(["read-pr", "close-pr", "read-pr"]);
     }),
   );
 
-  it.effect("emits bounded close and recovery diagnostics in TOON and JSON", () =>
+  it.effect("emits bounded close and recovery diagnostics", () =>
     Effect.gen(function* () {
-      for (const json of [false, true]) {
-        const events: string[] = [];
-        const task = taskRecord("todo");
-        const dependencies = cancellationDependencies({
-          task,
-          change: changeRecord(null),
-          pullRequest: pullRequest("open", false),
-          closePullRequest: {
-            ok: false,
-            code: "close_failed",
-            evidence: {
-              operation: "pull_request_close",
-              classification: "response_parse_failure",
-            },
+      const events: string[] = [];
+      const task = taskRecord("todo");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(null),
+        pullRequest: pullRequest("open", false),
+        closePullRequest: {
+          ok: false,
+          code: "close_failed",
+          evidence: {
+            operation: "pull_request_close",
+            classification: "response_parse_failure",
           },
-          events,
-        });
-        const result = yield* runByInProcessEffect(
-          createTestWorkspace(),
-          [...(json ? ["--json"] : []), "change", "cancel", "change-1", "--reason", "Stop"],
-          now,
-          { cancellationUseCases: openCancellationUseCases(dependencies) },
-        );
-        expect(result.status).toBe(1);
-        expect(result.stdout).toContain(json ? '"evidence"' : "evidence:");
-        expect(result.stdout).toContain(json ? '"recoveryEvidence"' : "recoveryEvidence:");
-        expect(result.stdout).toContain("response_parse_failure");
-        expect(result.stdout).toContain("postcondition_mismatch");
-        expect(result.stdout).not.toContain("raw GitHub response");
-        if (json) expect(() => JSON.parse(result.stdout)).not.toThrow();
-      }
+        },
+        events,
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["change", "cancel", "change-1", "--reason", "Stop"],
+        now,
+        { cancellationUseCases: openCancellationUseCases(dependencies) },
+      );
+      expect(result.status).toBe(1);
+      const output = JSON.parse(result.stdout);
+      expect(output).toMatchObject({
+        error: {
+          evidence: { classification: "response_parse_failure" },
+          recoveryEvidence: { classification: "conflict" },
+        },
+      });
+      expect(JSON.stringify(output)).toContain("postcondition_mismatch");
+      expect(result.stdout).not.toContain("raw GitHub response");
     }),
   );
 
@@ -509,8 +506,10 @@ describe("Change cancellation", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("code: remote_tasks_not_supported");
-      expect(result.stdout).toContain("Use a repo-local Task ID such as BY-1.");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "remote_tasks_not_supported" },
+        help: ["Use a repo-local Task ID such as BY-1."],
+      });
     }),
   );
 
@@ -532,8 +531,9 @@ describe("Change cancellation", () => {
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("status: completed");
-      expect(result.stdout).toContain("state: done");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        task: { status: "completed", state: "done" },
+      });
       expect(events).toEqual([
         "read-task",
         "read-change",
@@ -566,7 +566,7 @@ describe("Change cancellation", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("code: owned_pull_request_mismatch");
+      expect(JSON.parse(result.stdout).error.code).toBe("owned_pull_request_mismatch");
       expect(events).toEqual(["read-task", "read-change", "read-pr", "complete-change"]);
     }),
   );

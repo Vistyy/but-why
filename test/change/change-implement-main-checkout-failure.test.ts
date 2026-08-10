@@ -57,20 +57,16 @@ describe("Change Implement canonical main checkout failures", () => {
           ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
           { cwd: root, timeout: mainCheckoutFailureProcessTimeoutMs },
         );
-        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+        const started = yield* runByInProcessEffect(root, ["change", "start"], now);
         const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-        const before = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "show", change.change.id],
-          now,
-        );
+        const before = yield* runByInProcessEffect(root, ["change", "show", change.change.id], now);
         const trustedExecutable = join(root, "bin/by");
         rmSync(trustedExecutable);
 
         try {
           const result = runTestProcessOrThrowResult(
             "just",
-            ["by", "--json", "change", "implement", change.change.id],
+            ["by", "change", "implement", change.change.id],
             linkedCheckout,
           );
 
@@ -93,11 +89,7 @@ describe("Change Implement canonical main checkout failures", () => {
           });
         }
 
-        const after = yield* runByInProcessEffect(
-          root,
-          ["--json", "change", "show", change.change.id],
-          now,
-        );
+        const after = yield* runByInProcessEffect(root, ["change", "show", change.change.id], now);
         expect(after.stdout).toBe(before.stdout);
       }),
     mainCheckoutFailureTestTimeoutMs,

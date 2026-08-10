@@ -5,7 +5,6 @@ import { dirname, join, resolve } from "node:path";
 
 const repoDir = realpathSync(resolve(dirname(process.argv[1]), ".."));
 const args = process.argv.slice(2);
-const outputFormat = outputFormatFor(args);
 const mainCheckout = findMainCheckout();
 
 if (!mainCheckout.ok) {
@@ -90,42 +89,6 @@ function fail(failure) {
     },
     help: [failure.help],
   };
-  if (outputFormat === "json") {
-    process.stdout.write(`${JSON.stringify(result)}\n`);
-  } else {
-    process.stdout.write(toonFailure(result));
-  }
+  process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(1);
-}
-
-function outputFormatFor(arguments_) {
-  for (let index = 0; index < arguments_.length; index += 1) {
-    const argument = arguments_[index];
-    if (argument === "--json") {
-      const value = arguments_[index + 1]?.toLowerCase();
-      return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
-        ? "toon"
-        : "json";
-    }
-    if (argument?.startsWith("--json=")) {
-      const value = argument.slice("--json=".length).toLowerCase();
-      return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
-        ? "toon"
-        : "json";
-    }
-  }
-  return "toon";
-}
-
-function toonFailure(result) {
-  const lines = [
-    "error:",
-    `  code: ${result.error.code}`,
-    `  message: ${JSON.stringify(result.error.message)}`,
-  ];
-  if (result.error.path !== undefined) {
-    lines.push(`  path: ${JSON.stringify(result.error.path)}`);
-  }
-  lines.push(`help[${result.help.length}]: ${JSON.stringify(result.help[0])}`);
-  return `${lines.join("\n")}\n`;
 }

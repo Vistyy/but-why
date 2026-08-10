@@ -33,7 +33,7 @@ export const changeCancelResult = (result: ChangeCancellationResult): CliResult 
       code: result.code,
       message: "Change was not found.",
       details: { changeId: result.changeId },
-      help: ["Use a Change ID returned by `by change start --json`."],
+      help: ["Use a Change ID returned by `by change start`."],
     });
   }
   if (result.code === "submission_in_progress") {

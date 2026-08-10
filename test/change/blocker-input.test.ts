@@ -13,7 +13,6 @@ describe("Implementation Blocker recording input", () => {
     (action) =>
       Effect.gen(function* () {
         const result = yield* runByInProcessEffect(createTestWorkspace(), [
-          "--json",
           "change",
           "blocker",
           action,
@@ -56,7 +55,7 @@ describe("Implementation Blocker recording input", () => {
 
         expect(result.status, `${action} ${file}`).toBe(1);
         expect(result.stderr, `${action} ${file}`).toBe("");
-        expect(result.stdout, `${action} ${file}`).toContain(`code: ${code}`);
+        expect(JSON.parse(result.stdout).error.code, `${action} ${file}`).toBe(code);
       }
     }),
   );
