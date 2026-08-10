@@ -13,8 +13,12 @@ import {
 } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import {
+  openSqliteCandidatePublicationPort,
+  openSqliteChangeReviewerSessionPort,
+  openSqliteChangeSubmissionPort,
+} from "../sqlite/sqliteChangePersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -28,6 +32,11 @@ import {
 } from "./candidateCapture/localGitCandidate.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { resolveCandidateValidationPolicy } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+import type {
+  CandidatePublicationPort,
+  ChangeReviewerSessionPort,
+  ChangeSubmissionPort,
+} from "./changePorts.js";
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
 import {
@@ -36,7 +45,7 @@ import {
   type ManagedRepoConfigResolution,
   openChangeSubmit,
 } from "./submitChange.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { CandidateValidationExecutionPort } from "./validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
@@ -62,8 +71,8 @@ export const loadChangeSubmit = (input: {
 
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
-    validationPersistence: ChangeValidationPersistence,
-    changePersistence: import("./changePersistence.js").ChangePersistence,
+    submission: ChangeSubmissionPort,
+    publication: CandidatePublicationPort,
   ) => {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
@@ -103,7 +112,7 @@ export const loadChangeSubmit = (input: {
       },
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
-      persistence: changePersistence,
+      persistence: submission,
       resolvePolicy: (acceptanceContextSupplied, repoConfig, worktreePath, validationRepoConfig) =>
         resolveCandidateValidationPolicy({
           context,
@@ -115,8 +124,7 @@ export const loadChangeSubmit = (input: {
         }),
       publicationFor: (cwd) =>
         openCandidatePublication({
-          changePersistence,
-          validationPersistence,
+          changePersistence: publication,
           git: localCandidatePublicationGit({ cwd }),
           github: localGitHubPullRequestGateway({ cwd }),
         }),
@@ -133,8 +141,8 @@ export const loadChangeSubmit = (input: {
     });
   };
   const layerFor = (
-    persistence: ChangeValidationPersistence,
-    changePersistence: import("./changePersistence.js").ChangePersistence,
+    persistence: CandidateValidationExecutionPort,
+    reviewerSessions: ChangeReviewerSessionPort,
   ) =>
     candidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
@@ -144,10 +152,10 @@ export const loadChangeSubmit = (input: {
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
       sessionStore: {
-        get: changePersistence.getReviewerSession,
-        save: changePersistence.saveReviewerSession,
+        get: reviewerSessions.getReviewerSession,
+        save: reviewerSessions.saveReviewerSession,
         remove: (changeId: string, producer: string) =>
-          changePersistence.removeReviewerSession(changeId, producer),
+          reviewerSessions.removeReviewerSession(changeId, producer),
       },
       reviewerSessionsRoot: context.paths.operationalDir,
     });
@@ -163,13 +171,15 @@ export const loadChangeSubmit = (input: {
       submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
-          validation: openSqliteChangeValidationPersistence(),
-          change: openSqliteChangePersistence(),
+          validation: openSqliteCandidateValidationExecutionPort(),
+          submission: openSqliteChangeSubmissionPort(),
+          reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          publication: openSqliteCandidatePublicationPort(),
         }).pipe(
-          Effect.flatMap(({ capture, validation, change }) =>
-            programFor(capture, validation, change)
+          Effect.flatMap(({ capture, validation, submission, reviewerSessions, publication }) =>
+            programFor(capture, submission, publication)
               .submit(submitInput)
-              .pipe(Effect.provide(layerFor(validation, change))),
+              .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
           ),
           Effect.provide(repositoryLayer),
         ),

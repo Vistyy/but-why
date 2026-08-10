@@ -24,27 +24,11 @@ import type { ValidationPhase } from "../validationRun/validationRun.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 
-export type ChangeValidationPersistence = {
-  readonly getCandidateById: (candidateId: string) => StorageEffect<CandidateRecord | undefined>;
-  readonly listCandidatesForChange: (changeId: string) => StorageEffect<readonly CandidateRecord[]>;
-  readonly listRunIdsForChange: (changeId: string) => StorageEffect<readonly string[]>;
+export type CandidateValidationExecutionPort = {
   readonly startOrReuse: (
     input: StartCandidateValidationRunInput,
   ) => StorageEffect<StartCandidateValidationRunResult>;
   readonly complete: (input: CompleteCandidateValidationRunInput) => StorageEffect<void>;
-  readonly getActiveForChange: (
-    changeId: string,
-  ) => StorageEffect<ActiveCandidateValidationRun | undefined>;
-  readonly getAbandonmentContext: (
-    validationRunId: string,
-  ) => StorageEffect<CandidateValidationRunAbandonmentContext | undefined>;
-  readonly abandon: (input: AbandonCandidateValidationRunInput) => StorageEffect<void>;
-  readonly getRunById: (
-    validationRunId: string,
-  ) => StorageEffect<CandidateValidationRunRecord | undefined>;
-  readonly listRunsForCandidate: (
-    candidateId: string,
-  ) => StorageEffect<readonly CandidateValidationRunRecord[]>;
   readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => StorageEffect<void>;
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => StorageEffect<void>;
   readonly recordPrepareRound: (
@@ -76,4 +60,38 @@ export type ChangeValidationPersistence = {
   readonly listArtifacts: (
     validationRunId: string,
   ) => StorageEffect<readonly CandidateValidationArtifact[]>;
+};
+
+export type ChangeValidationReadPort = {
+  readonly getCandidateById: (candidateId: string) => StorageEffect<CandidateRecord | undefined>;
+  readonly listCandidatesForChange: (changeId: string) => StorageEffect<readonly CandidateRecord[]>;
+  readonly getRunById: (
+    validationRunId: string,
+  ) => StorageEffect<CandidateValidationRunRecord | undefined>;
+  readonly listRunsForCandidate: (
+    candidateId: string,
+  ) => StorageEffect<readonly CandidateValidationRunRecord[]>;
+  readonly listRounds: CandidateValidationExecutionPort["listRounds"];
+  readonly listFindings: CandidateValidationExecutionPort["listFindings"];
+  readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
+  readonly listArtifacts: CandidateValidationExecutionPort["listArtifacts"];
+};
+
+export type ActiveValidationRunPort = {
+  readonly getActiveForChange: (
+    changeId: string,
+  ) => StorageEffect<ActiveCandidateValidationRun | undefined>;
+};
+
+export type ValidationRunAbandonmentPort = {
+  readonly getAbandonmentContext: (
+    validationRunId: string,
+  ) => StorageEffect<CandidateValidationRunAbandonmentContext | undefined>;
+  readonly getRunById: ChangeValidationReadPort["getRunById"];
+  readonly recordToolingFailure: CandidateValidationExecutionPort["recordToolingFailure"];
+  readonly abandon: (input: AbandonCandidateValidationRunInput) => StorageEffect<void>;
+};
+
+export type ValidationArtifactLifecyclePort = {
+  readonly listRunIdsForChange: (changeId: string) => StorageEffect<readonly string[]>;
 };

@@ -2,17 +2,18 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 
@@ -58,7 +59,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -70,15 +71,19 @@ describe("by change reconcile", () => {
             now,
           };
           yield* installPublicationIdentity(created.change.id);
-          const begun = yield* changes.beginPublication(publication);
+          const begun = yield* changes.publication.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
-          const recorded = yield* changes.recordPublishedPullRequest({
+          const recorded = yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           });
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
-            persistence: changes,
+            persistence: {
+              getChangeById: changes.reads.getChangeById,
+              listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+              completeMergedChange: changes.delivery.completeMergedChange,
+            },
             github: {
               findPullRequests: () => [],
               getPullRequest: () => ({
@@ -99,7 +104,11 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
-              persistence: changes,
+              ...noOpTerminalCleanupDependencies,
+              persistence: {
+                recordCleanup: changes.delivery.recordCleanup,
+                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: () => {
                 throw new Error("Open Changes must not be cleaned");
               },
@@ -125,7 +134,9 @@ describe("by change reconcile", () => {
               },
             ],
           });
-          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({ state: "open" });
+          expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
+            state: "open",
+          });
         }),
       ),
     15_000,
@@ -149,7 +160,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -161,9 +172,9 @@ describe("by change reconcile", () => {
             now,
           };
           yield* installPublicationIdentity(created.change.id);
-          const begun = yield* changes.beginPublication(publication);
+          const begun = yield* changes.publication.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
-          const recorded = yield* changes.recordPublishedPullRequest({
+          const recorded = yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           });
@@ -193,7 +204,11 @@ describe("by change reconcile", () => {
 
           for (const pullRequest of unexpected) {
             const reconciliation = openChangeReconciliation({
-              persistence: changes,
+              persistence: {
+                getChangeById: changes.reads.getChangeById,
+                listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+                completeMergedChange: changes.delivery.completeMergedChange,
+              },
               github: {
                 findPullRequests: () => [],
                 getPullRequest: () => pullRequest,
@@ -205,7 +220,11 @@ describe("by change reconcile", () => {
                 },
               },
               cleanupTerminal: openTerminalCleanup({
-                persistence: changes,
+                ...noOpTerminalCleanupDependencies,
+                persistence: {
+                  recordCleanup: changes.delivery.recordCleanup,
+                  removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+                },
                 cleanup: () => {
                   throw new Error("Rejected Changes must not be cleaned");
                 },
@@ -222,7 +241,9 @@ describe("by change reconcile", () => {
               changes: [{ changeId: created.change.id, status: "rejected" }],
             });
           }
-          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({ state: "open" });
+          expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
+            state: "open",
+          });
         }),
       ),
     30_000,
@@ -259,7 +280,7 @@ describe("by change reconcile", () => {
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
 
-        const changes = yield* openSqliteChangePersistence();
+        const changes = yield* openSqliteChangeTestDependencies();
         const publication = {
           changeId: created.change.id,
           candidateId: "candidate-1",
@@ -271,9 +292,9 @@ describe("by change reconcile", () => {
           now,
         };
         yield* installPublicationIdentity(created.change.id);
-        const begun = yield* changes.beginPublication(publication);
+        const begun = yield* changes.publication.beginPublication(publication);
         if (!begun.ok) throw new Error(begun.code);
-        const recorded = yield* changes.recordPublishedPullRequest({
+        const recorded = yield* changes.publication.recordPublishedPullRequest({
           ...publication,
           pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
         });
@@ -286,7 +307,11 @@ describe("by change reconcile", () => {
         let cleanupAttempts = 0;
         let mergedHead = "merged-head";
         const reconciliation = openChangeReconciliation({
-          persistence: changes,
+          persistence: {
+            getChangeById: changes.reads.getChangeById,
+            listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+            completeMergedChange: changes.delivery.completeMergedChange,
+          },
           github: {
             findPullRequests: () => [],
             getPullRequest: () => ({
@@ -307,7 +332,11 @@ describe("by change reconcile", () => {
             },
           },
           cleanupTerminal: openTerminalCleanup({
-            persistence: changes,
+            ...noOpTerminalCleanupDependencies,
+            persistence: {
+              recordCleanup: changes.delivery.recordCleanup,
+              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: () => cleanupResults[cleanupAttempts++] ?? { state: "complete" },
           }),
         });
@@ -360,7 +389,7 @@ describe("by change reconcile", () => {
           ],
         });
         expect(cleanupAttempts).toBe(2);
-        expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",
         });
@@ -388,7 +417,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -400,15 +429,19 @@ describe("by change reconcile", () => {
             now,
           };
           yield* installPublicationIdentity(created.change.id);
-          const begun = yield* changes.beginPublication(publication);
+          const begun = yield* changes.publication.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
-          const recorded = yield* changes.recordPublishedPullRequest({
+          const recorded = yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           });
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
-            persistence: changes,
+            persistence: {
+              getChangeById: changes.reads.getChangeById,
+              listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+              completeMergedChange: changes.delivery.completeMergedChange,
+            },
             github: {
               findPullRequests: () => [],
               getPullRequest: () => ({
@@ -429,7 +462,11 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
-              persistence: changes,
+              ...noOpTerminalCleanupDependencies,
+              persistence: {
+                recordCleanup: changes.delivery.recordCleanup,
+                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
           });
@@ -450,7 +487,7 @@ describe("by change reconcile", () => {
               },
             ],
           });
-          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+          expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
             state: "closed",
             closeReason: "completed",
             taskId: null,
@@ -492,8 +529,8 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
-          const raised = yield* changes.raiseImplementationBlocker({
+          const changes = yield* openSqliteChangeTestDependencies();
+          const raised = yield* changes.authority.raiseImplementationBlocker({
             changeId: created.change.id,
             content: "Wait for an external decision that never arrived.",
             now,
@@ -510,15 +547,19 @@ describe("by change reconcile", () => {
             now,
           };
           yield* installPublicationIdentity(created.change.id);
-          const begun = yield* changes.beginPublication(publication);
+          const begun = yield* changes.publication.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
-          const recorded = yield* changes.recordPublishedPullRequest({
+          const recorded = yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           });
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
-            persistence: changes,
+            persistence: {
+              getChangeById: changes.reads.getChangeById,
+              listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+              completeMergedChange: changes.delivery.completeMergedChange,
+            },
             github: {
               findPullRequests: () => [],
               getPullRequest: () => ({
@@ -539,7 +580,11 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
-              persistence: changes,
+              ...noOpTerminalCleanupDependencies,
+              persistence: {
+                recordCleanup: changes.delivery.recordCleanup,
+                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
           });
@@ -560,12 +605,14 @@ describe("by change reconcile", () => {
               },
             ],
           });
-          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+          expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
             state: "closed",
             closeReason: "completed",
           });
           expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
-          expect(yield* changes.listImplementationBlockers(created.change.id)).toMatchObject({
+          expect(
+            yield* changes.authority.listImplementationBlockers(created.change.id),
+          ).toMatchObject({
             active: { content: "Wait for an external decision that never arrived." },
             resolutions: [],
           });
@@ -606,7 +653,7 @@ describe("by change reconcile", () => {
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
-          const changes = yield* openSqliteChangePersistence();
+          const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
             candidateId: "candidate-1",
@@ -618,9 +665,9 @@ describe("by change reconcile", () => {
             now,
           };
           yield* installPublicationIdentity(created.change.id);
-          const begun = yield* changes.beginPublication(publication);
+          const begun = yield* changes.publication.beginPublication(publication);
           if (!begun.ok) throw new Error(begun.code);
-          const recorded = yield* changes.recordPublishedPullRequest({
+          const recorded = yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           });
@@ -628,11 +675,12 @@ describe("by change reconcile", () => {
 
           let pullRequestObservations = 0;
           let capturedInput: CompleteMergedChangeInput | undefined;
-          const persistence: ChangePersistence = {
-            ...changes,
+          const persistence: ChangeReconciliationPort = {
+            getChangeById: changes.reads.getChangeById,
+            listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: (input) => {
               capturedInput = input;
-              return changes.completeMergedChange(input);
+              return changes.delivery.completeMergedChange(input);
             },
           };
           const reconciliation = openChangeReconciliation({
@@ -660,7 +708,11 @@ describe("by change reconcile", () => {
               },
             },
             cleanupTerminal: openTerminalCleanup({
-              persistence: changes,
+              ...noOpTerminalCleanupDependencies,
+              persistence: {
+                recordCleanup: changes.delivery.recordCleanup,
+                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
           });

@@ -19,30 +19,8 @@ import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeSta
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
 import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
-import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 
 export type { ChangeImplementResult };
-
-export type ChangeUseCases = {
-  readonly start: (input: {
-    readonly taskId?: PublicTaskId;
-    readonly baseBranch?: string;
-    readonly now: string;
-  }) => Effect.Effect<ChangeStartResult, RepositoryStorageError>;
-  readonly prepare: (
-    changeId: string,
-    now: string,
-  ) => Effect.Effect<ChangePrepareResult, RepositoryStorageError>;
-  readonly implement: (
-    changeId: string,
-    implementerPrompt: string | undefined,
-  ) => Effect.Effect<ChangeImplementResult, RepositoryStorageError>;
-  readonly reconcile: (
-    changeId: string | undefined,
-    now: string,
-    discardWork?: boolean,
-  ) => Effect.Effect<ChangeReconciliationResult, RepositoryStorageError>;
-};
 
 export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
@@ -56,36 +34,7 @@ export type ChangePrepareResult =
   | { readonly ok: false; readonly code: "change_not_open" }
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
-export const openChangeUseCases = (
-  context: RepoLocalContext,
-  store: ChangeStartPersistence,
-  git: ChangeStartGitOperations,
-  executor: RepositoryPreparationEffectExecutor,
-  reconciliation: ChangeReconciliation,
-  interactiveSessionHost: InteractiveSessionHost,
-  globalConfigPath: string,
-): ChangeUseCases => ({
-  start: (input) => startChange(store, git, executor, input),
-  prepare: (changeId, now) => prepareChange(store, git, executor, changeId, now),
-  implement: (changeId, implementerPrompt) =>
-    implementChange(
-      context,
-      store,
-      interactiveSessionHost,
-      globalConfigPath,
-      changeId,
-      implementerPrompt,
-    ),
-  reconcile: (changeId, now, discardWork) =>
-    reconciliation.reconcile({
-      repositoryCommonDirectory: context.commonDirectory,
-      ...(changeId === undefined ? {} : { changeId }),
-      now,
-      ...(discardWork === undefined ? {} : { discardWork }),
-    }),
-});
-
-const startChange = (
+export const startChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
@@ -148,7 +97,7 @@ const resumeTaskChange = (
     return yield* prepareExisting(store, executor, eligibility.existing, now);
   });
 
-const prepareChange = (
+export const prepareChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
@@ -164,7 +113,7 @@ const prepareChange = (
     return yield* prepareExisting(store, executor, change, now);
   });
 
-const implementChange = (
+export const implementChange = (
   context: RepoLocalContext,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,

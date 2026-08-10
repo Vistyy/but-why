@@ -1,4 +1,4 @@
-import type { ChangeImplementResult } from "../../change/changeUseCases.js";
+import type { ChangeImplementResult } from "../../change/changeLifecycle.js";
 import { type CliResult, runtimeError, success, usageError } from "../../cliResults.js";
 import type { ImplementerPromptFileReadError } from "./implementerPromptFile.js";
 

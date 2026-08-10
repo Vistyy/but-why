@@ -2,7 +2,10 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import {
+  loadImplementationDecisions,
+  loadRecordImplementationDecision,
+} from "../../change/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
@@ -36,9 +39,9 @@ export const runDecision = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   if (command.action === "list") {
-    const loaded = loadChangeInspection({ cwd: environment.cwd });
+    const loaded = loadImplementationDecisions({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.decisions(command.changeId).pipe(
+    return loaded.operation(command.changeId).pipe(
       Effect.map((decisions) =>
         decisions === undefined
           ? support.changeNotFound()
@@ -49,10 +52,10 @@ export const runDecision = (
   }
   const validation = validateDecisionInput(command.choice, command.rationale);
   if (!validation.ok) return Effect.succeed(decisionInputError(validation.code));
-  const loaded = loadChangeInspection({ cwd: environment.cwd });
+  const loaded = loadRecordImplementationDecision({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-  return loaded.inspection
-    .addDecision({
+  return loaded
+    .operation({
       changeId: command.changeId,
       choice: command.choice,
       rationale: command.rationale,

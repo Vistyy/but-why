@@ -298,7 +298,7 @@ const runReviewPhases = (
   ready.validation.runWithPersistence((persistence) =>
     Effect.gen(function* () {
       const policySnapshot: CandidateValidationPolicySnapshot = { ...policy, acceptanceContext };
-      const started = yield* persistence.startOrReuse({
+      const started = yield* persistence.execution.startOrReuse({
         candidateId: captured.candidateId,
         headSha: captured.headSha,
         changeBaseSha: captured.changeBaseSha,
@@ -310,7 +310,7 @@ const runReviewPhases = (
         throw new Error("Unexpected active Blocker in Acceptance Review fixture");
       }
 
-      yield* persistence.recordCheckRound({
+      yield* persistence.execution.recordCheckRound({
         validationRunId: started.validationRunId,
         producer: "quality",
         roundNumber: 1,
@@ -361,17 +361,18 @@ const runReviewPhases = (
         resourceRoot: ready.repo,
         allowedUntrackedFiles: [],
         now,
-        listArtifacts: persistence.listArtifacts,
-        listPreviousCandidateReviewerFindings: persistence.listPreviousCandidateReviewerFindings,
-        recordAcceptanceRound: persistence.recordAcceptanceRound,
+        listArtifacts: persistence.reads.listArtifacts,
+        listPreviousCandidateReviewerFindings:
+          persistence.execution.listPreviousCandidateReviewerFindings,
+        recordAcceptanceRound: persistence.execution.recordAcceptanceRound,
       });
       if (acceptance.toolingFailure !== undefined) {
-        yield* persistence.recordToolingFailure({
+        yield* persistence.execution.recordToolingFailure({
           validationRunId: started.validationRunId,
           ...validationToolingFailureRecord(acceptance.toolingFailure),
           now,
         });
-        yield* persistence.complete({
+        yield* persistence.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "tooling_failed",
           now,
@@ -383,7 +384,7 @@ const runReviewPhases = (
         };
       }
       if (acceptance.findings === 1) {
-        yield* persistence.complete({
+        yield* persistence.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "blocked",
           now,
@@ -395,7 +396,7 @@ const runReviewPhases = (
           outcome: "blocked" as const,
         };
       }
-      yield* persistence.complete({
+      yield* persistence.execution.complete({
         validationRunId: started.validationRunId,
         outcome: "passed",
         now,

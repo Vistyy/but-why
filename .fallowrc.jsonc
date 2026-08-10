@@ -69,7 +69,7 @@
           "src/change/loadAbandonValidationRun.ts",
           "src/change/loadChangeInspection.ts",
           "src/change/loadChangeSubmit.ts",
-          "src/change/loadChangeUseCases.ts",
+          "src/change/loadChangeLifecycle.ts",
           "src/task/loadTaskUseCases.ts"
         ]
       },
@@ -95,7 +95,7 @@
         "name": "change-workflows",
         "patterns": [
           "src/change/candidateValidation/inspectCandidateValidationRun.ts",
-          "src/change/changeUseCases.ts",
+          "src/change/changeLifecycle.ts",
           "src/change/inspectChange.ts",
           "src/change/reconcileChange.ts",
           "src/change/submitChange.ts",

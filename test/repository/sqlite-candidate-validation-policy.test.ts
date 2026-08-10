@@ -7,7 +7,7 @@ import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositorySt
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-07-25T16:00:00.000Z";
@@ -100,7 +100,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -111,7 +111,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
 
-        const started = yield* validation.startOrReuse({
+        const started = yield* validation.execution.startOrReuse({
           candidateId: captured.candidateId,
           changeBaseSha: "base-sha",
           headSha: "head-sha",
@@ -121,7 +121,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
         if (started.reused || "blocked" in started)
           throw new Error("Expected a new Validation Run");
 
-        const stored = yield* validation.getRunById(started.validationRunId);
+        const stored = yield* validation.reads.getRunById(started.validationRunId);
         expect(stored).toBeDefined();
         expect(stored?.policy).toEqual(currentPolicy);
 
@@ -145,7 +145,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -157,7 +157,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
 
-        const error = yield* validation
+        const error = yield* validation.execution
           .startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
@@ -200,7 +200,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -217,7 +217,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
             `insert malformed Validation Run policy ${malformed.id}`,
             (sql) => insertPolicyRun(sql, captured.candidateId, malformed.id, malformed.policyJson),
           );
-          const error = yield* validation.getRunById(malformed.id).pipe(Effect.flip);
+          const error = yield* validation.reads.getRunById(malformed.id).pipe(Effect.flip);
           expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
           expect(error).toMatchObject({
             _tag: "RepositoryPersistedDataInvalid",

@@ -2,7 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import { loadChangeFindings } from "../../change/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import { structuredValue } from "../../output/structuredValue.js";
@@ -14,11 +14,11 @@ export const runFindings = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> =>
   support.withResolvedChangeId(command.changeId, environment, "findings", (changeId) => {
-    const loaded = loadChangeInspection({
+    const loaded = loadChangeFindings({
       cwd: environment.cwd,
     });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection.findings(changeId).pipe(
+    return loaded.operation(changeId).pipe(
       Effect.map((result) =>
         result === undefined
           ? support.changeNotFound()

@@ -2,7 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import { loadChangeList } from "../../change/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
@@ -12,13 +12,13 @@ export const runList = (
   command: { readonly all: boolean },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const loaded = loadChangeInspection({
+  const loaded = loadChangeList({
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const now = environment.now().getTime();
-  return loaded.inspection
-    .list({
+  return loaded
+    .operation({
       repositoryCommonDirectory: loaded.commonDirectory,
       includeClosed: command.all,
     })

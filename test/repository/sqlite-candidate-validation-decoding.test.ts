@@ -5,7 +5,7 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const reviewerProfile = {
@@ -40,7 +40,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const validation = yield* openSqliteChangeValidationPersistence();
+          const validation = yield* openSqliteChangeValidationTestDependencies();
           const repository = yield* RepositorySql;
           const prior = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
@@ -51,18 +51,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             now: "2026-08-10T00:01:00.000Z",
           });
           if (!prior.ok) throw new Error(`Candidate capture failed: ${prior.code}`);
-          const current = yield* capture.commitCapture({
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/decoding",
-            baseRef: "refs/remotes/origin/main",
-            changeBaseSha: "base",
-            headSha: "current",
-            expectedChangeId: prior.changeId,
-            now: "2026-08-10T00:02:00.000Z",
-          });
-          if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
-
-          const priorRun = yield* validation.startOrReuse({
+          const priorRun = yield* validation.execution.startOrReuse({
             candidateId: prior.candidateId,
             changeBaseSha: "base",
             headSha: "prior",
@@ -70,14 +59,14 @@ describe("SQLite Candidate and Validation read decoding", () => {
             now: "2026-08-10T00:03:00.000Z",
           });
           if (priorRun.reused || "blocked" in priorRun) throw new Error("Expected a new Run");
-          yield* validation.recordPrepareRound({
+          yield* validation.execution.recordPrepareRound({
             validationRunId: priorRun.validationRunId,
             roundNumber: 1,
             roundStatus: "passed",
             artifactRecords: [],
             now,
           });
-          yield* validation.recordCheckRound({
+          yield* validation.execution.recordCheckRound({
             validationRunId: priorRun.validationRunId,
             producer: "types",
             roundNumber: 1,
@@ -85,7 +74,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             artifactRecords: [],
             now,
           });
-          yield* validation.recordAcceptanceRound({
+          yield* validation.execution.recordAcceptanceRound({
             validationRunId: priorRun.validationRunId,
             roundNumber: 1,
             roundStatus: "failed",
@@ -116,7 +105,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             ],
             now,
           });
-          yield* validation.recordSpecialistRound({
+          yield* validation.execution.recordSpecialistRound({
             validationRunId: priorRun.validationRunId,
             producer: "security",
             roundNumber: 1,
@@ -125,20 +114,31 @@ describe("SQLite Candidate and Validation read decoding", () => {
             findings: [],
             now,
           });
-          yield* validation.recordToolingFailure({
+          yield* validation.execution.recordToolingFailure({
             validationRunId: priorRun.validationRunId,
             errorKind: "infrastructure_tooling_failed",
             operationName: "collect advisory evidence",
             errorMessage: "Advisory collection failed.",
             now,
           });
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: priorRun.validationRunId,
             outcome: "blocked",
             now: "2026-08-10T00:04:00.000Z",
           });
 
-          const active = yield* validation.startOrReuse({
+          const current = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/decoding",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base",
+            headSha: "current",
+            expectedChangeId: prior.changeId,
+            now: "2026-08-10T00:04:30.000Z",
+          });
+          if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
+
+          const active = yield* validation.execution.startOrReuse({
             candidateId: current.candidateId,
             changeBaseSha: "base",
             headSha: "current",
@@ -148,25 +148,27 @@ describe("SQLite Candidate and Validation read decoding", () => {
           });
           if (active.reused || "blocked" in active) throw new Error("Expected an Active Run");
 
-          expect(yield* validation.getCandidateById(current.candidateId)).toMatchObject({
+          expect(yield* validation.reads.getCandidateById(current.candidateId)).toMatchObject({
             id: current.candidateId,
             changeId: current.changeId,
             headSha: "current",
           });
           expect(
-            (yield* validation.listCandidatesForChange(current.changeId)).map(
+            (yield* validation.reads.listCandidatesForChange(current.changeId)).map(
               ({ headSha }) => headSha,
             ),
           ).toEqual(["prior", "current"]);
-          expect(yield* validation.getRunById(priorRun.validationRunId)).toMatchObject({
+          expect(yield* validation.reads.getRunById(priorRun.validationRunId)).toMatchObject({
             state: "complete",
             outcome: "blocked",
           });
-          expect(yield* validation.getActiveForChange(current.changeId)).toEqual({
+          expect(yield* validation.active.getActiveForChange(current.changeId)).toEqual({
             validationRunId: active.validationRunId,
             changeId: current.changeId,
           });
-          expect(yield* validation.getAbandonmentContext(active.validationRunId)).toMatchObject({
+          expect(
+            yield* validation.abandonment.getAbandonmentContext(active.validationRunId),
+          ).toMatchObject({
             validationRunId: active.validationRunId,
             candidateId: current.candidateId,
             tempRefName: "refs/but-why/current",
@@ -174,25 +176,27 @@ describe("SQLite Candidate and Validation read decoding", () => {
             cleanupTempRef: "not_created",
           });
           expect(
-            (yield* validation.listRounds(priorRun.validationRunId)).map(({ phase }) => phase),
+            (yield* validation.reads.listRounds(priorRun.validationRunId)).map(
+              ({ phase }) => phase,
+            ),
           ).toEqual(["prepare", "checks", "acceptance_review", "specialist_review"]);
-          expect(yield* validation.listFindings(priorRun.validationRunId)).toMatchObject([
+          expect(yield* validation.reads.listFindings(priorRun.validationRunId)).toMatchObject([
             { id: "finding-prior", files: ["src/prior.ts"], artifactRefs: ["artifact-acceptance"] },
           ]);
-          expect(yield* validation.listToolingFailures(priorRun.validationRunId)).toMatchObject([
-            { sequence: 1, errorKind: "infrastructure_tooling_failed" },
-          ]);
-          expect(yield* validation.listArtifacts(priorRun.validationRunId)).toMatchObject([
+          expect(
+            yield* validation.reads.listToolingFailures(priorRun.validationRunId),
+          ).toMatchObject([{ sequence: 1, errorKind: "infrastructure_tooling_failed" }]);
+          expect(yield* validation.reads.listArtifacts(priorRun.validationRunId)).toMatchObject([
             { ref: "artifact-acceptance", originalBytes: 10, storedBytes: 7, truncated: true },
           ]);
           expect(
-            yield* validation.listPreviousCandidateReviewerFindings({
+            yield* validation.execution.listPreviousCandidateReviewerFindings({
               candidateId: current.candidateId,
               phase: "acceptance_review",
               producer: "acceptance",
             }),
           ).toMatchObject([{ id: "finding-prior" }]);
-          expect(yield* validation.listRunIdsForChange(current.changeId)).toEqual([
+          expect(yield* validation.artifacts.listRunIdsForChange(current.changeId)).toEqual([
             priorRun.validationRunId,
             active.validationRunId,
           ]);
@@ -202,10 +206,10 @@ describe("SQLite Candidate and Validation read decoding", () => {
             (sql) =>
               sql`UPDATE candidate_validation_runs SET policy_snapshot = '{not-json' WHERE id = ${priorRun.validationRunId}`,
           );
-          expect(yield* validation.listRunIdsForChange(current.changeId)).toContain(
+          expect(yield* validation.artifacts.listRunIdsForChange(current.changeId)).toContain(
             priorRun.validationRunId,
           );
-          const strictError = yield* validation
+          const strictError = yield* validation.reads
             .getRunById(priorRun.validationRunId)
             .pipe(Effect.flip);
           expect(strictError).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -217,7 +221,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const validation = yield* openSqliteChangeValidationPersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const prior = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -228,17 +232,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           now: "2026-08-10T01:01:00.000Z",
         });
         if (!prior.ok) throw new Error(`Candidate capture failed: ${prior.code}`);
-        const current = yield* capture.commitCapture({
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/malformed-decoding",
-          baseRef: "refs/remotes/origin/main",
-          changeBaseSha: "base",
-          headSha: "current",
-          expectedChangeId: prior.changeId,
-          now: "2026-08-10T01:02:00.000Z",
-        });
-        if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
-        const started = yield* validation.startOrReuse({
+        const started = yield* validation.execution.startOrReuse({
           candidateId: prior.candidateId,
           changeBaseSha: "base",
           headSha: "prior",
@@ -246,7 +240,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           now,
         });
         if (started.reused || "blocked" in started) throw new Error("Expected a new Run");
-        yield* validation.recordAcceptanceRound({
+        yield* validation.execution.recordAcceptanceRound({
           validationRunId: started.validationRunId,
           roundNumber: 1,
           roundStatus: "failed",
@@ -277,7 +271,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           ],
           now,
         });
-        yield* validation.recordCheckRound({
+        yield* validation.execution.recordCheckRound({
           validationRunId: started.validationRunId,
           producer: "types",
           roundNumber: 1,
@@ -285,11 +279,22 @@ describe("SQLite Candidate and Validation read decoding", () => {
           artifactRecords: [],
           now,
         });
-        yield* validation.complete({
+        yield* validation.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "blocked",
           now,
         });
+
+        const current = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/malformed-decoding",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base",
+          headSha: "current",
+          expectedChangeId: prior.changeId,
+          now: "2026-08-10T01:02:00.000Z",
+        });
+        if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
 
         yield* repository.operation("install orphan Tooling Failure", (sql) =>
           Effect.gen(function* () {
@@ -299,7 +304,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
         expect(
-          yield* validation.listToolingFailures("unknown-run").pipe(Effect.flip),
+          yield* validation.reads.listToolingFailures("unknown-run").pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "remove orphan Tooling Failure",
@@ -336,7 +341,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
         expect(
-          yield* validation.getRunById(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation("restore Validation Run lifecycle", (sql) =>
           Effect.gen(function* () {
@@ -352,7 +357,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
         expect(
-          yield* validation.getRunById(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "install older Blocker identity",
@@ -360,14 +365,14 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = 'older-blocker' WHERE id = ${started.validationRunId}`,
         );
         expect(
-          yield* validation.getRunById(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "install exact latest Blocker identity",
           (sql) =>
             sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = 'latest-blocker' WHERE id = ${started.validationRunId}`,
         );
-        expect(yield* validation.getRunById(started.validationRunId)).toBeDefined();
+        expect(yield* validation.reads.getRunById(started.validationRunId)).toBeDefined();
         yield* repository.operation("restore absent Blocker history", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = NULL WHERE id = ${started.validationRunId}`;
@@ -381,7 +386,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_findings SET files = '["src/file.ts",]' WHERE id = 'finding-malformed'`,
         );
         expect(
-          yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "restore Finding files",
@@ -395,7 +400,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_artifacts SET original_bytes = 9007199254740992, stored_bytes = 10, truncated = 1 WHERE ref = 'artifact-malformed'`,
         );
         expect(
-          yield* validation.listArtifacts(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "install invalid Artifact relationship",
@@ -403,7 +408,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_artifacts SET original_bytes = 9, stored_bytes = 10, truncated = 0 WHERE ref = 'artifact-malformed'`,
         );
         expect(
-          yield* validation.listArtifacts(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation("install invalid Artifact flag", (sql) =>
           Effect.gen(function* () {
@@ -412,7 +417,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
         expect(
-          yield* validation.listArtifacts(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation("restore Artifact", (sql) =>
           Effect.gen(function* () {
@@ -427,7 +432,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_artifacts SET phase = 'checks', producer = 'retired-check' WHERE ref = 'artifact-malformed'`,
         );
         expect(
-          yield* validation.listArtifacts(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "restore Artifact round relationship",
@@ -441,10 +446,10 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_findings SET phase = 'checks', producer = 'types' WHERE id = 'finding-malformed'`,
         );
         expect(
-          yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* validation
+          yield* validation.execution
             .listPreviousCandidateReviewerFindings({
               candidateId: current.candidateId,
               phase: "acceptance_review",
@@ -464,10 +469,10 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_rounds SET status = 'passed' WHERE validation_run_id = ${started.validationRunId} AND phase = 'acceptance_review'`,
         );
         expect(
-          yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* validation
+          yield* validation.execution
             .listPreviousCandidateReviewerFindings({
               candidateId: current.candidateId,
               phase: "acceptance_review",
@@ -487,10 +492,10 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_rounds SET producer = 'retired-check' WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
         );
         expect(
-          yield* validation.listRounds(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listRounds(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* validation
+          yield* validation.execution
             .listPreviousCandidateReviewerFindings({
               candidateId: current.candidateId,
               phase: "acceptance_review",
@@ -510,7 +515,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_rounds SET round_number = 2 WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
         );
         expect(
-          yield* validation.listRounds(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listRounds(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "restore Check round order",
@@ -524,7 +529,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`INSERT INTO candidate_validation_rounds (validation_run_id, phase, producer, round_number, status, created_at) VALUES (${started.validationRunId}, 'acceptance_review', 'acceptance', 2, 'failed', ${now})`,
         );
         expect(
-          yield* validation.listFindings(started.validationRunId).pipe(Effect.flip),
+          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* repository.operation(
           "remove duplicate Acceptance Review round",
@@ -538,7 +543,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_rounds SET phase = 'retired_phase' WHERE validation_run_id = ${started.validationRunId}`,
         );
         expect(
-          yield* validation
+          yield* validation.execution
             .listPreviousCandidateReviewerFindings({
               candidateId: current.candidateId,
               phase: "acceptance_review",
@@ -560,7 +565,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           }),
         );
         expect(
-          yield* validation.getCandidateById(prior.candidateId).pipe(Effect.flip),
+          yield* validation.reads.getCandidateById(prior.candidateId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),

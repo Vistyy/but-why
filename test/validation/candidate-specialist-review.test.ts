@@ -425,7 +425,7 @@ describe("Candidate Specialist Review phase", () => {
         ) =>
           validation.runWithPersistence((persistence) =>
             Effect.gen(function* () {
-              const started = yield* persistence.startOrReuse({
+              const started = yield* persistence.execution.startOrReuse({
                 candidateId: captured.candidateId,
                 headSha: captured.headSha,
                 changeBaseSha: captured.changeBaseSha,
@@ -451,19 +451,19 @@ describe("Candidate Specialist Review phase", () => {
                 resourceRoot: repo,
                 allowedUntrackedFiles: [],
                 now: runNow,
-                listArtifacts: persistence.listArtifacts,
+                listArtifacts: persistence.reads.listArtifacts,
                 listPreviousCandidateReviewerFindings:
-                  persistence.listPreviousCandidateReviewerFindings,
-                recordSpecialistRound: persistence.recordSpecialistRound,
+                  persistence.execution.listPreviousCandidateReviewerFindings,
+                recordSpecialistRound: persistence.execution.recordSpecialistRound,
               });
               for (const toolingFailure of result.toolingFailures) {
-                yield* persistence.recordToolingFailure({
+                yield* persistence.execution.recordToolingFailure({
                   validationRunId: started.validationRunId,
                   ...validationToolingFailureRecord(toolingFailure),
                   now: runNow,
                 });
               }
-              yield* persistence.complete({
+              yield* persistence.execution.complete({
                 validationRunId: started.validationRunId,
                 outcome,
                 now: runNow,

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteValidationRunAbandonmentPort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
 import { validationWorkspaceCleanupGit } from "./validation/validationWorkspaceCleanupGit.js";
@@ -39,7 +39,7 @@ export const loadAbandonValidationRun = (input: {
     ok: true,
     abandon: {
       abandon: (command) =>
-        Effect.flatMap(openSqliteChangeValidationPersistence(), (persistence) =>
+        Effect.flatMap(openSqliteValidationRunAbandonmentPort(), (persistence) =>
           openAbandonValidationRun({
             persistence,
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),

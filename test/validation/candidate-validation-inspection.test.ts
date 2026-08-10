@@ -5,15 +5,18 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import {
   expectedSandcastleWorktreePath,
   validationTempRefName,
 } from "../../src/change/validation/validationWorkspacePath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
+import {
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
+} from "../support/changeValidationPorts.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -131,7 +134,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now: later,
       });
 
-      expect(started).toEqual({
+      expect(started).toMatchObject({
         reused: false,
         validationRunId: "run-with-atomic-workspace",
       });
@@ -189,17 +192,23 @@ describe("Candidate-owned Validation Run inspection", () => {
         choice: "Keep rationale separate from intent",
         rationale: "Preserve rationale separately from approved intent.",
       };
+      yield* fixture.recordDecision(decision.choice, decision.rationale);
       const first = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy,
-        implementationDecisions: [decision],
         now,
       });
       expect(first.reused).toBe(false);
       if ("blocked" in first) throw new Error("Expected a new Validation Run");
       const stored = yield* fixture.runStore.getRunById(first.validationRunId);
-      expect(stored?.implementationDecisions).toEqual([decision]);
+      expect(stored?.implementationDecisions).toEqual([
+        expect.objectContaining({
+          changeId: fixture.changeId,
+          choice: decision.choice,
+          rationale: decision.rationale,
+        }),
+      ]);
     }),
   );
 
@@ -673,9 +682,9 @@ const candidateValidationFixture = () =>
       commonDirectory,
     });
     const withPersistence = <A, E>(
-      use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
+      use: (persistence: ChangeValidationTestDependencies) => Effect.Effect<A, E>,
     ) =>
-      Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+      Effect.flatMap(openSqliteChangeValidationTestDependencies(), use).pipe(
         Effect.provide(repositoryLayer),
       );
     const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
@@ -693,7 +702,7 @@ const candidateValidationFixture = () =>
     );
     if (!candidateResult.ok) throw new Error(candidateResult.code);
     const runResult = yield* withPersistence((persistence) =>
-      persistence.startOrReuse({
+      persistence.execution.startOrReuse({
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
@@ -726,29 +735,45 @@ const candidateValidationFixture = () =>
         truncated: false,
       };
     };
+    const recordDecision = (choice: string, rationale: string) =>
+      openSqliteChangeTestDependencies().pipe(
+        Effect.flatMap((changes) =>
+          changes.authority.recordImplementationDecision({
+            changeId: candidateResult.changeId,
+            choice,
+            rationale,
+            now,
+          }),
+        ),
+        Effect.provide(repositoryLayer),
+      );
     const runStore = {
-      startOrReuse: (input: Parameters<ChangeValidationPersistence["startOrReuse"]>[0]) =>
-        withPersistence((persistence) => persistence.startOrReuse(input)),
+      startOrReuse: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["startOrReuse"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.startOrReuse(input)),
       getRunById: (runId: string) =>
-        withPersistence((persistence) => persistence.getRunById(runId)),
+        withPersistence((persistence) => persistence.reads.getRunById(runId)),
       recordPrepareRound: (
-        input: Parameters<ChangeValidationPersistence["recordPrepareRound"]>[0],
-      ) => withPersistence((persistence) => persistence.recordPrepareRound(input)),
-      recordCheckRound: (input: Parameters<ChangeValidationPersistence["recordCheckRound"]>[0]) =>
-        withPersistence((persistence) => persistence.recordCheckRound(input)),
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordPrepareRound"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordPrepareRound(input)),
+      recordCheckRound: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordCheckRound"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordCheckRound(input)),
       recordAcceptanceRound: (
-        input: Parameters<ChangeValidationPersistence["recordAcceptanceRound"]>[0],
-      ) => withPersistence((persistence) => persistence.recordAcceptanceRound(input)),
+        input: Parameters<
+          ChangeValidationTestDependencies["execution"]["recordAcceptanceRound"]
+        >[0],
+      ) => withPersistence((persistence) => persistence.execution.recordAcceptanceRound(input)),
       recordToolingFailure: (
-        input: Parameters<ChangeValidationPersistence["recordToolingFailure"]>[0],
-      ) => withPersistence((persistence) => persistence.recordToolingFailure(input)),
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
       recordWorkspaceSetup: (
-        input: Parameters<ChangeValidationPersistence["recordWorkspaceSetup"]>[0],
-      ) => withPersistence((persistence) => persistence.recordWorkspaceSetup(input)),
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordWorkspaceSetup"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceSetup(input)),
       getAbandonmentContext: (runId: string) =>
-        withPersistence((persistence) => persistence.getAbandonmentContext(runId)),
-      complete: (input: Parameters<ChangeValidationPersistence["complete"]>[0]) =>
-        withPersistence((persistence) => persistence.complete(input)),
+        withPersistence((persistence) => persistence.abandonment.getAbandonmentContext(runId)),
+      complete: (input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0]) =>
+        withPersistence((persistence) => persistence.execution.complete(input)),
     };
 
     return {
@@ -759,5 +784,6 @@ const candidateValidationFixture = () =>
       validationRunId: runResult.validationRunId,
       candidateId: candidateResult.candidateId,
       changeId: candidateResult.changeId,
+      recordDecision,
     };
   });

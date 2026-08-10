@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import { loadChangeList } from "../../change/loadChangeInspection.js";
 import {
   type CliResult,
   repoStateLoadError,
@@ -19,14 +19,14 @@ export const resolveChangeId = (
 ): Effect.Effect<ChangeTargetResolution> => {
   if (changeId !== undefined) return Effect.succeed({ ok: true, changeId });
 
-  const loaded = loadChangeInspection({ cwd });
+  const loaded = loadChangeList({ cwd });
   if (!loaded.ok) return Effect.succeed({ ok: false, result: repoStateLoadError(loaded.error) });
 
   const facts = findCurrentWorktreeFacts(cwd);
   if (!facts.ok) return Effect.succeed(unresolvedChangeTarget(commandName));
 
-  return loaded.inspection
-    .list({
+  return loaded
+    .operation({
       repositoryCommonDirectory: loaded.commonDirectory,
       includeClosed: false,
     })

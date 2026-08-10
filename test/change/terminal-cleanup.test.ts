@@ -11,6 +11,7 @@ import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
+import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 const target = {
@@ -26,6 +27,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(
           events,
           changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
@@ -66,6 +68,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(
           events,
           changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
@@ -111,6 +114,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(
           events,
           changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
@@ -151,6 +155,7 @@ describe("Change-owned terminal cleanup operation", () => {
       let cleanupRecorded = 0;
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: {
           recordCleanup: () => {
             events.push("record-cleanup");
@@ -215,6 +220,7 @@ describe("Change-owned terminal cleanup operation", () => {
         publication: null,
       };
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events, change),
         cleanup: (input) => {
           events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
@@ -234,6 +240,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "completed", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events, change),
         cleanup: (input) => {
           events.push(
@@ -258,6 +265,7 @@ describe("Change-owned terminal cleanup operation", () => {
         cleanup: pendingCleanup,
       });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events, change, {
           state: "pending",
           blockingReason: "worktree_has_uncommitted_changes",
@@ -295,6 +303,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: echoPersistence(events, change),
         cleanup: (input) => {
           events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
@@ -336,6 +345,7 @@ describe("Change-owned terminal cleanup operation", () => {
         { changeId: "change-1", success: true },
       ];
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: echoPersistence(events, change),
         cleanup: (input) => {
           events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
@@ -389,6 +399,7 @@ describe("Change-owned terminal cleanup operation", () => {
         cleanup: { state: "complete", blockingReason: null },
       });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events, change),
         cleanup: () => {
           events.push("cleanup");
@@ -414,6 +425,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: null, cleanup: pendingCleanup, state: "open" });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events, change),
         cleanup: () => {
           events.push("cleanup");
@@ -433,6 +445,7 @@ describe("Change-owned terminal cleanup operation", () => {
       const events: string[] = [];
       const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
       const cleanup = openTerminalCleanup({
+        ...noOpTerminalCleanupDependencies,
         persistence: {
           recordCleanup: () => {
             events.push("record-cleanup-failed");
@@ -702,7 +715,10 @@ const cancellationDependencies = (input: {
       getPullRequest: () => pullRequest("closed", false),
       closePullRequest: () => ({ ok: true, pullRequest: pullRequest("closed", false) }),
     },
+    validation: { getActiveForChange: () => Effect.succeed(undefined) },
+    executionLock: { withLock: ({ effect }) => effect },
     cleanupTerminal: openTerminalCleanup({
+      ...noOpTerminalCleanupDependencies,
       persistence: changes,
       cleanup: () => {
         input.events.push("cleanup");

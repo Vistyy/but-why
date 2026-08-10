@@ -3,9 +3,17 @@ import { type CliResult, runtimeError, usageError } from "../../cliResults.js";
 export const decisionMutationError = (code: string, changeId: string): CliResult =>
   runtimeError({
     code,
-    message: code === "change_not_found" ? "Change was not found." : "Change is closed.",
+    message:
+      code === "change_not_found"
+        ? "Change was not found."
+        : code === "submission_in_progress"
+          ? "Change Submission is in progress."
+          : "Change is closed.",
     details: { changeId },
-    help: ["Use an open Change ID."],
+    help:
+      code === "submission_in_progress"
+        ? ["Wait for Change Submit to finish, then retry the Implementation Decision command."]
+        : ["Use an open Change ID."],
   });
 
 export const decisionInputError = (

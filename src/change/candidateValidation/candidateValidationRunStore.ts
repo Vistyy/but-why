@@ -1,3 +1,5 @@
+import type { CandidateRecord } from "../candidate/candidate.js";
+import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
@@ -35,8 +37,7 @@ export type StartCandidateValidationRunInput = {
   readonly candidateId: string;
   readonly headSha: string;
   readonly changeBaseSha?: string;
-  readonly policy: CandidateValidationPolicySnapshot;
-  readonly implementationDecisions?: readonly ImplementationDecision[];
+  readonly policy: Omit<CandidateValidationPolicySnapshot, "acceptanceContext">;
   readonly validationRunId?: string;
   readonly workspaceSetup?: {
     readonly tempRefName: string;
@@ -45,9 +46,26 @@ export type StartCandidateValidationRunInput = {
   readonly now: string;
 };
 
+export type CandidateValidationAuthority = {
+  readonly candidate: CandidateRecord;
+  readonly policy: CandidateValidationPolicySnapshot;
+  readonly implementationDecisions: readonly ImplementationDecision[];
+  readonly blockerHistory: ImplementationBlockerHistory;
+  readonly latestResolvedBlockerId: string | null;
+};
+
 export type StartCandidateValidationRunResult =
-  | { readonly reused: true; readonly validationRunId: string; readonly outcome: "passed" }
-  | { readonly reused: false; readonly validationRunId: string }
+  | {
+      readonly reused: true;
+      readonly validationRunId: string;
+      readonly outcome: "passed";
+      readonly authority: CandidateValidationAuthority;
+    }
+  | {
+      readonly reused: false;
+      readonly validationRunId: string;
+      readonly authority: CandidateValidationAuthority;
+    }
   | { readonly reused: false; readonly active: true; readonly validationRunId: string }
   | { readonly reused: false; readonly blocked: true };
 

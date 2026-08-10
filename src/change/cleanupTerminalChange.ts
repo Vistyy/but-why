@@ -7,7 +7,7 @@ import {
   changeState,
   type RemoteChangeBranch,
 } from "./change.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { TerminalChangeCleanupPort } from "./changePorts.js";
 import type {
   TranscriptIndexOperation,
   TranscriptIndexResult,
@@ -45,11 +45,11 @@ export type TerminalCleanupOperation = (
 
 export const openTerminalCleanup =
   (dependencies: {
-    readonly persistence: Pick<ChangePersistence, "recordCleanup" | "removeReviewerSessions">;
+    readonly persistence: TerminalChangeCleanupPort;
     readonly cleanup: ChangeCleanupOperation;
-    readonly indexTranscripts?: TranscriptIndexOperation;
-    readonly reviewerSessionPathFor?: (changeId: string) => string;
-    readonly artifactLifecycle?: ArtifactLifecycleOwner;
+    readonly indexTranscripts: TranscriptIndexOperation;
+    readonly reviewerSessionPathFor: (changeId: string) => string;
+    readonly artifactLifecycle: ArtifactLifecycleOwner;
   }): TerminalCleanupOperation =>
   (change, now, discardWork) =>
     cleanupTerminalChange(dependencies, change, now, discardWork);
@@ -67,7 +67,7 @@ const cleanupTerminalChange = (
     if (change.state !== changeState.closed) return { ok: false, code: "change_not_closed" };
 
     const indexResult = yield* indexTranscripts(dependencies, change);
-    if (indexResult !== undefined && !indexResult.ok) {
+    if (!indexResult.ok) {
       return yield* recordCleanup(dependencies, change, now, {
         state: "pending",
         blockingReason: "transcript_index_failed",
@@ -105,9 +105,7 @@ const removeArtifactContent = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
   change: ChangeRecord,
 ): Effect.Effect<boolean, RepositoryStorageError> =>
-  dependencies.artifactLifecycle === undefined
-    ? Effect.succeed(true)
-    : Effect.map(dependencies.artifactLifecycle.removeContent(change.id), (result) => result.ok);
+  Effect.map(dependencies.artifactLifecycle.removeContent(change.id), (result) => result.ok);
 
 const recordCleanup = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
@@ -128,18 +126,11 @@ const recordCleanup = (
 const indexTranscripts = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
   change: ChangeRecord,
-): Effect.Effect<TranscriptIndexResult | undefined, RepositoryStorageError> => {
-  if (
-    dependencies.indexTranscripts === undefined ||
-    dependencies.reviewerSessionPathFor === undefined
-  ) {
-    return Effect.succeed(undefined);
-  }
-  return dependencies.indexTranscripts({
+): Effect.Effect<TranscriptIndexResult, RepositoryStorageError> =>
+  dependencies.indexTranscripts({
     changeId: change.id,
     reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id),
   });
-};
 
 const remoteChangeBranchFor = (change: ChangeRecord): RemoteChangeBranch | undefined => {
   const publication = change.publication;

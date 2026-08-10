@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { ValidationRunAbandonmentPort } from "./validation/changeValidationPorts.js";
 import type { ValidationWorkspaceCleanup } from "./validation/validationWorkspaceCleanup.js";
 
 export type AbandonValidationRunResult =
@@ -32,13 +32,8 @@ export type AbandonValidationRun = {
   }) => Effect.Effect<AbandonValidationRunResult, RepositoryStorageError>;
 };
 
-export type AbandonValidationPersistence = Pick<
-  ChangeValidationPersistence,
-  "getAbandonmentContext" | "getRunById" | "recordToolingFailure" | "abandon"
->;
-
 export const openAbandonValidationRun = (input: {
-  readonly persistence: AbandonValidationPersistence;
+  readonly persistence: ValidationRunAbandonmentPort;
   readonly executionLock: ExecutionLock;
   readonly workspaceCleanup: ValidationWorkspaceCleanup;
 }): AbandonValidationRun => ({
@@ -84,7 +79,7 @@ export const openAbandonValidationRun = (input: {
 
 const abandonWhileLocked = (
   input: {
-    readonly persistence: AbandonValidationPersistence;
+    readonly persistence: ValidationRunAbandonmentPort;
     readonly workspaceCleanup: ValidationWorkspaceCleanup;
   },
   command: { readonly validationRunId: string; readonly reason: string; readonly now: string },

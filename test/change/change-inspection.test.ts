@@ -6,8 +6,14 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  loadRaiseImplementationBlocker,
+  loadRecordImplementationDecision,
+} from "../../src/change/loadChangeInspection.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
+import { loadRepoLocalContext } from "../../src/init/repoContext.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   captureCandidateFixture,
@@ -57,6 +63,47 @@ const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepo
 // This file retains the real-Git inference and policy-source sentinels because those Claims
 // include Git identity and exact Change Base and Candidate policy authority.
 describe("Change inspection CLI", () => {
+  it.effect("rejects Decision and Blocker mutations while Submission owns the Change lock", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      commitButWhyConfigAndRecordDefault(root);
+      const started = yield* runByInProcessEffect(root, ["change", "start"]);
+      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
+        .change.id;
+      const context = loadRepoLocalContext(root);
+      if (!context.ok) throw new Error(context.error.code);
+      const decision = loadRecordImplementationDecision({ cwd: root });
+      const blocker = loadRaiseImplementationBlocker({ cwd: root });
+      if (!decision.ok) throw new Error(decision.error.code);
+      if (!blocker.ok) throw new Error(blocker.error.code);
+
+      const results = yield* openSqliteExecutionLock({
+        commonDirectory: context.context.commonDirectory,
+      }).withLock({
+        owner: "change_submission",
+        key: changeId,
+        effect: Effect.all([
+          decision.operation({
+            changeId,
+            choice: "Do not record this Decision",
+            rationale: "Submission owns the authority snapshot.",
+            now: commandNow,
+          }),
+          blocker.operation({
+            changeId,
+            content: "Do not change Blocker authority during Submission.",
+            now: commandNow,
+          }),
+        ]),
+      });
+
+      expect(results).toEqual([
+        { ok: false, code: "submission_in_progress" },
+        { ok: false, code: "submission_in_progress" },
+      ]);
+    }),
+  );
+
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();

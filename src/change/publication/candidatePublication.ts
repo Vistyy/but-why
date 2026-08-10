@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateValidationPolicySnapshot } from "../candidateValidation/candidateValidationPolicySnapshot.js";
@@ -9,7 +8,7 @@ import type {
   ChangeRecord,
 } from "../change.js";
 import { branchNameForRef } from "../changeBranch.js";
-import type { ChangePersistence } from "../changePersistence.js";
+import type { CandidatePublicationPort } from "../changePorts.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import {
   classifyOwnedPullRequest,
@@ -23,7 +22,6 @@ import type {
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
 } from "../ownedPullRequestGateway.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };
@@ -34,7 +32,7 @@ export type CandidatePublicationGit = {
     startingCommit: string,
     headSha: string,
   ) => CommitSubjectResult;
-  readonly containsCommit?: (headSha: string, ancestorSha: string) => boolean;
+  readonly containsCommit: (headSha: string, ancestorSha: string) => boolean;
 };
 
 export type CandidatePublication = {
@@ -79,11 +77,7 @@ export type PublishCandidateResult =
     };
 
 type Dependencies = {
-  readonly changePersistence: ChangePersistence;
-  readonly validationPersistence: Pick<
-    ChangeValidationPersistence,
-    "getCandidateById" | "getRunById"
-  >;
+  readonly changePersistence: CandidatePublicationPort;
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
   readonly delayBeforeConfirmation?: (milliseconds: number) => Effect.Effect<void>;
@@ -100,30 +94,21 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     const change = yield* dependencies.changePersistence.getChangeById(input.changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state === "closed") return { ok: false, code: "change_closed" };
-    const candidate = yield* dependencies.validationPersistence.getCandidateById(input.candidateId);
-    if (candidate === undefined) return { ok: false, code: "candidate_not_found" };
-    if (candidate.changeId !== change.id)
+    const evidence = yield* dependencies.changePersistence.getCurrentPassingEvidence(change.id, {
+      candidateId: input.candidateId,
+      validationRunId: input.validationRunId,
+      changeBaseSha: input.changeBaseSha,
+      policy: input.policy,
+    });
+    if (evidence === undefined) return { ok: false, code: "validation_evidence_invalid" };
+    if (evidence.candidateId !== input.candidateId)
       return { ok: false, code: "candidate_does_not_belong_to_change" };
-    const publicationInput = { ...input, changeBaseSha: candidate.changeBaseSha };
-    const validationRun = yield* dependencies.validationPersistence.getRunById(
-      publicationInput.validationRunId,
-    );
-    if (
-      validationRun === undefined ||
-      validationRun.candidateId !== input.candidateId ||
-      validationRun.state !== "complete" ||
-      validationRun.outcome !== "passed" ||
-      !isDeepStrictEqual(validationRun.policy, publicationInput.policy) ||
-      !isDeepStrictEqual(
-        validationRun.implementationDecisions,
-        change.implementationDecisions ?? [],
-      ) ||
-      candidate.headSha.length === 0
-    )
+    if (evidence.validationRunId !== input.validationRunId)
       return { ok: false, code: "validation_evidence_invalid" };
+    const publicationInput = { ...input, changeBaseSha: evidence.changeBaseSha };
     const headBranch = branchNameForRef(change.branchRef);
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
-    const metadata = metadataFor(change, candidate.headSha, dependencies.git);
+    const metadata = metadataFor(change, evidence.headSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     if (change.publication === null)
       return yield* create(
@@ -131,17 +116,17 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
         publicationInput,
         change,
         headBranch,
-        candidate.headSha,
+        evidence.headSha,
         metadata,
       );
     if (change.publication.pullRequest === null)
-      return yield* recover(dependencies, publicationInput, change, headBranch, candidate.headSha);
+      return yield* recover(dependencies, publicationInput, change, headBranch, evidence.headSha);
     return yield* updateOrReuse(
       dependencies,
       publicationInput,
       change,
       headBranch,
-      candidate.headSha,
+      evidence.headSha,
       metadata,
     );
   });
@@ -203,7 +188,7 @@ const createFailure = (
   _change: ChangeRecord,
   headBranch: string,
   expectedHeadSha: string,
-  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
   if (
@@ -221,7 +206,7 @@ const createFailure = (
 
 const releaseWithDetails = (
   dependencies: Dependencies,
-  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect =>
@@ -243,7 +228,7 @@ const releaseWithDetails = (
 
 const releaseWithEvidence = (
   dependencies: Dependencies,
-  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
   failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
 ): PublicationEffect =>
@@ -255,7 +240,7 @@ const releaseWithEvidence = (
 
 const release = (
   dependencies: Dependencies,
-  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
 ): PublicationEffect =>
   Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
@@ -315,10 +300,7 @@ const recover = (
       marker.validationRunId === input.validationRunId
     )
       return yield* record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest);
-    if (
-      dependencies.git.containsCommit === undefined ||
-      !dependencies.git.containsCommit(expectedHeadSha, selected.pullRequest.headSha)
-    )
+    if (!dependencies.git.containsCommit(expectedHeadSha, selected.pullRequest.headSha))
       return {
         ok: false,
         code: "publication_remote_mismatch",
@@ -424,7 +406,7 @@ const confirmCreation = (
 
 const retainFailure = (
   dependencies: Dependencies,
-  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect =>
   Effect.map(dependencies.changePersistence.getChangeById(pending.changeId), () => ({

@@ -2,8 +2,8 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ChangeRecord } from "../change.js";
-import type { ChangePersistence } from "../changePersistence.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
+import type { ChangeReadPort } from "../changePorts.js";
+import type { ChangeValidationReadPort } from "../validation/changeValidationPorts.js";
 import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type {
@@ -66,8 +66,8 @@ export type CandidateValidationRunInspectionUseCases = {
 };
 
 export const openCandidateValidationRunInspection = (input: {
-  readonly persistence: ChangeValidationPersistence;
-  readonly changePersistence: ChangePersistence;
+  readonly persistence: ChangeValidationReadPort;
+  readonly changePersistence: ChangeReadPort;
   readonly artifactsRoot: string;
 }): CandidateValidationRunInspectionUseCases => ({
   inspectRun: (validationRunId) => inspectRun(input, validationRunId),
@@ -76,8 +76,8 @@ export const openCandidateValidationRunInspection = (input: {
 
 const inspectRun = (
   dependencies: {
-    readonly persistence: ChangeValidationPersistence;
-    readonly changePersistence: ChangePersistence;
+    readonly persistence: ChangeValidationReadPort;
+    readonly changePersistence: ChangeReadPort;
     readonly artifactsRoot: string;
   },
   validationRunId: string,
@@ -123,7 +123,7 @@ const inspectRun = (
 
 const readArtifact = (
   dependencies: {
-    readonly persistence: ChangeValidationPersistence;
+    readonly persistence: ChangeValidationReadPort;
     readonly artifactsRoot: string;
   },
   validationRunId: string,

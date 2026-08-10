@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import type { ChangeRecord } from "../../change/change.js";
-import type { ChangePrepareResult, ChangeStartResult } from "../../change/changeUseCases.js";
+import type { ChangePrepareResult, ChangeStartResult } from "../../change/changeLifecycle.js";
 import { type CliResult, runtimeError, success } from "../../cliResults.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 

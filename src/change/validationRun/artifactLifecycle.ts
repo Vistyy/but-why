@@ -8,10 +8,10 @@ import type {
   ArtifactContentRemovalResult,
   ArtifactLifecycleOwner,
 } from "../cleanupTerminalChange.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
+import type { ValidationArtifactLifecyclePort } from "../validation/changeValidationPorts.js";
 
 export const openArtifactLifecycle = (input: {
-  readonly persistence: Pick<ChangeValidationPersistence, "listRunIdsForChange">;
+  readonly persistence: Pick<ValidationArtifactLifecyclePort, "listRunIdsForChange">;
   readonly artifactsRoot: string;
 }): ArtifactLifecycleOwner => ({
   removeContent: (changeId) => removeChangeArtifactContent(input, changeId),
@@ -19,7 +19,7 @@ export const openArtifactLifecycle = (input: {
 
 const removeChangeArtifactContent = (
   dependencies: {
-    readonly persistence: Pick<ChangeValidationPersistence, "listRunIdsForChange">;
+    readonly persistence: Pick<ValidationArtifactLifecyclePort, "listRunIdsForChange">;
     readonly artifactsRoot: string;
   },
   changeId: string,

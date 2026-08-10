@@ -4,19 +4,19 @@ import {
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
+import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import {
   CandidateReviewerAgentRuntime,
   type CandidateValidation,
+  CandidateValidationExecution,
   CandidateValidationLive,
   CandidateValidationPaths,
-  CandidateValidationPersistence,
 } from "./validateCandidate.js";
 
 export const candidateValidationLayer = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly persistence: ChangeValidationPersistence;
+  readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sessionStore?: unknown;
   readonly reviewerSessionsRoot?: string;
@@ -37,7 +37,7 @@ export const candidateValidationLayer = (input: {
                   input.sessionStore as import("../reviewerSession/reviewerSession.js").ReviewerSessionStore,
               }),
         }),
-        Layer.succeed(CandidateValidationPersistence, input.persistence),
+        Layer.succeed(CandidateValidationExecution, input.persistence),
         Layer.succeed(
           CandidateReviewerAgentRuntime,
           input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
