@@ -91,9 +91,7 @@ describe("reviewer prompts", () => {
       `Implementer Implementation Decision Log (non-authoritative rationale):\n${JSON.stringify([
         implementationDecision,
       ])}`,
-      `Available Check and Validation evidence:\n${JSON.stringify([
-        "artifact:continued-check",
-      ])}`,
+      `Available Check and Validation evidence:\n${JSON.stringify(["artifact:continued-check"])}`,
       `Previous Findings:\n${prettyJson({ findings: [previousFinding] })}`,
     ]);
   });
