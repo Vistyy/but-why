@@ -152,6 +152,17 @@ describe("by CLI", () => {
     }),
   );
 
+  it.effect("prints the package version as one compact JSON document", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["--version"]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe('{"version":"0.0.1"}\n');
+      expect(JSON.parse(result.stdout)).toEqual({ version: "0.0.1" });
+    }),
+  );
+
   it.effect("prints JSON init help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["init", "--help"]);
