@@ -106,9 +106,7 @@ export const queryChangeDetail = (
       currentCandidate: candidate,
       currentValidationRun: validationRun,
       findings:
-        validationRun === null
-          ? []
-          : yield* dependencies.validation.listFindings(validationRun.id),
+        validationRun === null ? [] : yield* dependencies.validation.listFindings(validationRun.id),
       toolingFailures:
         validationRun === null
           ? []

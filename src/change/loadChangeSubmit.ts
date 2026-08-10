@@ -176,11 +176,10 @@ export const loadChangeSubmit = (input: {
           reviewerSessions: openSqliteChangeReviewerSessionPort(),
           publication: openSqliteCandidatePublicationPort(),
         }).pipe(
-          Effect.flatMap(
-            ({ capture, validation, submission, reviewerSessions, publication }) =>
-              programFor(capture, submission, publication)
-                .submit(submitInput)
-                .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
+          Effect.flatMap(({ capture, validation, submission, reviewerSessions, publication }) =>
+            programFor(capture, submission, publication)
+              .submit(submitInput)
+              .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
           ),
           Effect.provide(repositoryLayer),
         ),
