@@ -245,7 +245,12 @@ export const createValidationRunFixture = (
             latest_resolved_blocker_id, state, outcome, created_at, updated_at
           ) VALUES (
             ${id}, ${input.candidateId}, ${JSON.stringify({ checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }], copyFiles: [] })}, '[]',
-            NULL, ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
+            (
+              SELECT id FROM implementation_blockers
+              WHERE change_id = ${input.changeId} AND resolved_at <= ${input.createdAt}
+              ORDER BY resolved_at DESC, sequence DESC LIMIT 1
+            ),
+            ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
           )
         `,
       );
