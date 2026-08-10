@@ -29,7 +29,8 @@ It is preserved in Acceptance Context when the Task starts.
 _Avoid_: Validation Policy Snapshot, Check list, coverage target
 
 **Task Context Draft**:
-A disposable editable copy of Task Context prepared before its proposed changes are applied.
+A disposable editable copy of a Task description prepared before the description is applied.
+Applying it preserves the Task title.
 _Avoid_: Task Worktree, durable Task Context, Artifact
 
 **Task Slug**:

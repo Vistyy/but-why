@@ -42,7 +42,6 @@ it.scoped("preserves terminal Task policy", () => {
         expect(
           yield* tasks.updateTaskContext({
             taskId,
-            title: "Changed title",
             description: "Changed description",
             now: thirdNow,
           }),
@@ -73,15 +72,11 @@ it.scoped(
         const taskId = publicTaskId("BY-1");
         yield* tasks.approveTask({ taskId, now: secondNow });
 
-        for (const proposal of [
-          { title: "Approved title", description: "Approved description" },
-          { title: "Changed title", description: "Changed description" },
-        ]) {
+        for (const description of ["Approved description", "Changed description"]) {
           expect(
             yield* tasks.updateTaskContext({
               taskId,
-              title: proposal.title,
-              description: proposal.description,
+              description,
               now: thirdNow,
             }),
           ).toEqual({
@@ -105,11 +100,13 @@ it.scoped(
         expect(
           yield* tasks.updateTaskContext({
             taskId: publicTaskId("BY-2"),
-            title: "Edited title",
             description: "Edited description",
             now: thirdNow,
           }),
-        ).toMatchObject({ ok: true, task: { title: "Edited title" } });
+        ).toMatchObject({
+          ok: true,
+          task: { title: "New title", description: "Edited description" },
+        });
       }),
     );
   },

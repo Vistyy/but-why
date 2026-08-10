@@ -7,7 +7,6 @@ import { type PublicTaskId, taskSlugForId } from "../taskId.js";
 
 export type ParsedTaskContextDraft = {
   readonly path: string;
-  readonly title: string;
   readonly description: string;
 };
 
@@ -33,7 +32,7 @@ export const writeTaskContextDraft = (
   mkdirSync(draftsPath, { recursive: true });
 
   const path = taskContextDraftPath(draftsPath, taskId);
-  const content = `# ${context.title}\n\n${context.description}`;
+  const content = context.description;
   writeFileSync(path, content, "utf8");
 
   return { path, content };
@@ -58,11 +57,9 @@ export const readTaskContextDraft = (
     return { ok: false, error: { code: "task_context_draft_unreadable", path } };
   }
 
-  const draft = parseTaskContextDraft(content, path);
-
-  return draft === undefined
+  return content.trim().length === 0
     ? { ok: false, error: { code: "invalid_task_context_draft", path } }
-    : { ok: true, draft };
+    : { ok: true, draft: { path, description: content } };
 };
 
 export const removeTaskContextDraft = (path: string): boolean => {
@@ -76,40 +73,6 @@ export const removeTaskContextDraft = (path: string): boolean => {
 
 const taskContextDraftPath = (draftsPath: string, taskId: PublicTaskId): string =>
   join(draftsPath, `${taskSlugForId(taskId)}.md`);
-
-const parseTaskContextDraft = (
-  content: string,
-  path: string,
-): ParsedTaskContextDraft | undefined => {
-  const firstLineEnd = content.indexOf("\n");
-
-  if (firstLineEnd < 0) {
-    return undefined;
-  }
-
-  const firstLine = content.slice(0, firstLineEnd).replace(/\r$/, "");
-
-  if (!firstLine.startsWith("# ")) {
-    return undefined;
-  }
-
-  const title = firstLine.slice(2).trim();
-  let description = content.slice(firstLineEnd + 1);
-
-  if (description.startsWith("\n")) {
-    description = description.slice(1);
-  } else if (description.startsWith("\r\n")) {
-    description = description.slice(2);
-  } else {
-    return undefined;
-  }
-
-  if (title.length === 0 || description.trim().length === 0) {
-    return undefined;
-  }
-
-  return { path, title, description };
-};
 
 type NodeError = Error & {
   readonly code?: string;
