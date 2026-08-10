@@ -14,8 +14,8 @@ import type { ReviewerSessionStore } from "../../src/change/reviewerSession/revi
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import {
-  type ChangeValidationTestPorts,
-  openSqliteChangeValidationTestPorts,
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
 
 export const candidateValidationForTest = (input: {
@@ -29,7 +29,10 @@ export const candidateValidationForTest = (input: {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
     CandidateValidationExecution,
-    openSqliteChangeValidationTestPorts(),
+    Effect.map(
+      openSqliteChangeValidationTestDependencies(),
+      (dependencies) => dependencies.execution,
+    ),
   ).pipe(Layer.provide(repositoryLayer));
   const layer = CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -51,28 +54,28 @@ export const candidateValidationForTest = (input: {
     ),
   );
   const withPersistence = <A>(
-    use: (persistence: ChangeValidationTestPorts) => Effect.Effect<A, unknown>,
+    use: (persistence: ChangeValidationTestDependencies) => Effect.Effect<A, unknown>,
   ) =>
-    Effect.flatMap(openSqliteChangeValidationTestPorts(), use).pipe(
+    Effect.flatMap(openSqliteChangeValidationTestDependencies(), use).pipe(
       Effect.provide(repositoryLayer),
     );
 
   return {
     layer,
     getRun: (validationRunId: string) =>
-      withPersistence((persistence) => persistence.getRunById(validationRunId)),
+      withPersistence((persistence) => persistence.reads.getRunById(validationRunId)),
     listRounds: (validationRunId: string) =>
       withPersistence((persistence) =>
-        Effect.map(persistence.listRounds(validationRunId), (rounds) =>
+        Effect.map(persistence.reads.listRounds(validationRunId), (rounds) =>
           rounds.map(({ producer, status }) => ({ producer, status })),
         ),
       ),
     listFindings: (validationRunId: string) =>
-      withPersistence((persistence) => persistence.listFindings(validationRunId)),
+      withPersistence((persistence) => persistence.reads.listFindings(validationRunId)),
     listArtifacts: (validationRunId: string) =>
-      withPersistence((persistence) => persistence.listArtifacts(validationRunId)),
+      withPersistence((persistence) => persistence.reads.listArtifacts(validationRunId)),
     listToolingFailures: (validationRunId: string) =>
-      withPersistence((persistence) => persistence.listToolingFailures(validationRunId)),
+      withPersistence((persistence) => persistence.reads.listToolingFailures(validationRunId)),
     runWithPersistence: withPersistence,
   };
 };

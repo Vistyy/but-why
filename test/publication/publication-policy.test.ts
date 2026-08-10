@@ -4,14 +4,6 @@ import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
-  CandidatePublicationPort,
-  ChangeAuthorityPort,
-  ChangeDeliveryPort,
-  ChangeReadPort,
-  ChangeReviewerSessionPort,
-  ChangeReviewerTranscriptPort,
-} from "../../src/change/changePorts.js";
-import type {
   GitHubPullRequest,
   GitHubPullRequestRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
@@ -20,21 +12,17 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
 import {
-  type ChangeValidationTestPorts,
-  openSqliteChangeValidationTestPorts,
+  type ChangeTestDependencies,
+  openSqliteChangeTestDependencies,
+} from "../support/changePorts.js";
+import {
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
 import { cloneInitializedRepositoryState } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
-
-type ChangeTestPorts = CandidatePublicationPort &
-  ChangeAuthorityPort &
-  ChangeDeliveryPort &
-  ChangeReadPort &
-  ChangeReviewerSessionPort &
-  ChangeReviewerTranscriptPort;
 
 const now = "2026-07-22T10:00:00.000Z";
 const policy = { checks: [], copyFiles: [], specialistReviews: [] };
@@ -74,7 +62,7 @@ const publicationTemplateLayer = Layer.effect(
           WHERE id = ${captured.changeId}
         `,
         );
-        const validation = yield* openSqliteChangeValidationTestPorts();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         return yield* completeValidation(validation, captured, now);
       }),
     );
@@ -88,7 +76,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       Effect.gen(function* () {
         const requests: unknown[] = [];
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -129,7 +117,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       Effect.gen(function* () {
         let readbacks = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -168,9 +156,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           },
         });
         expect(readbacks).toBe(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: { pullRequest: null },
-        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: { pullRequest: null },
+          },
+        );
       }),
     ),
   );
@@ -181,7 +171,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let currentHead = "moved-head";
         let createCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => currentHead,
@@ -211,9 +201,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           ok: false,
           code: "publication_tooling_failed",
         });
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: null,
-        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: null,
+          },
+        );
         expect(yield* publication.publish(input(fixture))).toMatchObject({
           ok: true,
           created: true,
@@ -228,7 +220,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const requests: unknown[] = [];
         let historyAvailable = false;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -255,7 +247,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     withFixture((fixture) =>
       Effect.gen(function* () {
         const requests: unknown[] = [];
-        const recorded = yield* fixture.changes.recordImplementationDecision({
+        const recorded = yield* fixture.changes.authority.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Keep & preserve <details>",
           rationale: "Keep the decision log separate from <approved> intent.",
@@ -264,7 +256,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(recorded.ok).toBe(true);
         if (!recorded.ok) return;
         const recordedDecisionId = recorded.decision.id;
-        const second = yield* fixture.changes.recordImplementationDecision({
+        const second = yield* fixture.changes.authority.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Preserve chronological order",
           rationale: "Keep decisions in their recorded order.",
@@ -278,7 +270,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           "2026-07-22T10:02:00.000Z",
         );
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -347,7 +339,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         );
         const requests: unknown[] = [];
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -382,7 +374,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const updates: unknown[] = [];
         const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -406,7 +398,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
 
-        yield* fixture.changes.recordImplementationDecision({
+        yield* fixture.changes.authority.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Update the owned pull request",
           rationale: "Keep the current decision log in the revised publication.",
@@ -446,12 +438,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toEqual({ ok: false, code: "publication_remote_mismatch" });
         expect(updates).toHaveLength(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: next.captured.candidateId,
-            expectedHeadSha: next.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              expectedHeadSha: next.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -464,7 +458,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let updateCalls = 0;
         let readBacks = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -514,12 +508,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
         expect(updateCalls).toBe(1);
         expect(readBacks).toBe(2);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: next.captured.candidateId,
-            expectedHeadSha: next.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              expectedHeadSha: next.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -531,7 +527,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const remote = pullRequest(branchHead);
         let updateCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -576,12 +572,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           recoveryEvidence: { operation: "remote_lookup", classification: "conflict" },
         });
         expect(updateCalls).toBe(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: fixture.captured.candidateId,
-            expectedHeadSha: fixture.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -593,7 +591,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let remote: GitHubPullRequest | undefined = pullRequest(branchHead);
         let updateCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -639,12 +637,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           recoveryEvidence: { operation: "remote_lookup", classification: "unavailable" },
         });
         expect(updateCalls).toBe(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: fixture.captured.candidateId,
-            expectedHeadSha: fixture.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -657,7 +657,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let confirmationReads = 0;
         const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -697,12 +697,14 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(confirmationReads).toBe(2);
         expect(confirmationDelays).toEqual([100]);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: fixture.captured.candidateId,
-            expectedHeadSha: fixture.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -714,7 +716,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let remote = pullRequest(branchHead);
         let updateCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -744,13 +746,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
         expect(updateCalls).toBe(0);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: next.captured.candidateId,
-            validationRunId: next.validationRunId,
-            expectedHeadSha: next.captured.headSha,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              validationRunId: next.validationRunId,
+              expectedHeadSha: next.captured.headSha,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -762,7 +766,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let remote: GitHubPullRequest = pullRequest(branchHead);
         let updateCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -796,13 +800,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toEqual({ ok: false, code: "publication_remote_mismatch" });
         expect(updateCalls).toBe(0);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: fixture.captured.candidateId,
-            expectedHeadSha: fixture.captured.headSha,
-            pullRequest: { number: 42 },
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
+              pullRequest: { number: 42 },
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -813,7 +819,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let branchHead = fixture.captured.headSha;
         let remote: GitHubPullRequest | undefined = pullRequest(branchHead);
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -841,13 +847,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             now: "2026-07-22T10:05:00.000Z",
           }),
         ).toEqual({ ok: false, code: "publication_tooling_failed" });
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: fixture.captured.candidateId,
-            expectedHeadSha: fixture.captured.headSha,
-            pullRequest: { number: 42 },
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
+              pullRequest: { number: 42 },
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -867,7 +875,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         }[] = [];
         let createCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -927,7 +935,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let branchHead = fixture.captured.headSha;
         const remote = pullRequest(fixture.captured.headSha);
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -972,7 +980,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       Effect.gen(function* () {
         let creates = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -1014,9 +1022,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           recoveryEvidence: { operation: "remote_lookup", classification: "conflict" },
         });
         expect(creates).toBe(2);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: { candidateId: next.captured.candidateId, pullRequest: null },
-        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: { candidateId: next.captured.candidateId, pullRequest: null },
+          },
+        );
       }),
     ),
   );
@@ -1028,7 +1038,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let remote: GitHubPullRequest = pullRequest(branchHead);
         let updates = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -1068,13 +1078,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(reopened).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
         expect(updates).toBe(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: next.captured.candidateId,
-            expectedHeadSha: next.captured.headSha,
-            pullRequest: { number: 42 },
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              expectedHeadSha: next.captured.headSha,
+              pullRequest: { number: 42 },
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -1086,7 +1098,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const oldPullRequest = pullRequest(fixture.captured.headSha);
         let updates = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -1135,7 +1147,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         Effect.gen(function* () {
           let updates = 0;
           const publication = openCandidatePublication({
-            changePersistence: fixture.changes,
+            changePersistence: fixture.changes.publication,
             git: {
               ...publicationGitDefaults,
               readBranchHead: () => fixture.captured.headSha,
@@ -1157,7 +1169,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           const first = yield* publication.publish(input(fixture));
           expect(first).toMatchObject({ ok: true, created: true, pullRequest: { number: 42 } });
 
-          const recorded = yield* fixture.changes.recordImplementationDecision({
+          const recorded = yield* fixture.changes.authority.recordImplementationDecision({
             changeId: fixture.captured.changeId,
             choice: "Revise the implementation",
             rationale: "Resolution requires fresh Validation evidence.",
@@ -1181,7 +1193,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             pullRequest: { number: 42 },
           });
           expect(updates).toBe(0);
-          expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          expect(
+            yield* fixture.changes.reads.getChangeById(fixture.captured.changeId),
+          ).toMatchObject({
             publication: {
               candidateId: fixture.captured.candidateId,
               validationRunId: freshRunId,
@@ -1198,7 +1212,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let branchHead = fixture.captured.headSha;
         let createCalls = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => branchHead,
@@ -1246,13 +1260,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toMatchObject({ ok: false, code: "publication_creation_unconfirmed" });
         expect(createCalls).toBe(3);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: {
-            candidateId: next.captured.candidateId,
-            expectedHeadSha: next.captured.headSha,
-            pullRequest: null,
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              expectedHeadSha: next.captured.headSha,
+              pullRequest: null,
+            },
           },
-        });
+        );
       }),
     ),
   );
@@ -1261,7 +1277,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     withFixture((fixture) =>
       Effect.gen(function* () {
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -1288,9 +1304,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           code: "publication_tooling_failed",
           evidence: { operation: "remote_lookup", classification: "unavailable" },
         });
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: { candidateId: fixture.captured.candidateId, pullRequest: null },
-        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: { candidateId: fixture.captured.candidateId, pullRequest: null },
+          },
+        );
       }),
     ),
   );
@@ -1300,7 +1318,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       Effect.gen(function* () {
         let creates = 0;
         const publication = openCandidatePublication({
-          changePersistence: fixture.changes,
+          changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
@@ -1323,9 +1341,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           code: "publication_lookup_ambiguous",
         });
         expect(creates).toBe(1);
-        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-          publication: { pullRequest: null },
-        });
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: { pullRequest: null },
+          },
+        );
       }),
     ),
   );
@@ -1334,8 +1354,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 type Fixture = {
   readonly root: string;
   readonly captured: Captured;
-  readonly changes: ChangeTestPorts;
-  readonly validation: ChangeValidationTestPorts;
+  readonly changes: ChangeTestDependencies;
+  readonly validation: ChangeValidationTestDependencies;
   readonly validationRunId: string;
 };
 
@@ -1346,8 +1366,8 @@ const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, Reposi
     return yield* withTestRepository(
       root,
       Effect.gen(function* () {
-        const changes = yield* openSqliteChangeTestPorts();
-        const validation = yield* openSqliteChangeValidationTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         return yield* use({
           root,
           captured: template.captured,
@@ -1359,9 +1379,13 @@ const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, Reposi
     );
   });
 
-function completeValidation(validation: ChangeValidationTestPorts, captured: Captured, at: string) {
+function completeValidation(
+  validation: ChangeValidationTestDependencies,
+  captured: Captured,
+  at: string,
+) {
   return Effect.gen(function* () {
-    const run = yield* validation.startOrReuse({
+    const run = yield* validation.execution.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
       policy,
@@ -1369,7 +1393,7 @@ function completeValidation(validation: ChangeValidationTestPorts, captured: Cap
     });
     if (run.reused) throw new Error("Expected a new Validation Run");
     if ("blocked" in run) throw new Error("Expected a new Validation Run");
-    yield* validation.complete({
+    yield* validation.execution.complete({
       validationRunId: run.validationRunId,
       outcome: "passed",
       now: at,

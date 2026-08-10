@@ -15,7 +15,7 @@ import {
   repositorySqlLayer,
 } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -51,7 +51,7 @@ const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
 const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
   Effect.gen(function* () {
     const starts = yield* openSqliteChangeStartPersistence();
-    const changes = yield* openSqliteChangeTestPorts();
+    const changes = yield* openSqliteChangeTestDependencies();
     const worktreePath = join(fixture.root, "worktrees", "but-why", id);
 
     const created = yield* starts.create({
@@ -66,7 +66,7 @@ const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
     });
     if (!created.ok) throw new Error(created.code);
     yield* starts.recordPrepareOutcome(created.change.id, null, now);
-    const cancelled = yield* changes.cancelChange({
+    const cancelled = yield* changes.delivery.cancelChange({
       changeId: created.change.id,
       reason: "cleanup",
       now,
@@ -96,7 +96,7 @@ describe("Change reconciliation discard boundary", () => {
     () =>
       withReconcileRepository((fixture) =>
         Effect.gen(function* () {
-          const changes = yield* openSqliteChangeTestPorts();
+          const changes = yield* openSqliteChangeTestDependencies();
           const first = yield* createTerminalChange(fixture, "change-a");
           const second = yield* createTerminalChange(fixture, "change-b");
           const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
@@ -107,11 +107,18 @@ describe("Change reconciliation discard boundary", () => {
               : { state: "pending", blockingReason: "work_preserved" };
           };
           const reconciliation = openChangeReconciliation({
-            persistence: changes,
+            persistence: {
+              getChangeById: changes.reads.getChangeById,
+              listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+              completeMergedChange: changes.delivery.completeMergedChange,
+            },
             github: noPullRequestGateway,
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
-              persistence: changes,
+              persistence: {
+                recordCleanup: changes.delivery.recordCleanup,
+                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: cleanupDirtyManagedWorktreeAndUniqueBranch,
             }),
           });
@@ -141,10 +148,10 @@ describe("Change reconciliation discard boundary", () => {
               discardWork: true,
             },
           ]);
-          expect(yield* changes.getChangeById(first.changeId)).toMatchObject({
+          expect(yield* changes.reads.getChangeById(first.changeId)).toMatchObject({
             cleanup: { state: "complete", blockingReason: null },
           });
-          expect(yield* changes.getChangeById(second.changeId)).toMatchObject({
+          expect(yield* changes.reads.getChangeById(second.changeId)).toMatchObject({
             cleanup: { state: "pending", blockingReason: null },
           });
         }),
@@ -155,15 +162,22 @@ describe("Change reconciliation discard boundary", () => {
   it.effect("withholds discard authority without the discard flag", () =>
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
-          persistence: changes,
+          persistence: {
+            getChangeById: changes.reads.getChangeById,
+            listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+            completeMergedChange: changes.delivery.completeMergedChange,
+          },
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
-            persistence: changes,
+            persistence: {
+              recordCleanup: changes.delivery.recordCleanup,
+              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: (input) => {
               cleanupInputs.push(input);
               return {
@@ -209,7 +223,7 @@ describe("Change reconciliation discard boundary", () => {
     withReconcileRepository((fixture) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const worktreePath = join(fixture.root, "worktrees", "but-why", "change-open");
         const created = yield* starts.create({
           id: "change-open",
@@ -224,11 +238,18 @@ describe("Change reconciliation discard boundary", () => {
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
         const reconciliation = openChangeReconciliation({
-          persistence: changes,
+          persistence: {
+            getChangeById: changes.reads.getChangeById,
+            listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+            completeMergedChange: changes.delivery.completeMergedChange,
+          },
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
-            persistence: changes,
+            persistence: {
+              recordCleanup: changes.delivery.recordCleanup,
+              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: () => {
               throw new Error("Open Changes must not be cleaned");
             },
@@ -252,7 +273,7 @@ describe("Change reconciliation discard boundary", () => {
             },
           ],
         });
-        expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
           state: "open",
         });
       }),
@@ -279,14 +300,21 @@ describe("Change reconciliation discard boundary", () => {
         const schemaBefore = yield* readSchema("read schema before discard");
         const columnsBefore = yield* readChangesColumns("read changes columns before discard");
 
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const reconciliation = openChangeReconciliation({
-          persistence: changes,
+          persistence: {
+            getChangeById: changes.reads.getChangeById,
+            listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
+            completeMergedChange: changes.delivery.completeMergedChange,
+          },
           github: noPullRequestGateway,
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
-            persistence: changes,
+            persistence: {
+              recordCleanup: changes.delivery.recordCleanup,
+              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: () => ({ state: "complete" }),
           }),
         });
@@ -305,7 +333,7 @@ describe("Change reconciliation discard boundary", () => {
         expect(schemaAfter.map((row) => row.name)).not.toContain("discard");
         expect(columnsAfter.map((row) => row.name)).not.toContain("discard");
 
-        const recorded = yield* changes.getChangeById(terminal.changeId);
+        const recorded = yield* changes.reads.getChangeById(terminal.changeId);
         expect(recorded).toBeDefined();
         expect("discardWork" in (recorded ?? {})).toBe(false);
         expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });

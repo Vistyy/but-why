@@ -12,7 +12,7 @@ import {
   type ReviewerTranscript,
 } from "../../src/change/reviewerSession/reviewerTranscript.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -173,7 +173,7 @@ describe("Reviewer Transcript discovery", () => {
       withTemporaryState((input) =>
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
-          const changes = yield* openSqliteChangeTestPorts();
+          const changes = yield* openSqliteChangeTestDependencies();
           const changeId = "change-e2e";
           yield* repository.operation(
             "insert terminal Change",
@@ -205,7 +205,7 @@ describe("Reviewer Transcript discovery", () => {
             "--home-agent--/review_session-s1.jsonl",
             "session-s1",
           );
-          yield* changes.saveReviewerSession({
+          yield* changes.reviewerSessions.saveReviewerSession({
             changeId,
             producer: "acceptance",
             fingerprint: "fingerprint",
@@ -214,16 +214,21 @@ describe("Reviewer Transcript discovery", () => {
 
           const cleanup = openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
-            persistence: changes,
+            persistence: {
+              recordCleanup: changes.delivery.recordCleanup,
+              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: () => ({ state: "complete" as const, blockingReason: null }),
-            indexTranscripts: openReviewerTranscriptIndex({ persistence: changes }),
+            indexTranscripts: openReviewerTranscriptIndex({
+              persistence: changes.reviewerTranscripts,
+            }),
             reviewerSessionPathFor: (change) => join(input.commonDirectory, "but-why", change),
           });
 
           const result = yield* cleanup(closedChange(changeId, input.commonDirectory), now);
 
           expect(result).toMatchObject({ ok: true, cleanup: { state: "complete" } });
-          const transcripts = yield* changes.listReviewerTranscripts(changeId);
+          const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(changeId);
           expect(transcripts).toEqual([
             {
               changeId,
@@ -244,7 +249,7 @@ describe("Reviewer Transcript discovery", () => {
               filePath: "--home-agent--/review_session-s1.jsonl",
             },
           ]);
-          const live = yield* changes.getReviewerSession(changeId, "acceptance");
+          const live = yield* changes.reviewerSessions.getReviewerSession(changeId, "acceptance");
           expect(live).toBeUndefined();
           const retained = yield* Effect.sync(() => existsSync(join(changeRoot, "acceptance")));
           expect(retained).toBe(true);

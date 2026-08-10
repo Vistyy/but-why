@@ -8,8 +8,8 @@ import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositorySt
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
-import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
+import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -23,7 +23,7 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
           id: "change-decoded",
@@ -57,7 +57,7 @@ describe("SQLite Change decoding", () => {
           }),
         );
 
-        const stored = yield* changes.getChangeById("change-decoded");
+        const stored = yield* changes.reads.getChangeById("change-decoded");
         expect(stored?.acceptanceContext).toEqual({
           version: 1,
           title: "Historical intent",
@@ -69,7 +69,7 @@ describe("SQLite Change decoding", () => {
           "inject incomplete task-backed Change Start",
           (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-decoded'`,
         );
-        yield* expectPersistedDataInvalid(changes.getChangeById("change-decoded"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-decoded"));
       }),
     ),
   );
@@ -78,7 +78,7 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
           id: "change-malformed",
@@ -96,7 +96,7 @@ describe("SQLite Change decoding", () => {
           "inject incomplete Change Start",
           (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
         );
-        expect(yield* changes.getChangeById("change-malformed")).toMatchObject({
+        expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
           taskId: null,
           startingCommit: null,
         });
@@ -110,7 +110,7 @@ describe("SQLite Change decoding", () => {
         const corruptAndReject = (
           label: string,
           update: (sql: SqlClient.SqlClient) => Effect.Effect<unknown, SqlError>,
-          read: Effect.Effect<unknown, unknown> = changes.getChangeById("change-malformed"),
+          read: Effect.Effect<unknown, unknown> = changes.reads.getChangeById("change-malformed"),
         ) =>
           Effect.gen(function* () {
             yield* repository.operation(`inject ${label}`, (sql) => Effect.asVoid(update(sql)));
@@ -180,7 +180,7 @@ describe("SQLite Change decoding", () => {
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
 
         yield* repository.operation("inject malformed publication evidence relationships", (sql) =>
@@ -219,7 +219,7 @@ describe("SQLite Change decoding", () => {
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation("inject unsupported publication Run state", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_expected_head_sha = 'actual-head' WHERE id = 'change-malformed'`;
@@ -233,7 +233,7 @@ describe("SQLite Change decoding", () => {
           implementationDecisions: [],
         };
         yield* expectPersistedDataInvalid(
-          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject malformed publication snapshots",
@@ -244,7 +244,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject malformed Implementation Decision Snapshot",
@@ -256,7 +256,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "inject foreign publication Implementation Decision",
@@ -267,7 +267,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         yield* expectPersistedDataInvalid(
-          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
@@ -291,7 +291,7 @@ describe("SQLite Change decoding", () => {
           }),
         );
         yield* expectPersistedDataInvalid(
-          changes.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
         );
         yield* repository.operation(
           "restore absent publication",
@@ -323,7 +323,7 @@ describe("SQLite Change decoding", () => {
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "install malformed Acceptance Context resolutions",
           (sql) => sql`
@@ -332,7 +332,7 @@ describe("SQLite Change decoding", () => {
             WHERE id = 'change-malformed'
           `,
         );
-        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "restore taskless context",
           (sql) =>
@@ -344,7 +344,7 @@ describe("SQLite Change decoding", () => {
           (sql) => sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
         );
         yield* expectPersistedDataInvalid(
-          changes.listChangesForReconciliation(input.commonDirectory),
+          changes.delivery.listChangesForReconciliation(input.commonDirectory),
         );
         yield* repository.operation(
           "restore open Change cleanup",
@@ -361,7 +361,7 @@ describe("SQLite Change decoding", () => {
           }),
         );
         yield* expectPersistedDataInvalid(
-          changes.listChanges({
+          changes.reads.listChanges({
             repositoryCommonDirectory: input.commonDirectory,
             includeClosed: false,
           }),
@@ -374,8 +374,8 @@ describe("SQLite Change decoding", () => {
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestPorts();
-        const validation = yield* openSqliteChangeValidationTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -386,7 +386,7 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:20:00.000Z",
         });
         if (!captured.ok) throw new Error(captured.code);
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need authority.",
           now: "2026-08-09T20:21:00.000Z",
@@ -402,9 +402,11 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${raised.blocker.id}
           `,
         );
-        yield* expectPersistedDataInvalid(changes.listImplementationBlockers(captured.changeId));
         yield* expectPersistedDataInvalid(
-          validation.startOrReuse({
+          changes.authority.listImplementationBlockers(captured.changeId),
+        );
+        yield* expectPersistedDataInvalid(
+          validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
@@ -423,13 +425,13 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${raised.blocker.id}
           `,
         );
-        const second = yield* changes.raiseImplementationBlocker({
+        const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need another decision.",
           now: "2026-08-09T20:23:00.000Z",
         });
         if (!second.ok) throw new Error(second.code);
-        const secondResolution = yield* changes.resolveImplementationBlocker({
+        const secondResolution = yield* changes.authority.resolveImplementationBlocker({
           changeId: captured.changeId,
           content: "Proceed again.",
           now: "2026-08-09T20:24:00.000Z",
@@ -443,7 +445,9 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${second.blocker.id}
           `,
         );
-        yield* expectPersistedDataInvalid(changes.listImplementationBlockers(captured.changeId));
+        yield* expectPersistedDataInvalid(
+          changes.authority.listImplementationBlockers(captured.changeId),
+        );
 
         yield* repository.operation("inject malformed capture lifecycle", (sql) =>
           Effect.gen(function* () {

@@ -9,14 +9,7 @@ import type {
 import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
-import type {
-  CandidatePublicationPort,
-  ChangeAuthorityPort,
-  ChangeDeliveryPort,
-  ChangeReadPort,
-  ChangeReviewerSessionPort,
-  ChangeReviewerTranscriptPort,
-} from "../../src/change/changePorts.js";
+import type { ChangeSubmissionPort } from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
@@ -32,13 +25,6 @@ import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contract
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-
-type ChangeTestPorts = CandidatePublicationPort &
-  ChangeAuthorityPort &
-  ChangeDeliveryPort &
-  ChangeReadPort &
-  ChangeReviewerSessionPort &
-  ChangeReviewerTranscriptPort;
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -1485,7 +1471,7 @@ const dependencies = (input: {
           events.push("complete_merged_change");
           return { ok: true as const, changed: true, change: input.change };
         }),
-    } as unknown as ChangeTestPorts,
+    } satisfies ChangeSubmissionPort,
     github: pullRequestGateway(input, events, pullRequestObservations),
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");

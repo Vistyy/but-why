@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
@@ -49,7 +49,7 @@ describe("by change reconcile --discard-work", () => {
           root,
           Effect.gen(function* () {
             const starts = yield* openSqliteChangeStartPersistence();
-            const changes = yield* openSqliteChangeTestPorts();
+            const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
               id: "change-pending",
               repositoryCommonDirectory: commonDirectory,
@@ -62,7 +62,7 @@ describe("by change reconcile --discard-work", () => {
             });
             if (!created.ok) throw new Error(created.code);
             yield* starts.recordPrepareOutcome(created.change.id, null, now);
-            const cancelled = yield* changes.cancelChange({
+            const cancelled = yield* changes.delivery.cancelChange({
               changeId: created.change.id,
               reason: "cleanup",
               now,

@@ -2,7 +2,11 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import {
+  loadImplementationBlockers,
+  loadRaiseImplementationBlocker,
+  loadResolveImplementationBlocker,
+} from "../../change/loadChangeInspection.js";
 import { type RecordingTextReadError, readRecordingText } from "../../cli/input/recordingText.js";
 import type { CliResult } from "../../cliResults.js";
 import { runtimeError, success } from "../../cliResults.js";
@@ -20,9 +24,9 @@ export const runBlocker = (
   const action = command.action;
   const changeId = command.changeId;
   if (action === "list") {
-    const loaded = loadChangeInspection({ cwd: environment.cwd });
+    const loaded = loadImplementationBlockers({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.queries.blockers(changeId).pipe(
+    return loaded.operation(changeId).pipe(
       Effect.map((history) =>
         history === undefined ? support.changeNotFound() : success({ changeId, ...history }),
       ),
@@ -31,33 +35,36 @@ export const runBlocker = (
   }
   const content = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!content.ok) return Effect.succeed(blockerInputError(content.error));
-  const loaded = loadChangeInspection({ cwd: environment.cwd });
+  const loaded =
+    action === "raise"
+      ? loadRaiseImplementationBlocker({ cwd: environment.cwd })
+      : loadResolveImplementationBlocker({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-  const operation =
-    action === "raise" ? loaded.authority.raiseBlocker : loaded.authority.resolveBlocker;
-  return operation({
-    changeId,
-    content: content.content,
-    now: environment.now().toISOString(),
-  }).pipe(
-    Effect.map((result) =>
-      result.ok
-        ? success({ changeId, blocker: result.blocker, change: result.change })
-        : runtimeError({
-            code: result.code,
-            message:
-              result.code === "submission_in_progress"
-                ? "Change Submission is in progress."
-                : `Cannot ${action} an Implementation Blocker in this Change.`,
-            details: { changeId },
-            help:
-              result.code === "submission_in_progress"
-                ? ["Wait for Change Submit to finish, then retry the blocker command."]
-                : ["Inspect the Change and use the applicable blocker lifecycle command."],
-          }),
-    ),
-    support.inspectionFailure,
-  );
+  return loaded
+    .operation({
+      changeId,
+      content: content.content,
+      now: environment.now().toISOString(),
+    })
+    .pipe(
+      Effect.map((result) =>
+        result.ok
+          ? success({ changeId, blocker: result.blocker, change: result.change })
+          : runtimeError({
+              code: result.code,
+              message:
+                result.code === "submission_in_progress"
+                  ? "Change Submission is in progress."
+                  : `Cannot ${action} an Implementation Blocker in this Change.`,
+              details: { changeId },
+              help:
+                result.code === "submission_in_progress"
+                  ? ["Wait for Change Submit to finish, then retry the blocker command."]
+                  : ["Inspect the Change and use the applicable blocker lifecycle command."],
+            }),
+      ),
+      support.inspectionFailure,
+    );
 };
 
 const blockerInputError = (error: RecordingTextReadError): CliResult => {

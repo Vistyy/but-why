@@ -6,7 +6,10 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
-import { loadChangeInspection } from "../../src/change/loadChangeInspection.js";
+import {
+  loadRaiseImplementationBlocker,
+  loadRecordImplementationDecision,
+} from "../../src/change/loadChangeInspection.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { loadRepoLocalContext } from "../../src/init/repoContext.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
@@ -69,8 +72,10 @@ describe("Change inspection CLI", () => {
         .change.id;
       const context = loadRepoLocalContext(root);
       if (!context.ok) throw new Error(context.error.code);
-      const loaded = loadChangeInspection({ cwd: root });
-      if (!loaded.ok) throw new Error(loaded.error.code);
+      const decision = loadRecordImplementationDecision({ cwd: root });
+      const blocker = loadRaiseImplementationBlocker({ cwd: root });
+      if (!decision.ok) throw new Error(decision.error.code);
+      if (!blocker.ok) throw new Error(blocker.error.code);
 
       const results = yield* openSqliteExecutionLock({
         commonDirectory: context.context.commonDirectory,
@@ -78,13 +83,13 @@ describe("Change inspection CLI", () => {
         owner: "change_submission",
         key: changeId,
         effect: Effect.all([
-          loaded.authority.addDecision({
+          decision.operation({
             changeId,
             choice: "Do not record this Decision",
             rationale: "Submission owns the authority snapshot.",
             now: commandNow,
           }),
-          loaded.authority.raiseBlocker({
+          blocker.operation({
             changeId,
             content: "Do not change Blocker authority during Submission.",
             now: commandNow,

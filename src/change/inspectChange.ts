@@ -7,32 +7,11 @@ import type {
   CandidateValidationToolingFailure,
 } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "./change.js";
-import type { ChangeQueryStore } from "./changePorts.js";
-import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
-import type { ImplementationDecision } from "./implementationDecision.js";
-import type { ChangeQueryValidationStore } from "./validation/changeValidationPorts.js";
-
-export type ChangeQueryPort = {
-  readonly list: ChangeQueryStore["listChanges"];
-  readonly detail: (
-    changeId: string,
-  ) => Effect.Effect<ChangeDetail | undefined, RepositoryStorageError>;
-  readonly taskProjection: (
-    taskId: string,
-  ) => Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError>;
-  readonly findings: (
-    changeId: string,
-  ) => Effect.Effect<ChangeFindings | undefined, RepositoryStorageError>;
-  readonly validationRuns: (
-    changeId: string,
-  ) => Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError>;
-  readonly decisions: (
-    changeId: string,
-  ) => Effect.Effect<readonly ImplementationDecision[] | undefined, RepositoryStorageError>;
-  readonly blockers: (
-    changeId: string,
-  ) => Effect.Effect<ImplementationBlockerHistory | undefined, RepositoryStorageError>;
-};
+import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
+import type {
+  ActiveValidationRunPort,
+  ChangeValidationReadPort,
+} from "./validation/changeValidationPorts.js";
 
 export type ChangeActivity = "blocked" | "validating" | "ready" | "implementing";
 
@@ -62,60 +41,67 @@ export type ChangeValidationRunHistory = {
   readonly validationRuns: readonly CandidateValidationRunRecord[];
 };
 
-type ChangeQueryDependencies = {
-  readonly changes: ChangeQueryStore;
-  readonly validation: ChangeQueryValidationStore;
+type ChangeTaskProjectionDependencies = {
+  readonly getChangeByTaskId: ChangeReadPort["getChangeByTaskId"];
+  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
+  readonly getActiveForChange: ActiveValidationRunPort["getActiveForChange"];
 };
 
 export const queryChangeTaskProjection = (
-  dependencies: ChangeQueryDependencies,
+  dependencies: ChangeTaskProjectionDependencies,
   taskId: string,
 ): Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const change = yield* dependencies.changes.getChangeByTaskId(taskId);
+    const change = yield* dependencies.getChangeByTaskId(taskId);
     if (change === undefined) return null;
     if (change.state === "closed") return { id: change.id };
     if (change.activeBlocker !== null && change.activeBlocker !== undefined) {
       return { id: change.id, activity: "blocked" };
     }
-    if ((yield* dependencies.validation.getActiveForChange(change.id)) !== undefined) {
+    if ((yield* dependencies.getActiveForChange(change.id)) !== undefined) {
       return { id: change.id, activity: "validating" };
     }
 
-    const evidence = yield* dependencies.changes.getCurrentPassingEvidence(change.id);
+    const evidence = yield* dependencies.getCurrentPassingEvidence(change.id);
     return {
       id: change.id,
       activity: evidence === undefined ? "implementing" : "ready",
     };
   });
 
+type ChangeDetailDependencies = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly listCandidatesForChange: ChangeValidationReadPort["listCandidatesForChange"];
+  readonly listRunsForCandidate: ChangeValidationReadPort["listRunsForCandidate"];
+  readonly listFindings: ChangeValidationReadPort["listFindings"];
+  readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
+};
+
 export const queryChangeDetail = (
-  dependencies: ChangeQueryDependencies,
+  dependencies: ChangeDetailDependencies,
   changeId: string,
 ): Effect.Effect<ChangeDetail | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const change = yield* dependencies.changes.getChangeById(changeId);
+    const change = yield* dependencies.getChangeById(changeId);
     if (change === undefined) return undefined;
-    const candidate = yield* currentCandidate(dependencies.validation, changeId);
+    const candidates = yield* dependencies.listCandidatesForChange(changeId);
+    const candidate = candidates.at(-1) ?? null;
     const validationRun =
       candidate === null
         ? null
-        : yield* currentValidationRun(dependencies.validation, candidate.id);
+        : ((yield* dependencies.listRunsForCandidate(candidate.id)).at(-1) ?? null);
     return {
       change,
       currentCandidate: candidate,
       currentValidationRun: validationRun,
-      findings:
-        validationRun === null ? [] : yield* dependencies.validation.listFindings(validationRun.id),
+      findings: validationRun === null ? [] : yield* dependencies.listFindings(validationRun.id),
       toolingFailures:
-        validationRun === null
-          ? []
-          : yield* dependencies.validation.listToolingFailures(validationRun.id),
+        validationRun === null ? [] : yield* dependencies.listToolingFailures(validationRun.id),
     };
   });
 
 export const queryChangeFindings = (
-  dependencies: ChangeQueryDependencies,
+  dependencies: ChangeDetailDependencies,
   changeId: string,
 ): Effect.Effect<ChangeFindings | undefined, RepositoryStorageError> =>
   Effect.map(queryChangeDetail(dependencies, changeId), (detail) =>
@@ -130,16 +116,22 @@ export const queryChangeFindings = (
         },
   );
 
+type ChangeValidationRunsDependencies = {
+  readonly getChangeById: ChangeReadPort["getChangeById"];
+  readonly listCandidatesForChange: ChangeValidationReadPort["listCandidatesForChange"];
+  readonly listRunsForCandidate: ChangeValidationReadPort["listRunsForCandidate"];
+};
+
 export const queryChangeValidationRuns = (
-  dependencies: ChangeQueryDependencies,
+  dependencies: ChangeValidationRunsDependencies,
   changeId: string,
 ): Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const change = yield* dependencies.changes.getChangeById(changeId);
+    const change = yield* dependencies.getChangeById(changeId);
     if (change === undefined) return undefined;
-    const candidates = yield* dependencies.validation.listCandidatesForChange(changeId);
+    const candidates = yield* dependencies.listCandidatesForChange(changeId);
     const validationRuns = yield* Effect.forEach(candidates, (candidate) =>
-      dependencies.validation.listRunsForCandidate(candidate.id),
+      dependencies.listRunsForCandidate(candidate.id),
     );
     return {
       change,
@@ -151,18 +143,3 @@ export const queryChangeValidationRuns = (
         ),
     };
   });
-
-const currentCandidate = (
-  persistence: ChangeQueryValidationStore,
-  changeId: string,
-): Effect.Effect<CandidateRecord | null, RepositoryStorageError> =>
-  Effect.map(
-    persistence.listCandidatesForChange(changeId),
-    (candidates) => candidates.at(-1) ?? null,
-  );
-
-const currentValidationRun = (
-  persistence: ChangeQueryValidationStore,
-  candidateId: string,
-): Effect.Effect<CandidateValidationRunRecord | null, RepositoryStorageError> =>
-  Effect.map(persistence.listRunsForCandidate(candidateId), (runs) => runs.at(-1) ?? null);

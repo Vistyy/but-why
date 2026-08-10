@@ -15,7 +15,6 @@ import type {
   ChangeCancellationPort,
   ChangeDeliveryPort,
   ChangePublicationEvidence,
-  ChangeQueryStore,
   ChangeReadPort,
   ChangeReconciliationPort,
   ChangeReviewerSessionPort,
@@ -253,19 +252,6 @@ export const openSqliteChangeCancellationPort = () =>
       getChangeByTaskId: adapter.getChangeByTaskId,
       completeMergedChange: adapter.completeMergedChange,
       cancelChange: adapter.cancelChange,
-    };
-  });
-
-export const openSqliteChangeQueryStore = () =>
-  Effect.map(RepositorySql, (repository): ChangeQueryStore => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      getChangeById: adapter.getChangeById,
-      getChangeByTaskId: adapter.getChangeByTaskId,
-      listChanges: adapter.listChanges,
-      listImplementationBlockers: adapter.listImplementationBlockers,
-      listImplementationDecisions: adapter.listImplementationDecisions,
-      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
     };
   });
 

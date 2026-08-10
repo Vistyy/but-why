@@ -165,15 +165,6 @@ export type TerminalChangeCleanupPort = {
   readonly removeReviewerSessions: ChangeReviewerSessionPort["removeReviewerSessions"];
 };
 
-export type ChangeQueryStore = {
-  readonly getChangeById: ChangeReadPort["getChangeById"];
-  readonly getChangeByTaskId: ChangeReadPort["getChangeByTaskId"];
-  readonly listChanges: ChangeReadPort["listChanges"];
-  readonly listImplementationBlockers: ChangeAuthorityPort["listImplementationBlockers"];
-  readonly listImplementationDecisions: ChangeAuthorityPort["listImplementationDecisions"];
-  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
-};
-
 export type CandidatePublicationPort = {
   readonly getChangeById: ChangeReadPort["getChangeById"];
   readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];

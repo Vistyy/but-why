@@ -14,25 +14,19 @@ import {
   openSqliteValidationRunAbandonmentPort,
 } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 
-export type ChangeValidationTestPorts = CandidateValidationExecutionPort &
-  ChangeValidationReadPort &
-  ActiveValidationRunPort &
-  ValidationRunAbandonmentPort &
-  ValidationArtifactLifecyclePort;
-
-export const openSqliteChangeValidationTestPorts = () =>
+export const openSqliteChangeValidationTestDependencies = () =>
   Effect.all({
     active: openSqliteActiveValidationRunPort(),
     execution: openSqliteCandidateValidationExecutionPort(),
     reads: openSqliteChangeValidationReadPort(),
     artifacts: openSqliteValidationArtifactLifecyclePort(),
     abandonment: openSqliteValidationRunAbandonmentPort(),
-  }).pipe(
-    Effect.map(({ active, execution, reads, artifacts, abandonment }) => ({
-      ...active,
-      ...execution,
-      ...reads,
-      ...artifacts,
-      ...abandonment,
-    })),
-  );
+  });
+
+export type ChangeValidationTestDependencies = {
+  readonly active: ActiveValidationRunPort;
+  readonly execution: CandidateValidationExecutionPort;
+  readonly reads: ChangeValidationReadPort;
+  readonly artifacts: ValidationArtifactLifecyclePort;
+  readonly abandonment: ValidationRunAbandonmentPort;
+};

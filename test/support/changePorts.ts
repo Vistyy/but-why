@@ -1,4 +1,12 @@
 import { Effect } from "effect";
+import type {
+  CandidatePublicationPort,
+  ChangeAuthorityPort,
+  ChangeDeliveryPort,
+  ChangeReadPort,
+  ChangeReviewerSessionPort,
+  ChangeReviewerTranscriptPort,
+} from "../../src/change/changePorts.js";
 import {
   openSqliteCandidatePublicationPort,
   openSqliteChangeAuthorityPort,
@@ -8,23 +16,21 @@ import {
   openSqliteChangeReviewerTranscriptPort,
 } from "../../src/sqlite/sqliteChangePersistence.js";
 
-export const openSqliteChangeTestPorts = () =>
+export const openSqliteChangeTestDependencies = () =>
   Effect.all({
     authority: openSqliteChangeAuthorityPort(),
     delivery: openSqliteChangeDeliveryPort(),
-    changes: openSqliteChangeReadPort(),
+    reads: openSqliteChangeReadPort(),
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     publication: openSqliteCandidatePublicationPort(),
-  }).pipe(
-    Effect.map(
-      ({ authority, delivery, changes, reviewerSessions, reviewerTranscripts, publication }) => ({
-        ...authority,
-        ...delivery,
-        ...changes,
-        ...reviewerSessions,
-        ...reviewerTranscripts,
-        ...publication,
-      }),
-    ),
-  );
+  });
+
+export type ChangeTestDependencies = {
+  readonly authority: ChangeAuthorityPort;
+  readonly delivery: ChangeDeliveryPort;
+  readonly reads: ChangeReadPort;
+  readonly reviewerSessions: ChangeReviewerSessionPort;
+  readonly reviewerTranscripts: ChangeReviewerTranscriptPort;
+  readonly publication: CandidatePublicationPort;
+};

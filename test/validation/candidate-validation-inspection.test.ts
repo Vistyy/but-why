@@ -12,10 +12,10 @@ import {
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {
-  type ChangeValidationTestPorts,
-  openSqliteChangeValidationTestPorts,
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
 import {
   cloneInitializedTestRepository,
@@ -682,9 +682,9 @@ const candidateValidationFixture = () =>
       commonDirectory,
     });
     const withPersistence = <A, E>(
-      use: (persistence: ChangeValidationTestPorts) => Effect.Effect<A, E>,
+      use: (persistence: ChangeValidationTestDependencies) => Effect.Effect<A, E>,
     ) =>
-      Effect.flatMap(openSqliteChangeValidationTestPorts(), use).pipe(
+      Effect.flatMap(openSqliteChangeValidationTestDependencies(), use).pipe(
         Effect.provide(repositoryLayer),
       );
     const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
@@ -702,7 +702,7 @@ const candidateValidationFixture = () =>
     );
     if (!candidateResult.ok) throw new Error(candidateResult.code);
     const runResult = yield* withPersistence((persistence) =>
-      persistence.startOrReuse({
+      persistence.execution.startOrReuse({
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
@@ -736,9 +736,9 @@ const candidateValidationFixture = () =>
       };
     };
     const recordDecision = (choice: string, rationale: string) =>
-      openSqliteChangeTestPorts().pipe(
+      openSqliteChangeTestDependencies().pipe(
         Effect.flatMap((changes) =>
-          changes.recordImplementationDecision({
+          changes.authority.recordImplementationDecision({
             changeId: candidateResult.changeId,
             choice,
             rationale,
@@ -748,27 +748,32 @@ const candidateValidationFixture = () =>
         Effect.provide(repositoryLayer),
       );
     const runStore = {
-      startOrReuse: (input: Parameters<ChangeValidationTestPorts["startOrReuse"]>[0]) =>
-        withPersistence((persistence) => persistence.startOrReuse(input)),
+      startOrReuse: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["startOrReuse"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.startOrReuse(input)),
       getRunById: (runId: string) =>
-        withPersistence((persistence) => persistence.getRunById(runId)),
-      recordPrepareRound: (input: Parameters<ChangeValidationTestPorts["recordPrepareRound"]>[0]) =>
-        withPersistence((persistence) => persistence.recordPrepareRound(input)),
-      recordCheckRound: (input: Parameters<ChangeValidationTestPorts["recordCheckRound"]>[0]) =>
-        withPersistence((persistence) => persistence.recordCheckRound(input)),
+        withPersistence((persistence) => persistence.reads.getRunById(runId)),
+      recordPrepareRound: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordPrepareRound"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordPrepareRound(input)),
+      recordCheckRound: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordCheckRound"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordCheckRound(input)),
       recordAcceptanceRound: (
-        input: Parameters<ChangeValidationTestPorts["recordAcceptanceRound"]>[0],
-      ) => withPersistence((persistence) => persistence.recordAcceptanceRound(input)),
+        input: Parameters<
+          ChangeValidationTestDependencies["execution"]["recordAcceptanceRound"]
+        >[0],
+      ) => withPersistence((persistence) => persistence.execution.recordAcceptanceRound(input)),
       recordToolingFailure: (
-        input: Parameters<ChangeValidationTestPorts["recordToolingFailure"]>[0],
-      ) => withPersistence((persistence) => persistence.recordToolingFailure(input)),
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
       recordWorkspaceSetup: (
-        input: Parameters<ChangeValidationTestPorts["recordWorkspaceSetup"]>[0],
-      ) => withPersistence((persistence) => persistence.recordWorkspaceSetup(input)),
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordWorkspaceSetup"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceSetup(input)),
       getAbandonmentContext: (runId: string) =>
-        withPersistence((persistence) => persistence.getAbandonmentContext(runId)),
-      complete: (input: Parameters<ChangeValidationTestPorts["complete"]>[0]) =>
-        withPersistence((persistence) => persistence.complete(input)),
+        withPersistence((persistence) => persistence.abandonment.getAbandonmentContext(runId)),
+      complete: (input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0]) =>
+        withPersistence((persistence) => persistence.execution.complete(input)),
     };
 
     return {

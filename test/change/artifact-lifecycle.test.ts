@@ -5,14 +5,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type {
-  CandidatePublicationPort,
-  ChangeAuthorityPort,
-  ChangeDeliveryPort,
-  ChangeReadPort,
-  ChangeReviewerSessionPort,
-  ChangeReviewerTranscriptPort,
-} from "../../src/change/changePorts.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
@@ -23,10 +15,13 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
 import {
-  type ChangeValidationTestPorts,
-  openSqliteChangeValidationTestPorts,
+  type ChangeTestDependencies,
+  openSqliteChangeTestDependencies,
+} from "../support/changePorts.js";
+import {
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
 import {
   cloneInitializedTestRepository,
@@ -38,13 +33,6 @@ import {
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
-
-type ChangeTestPorts = CandidatePublicationPort &
-  ChangeAuthorityPort &
-  ChangeDeliveryPort &
-  ChangeReadPort &
-  ChangeReviewerSessionPort &
-  ChangeReviewerTranscriptPort;
 
 const now = "2026-08-05T10:00:00.000Z";
 
@@ -110,7 +98,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
     () =>
       withArtifactLifecycleFixture((fixture) =>
         Effect.gen(function* () {
-          const closed = yield* fixture.changes.cancelChange({
+          const closed = yield* fixture.changes.delivery.cancelChange({
             changeId: fixture.first.changeId,
             reason: "Stop",
             now,
@@ -119,10 +107,13 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
 
           const cleanup = openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
-            persistence: fixture.changes,
+            persistence: {
+              recordCleanup: fixture.changes.delivery.recordCleanup,
+              removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
+            },
             cleanup: () => ({ state: "complete", blockingReason: null }),
             artifactLifecycle: openArtifactLifecycle({
-              persistence: fixture.validation,
+              persistence: fixture.validation.artifacts,
               artifactsRoot: fixture.artifactsRoot,
             }),
           });
@@ -150,10 +141,10 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
             ),
           ).toBe(true);
 
-          const firstArtifacts = yield* fixture.validation.listArtifacts(
+          const firstArtifacts = yield* fixture.validation.reads.listArtifacts(
             fixture.first.validationRunId,
           );
-          const secondArtifacts = yield* fixture.validation.listArtifacts(
+          const secondArtifacts = yield* fixture.validation.reads.listArtifacts(
             fixture.second.validationRunId,
           );
           expect(firstArtifacts.map((artifact) => artifact.ref)).toEqual([
@@ -197,7 +188,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
             recursive: true,
           });
           writeFileSync(join(fixture.artifactsRoot, unsupportedPath), "retired content\n");
-          yield* fixture.validation.recordCheckRound({
+          yield* fixture.validation.execution.recordCheckRound({
             validationRunId: unsupportedRunId,
             producer: "check",
             roundNumber: 1,
@@ -245,7 +236,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           const rawRunsBefore = yield* readRawRuns();
           const rawArtifactsBefore = yield* readRawArtifacts();
 
-          const closed = yield* fixture.changes.cancelChange({
+          const closed = yield* fixture.changes.delivery.cancelChange({
             changeId: fixture.first.changeId,
             reason: "Stop",
             now,
@@ -253,14 +244,21 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           if (!closed.ok) throw new Error(closed.code);
 
           const reconciliation = openChangeReconciliation({
-            persistence: fixture.changes,
+            persistence: {
+              getChangeById: fixture.changes.reads.getChangeById,
+              listChangesForReconciliation: fixture.changes.delivery.listChangesForReconciliation,
+              completeMergedChange: fixture.changes.delivery.completeMergedChange,
+            },
             github: unusedGitHubGateway,
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
-              persistence: fixture.changes,
+              persistence: {
+                recordCleanup: fixture.changes.delivery.recordCleanup,
+                removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
+              },
               cleanup: () => ({ state: "complete" }),
               artifactLifecycle: openArtifactLifecycle({
-                persistence: fixture.validation,
+                persistence: fixture.validation.artifacts,
                 artifactsRoot: fixture.artifactsRoot,
               }),
             }),
@@ -309,27 +307,30 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           expect(yield* readRawArtifacts()).toEqual(rawArtifactsBefore);
 
           // The unsupported Run stays rejected through both full read paths.
-          const runError = yield* fixture.validation.getRunById(unsupportedRunId).pipe(Effect.flip);
+          const runError = yield* fixture.validation.reads
+            .getRunById(unsupportedRunId)
+            .pipe(Effect.flip);
           expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          const historyError = yield* fixture.validation
+          const historyError = yield* fixture.validation.reads
             .listRunsForCandidate(fixture.first.candidateId)
             .pipe(Effect.flip);
           expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
           // The retained Change's Run and metadata remain readable.
           expect(
-            yield* fixture.validation.getRunById(fixture.second.validationRunId),
+            yield* fixture.validation.reads.getRunById(fixture.second.validationRunId),
           ).toBeDefined();
           expect(
-            (yield* fixture.validation.listRunsForCandidate(fixture.second.candidateId)).length,
+            (yield* fixture.validation.reads.listRunsForCandidate(fixture.second.candidateId))
+              .length,
           ).toBe(1);
           expect(
-            (yield* fixture.validation.listArtifacts(fixture.second.validationRunId)).map(
+            (yield* fixture.validation.reads.listArtifacts(fixture.second.validationRunId)).map(
               (artifact) => artifact.ref,
             ),
           ).toEqual([`artifact:${fixture.second.validationRunId}/checks/check/two.txt`]);
 
-          const recorded = yield* fixture.changes.getChangeById(fixture.first.changeId);
+          const recorded = yield* fixture.changes.reads.getChangeById(fixture.first.changeId);
           expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });
         }),
       ),
@@ -340,7 +341,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
     withArtifactLifecycleFixture((fixture) =>
       Effect.gen(function* () {
         const lifecycle = openArtifactLifecycle({
-          persistence: fixture.validation,
+          persistence: fixture.validation.artifacts,
           artifactsRoot: fixture.artifactsRoot,
         });
 
@@ -360,7 +361,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
       withArtifactLifecycleFixture((fixture) =>
         Effect.gen(function* () {
           const lifecycle = openArtifactLifecycle({
-            persistence: fixture.validation,
+            persistence: fixture.validation.artifacts,
             artifactsRoot: fixture.artifactsRoot,
           });
           const runDirectory = join(fixture.artifactsRoot, fixture.first.validationRunId);
@@ -373,7 +374,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
           expect(existsSync(runDirectory)).toBe(false);
           expect(
-            yield* fixture.validation.listArtifacts(fixture.first.validationRunId),
+            yield* fixture.validation.reads.listArtifacts(fixture.first.validationRunId),
           ).toHaveLength(1);
         }),
       ),
@@ -409,8 +410,8 @@ const withArtifactLifecycleFixture = <A, E>(
     readonly root: string;
     readonly commonDirectory: string;
     readonly artifactsRoot: string;
-    readonly changes: ChangeTestPorts;
-    readonly validation: ChangeValidationTestPorts;
+    readonly changes: ChangeTestDependencies;
+    readonly validation: ChangeValidationTestDependencies;
     readonly first: {
       readonly changeId: string;
       readonly candidateId: string;
@@ -435,8 +436,8 @@ const withArtifactLifecycleFixture = <A, E>(
     });
     return yield* Effect.gen(function* () {
       const capture = yield* openSqliteCandidateCapturePersistence();
-      const changes = yield* openSqliteChangeTestPorts();
-      const validation = yield* openSqliteChangeValidationTestPorts();
+      const changes = yield* openSqliteChangeTestDependencies();
+      const validation = yield* openSqliteChangeValidationTestDependencies();
 
       const createChangeWithRun = (branchRef: string, marker: string) =>
         Effect.gen(function* () {
@@ -449,7 +450,7 @@ const withArtifactLifecycleFixture = <A, E>(
             now,
           });
           if (!captured.ok) throw new Error(captured.code);
-          const started = yield* validation.startOrReuse({
+          const started = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             headSha: `head-${marker}`,
             policy,
@@ -462,7 +463,7 @@ const withArtifactLifecycleFixture = <A, E>(
             recursive: true,
           });
           writeFileSync(join(artifactsRoot, path), `content-${marker}\n`);
-          yield* validation.recordCheckRound({
+          yield* validation.execution.recordCheckRound({
             validationRunId: started.validationRunId,
             producer: "check",
             roundNumber: 1,

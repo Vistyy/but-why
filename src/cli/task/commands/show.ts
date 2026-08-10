@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
+import { loadChangeTaskProjection } from "../../../change/loadChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
@@ -27,11 +27,10 @@ export const runTaskShowCommand = (
       if (task === undefined) return taskNotFound(taskId.taskId);
       const change =
         environment.taskUseCases === undefined
-          ? loadChangeInspection({ cwd: environment.cwd })
+          ? loadChangeTaskProjection({ cwd: environment.cwd })
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
-      const projection =
-        change === undefined ? null : yield* change.queries.taskProjection(taskId.taskId);
+      const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
       return success({
         task: {
           id: task.id,

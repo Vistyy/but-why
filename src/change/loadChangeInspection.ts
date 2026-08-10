@@ -1,133 +1,270 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
   openSqliteChangeAuthorityPort,
-  openSqliteChangeQueryStore,
+  openSqliteChangeReadPort,
 } from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeQueryValidationStore } from "../sqlite/sqliteChangeValidationPersistence.js";
+import {
+  openSqliteActiveValidationRunPort,
+  openSqliteChangeValidationReadPort,
+} from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import type {
   ChangeAuthorityPort,
   ImplementationBlockerMutationResult,
+  RaiseImplementationBlockerInput,
+  RecordImplementationDecisionInput,
   RecordImplementationDecisionResult,
+  ResolveImplementationBlockerInput,
 } from "./changePorts.js";
+import type { ListChangesInput } from "./changeStore.js";
 import {
-  type ChangeQueryPort,
   queryChangeDetail,
   queryChangeFindings,
   queryChangeTaskProjection,
   queryChangeValidationRuns,
 } from "./inspectChange.js";
 
-export type ChangeAuthorityCommands = {
-  readonly raiseBlocker: ChangeAuthorityPort["raiseImplementationBlocker"];
-  readonly resolveBlocker: ChangeAuthorityPort["resolveImplementationBlocker"];
-  readonly addDecision: ChangeAuthorityPort["recordImplementationDecision"];
-};
+export type LoadChangeInspectionError =
+  | LoadRepoLocalContextError
+  | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
 
-export type LoadChangeInspectionResult =
+export type LoadedChangeInspectionOperation<A> =
   | {
       readonly ok: true;
       readonly commonDirectory: string;
-      readonly queries: ChangeQueryPort;
-      readonly authority: ChangeAuthorityCommands;
+      readonly operation: A;
     }
-  | { readonly ok: false; readonly error: LoadRepoLocalContextError };
+  | { readonly ok: false; readonly error: LoadChangeInspectionError };
 
-export const loadChangeInspection = (input: {
-  readonly cwd: string;
-}): LoadChangeInspectionResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
-  if (!repoContext.ok) return repoContext;
-  if (!existsSync(repoContext.context.paths.statePath)) {
+type LoadInput = { readonly cwd: string };
+
+type LoadedContext = Exclude<ReturnType<typeof loadContext>, { readonly ok: false }>;
+
+const loadContext = (input: LoadInput) => {
+  const loaded = loadRepoLocalContext(input.cwd);
+  if (!loaded.ok) return loaded;
+  if (!existsSync(loaded.context.paths.statePath)) {
     return {
-      ok: false,
+      ok: false as const,
       error: {
-        code: "state_store_unavailable",
-        taskPrefix: repoContext.context.taskPrefix,
+        code: "state_store_unavailable" as const,
+        taskPrefix: loaded.context.taskPrefix,
       },
     };
   }
+  return loaded;
+};
 
-  const context = repoContext.context;
-  const repositoryLayer = repositorySqlLayer({
-    statePath: context.paths.statePath,
-    commonDirectory: context.commonDirectory,
-  });
-  const queryPorts = Effect.all({
-    changes: openSqliteChangeQueryStore(),
-    validation: openSqliteChangeQueryValidationStore(),
-  });
-  const runQuery = <A, E>(
-    use: (ports: Effect.Effect.Success<typeof queryPorts>) => Effect.Effect<A, E>,
-  ) => Effect.flatMap(queryPorts, use).pipe(Effect.provide(repositoryLayer));
-
-  const executionLock = openSqliteExecutionLock({ commonDirectory: context.commonDirectory });
-  const runMutation = <
-    A extends ImplementationBlockerMutationResult | RecordImplementationDecisionResult,
-  >(
-    changeId: string,
-    use: (
-      authority: Effect.Effect.Success<ReturnType<typeof openSqliteChangeAuthorityPort>>,
-    ) => Effect.Effect<A, import("../contracts/repositoryStorageError.js").RepositoryStorageError>,
-  ) =>
-    executionLock
-      .withLock({
-        owner: "change_submission",
-        key: changeId,
-        effect: Effect.flatMap(openSqliteChangeAuthorityPort(), use).pipe(
-          Effect.provide(repositoryLayer),
-        ),
-      })
-      .pipe(
-        Effect.catchTag("ExecutionLockUnavailable", () =>
-          Effect.succeed({ ok: false as const, code: "submission_in_progress" as const }),
-        ),
-      );
-
-  const dependencies = (ports: Effect.Effect.Success<typeof queryPorts>) => ports;
-
+const loadOperation = <A>(
+  input: LoadInput,
+  makeOperation: (context: LoadedContext["context"]) => A,
+): LoadedChangeInspectionOperation<A> => {
+  const loaded = loadContext(input);
+  if (!loaded.ok) return loaded;
   return {
     ok: true,
-    commonDirectory: context.commonDirectory,
-    queries: {
-      list: (listInput) => runQuery(({ changes }) => changes.listChanges(listInput)),
-      taskProjection: (taskId) =>
-        runQuery((ports) => queryChangeTaskProjection(dependencies(ports), taskId)),
-      detail: (changeId) => runQuery((ports) => queryChangeDetail(dependencies(ports), changeId)),
-      findings: (changeId) =>
-        runQuery((ports) => queryChangeFindings(dependencies(ports), changeId)),
-      validationRuns: (changeId) =>
-        runQuery((ports) => queryChangeValidationRuns(dependencies(ports), changeId)),
-      decisions: (changeId) =>
-        runQuery(({ changes }) =>
-          changes
-            .getChangeById(changeId)
-            .pipe(
-              Effect.flatMap((change) =>
-                change === undefined
-                  ? Effect.succeed(undefined)
-                  : changes.listImplementationDecisions(changeId),
-              ),
-            ),
-        ),
-      blockers: (changeId) =>
-        runQuery(({ changes }) => changes.listImplementationBlockers(changeId)),
-    },
-    authority: {
-      raiseBlocker: (command) =>
-        runMutation(command.changeId, (authority) => authority.raiseImplementationBlocker(command)),
-      resolveBlocker: (command) =>
-        runMutation(command.changeId, (authority) =>
-          authority.resolveImplementationBlocker(command),
-        ),
-      addDecision: (command) =>
-        runMutation(command.changeId, (authority) =>
-          authority.recordImplementationDecision(command),
-        ),
-    },
+    commonDirectory: loaded.context.commonDirectory,
+    operation: makeOperation(loaded.context),
   };
 };
+
+const provideRepository = <A, E>(
+  context: LoadedContext["context"],
+  effect: Effect.Effect<A, E, import("../sqlite/repositorySql.js").RepositorySql>,
+) =>
+  effect.pipe(
+    Effect.provide(
+      repositorySqlLayer({
+        statePath: context.paths.statePath,
+        commonDirectory: context.commonDirectory,
+      }),
+    ),
+  );
+
+export const loadChangeList = (input: LoadInput) =>
+  loadOperation(
+    input,
+    (context) => (listInput: ListChangesInput) =>
+      provideRepository(
+        context,
+        Effect.flatMap(openSqliteChangeReadPort(), (changes) => changes.listChanges(listInput)),
+      ),
+  );
+
+export const loadChangeTaskProjection = (input: LoadInput) =>
+  loadOperation(
+    input,
+    (context) => (taskId: string) =>
+      provideRepository(
+        context,
+        Effect.all({
+          changes: openSqliteChangeReadPort(),
+          authority: openSqliteChangeAuthorityPort(),
+          activeValidation: openSqliteActiveValidationRunPort(),
+        }).pipe(
+          Effect.flatMap(({ changes, authority, activeValidation }) =>
+            queryChangeTaskProjection(
+              {
+                getChangeByTaskId: changes.getChangeByTaskId,
+                getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
+                getActiveForChange: activeValidation.getActiveForChange,
+              },
+              taskId,
+            ),
+          ),
+        ),
+      ),
+  );
+
+const loadChangeDetailOperation = <A>(
+  input: LoadInput,
+  query: (
+    dependencies: Parameters<typeof queryChangeDetail>[0],
+    changeId: string,
+  ) => Effect.Effect<A, RepositoryStorageError>,
+) =>
+  loadOperation(
+    input,
+    (context) => (changeId: string) =>
+      provideRepository(
+        context,
+        Effect.all({
+          changes: openSqliteChangeReadPort(),
+          validation: openSqliteChangeValidationReadPort(),
+        }).pipe(
+          Effect.flatMap(({ changes, validation }) =>
+            query(
+              {
+                getChangeById: changes.getChangeById,
+                listCandidatesForChange: validation.listCandidatesForChange,
+                listRunsForCandidate: validation.listRunsForCandidate,
+                listFindings: validation.listFindings,
+                listToolingFailures: validation.listToolingFailures,
+              },
+              changeId,
+            ),
+          ),
+        ),
+      ),
+  );
+
+export const loadChangeDetail = (input: LoadInput) =>
+  loadChangeDetailOperation(input, queryChangeDetail);
+
+export const loadChangeFindings = (input: LoadInput) =>
+  loadChangeDetailOperation(input, queryChangeFindings);
+
+export const loadChangeValidationRuns = (input: LoadInput) =>
+  loadOperation(
+    input,
+    (context) => (changeId: string) =>
+      provideRepository(
+        context,
+        Effect.all({
+          changes: openSqliteChangeReadPort(),
+          validation: openSqliteChangeValidationReadPort(),
+        }).pipe(
+          Effect.flatMap(({ changes, validation }) =>
+            queryChangeValidationRuns(
+              {
+                getChangeById: changes.getChangeById,
+                listCandidatesForChange: validation.listCandidatesForChange,
+                listRunsForCandidate: validation.listRunsForCandidate,
+              },
+              changeId,
+            ),
+          ),
+        ),
+      ),
+  );
+
+export const loadImplementationDecisions = (input: LoadInput) =>
+  loadOperation(
+    input,
+    (context) => (changeId: string) =>
+      provideRepository(
+        context,
+        Effect.all({
+          changes: openSqliteChangeReadPort(),
+          authority: openSqliteChangeAuthorityPort(),
+        }).pipe(
+          Effect.flatMap(({ changes, authority }) =>
+            changes
+              .getChangeById(changeId)
+              .pipe(
+                Effect.flatMap((change) =>
+                  change === undefined
+                    ? Effect.succeed(undefined)
+                    : authority.listImplementationDecisions(changeId),
+                ),
+              ),
+          ),
+        ),
+      ),
+  );
+
+export const loadImplementationBlockers = (input: LoadInput) =>
+  loadOperation(
+    input,
+    (context) => (changeId: string) =>
+      provideRepository(
+        context,
+        Effect.flatMap(openSqliteChangeAuthorityPort(), (authority) =>
+          authority.listImplementationBlockers(changeId),
+        ),
+      ),
+  );
+
+const loadAuthorityMutation = <
+  Input extends { readonly changeId: string },
+  Result extends ImplementationBlockerMutationResult | RecordImplementationDecisionResult,
+>(
+  input: LoadInput,
+  mutate: (
+    authority: ChangeAuthorityPort,
+    command: Input,
+  ) => Effect.Effect<Result, RepositoryStorageError>,
+) =>
+  loadOperation(
+    input,
+    (context) => (command: Input) =>
+      openSqliteExecutionLock({ commonDirectory: context.commonDirectory })
+        .withLock({
+          owner: "change_submission",
+          key: command.changeId,
+          effect: provideRepository(
+            context,
+            Effect.flatMap(openSqliteChangeAuthorityPort(), (authority) =>
+              mutate(authority, command),
+            ),
+          ),
+        })
+        .pipe(
+          Effect.catchTag("ExecutionLockUnavailable", () =>
+            Effect.succeed({ ok: false as const, code: "submission_in_progress" as const }),
+          ),
+        ),
+  );
+
+export const loadRaiseImplementationBlocker = (input: LoadInput) =>
+  loadAuthorityMutation<RaiseImplementationBlockerInput, ImplementationBlockerMutationResult>(
+    input,
+    (authority, command) => authority.raiseImplementationBlocker(command),
+  );
+
+export const loadResolveImplementationBlocker = (input: LoadInput) =>
+  loadAuthorityMutation<ResolveImplementationBlockerInput, ImplementationBlockerMutationResult>(
+    input,
+    (authority, command) => authority.resolveImplementationBlocker(command),
+  );
+
+export const loadRecordImplementationDecision = (input: LoadInput) =>
+  loadAuthorityMutation<RecordImplementationDecisionInput, RecordImplementationDecisionResult>(
+    input,
+    (authority, command) => authority.recordImplementationDecision(command),
+  );

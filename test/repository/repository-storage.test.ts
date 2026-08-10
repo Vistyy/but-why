@@ -47,8 +47,8 @@ import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { repoRoot } from "../support/by-cli.js";
-import { openSqliteChangeTestPorts } from "../support/changePorts.js";
-import { openSqliteChangeValidationTestPorts } from "../support/changeValidationPorts.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
+import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { observeUntil } from "../support/observe.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import { startTestProcess } from "../support/testProcess.js";
@@ -319,7 +319,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Raise blocker without lifecycle writes",
           description: "One unresolved row must be the active Blocker authority.",
@@ -341,7 +341,7 @@ describe("repository SQL storage", () => {
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
           now: "2026-07-17T22:56:00.000Z",
@@ -356,7 +356,9 @@ describe("repository SQL storage", () => {
           blocker: { content: "Wait for approved intent.", resolvedAt: null },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+        expect(
+          yield* changes.authority.listImplementationBlockers(started.change.id),
+        ).toMatchObject({
           blockers: [{ content: "Wait for approved intent.", resolvedAt: null }],
           resolutions: [],
           active: { content: "Wait for approved intent.", resolvedAt: null },
@@ -370,7 +372,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Reject duplicate blocker",
           description: "One unresolved Implementation Blocker may exist for an open Change.",
@@ -391,25 +393,27 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
-        const first = yield* changes.raiseImplementationBlocker({
+        const first = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
           now: "2026-07-17T22:56:00.000Z",
         });
         if (!first.ok) throw new Error(`Blocker creation failed: ${first.code}`);
 
-        const duplicate = yield* changes.raiseImplementationBlocker({
+        const duplicate = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "A second blocker must not be recorded.",
           now: "2026-07-17T22:57:00.000Z",
         });
 
         expect(duplicate).toEqual({ ok: false, code: "change_blocked" });
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
           state: "open",
           activeBlocker: { id: first.blocker.id, resolvedAt: null },
         });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+        expect(
+          yield* changes.authority.listImplementationBlockers(started.change.id),
+        ).toMatchObject({
           blockers: [{ id: first.blocker.id }],
           active: { id: first.blocker.id, resolvedAt: null },
         });
@@ -422,7 +426,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Raise after publication",
           description: "Publication and earlier passing evidence must not prevent a Blocker.",
@@ -473,7 +477,7 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "The published Candidate still needs an external decision.",
           now: "2026-07-17T22:57:00.000Z",
@@ -483,7 +487,9 @@ describe("repository SQL storage", () => {
           ok: true,
           change: { state: "open", activeBlocker: { resolvedAt: null } },
         });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+        expect(
+          yield* changes.authority.listImplementationBlockers(started.change.id),
+        ).toMatchObject({
           blockers: [{ content: "The published Candidate still needs an external decision." }],
           active: { content: "The published Candidate still needs an external decision." },
         });
@@ -496,7 +502,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Resolve blocker",
           description: "Resume implementation with approved intent.",
@@ -517,14 +523,14 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T23:04:00.000Z",
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
           now: "2026-07-17T23:05:00.000Z",
         });
         if (!raised.ok) throw new Error(`Blocker creation failed: ${raised.code}`);
 
-        const resolved = yield* changes.resolveImplementationBlocker({
+        const resolved = yield* changes.authority.resolveImplementationBlocker({
           changeId: started.change.id,
           content: "Use the approved approach.",
           now: "2026-07-17T23:06:00.000Z",
@@ -544,7 +550,9 @@ describe("repository SQL storage", () => {
           },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+        expect(
+          yield* changes.authority.listImplementationBlockers(started.change.id),
+        ).toMatchObject({
           active: null,
           resolutions: [{ content: "Use the approved approach." }],
         });
@@ -556,7 +564,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const started = yield* starts.create({
           id: "change-taskless-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -568,14 +576,14 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T23:02:00.000Z",
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for an operator decision.",
           now: "2026-07-17T23:03:00.000Z",
         });
         if (!raised.ok) throw new Error(`Blocker creation failed: ${raised.code}`);
 
-        const resolved = yield* changes.resolveImplementationBlocker({
+        const resolved = yield* changes.authority.resolveImplementationBlocker({
           changeId: started.change.id,
           content: "Continue without taskless intent.",
           now: "2026-07-17T23:04:00.000Z",
@@ -586,7 +594,9 @@ describe("repository SQL storage", () => {
           change: { state: "open", activeBlocker: null, acceptanceContext: null },
           blocker: { resolution: { content: "Continue without taskless intent." } },
         });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+        expect(
+          yield* changes.authority.listImplementationBlockers(started.change.id),
+        ).toMatchObject({
           active: null,
           resolutions: [{ content: "Continue without taskless intent." }],
         });
@@ -598,7 +608,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const started = yield* starts.create({
           id: "change-no-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -611,14 +621,14 @@ describe("repository SQL storage", () => {
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
-        const result = yield* changes.resolveImplementationBlocker({
+        const result = yield* changes.authority.resolveImplementationBlocker({
           changeId: started.change.id,
           content: "There is nothing to resolve.",
           now: "2026-07-17T23:03:00.000Z",
         });
 
         expect(result).toEqual({ ok: false, code: "no_active_blocker" });
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
           state: "open",
           activeBlocker: null,
         });
@@ -633,7 +643,7 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const tasks = yield* openSqliteTaskPersistence("BY");
           const starts = yield* openSqliteChangeStartPersistence();
-          const changes = yield* openSqliteChangeTestPorts();
+          const changes = yield* openSqliteChangeTestDependencies();
           const created = yield* tasks.createTask({
             title: "Cancel Task-backed Change atomically",
             description: "The linked Task mutation and Change close share one transaction.",
@@ -667,7 +677,7 @@ describe("repository SQL storage", () => {
             `),
           );
 
-          const error = yield* changes
+          const error = yield* changes.delivery
             .cancelChange({
               changeId: started.change.id,
               reason: "Scope removed",
@@ -676,7 +686,7 @@ describe("repository SQL storage", () => {
             .pipe(Effect.flip);
 
           expect(error).toBeInstanceOf(RepositorySqlOperationFailed);
-          expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
             state: "open",
             closeReason: null,
             cancelReason: null,
@@ -691,7 +701,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Stale merge evidence",
           description: "Observed facts must match current publication.",
@@ -734,9 +744,9 @@ describe("repository SQL storage", () => {
           publication.expectedHeadSha,
           publication.now,
         );
-        const begun = yield* changes.beginPublication(publication);
+        const begun = yield* changes.publication.beginPublication(publication);
         if (!begun.ok) throw new Error(begun.code);
-        const recorded = yield* changes.recordPublishedPullRequest({
+        const recorded = yield* changes.publication.recordPublishedPullRequest({
           ...publication,
           pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
         });
@@ -765,19 +775,19 @@ describe("repository SQL storage", () => {
         ] as const;
 
         for (const observed of staleVariants) {
-          const result = yield* changes.completeMergedChange({
+          const result = yield* changes.delivery.completeMergedChange({
             changeId: started.change.id,
             now: "2026-07-17T22:58:00.000Z",
             observed,
           });
           expect(result).toEqual({ ok: false, code: "publication_mismatch" });
         }
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
           state: "open",
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
 
-        const completed = yield* changes.completeMergedChange({
+        const completed = yield* changes.delivery.completeMergedChange({
           changeId: started.change.id,
           now: "2026-07-17T22:59:00.000Z",
           observed: exact,
@@ -797,7 +807,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Newer publication wins",
           description: "Only the current publication can complete.",
@@ -841,9 +851,10 @@ describe("repository SQL storage", () => {
           first.expectedHeadSha,
           first.now,
         );
-        if (!(yield* changes.beginPublication(first)).ok) throw new Error("begin failed");
+        if (!(yield* changes.publication.beginPublication(first)).ok)
+          throw new Error("begin failed");
         if (
-          !(yield* changes.recordPublishedPullRequest({
+          !(yield* changes.publication.recordPublishedPullRequest({
             ...first,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           })).ok
@@ -863,7 +874,7 @@ describe("repository SQL storage", () => {
           newer.expectedHeadSha,
           newer.now,
         );
-        const replaced = yield* changes.recordPublishedPullRequest({
+        const replaced = yield* changes.publication.recordPublishedPullRequest({
           ...newer,
           pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           previousExpectedHeadSha: first.expectedHeadSha,
@@ -884,13 +895,15 @@ describe("repository SQL storage", () => {
           expectedHeadSha: first.expectedHeadSha,
         };
         expect(
-          yield* changes.completeMergedChange({
+          yield* changes.delivery.completeMergedChange({
             changeId: started.change.id,
             now: "2026-07-17T23:00:00.000Z",
             observed: olderEvidence,
           }),
         ).toEqual({ ok: false, code: "publication_mismatch" });
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({ state: "open" });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+        });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
 
         const newerEvidence = {
@@ -901,7 +914,7 @@ describe("repository SQL storage", () => {
           expectedHeadSha: newer.expectedHeadSha,
         };
         expect(
-          yield* changes.completeMergedChange({
+          yield* changes.delivery.completeMergedChange({
             changeId: started.change.id,
             now: "2026-07-17T23:01:00.000Z",
             observed: newerEvidence,
@@ -917,7 +930,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
           title: "Atomic terminal completion",
           description: "Change and Task terminal writes commit together.",
@@ -960,9 +973,10 @@ describe("repository SQL storage", () => {
           publication.expectedHeadSha,
           publication.now,
         );
-        if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
+        if (!(yield* changes.publication.beginPublication(publication)).ok)
+          throw new Error("begin failed");
         if (
-          !(yield* changes.recordPublishedPullRequest({
+          !(yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           })).ok
@@ -982,7 +996,7 @@ describe("repository SQL storage", () => {
           `,
         );
 
-        yield* changes
+        yield* changes.delivery
           .completeMergedChange({
             changeId: started.change.id,
             now: "2026-07-17T22:58:00.000Z",
@@ -999,7 +1013,9 @@ describe("repository SQL storage", () => {
           })
           .pipe(Effect.flip);
 
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({ state: "open" });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+        });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
       }),
     ),
@@ -1009,7 +1025,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const started = yield* starts.create({
           id: "change-concurrent-completion",
           repositoryCommonDirectory: input.commonDirectory,
@@ -1043,9 +1059,10 @@ describe("repository SQL storage", () => {
           publication.expectedHeadSha,
           publication.now,
         );
-        if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
+        if (!(yield* changes.publication.beginPublication(publication)).ok)
+          throw new Error("begin failed");
         if (
-          !(yield* changes.recordPublishedPullRequest({
+          !(yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
           })).ok
@@ -1064,12 +1081,12 @@ describe("repository SQL storage", () => {
 
         const results = yield* Effect.all(
           [
-            changes.completeMergedChange({
+            changes.delivery.completeMergedChange({
               changeId: started.change.id,
               now: "2026-07-17T22:58:00.000Z",
               observed: evidence,
             }),
-            changes.completeMergedChange({
+            changes.delivery.completeMergedChange({
               changeId: started.change.id,
               now: "2026-07-17T22:58:00.000Z",
               observed: evidence,
@@ -1084,7 +1101,7 @@ describe("repository SQL storage", () => {
         expect(
           results.filter((result) => result.ok === true && result.changed === false),
         ).toHaveLength(1);
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",
           cleanup: { state: "pending" },
@@ -1147,7 +1164,7 @@ describe("repository SQL storage", () => {
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1192,7 +1209,9 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
@@ -1225,7 +1244,7 @@ describe("repository SQL storage", () => {
           }),
         );
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, {
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
             validationRunId: "run-repaired-publication",
             changeBaseSha: "base-sha",
             policy: repairedAcceptancePolicy,
@@ -1254,7 +1273,7 @@ describe("repository SQL storage", () => {
           (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
         );
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
         yield* repository.operation(
           "restore publication evidence outcome",
@@ -1267,7 +1286,7 @@ describe("repository SQL storage", () => {
             sql`UPDATE candidate_validation_runs SET state = 'running', outcome = NULL WHERE id = 'run-1'`,
         );
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
         yield* repository.operation(
           "restore publication evidence state",
@@ -1276,13 +1295,13 @@ describe("repository SQL storage", () => {
         );
 
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, {
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
             ...authority,
             changeBaseSha: "advanced-base",
           }),
         ).toBeUndefined();
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, {
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
             ...authority,
             policy: {
               checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
@@ -1313,7 +1332,9 @@ describe("repository SQL storage", () => {
               `;
             }),
         );
-        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
@@ -1324,20 +1345,22 @@ describe("repository SQL storage", () => {
           (sql) =>
             sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
         );
-        expect(yield* changes.getCurrentPassingEvidence(captured.changeId, authority)).toEqual({
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
         });
-        yield* changes.recordImplementationDecision({
+        yield* changes.authority.recordImplementationDecision({
           changeId: captured.changeId,
           choice: "Choose the passing path",
           rationale: "Prove that decisions are part of current evidence identity.",
           now: "2026-07-25T15:01:00.000Z",
         });
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
 
         const other = yield* capture.commitCapture({
@@ -1371,7 +1394,7 @@ describe("repository SQL storage", () => {
           }),
         );
         expect(
-          yield* changes.getCurrentPassingEvidence(captured.changeId, authority),
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
         ).toBeUndefined();
       }),
     ),
@@ -1384,8 +1407,8 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const changes = yield* openSqliteChangeTestPorts();
-          const validation = yield* openSqliteChangeValidationTestPorts();
+          const changes = yield* openSqliteChangeTestDependencies();
+          const validation = yield* openSqliteChangeValidationTestDependencies();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1395,7 +1418,7 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:10:00.000Z",
           });
           if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-          const recordedDecision = yield* changes.recordImplementationDecision({
+          const recordedDecision = yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,
             choice: "Choose the passing path",
             rationale: "Prove that decisions are part of Validation Run identity.",
@@ -1410,7 +1433,7 @@ describe("repository SQL storage", () => {
             policy,
             now: "2026-07-25T16:11:00.000Z",
           };
-          const first = yield* validation.startOrReuse(exact);
+          const first = yield* validation.execution.startOrReuse(exact);
           if (first.reused || "blocked" in first || "active" in first)
             throw new Error("Expected a new Validation Run");
           expect(first.authority).toMatchObject({
@@ -1425,13 +1448,13 @@ describe("repository SQL storage", () => {
             blockerHistory: { active: null, blockers: [], resolutions: [] },
             latestResolvedBlockerId: null,
           });
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: first.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:12:00.000Z",
           });
 
-          expect(yield* validation.startOrReuse(exact)).toMatchObject({
+          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
             reused: true,
             validationRunId: first.validationRunId,
           });
@@ -1451,7 +1474,7 @@ describe("repository SQL storage", () => {
                 )
               `,
           );
-          const malformedHistoryError = yield* validation
+          const malformedHistoryError = yield* validation.execution
             .startOrReuse({
               candidateId: captured.candidateId,
               changeBaseSha: "base-sha",
@@ -1466,7 +1489,7 @@ describe("repository SQL storage", () => {
             (sql) =>
               sql`DELETE FROM candidate_validation_runs WHERE id = 'run-duplicate-representation'`,
           );
-          const simplifiedCurrent = yield* validation.startOrReuse({
+          const simplifiedCurrent = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
@@ -1475,7 +1498,7 @@ describe("repository SQL storage", () => {
           });
           if (simplifiedCurrent.reused || "blocked" in simplifiedCurrent)
             throw new Error("Expected a policy-distinct Validation Run");
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: simplifiedCurrent.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:12:45.000Z",
@@ -1485,8 +1508,10 @@ describe("repository SQL storage", () => {
             (sql) =>
               sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${simplifiedCurrent.validationRunId}`,
           );
-          expect(yield* changes.getCurrentPassingEvidence(captured.changeId)).toBeUndefined();
-          expect(yield* validation.startOrReuse(exact)).toMatchObject({
+          expect(
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
+          ).toBeUndefined();
+          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
             reused: true,
             validationRunId: first.validationRunId,
           });
@@ -1496,11 +1521,11 @@ describe("repository SQL storage", () => {
             changeBaseSha: "base-sha",
             headSha: "head-sha",
           };
-          expect(yield* changes.getCurrentPassingEvidence(captured.changeId)).toEqual(
+          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
             currentEvidence,
           );
           expect(
-            yield* changes.getCurrentPassingEvidence(captured.changeId, {
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
               candidateId: captured.candidateId,
               validationRunId: first.validationRunId,
               changeBaseSha: "base-sha",
@@ -1508,7 +1533,7 @@ describe("repository SQL storage", () => {
             }),
           ).toEqual(currentEvidence);
 
-          const policyMismatch = yield* validation.startOrReuse({
+          const policyMismatch = yield* validation.execution.startOrReuse({
             ...exact,
             policy: {
               checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
@@ -1519,48 +1544,48 @@ describe("repository SQL storage", () => {
           expect(policyMismatch.reused).toBe(false);
           if (policyMismatch.reused || "blocked" in policyMismatch)
             throw new Error("Expected a policy-distinct Validation Run");
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: policyMismatch.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:13:00.000Z",
           });
 
-          const addedDecision = yield* changes.recordImplementationDecision({
+          const addedDecision = yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,
             choice: "Add a second authority input",
             rationale: "A persisted decision requires fresh Validation evidence.",
             now: "2026-07-25T16:13:30.000Z",
           });
           if (!addedDecision.ok) throw new Error(addedDecision.code);
-          const decisionsMismatch = yield* validation.startOrReuse(exact);
+          const decisionsMismatch = yield* validation.execution.startOrReuse(exact);
           expect(decisionsMismatch.reused).toBe(false);
           if (decisionsMismatch.reused || "blocked" in decisionsMismatch)
             throw new Error("Expected a decision-distinct Validation Run");
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: decisionsMismatch.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:14:00.000Z",
           });
 
-          const identityError = yield* validation
+          const identityError = yield* validation.execution
             .startOrReuse({ ...exact, headSha: "other-head" })
             .pipe(Effect.flip);
           expect(identityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
-          const raised = yield* changes.raiseImplementationBlocker({
+          const raised = yield* changes.authority.raiseImplementationBlocker({
             changeId: captured.changeId,
             content: "Wait for an external decision.",
             now: "2026-07-25T16:15:00.000Z",
           });
           expect(raised.ok).toBe(true);
-          const resolved = yield* changes.resolveImplementationBlocker({
+          const resolved = yield* changes.authority.resolveImplementationBlocker({
             changeId: captured.changeId,
             content: "Proceed without taskless intent.",
             now: "2026-07-25T16:16:00.000Z",
           });
           expect(resolved.ok).toBe(true);
           if (!resolved.ok) throw new Error(resolved.code);
-          const afterResolution = yield* validation.startOrReuse({
+          const afterResolution = yield* validation.execution.startOrReuse({
             ...exact,
             now: "2026-07-25T16:17:00.000Z",
           });
@@ -1578,7 +1603,7 @@ describe("repository SQL storage", () => {
             latestResolvedBlockerId: resolved.blocker.id,
           });
 
-          const history = yield* validation.listRunsForCandidate(captured.candidateId);
+          const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
         }),
       ),
@@ -1590,8 +1615,8 @@ describe("repository SQL storage", () => {
       withTemporaryState((input) =>
         Effect.gen(function* () {
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const changes = yield* openSqliteChangeTestPorts();
-          const validation = yield* openSqliteChangeValidationTestPorts();
+          const changes = yield* openSqliteChangeTestDependencies();
+          const validation = yield* openSqliteChangeValidationTestDependencies();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1601,20 +1626,20 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T17:00:00.000Z",
           });
           if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-          yield* changes.recordImplementationDecision({
+          yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,
             choice: "Keep rationale separate from intent",
             rationale: "Preserve rationale separately from approved intent.",
             now: "2026-07-25T17:01:00.000Z",
           });
-          yield* changes.recordImplementationDecision({
+          yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,
             choice: "Use the current snapshot schema",
             rationale: "Reject retired content without rewriting stored rows.",
             now: "2026-07-25T17:02:00.000Z",
           });
-          const decisions = yield* changes.listImplementationDecisions(captured.changeId);
-          const started = yield* validation.startOrReuse({
+          const decisions = yield* changes.authority.listImplementationDecisions(captured.changeId);
+          const started = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
@@ -1623,15 +1648,15 @@ describe("repository SQL storage", () => {
           });
           if (started.reused || "blocked" in started)
             throw new Error("Expected a new Validation Run");
-          yield* validation.complete({
+          yield* validation.execution.complete({
             validationRunId: started.validationRunId,
             outcome: "passed",
             now: "2026-07-25T17:04:00.000Z",
           });
 
-          const stored = yield* validation.getRunById(started.validationRunId);
+          const stored = yield* validation.reads.getRunById(started.validationRunId);
           expect(stored?.implementationDecisions).toEqual(decisions);
-          const history = yield* validation.listRunsForCandidate(captured.candidateId);
+          const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history[0]?.implementationDecisions).toEqual(decisions);
         }),
       ),
@@ -1644,7 +1669,7 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
           const capture = yield* openSqliteCandidateCapturePersistence();
-          const validation = yield* openSqliteChangeValidationTestPorts();
+          const validation = yield* openSqliteChangeValidationTestDependencies();
           const captured = yield* capture.commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
@@ -1697,9 +1722,9 @@ describe("repository SQL storage", () => {
                     )
                   `,
               );
-              const runError = yield* validation.getRunById(runId).pipe(Effect.flip);
+              const runError = yield* validation.reads.getRunById(runId).pipe(Effect.flip);
               expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const listError = yield* validation
+              const listError = yield* validation.reads
                 .listRunsForCandidate(captured.candidateId)
                 .pipe(Effect.flip);
               expect(listError).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -1713,8 +1738,8 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestPorts();
-        const validation = yield* openSqliteChangeValidationTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1724,14 +1749,14 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T16:20:00.000Z",
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-        const raised = yield* changes.raiseImplementationBlocker({
+        const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Wait for an external decision.",
           now: "2026-07-25T16:21:00.000Z",
         });
         expect(raised.ok).toBe(true);
 
-        const rejected = yield* validation.startOrReuse({
+        const rejected = yield* validation.execution.startOrReuse({
           candidateId: captured.candidateId,
           changeBaseSha: "base-sha",
           headSha: "head-sha",
@@ -1739,15 +1764,15 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T16:22:00.000Z",
         });
         expect(rejected).toEqual({ reused: false, blocked: true });
-        expect(yield* validation.getActiveForChange(captured.changeId)).toBeUndefined();
+        expect(yield* validation.active.getActiveForChange(captured.changeId)).toBeUndefined();
 
-        const resolved = yield* changes.resolveImplementationBlocker({
+        const resolved = yield* changes.authority.resolveImplementationBlocker({
           changeId: captured.changeId,
           content: "Proceed with the accepted implementation.",
           now: "2026-07-25T16:23:00.000Z",
         });
         expect(resolved.ok).toBe(true);
-        const admitted = yield* validation.startOrReuse({
+        const admitted = yield* validation.execution.startOrReuse({
           candidateId: captured.candidateId,
           changeBaseSha: "base-sha",
           headSha: "head-sha",
@@ -1764,7 +1789,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1796,7 +1821,10 @@ describe("repository SQL storage", () => {
           pending.expectedHeadSha,
           pending.now,
         );
-        expect(yield* changes.beginPublication(pending)).toMatchObject({ ok: true, created: true });
+        expect(yield* changes.publication.beginPublication(pending)).toMatchObject({
+          ok: true,
+          created: true,
+        });
         const second = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -1826,14 +1854,16 @@ describe("repository SQL storage", () => {
           replacement.expectedHeadSha,
           replacement.now,
         );
-        expect(yield* changes.replacePendingPublication(replacement)).toMatchObject({ ok: true });
+        expect(yield* changes.publication.replacePendingPublication(replacement)).toMatchObject({
+          ok: true,
+        });
         expect(
-          yield* changes.replacePendingPublication({
+          yield* changes.publication.replacePendingPublication({
             ...replacement,
             expectedCurrentCandidateId: first.candidateId,
           }),
         ).toEqual({ ok: false, code: "publication_state_conflict" });
-        expect(yield* changes.getChangeById(first.changeId)).toMatchObject({
+        expect(yield* changes.reads.getChangeById(first.changeId)).toMatchObject({
           publication: { candidateId: second.candidateId, expectedHeadSha: "second-head" },
         });
       }),
@@ -1904,7 +1934,7 @@ describe("repository SQL storage", () => {
           );
           yield* Effect.scoped(
             Effect.gen(function* () {
-              const upgraded = yield* openSqliteChangeTestPorts();
+              const upgraded = yield* openSqliteChangeTestDependencies();
               yield* installPublicationIdentity(
                 captured.changeId,
                 captured.candidateId,
@@ -1912,8 +1942,10 @@ describe("repository SQL storage", () => {
                 "head-legacy",
                 "2026-07-25T15:30:00.000Z",
               );
-              expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
-              const current = yield* upgraded.getChangeById(captured.changeId);
+              expect(
+                yield* upgraded.authority.listImplementationDecisions(captured.changeId),
+              ).toEqual([]);
+              const current = yield* upgraded.reads.getChangeById(captured.changeId);
               expect(current?.publication).toMatchObject({
                 candidateId: captured.candidateId,
                 validationRunId: "legacy-run",
@@ -1970,14 +2002,16 @@ describe("repository SQL storage", () => {
                 changeBaseSha: "base-next",
                 now: "2026-07-25T15:32:00.000Z",
               };
-              expect(yield* upgraded.beginPublication(nextPublication)).toMatchObject({ ok: true });
+              expect(yield* upgraded.publication.beginPublication(nextPublication)).toMatchObject({
+                ok: true,
+              });
               expect(
-                yield* upgraded.recordPublishedPullRequest({
+                yield* upgraded.publication.recordPublishedPullRequest({
                   ...nextPublication,
                   pullRequest: { number: 7, url: "https://github.test/pull/7" },
                 }),
               ).toMatchObject({ ok: true });
-              const revised = yield* upgraded.getChangeById(captured.changeId);
+              const revised = yield* upgraded.reads.getChangeById(captured.changeId);
               expect(revised?.publication).toMatchObject({
                 candidateId: next.candidateId,
                 validationRunId: "next-run",
@@ -2001,7 +2035,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/revision",
@@ -2029,9 +2063,11 @@ describe("repository SQL storage", () => {
           publication.expectedHeadSha,
           publication.now,
         );
-        expect(yield* changes.beginPublication(publication)).toMatchObject({ ok: true });
+        expect(yield* changes.publication.beginPublication(publication)).toMatchObject({
+          ok: true,
+        });
         expect(
-          yield* changes.recordPublishedPullRequest({
+          yield* changes.publication.recordPublishedPullRequest({
             ...publication,
             pullRequest: { number: 42, url: "https://github.test/pull/42" },
           }),
@@ -2053,7 +2089,7 @@ describe("repository SQL storage", () => {
           "head-2",
           "2026-07-25T16:03:00.000Z",
         );
-        const recorded = yield* changes.recordPublishedPullRequest({
+        const recorded = yield* changes.publication.recordPublishedPullRequest({
           changeId: first.changeId,
           candidateId: second.candidateId,
           validationRunId: "run-2",
@@ -2069,7 +2105,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T16:03:00.000Z",
         });
         if (!recorded.ok) throw new Error(`Publication record failed: ${recorded.code}`);
-        const revised = yield* changes.getChangeById(first.changeId);
+        const revised = yield* changes.reads.getChangeById(first.changeId);
         expect(revised?.publication).toMatchObject({
           candidateId: second.candidateId,
           validationRunId: "run-2",
@@ -2623,7 +2659,7 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationTestPorts();
+              const validation = yield* openSqliteChangeValidationTestDependencies();
               const rows = yield* repository.operation(
                 "read repaired Validation Policy Snapshot text",
                 (sql) => sql<{ readonly id: string; readonly policySnapshot: string }>`
@@ -2651,26 +2687,28 @@ describe("repository SQL storage", () => {
               expect(byId.get("run-malformed")).toBe(malformedPolicyText);
               expect(byId.get("run-current")).toBe(currentPolicyText);
 
-              const repaired = yield* validation.getRunById("run-affected");
+              const repaired = yield* validation.reads.getRunById("run-affected");
               expect(repaired).toBeDefined();
               expect(repaired?.policy).toEqual(affectedPolicy);
-              const reorderedError = yield* validation
+              const reorderedError = yield* validation.reads
                 .getRunById("run-affected-reordered")
                 .pipe(Effect.flip);
               expect(reorderedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const protoError = yield* validation.getRunById("run-proto").pipe(Effect.flip);
+              const protoError = yield* validation.reads.getRunById("run-proto").pipe(Effect.flip);
               expect(protoError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const whitespaceError = yield* validation
+              const whitespaceError = yield* validation.reads
                 .getRunById("run-whitespace")
                 .pipe(Effect.flip);
               expect(whitespaceError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const legacyError = yield* validation.getRunById("run-legacy").pipe(Effect.flip);
+              const legacyError = yield* validation.reads
+                .getRunById("run-legacy")
+                .pipe(Effect.flip);
               expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const malformedError = yield* validation
+              const malformedError = yield* validation.reads
                 .getRunById("run-malformed")
                 .pipe(Effect.flip);
               expect(malformedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const current = yield* validation.getRunById("run-current");
+              const current = yield* validation.reads.getRunById("run-current");
               expect(current?.policy).toEqual(currentPolicy);
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
           );
@@ -2706,13 +2744,13 @@ describe("repository SQL storage", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            const upgraded = yield* openSqliteChangeTestPorts();
-            expect(yield* upgraded.getChangeById(created.change.id)).toMatchObject({
+            const upgraded = yield* openSqliteChangeTestDependencies();
+            expect(yield* upgraded.reads.getChangeById(created.change.id)).toMatchObject({
               id: created.change.id,
               state: "open",
               cancelReason: null,
             });
-            const cancelled = yield* upgraded.cancelChange({
+            const cancelled = yield* upgraded.delivery.cancelChange({
               changeId: created.change.id,
               reason: "Not needed after upgrade",
               now: "2026-07-17T23:02:00.000Z",
@@ -2726,7 +2764,7 @@ describe("repository SQL storage", () => {
                 cancelReason: "Not needed after upgrade",
               },
             });
-            expect(yield* upgraded.getChangeById(created.change.id)).toMatchObject({
+            expect(yield* upgraded.reads.getChangeById(created.change.id)).toMatchObject({
               state: "closed",
               closeReason: "cancelled",
               cancelReason: "Not needed after upgrade",
@@ -2818,8 +2856,8 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationTestPorts();
-              const findings = yield* validation.listFindings("run-severity");
+              const validation = yield* openSqliteChangeValidationTestDependencies();
+              const findings = yield* validation.reads.listFindings("run-severity");
               expect(findings).toEqual([
                 {
                   id: "finding-severity",
@@ -2894,21 +2932,27 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestPorts();
-              const session = yield* changes.getReviewerSession("change-session", "acceptance");
+              const changes = yield* openSqliteChangeTestDependencies();
+              const session = yield* changes.reviewerSessions.getReviewerSession(
+                "change-session",
+                "acceptance",
+              );
               expect(session).toEqual({
                 changeId: "change-session",
                 producer: "acceptance",
                 fingerprint: "fingerprint-legacy",
                 sessionReference: "session-legacy",
               });
-              yield* changes.saveReviewerSession({
+              yield* changes.reviewerSessions.saveReviewerSession({
                 changeId: "change-session",
                 producer: "acceptance",
                 fingerprint: "fingerprint-new",
                 sessionReference: "session-new",
               });
-              const replaced = yield* changes.getReviewerSession("change-session", "acceptance");
+              const replaced = yield* changes.reviewerSessions.getReviewerSession(
+                "change-session",
+                "acceptance",
+              );
               expect(replaced).toEqual({
                 changeId: "change-session",
                 producer: "acceptance",
@@ -2978,8 +3022,8 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestPorts();
-              const session = yield* changes.getReviewerSession(
+              const changes = yield* openSqliteChangeTestDependencies();
+              const session = yield* changes.reviewerSessions.getReviewerSession(
                 "change-session-retained",
                 "acceptance",
               );
@@ -2989,7 +3033,7 @@ describe("repository SQL storage", () => {
                 fingerprint: "fingerprint-retained",
                 sessionReference: "session-1",
               });
-              yield* changes.recordReviewerTranscripts({
+              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
                 changeId: "change-session-retained",
                 transcripts: [
                   {
@@ -3000,7 +3044,7 @@ describe("repository SQL storage", () => {
                   },
                 ],
               });
-              yield* changes.recordReviewerTranscripts({
+              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
                 changeId: "change-session-retained",
                 transcripts: [
                   {
@@ -3011,7 +3055,10 @@ describe("repository SQL storage", () => {
                   },
                 ],
               });
-              const transcripts = yield* changes.listReviewerTranscripts("change-session-retained");
+              const transcripts =
+                yield* changes.reviewerTranscripts.listReviewerTranscripts(
+                  "change-session-retained",
+                );
               expect(transcripts).toEqual([
                 {
                   changeId: "change-session-retained",
@@ -3042,7 +3089,7 @@ describe("repository SQL storage", () => {
     withTemporaryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         yield* repository.operation("insert transcript Changes", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -3065,7 +3112,7 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        yield* changes.recordReviewerTranscripts({
+        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
           changeId: "change-transcript-a",
           transcripts: [
             {
@@ -3082,7 +3129,7 @@ describe("repository SQL storage", () => {
             },
           ],
         });
-        yield* changes.recordReviewerTranscripts({
+        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
           changeId: "change-transcript-b",
           transcripts: [
             {
@@ -3094,8 +3141,10 @@ describe("repository SQL storage", () => {
           ],
         });
 
-        const first = yield* changes.listReviewerTranscripts("change-transcript-a");
-        const second = yield* changes.listReviewerTranscripts("change-transcript-b");
+        const first =
+          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-a");
+        const second =
+          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-b");
 
         expect(first).toEqual([
           {
@@ -3127,7 +3176,7 @@ describe("repository SQL storage", () => {
     withTemporaryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         yield* repository.operation("insert transcript Change", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -3141,13 +3190,13 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        yield* changes.saveReviewerSession({
+        yield* changes.reviewerSessions.saveReviewerSession({
           changeId: "change-transcript-retained",
           producer: "acceptance",
           fingerprint: "fingerprint",
           sessionReference: "session-live",
         });
-        yield* changes.recordReviewerTranscripts({
+        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
           changeId: "change-transcript-retained",
           transcripts: [
             {
@@ -3159,11 +3208,16 @@ describe("repository SQL storage", () => {
           ],
         });
 
-        yield* changes.removeReviewerSessions("change-transcript-retained");
+        yield* changes.reviewerSessions.removeReviewerSessions("change-transcript-retained");
 
-        const live = yield* changes.getReviewerSession("change-transcript-retained", "acceptance");
+        const live = yield* changes.reviewerSessions.getReviewerSession(
+          "change-transcript-retained",
+          "acceptance",
+        );
         expect(live).toBeUndefined();
-        const transcripts = yield* changes.listReviewerTranscripts("change-transcript-retained");
+        const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
+          "change-transcript-retained",
+        );
         expect(transcripts).toEqual([
           {
             changeId: "change-transcript-retained",
@@ -3301,8 +3355,8 @@ describe("repository SQL storage", () => {
                 (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
               );
               expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
-              const changes = yield* openSqliteChangeTestPorts();
-              const stored = yield* changes.getChangeById("change-with-failure");
+              const changes = yield* openSqliteChangeTestDependencies();
+              const stored = yield* changes.reads.getChangeById("change-with-failure");
               expect(stored).toMatchObject({
                 id: "change-with-failure",
                 state: "open",
@@ -3417,8 +3471,8 @@ describe("repository SQL storage", () => {
                   `,
                 );
                 expect(tables).toEqual([]);
-                const changes = yield* openSqliteChangeTestPorts();
-                const stored = yield* changes.getChangeById("change-with-context");
+                const changes = yield* openSqliteChangeTestDependencies();
+                const stored = yield* changes.reads.getChangeById("change-with-context");
                 expect(stored?.acceptanceContext).toEqual({
                   version: 1,
                   title: "Current intent",
@@ -3513,8 +3567,9 @@ describe("repository SQL storage", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestPorts();
-              const decisions = yield* changes.listImplementationDecisions("change-decisions");
+              const changes = yield* openSqliteChangeTestDependencies();
+              const decisions =
+                yield* changes.authority.listImplementationDecisions("change-decisions");
               expect(decisions).toEqual([
                 {
                   id: "structured-decision",
@@ -3749,7 +3804,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestPorts();
+        const changes = yield* openSqliteChangeTestDependencies();
         const started = yield* starts.create({
           id: "change-malformed",
           repositoryCommonDirectory: input.commonDirectory,
@@ -3772,7 +3827,7 @@ describe("repository SQL storage", () => {
           `,
         );
 
-        const error = yield* changes.getChangeById(started.change.id).pipe(Effect.flip);
+        const error = yield* changes.reads.getChangeById(started.change.id).pipe(Effect.flip);
         expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(error).toMatchObject({
           _tag: "RepositoryPersistedDataInvalid",
