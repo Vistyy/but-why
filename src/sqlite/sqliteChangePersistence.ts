@@ -21,9 +21,9 @@ import type {
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
   ChangeSubmissionPort,
-  TerminalChangeCleanupPort,
   CurrentChangeEvidenceQuery,
   RecordImplementationDecisionInput,
+  TerminalChangeCleanupPort,
 } from "../change/changePorts.js";
 import type {
   BeginChangePublicationInput,
