@@ -83,6 +83,35 @@ describe("Disposable workspace Git cleanup verification", () => {
     expect(refExists(repository, unrelatedRef)).toBe(true);
   });
 
+  it("leaves a worktree with an unrelated HEAD untouched when the live temporary ref matches", () => {
+    const repository = initializedRepository();
+    const submittedSha = git(repository, "rev-parse", "HEAD");
+    git(repository, "commit", "--allow-empty", "-m", "Unrelated worktree target");
+    const unrelatedSha = git(repository, "rev-parse", "HEAD");
+    const validationRunId = "selected";
+    const tempRefName = validationTempRefName(validationRunId);
+    const worktreePath = expectedSandcastleWorktreePath(repository, tempRefName);
+    git(repository, "update-ref", tempRefName, submittedSha);
+    git(repository, "worktree", "add", "--detach", worktreePath, unrelatedSha);
+
+    expect(
+      validationWorkspaceCleanupGit(repository).cleanup({
+        validationRunId,
+        submittedSha,
+        recordedTempRefName: tempRefName,
+        recordedWorktreePath: worktreePath,
+      }),
+    ).toEqual({
+      worktree: "failed",
+      tempRef: "failed",
+      errorMessage:
+        "Live Validation Workspace identity does not match its selected Validation Run.",
+    });
+    expect(existsSync(worktreePath)).toBe(true);
+    expect(git(worktreePath, "rev-parse", "HEAD")).toBe(unrelatedSha);
+    expect(git(repository, "rev-parse", tempRefName)).toBe(submittedSha);
+  });
+
   it("leaves a detached worktree untouched when the live temporary ref mismatches", () => {
     const repository = initializedRepository();
     const submittedSha = git(repository, "rev-parse", "HEAD");
