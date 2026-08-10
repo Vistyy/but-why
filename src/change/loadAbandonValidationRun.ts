@@ -1,16 +1,12 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
-import {
-  deleteDisposableWorkspaceRef,
-  removeDisposableWorktree,
-} from "../disposableWorkspace/disposableWorkspaceGit.js";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
-import { validationTempRefName } from "./validation/validationWorkspacePath.js";
+import { validationWorkspaceCleanupGit } from "./validation/validationWorkspaceCleanupGit.js";
 
 export type LoadAbandonValidationRunResult =
   | { readonly ok: true; readonly abandon: AbandonValidationRun }
@@ -47,13 +43,7 @@ export const loadAbandonValidationRun = (input: {
           openAbandonValidationRun({
             persistence,
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
-            workspaceCleanup: {
-              tempRefName: validationTempRefName,
-              removeWorktree: (worktreePath) =>
-                removeDisposableWorktree(context.mainCheckoutRoot, worktreePath),
-              deleteTempRef: (tempRefName) =>
-                deleteDisposableWorkspaceRef(context.mainCheckoutRoot, tempRefName),
-            },
+            workspaceCleanup: validationWorkspaceCleanupGit(context.mainCheckoutRoot),
           }).abandon(command),
         ).pipe(Effect.provide(repositoryLayer)),
     },

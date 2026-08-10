@@ -6,6 +6,10 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import {
+  expectedSandcastleWorktreePath,
+  validationTempRefName,
+} from "../../src/change/validation/validationWorkspacePath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
@@ -43,12 +47,13 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("abandons an interrupted Validation Run and is idempotent", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      const tempRefName = validationTempRefName(fixture.validationRunId);
       yield* fixture.runStore.recordWorkspaceSetup({
         validationRunId: fixture.validationRunId,
-        tempRefName: `refs/but-why/validation-runs/${fixture.validationRunId}/validation`,
+        tempRefName,
         submittedSha: "head-sha",
         worktreeHead: "head-sha",
-        worktreePath: join(fixture.root, ".sandcastle", "validation-workspace"),
+        worktreePath: expectedSandcastleWorktreePath(fixture.root, tempRefName),
         cleanupWorktree: "not_created",
         cleanupTempRef: "not_created",
         now,
