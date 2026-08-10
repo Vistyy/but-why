@@ -69,7 +69,7 @@ describe("shared repository state", () => {
 
         const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-        writeFileSync(draft.draft.path, "# Shared updated\n\nUpdated from another worktree");
+        writeFileSync(draft.draft.path, "Updated from another worktree");
 
         const applyResult = yield* runByInProcessEffect(
           linked,
@@ -80,7 +80,7 @@ describe("shared repository state", () => {
 
         expect(applyResult.status).toBe(0);
         expect(JSON.parse(contextResult.stdout)).toMatchObject({
-          task: { title: "Shared updated", description: "Updated from another worktree" },
+          task: { title: "Shared", description: "Updated from another worktree" },
         });
         expect(existsSync(draft.draft.path)).toBe(false);
         expect(git(root, "status", "--short")).toBe(rootStatusBeforeDraft);

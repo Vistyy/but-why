@@ -85,8 +85,7 @@ const taskContextDraftReadError = (error: TaskContextDraftReadError): CliResult 
     case "invalid_task_context_draft":
       return runtimeError({
         code: error.code,
-        message:
-          "Task Context draft must start with a non-empty # title and include a description.",
+        message: "Task Context draft must contain a non-empty description.",
         details: { path: error.path },
         help: ["Fix the draft, then rerun `by task context apply <task-id>`."],
       });

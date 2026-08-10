@@ -12,8 +12,8 @@ Treat historical material only as evidence unless the Operator approves it as a 
 You may recommend a Work Route, but you must follow the Operator's selected Work Route.
 If the selected Work Route conflicts with a higher-priority instruction, supported interface, safety constraint, or approved Task intent, report the conflict and request direction through the applicable authority mechanism.
 
-**Task Recording Authorization** is the Operator's explicit permission to record the proposed Task Contexts and Task Dependencies for one selected work item.
-It permits only those approved mutations.
+**Task Recording Authorization** is the Operator's explicit permission to record agreed Task outcomes and their actual Task Dependencies for one selected work item.
+It permits the agent to choose clear Task description wording and encode the actual dependencies within the agreed scope.
 It does not permit Task Approval, Change Start, implementation, or Implementation Authorization.
 
 **Task Approval** is a separate Operator action for one recorded Task.
@@ -41,51 +41,28 @@ This section is complete when the Operator's selected Work Route and its selecte
 
 ## Author Tasks
 
-Before designing or revising a Task Verification Contract, read [Task verification](task-verification.md) completely.
-
-1. Gather the Operator-approved requirements and applicable current authority for the selected work item.
+1. Gather the Operator-approved outcome, applicable current authority, existing Tasks, and relevant repository evidence for the selected work item.
    Do not infer approval from brainstorming or provisional planning.
-   Ask the Operator when requirement approval is unclear.
-   Inspect current Tasks, their complete Task Context, and their dependencies.
-   Identify one current Task owner or one ownership gap for every requirement.
-2. Propose the complete Task graph for the selected approved work item before mutation.
-   Account for every approved requirement exactly once across that graph and assign each approved behavior and constraint to one Task.
-   Do not omit, replace, defer, or reduce approved behavior to make a Task smaller.
-   Treat any such proposal as a requirements change that requires an explicit Operator decision.
-   Each proposed Task must deliver one bounded supported result: a completed state that is distinguishable from the prior supported state, is independently acceptable progress toward approved intent, and can be implemented, reviewed, and verified coherently.
-   Before recording each Task, state its supported completion result in one sentence.
-   Move behavior to another Task only when it can be delivered later while leaving both results safe, usable, and independently acceptable.
-   A quality, theme, final objective, shared owner, implementation area, or preferred sequence is not by itself a Task result.
-   Split approved intent only when material evidence identifies multiple independently acceptable bounded supported results.
-   Reconsider a boundary only when concrete evidence shows that a human cannot coherently review the complete result.
-   The number of behavior groups, state relationships, interface changes, implementation areas, or verification arguments does not alone require a split or reconsideration.
-   If no practical bounded result is clear, present the evidence and obtain an Operator decision before recording the Task.
-   A migration stage, caller population, or preparatory activity is a Task only when it ends in an approved bounded supported result.
+   Ask the Operator when the outcome or scope is unclear.
+2. Choose only Tasks that each leave one independently acceptable supported result.
+   Do not omit or weaken approved behavior to make a Task smaller.
+   Split work only when the separate results remain safe, usable, and independently valuable.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
-3. Give each proposed Task behavior-based acceptance criteria and a complete Task Verification Contract.
-   Keep acceptance criteria separate from verification mechanisms.
-   Do not use generic gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
-   Follow the Task verification reference to define proportionate implementation confidence.
-   Include a `## Review path` section in every proposed Task Context.
-   State a practical path for a human to review and verify the Task as one bounded supported result.
-   Use available repository evidence, including evidence from prior implementation attempts, to decide whether the path is practical.
-   When available evidence has disproved a review path, do not reuse it or a materially equivalent Task boundary unless concrete evidence shows why the observed mismatch no longer applies.
-   Do not turn the review path into a detailed implementation plan, an exact file forecast, a line estimate, or an effort estimate.
-4. Before requesting Task Recording Authorization, review the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
-   Confirm that each review path covers its complete supported result and remains practical in light of the available evidence.
-   If no practical review path can be stated, present the evidence and concern instead of requesting Task Recording Authorization.
-   Task lifecycle state does not establish implementation readiness.
-5. Present the selected work item's complete Task graph, exact Task Contexts including each `## Review path` section, Task Dependency rationale, and recording order.
+3. Describe each Task in whatever form communicates its outcome and consequential constraints clearly.
+   Do not require standard headings, a verification inventory, an implementation plan, or an exact file forecast.
+   State a special verification constraint only when it is already part of approved intent.
+   Otherwise, select proportionate verification during implementation when the implementation shape is known.
+4. Present the proposed Task titles and intended outcomes, plus any unresolved choice that affects scope or observable behavior.
    Obtain Task Recording Authorization before any Task or Task Dependency mutation.
-6. Record only the authorized Task Context and Task Dependencies.
+   The Operator does not need to approve the exact description wording or dependency encoding.
+5. Record the agreed Tasks and only their actual prerequisites.
    Use CLI help for the exact syntax before each command.
-   Create Tasks in the authorized recording order and set each complete dependency set.
    Use a Task Context draft and apply operation for an existing unstarted Task.
-7. Treat each successful mutation result as authoritative for its returned committed fields.
+6. Treat each successful mutation result as authoritative for its returned committed fields.
    Run Task Show, Task Context, or dependency inspection only when required recording state is omitted from that result.
    Verify every recorded Task remains unapproved and has no Change through the returned state or the applicable inspection command.
 
-This section is complete when every authorized Task and Task Dependency is recorded, unapproved, and unlinked to a Change.
+This section is complete when the authorized Tasks and Task Dependencies are recorded, unapproved, and unlinked to a Change.
 
 ## Approve a Task
 

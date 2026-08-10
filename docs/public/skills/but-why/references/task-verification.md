@@ -1,95 +1,57 @@
 # Task verification
 
-Use this reference to design or revise a Task Verification Contract.
-The contract states the confidence required for one implementation Task without prescribing implementation techniques unnecessarily.
+Accepted intent defines the required result.
+Implementation creates that result.
+Verification establishes justified confidence that the Candidate satisfies it, and review judges whether the Candidate and its evidence are sufficient.
+A test is one possible source of evidence, not the default output.
+Task Context has no required verification section or template.
 
-## Terms
+## Philosophy
 
-**Material Risk** is a plausible way implementation can fail accepted intent with a meaningful consequence, supported by accepted requirements or concrete target-repository evidence.
+Start from the actual work rather than a preferred verification mechanism.
+Consider what could materially be wrong and what observation would distinguish the accepted result from that failure.
+Choose evidence after understanding the implementation, the boundaries on which its behavior depends, retained evidence, and mandatory gates.
 
-**Verification Claim** is one fact that evidence must establish to address one Material Risk.
+Prefer evidence that observes the relevant behavior directly, would reveal the meaningful failure, and has proportionate creation and maintenance cost.
+A broader, slower, or more durable mechanism is not inherently stronger.
+Evidence establishes only what it actually observes.
+Treat missing, malformed, unavailable, or ambiguous observations as unknown rather than success.
 
-**Verification Evidence** is an interpretable observation or artifact that supports or refutes one Verification Claim.
+Use this reasoning to guide judgment.
+Do not require a verification plan, inventory, or standard output structure unless the Operator requests one or software must parse it.
 
-**Required Seam** is a boundary required by a Verification Claim or accepted verification plan because interaction across that boundary is part of the Claim.
+## Select and produce evidence
 
-**Task Verification Contract** is the Task Context section that records Material Risks, required Verification Claims and Evidence, escalation conditions, and explicit exclusions.
-It is preserved in Acceptance Context when the Task starts.
+Read the accepted intent and applicable repository verification policy.
+Do not strengthen the product guarantee merely to make verification easier or more comprehensive.
+An Implementer may use any supported evidence that establishes the relevant behavior reliably.
+Use a broader system boundary only when the behavior being established depends on that boundary.
+When several mechanisms are credible, prefer the reliable one with lower execution, diagnosis, coupling, and maintenance cost.
 
-**Distinct Regression Failure** is a plausible regression that other selected or retained Verification Evidence would not reveal.
-A different input, fixture, branch, assertion, or code path does not make a failure distinct by itself.
+Produce evidence for the exact Candidate and relevant environment.
+Record only the command or procedure, relevant environment, and observation needed to interpret the result.
+Complete mandatory gates through their owning workflow instead of duplicating them manually.
+If an evidence mechanism fails, report the failed mechanism and remaining uncertainty.
+Do not interpret inability to collect evidence as either success or a Candidate failure.
 
-**Lifecycle Cost** is the total cost of Verification Evidence across authoring, review, code and fixtures, execution, stability, failure diagnosis, coupling, and maintenance compared with the least-cost feasible Evidence for the same Claim.
+## Review verification
 
-## Design the contract
+Before implementation, review whether the accepted outcome is observable and whether any prescribed verification constraint is feasible and capable of observing that outcome.
+The absence of a prescribed mechanism is not itself a problem.
 
-1. Identify the Material Risks introduced or affected by the Task.
-   Do not use numerical risk scoring.
-   Do not invent guarantees, speculative edge cases, or risks unsupported by accepted intent or repository evidence.
-2. Define only the Verification Claims needed to address those risks.
-   A requirement, code change, branch, or scenario does not by itself require a separate Claim.
-   A Claim must not require a stronger product guarantee than accepted intent justifies.
-3. Select the least costly reliable supported Evidence that establishes each complete Claim through every Required Seam.
-   Evidence establishes a Verification Claim only through decoded observations that contain the facts the Claim requires.
-   Missing, malformed, or unavailable observations do not establish the Claim.
-   Start with applicable mandatory gates, retained Evidence, focused execution, inspection, and other proportionate one-time Evidence.
-   Use integration or end-to-end Evidence only when the Claim includes that interaction.
-   Specify a mechanism only when the Claim requires it.
-   An Implementer may use another mechanism that establishes the complete Claim through every Required Seam.
-4. Confirm that every required mechanism exists in the supported environment.
-   Expose an unresolved confidence or feasibility problem instead of silently weakening the contract.
+After implementation, review the exact Candidate against accepted intent and available evidence.
+Ask whether the evidence could distinguish a materially incorrect Candidate from the accepted result, observes the boundaries on which that judgment depends, and corresponds to the exact Candidate and relevant environment.
+Do not reject sufficient evidence merely because another mechanism is more familiar or broader.
+Report only material confidence gaps and state what remains unsupported.
+Distinguish insufficient evidence from a tooling failure that prevents a trustworthy review.
 
-Do not require tests by default.
-A requirement, code change, branch, scenario, or Verification Claim does not by itself require new durable automation.
-Do not require a new test or expanded durable coverage unless all applicable conditions are true:
+## Durable regression coverage
 
-- It protects accepted supported behavior, an interface, an invariant, or a reproduced defect class.
-- It detects a Distinct Regression Failure supported by accepted requirements or concrete evidence.
-- Retained Evidence and proportionate one-time Evidence do not establish the Claim sufficiently.
-- The selected seam observes the Claim reliably.
-- The additional protection justifies its Lifecycle Cost over the least-cost feasible alternative.
+Do not require a test by default.
+Add durable automation when it can repeatedly reveal a plausible meaningful regression that other retained or proportionate one-time evidence would miss, and when that protection justifies its authoring and maintenance cost.
+A requirement, branch, scenario, fixture, assertion, or changed line does not create that need by itself.
+Prefer updating, reusing, consolidating, or removing retained coverage when that gives sufficient confidence at lower cost.
 
-When every condition establishes that maintained regression protection is necessary and proportionate, require that protection without prescribing a more expensive mechanism than the Claim requires.
-Before requiring new or expanded durable coverage, state the Distinct Regression Failure, why retained and one-time Evidence are insufficient, and why Lifecycle Cost is proportionate.
-Apply the conditions to each additional test case, including each parameterized case.
-Prefer updating, reusing, consolidating, or removing retained Evidence when that provides sufficient confidence at lower Lifecycle Cost.
-Updating an existing expectation because the accepted contract changed preserves that Evidence and does not by itself justify another test case or suite.
-Do not derive tests from test counts, coverage targets, existing test habits, or one-test-per-requirement conventions.
-Accepted repository mandatory gates remain binding.
-
-When accepted intent retires a concept, use targeted diff, search, and inspection as one-time Evidence for its replacement and affected surfaces.
-Do not create durable Evidence whose only purpose is to prove that a retired concept is absent.
-
-## Write the contract
-
-Keep behavioral acceptance criteria separate from verification.
-Use this structure and omit empty optional sections:
-
-```markdown
-## Verification
-
-### Material risks
-
-- <Plausible failure and meaningful consequence.>
-
-### Required claims
-
-- <Fact that evidence must establish.>
-
-### Required evidence
-
-- <Least-cost feasible evidence, naming a mechanism only when the Claim requires it.>
-
-### Escalation
-
-- <Condition requiring an intent amendment or external decision.>
-
-### Not required
-
-- <Likely scope misunderstanding explicitly excluded.>
-```
-
-Use `Not required` only for a likely scope misunderstanding.
-When applicable mandatory gates provide sufficient Evidence, state that no additional durable Evidence is required.
-
-Contract design is complete when every Material Risk has sufficient Claims, every Claim has feasible and proportionate Evidence, every mandatory gate remains included, and no Evidence requirement imposes an unsupported product guarantee or mechanism.
+For a reproduced defect, demonstrating that a regression test fails against the defective behavior can strengthen the evidence when the supported environment makes that practical.
+Do not require historical execution, mutation, or sensitivity experiments by convention.
+Do not create durable evidence whose only purpose is to prove exact documentation wording or the absence of a retired concept unless that fact is itself an executable supported contract.

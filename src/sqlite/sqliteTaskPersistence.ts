@@ -353,8 +353,8 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
     yield* sql`
-      UPDATE tasks SET title = ${input.title}, description = ${input.description},
-        updated_at = ${input.now} WHERE id = ${input.taskId}
+      UPDATE tasks SET description = ${input.description}, updated_at = ${input.now}
+      WHERE id = ${input.taskId}
     `;
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) {

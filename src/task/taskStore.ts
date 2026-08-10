@@ -72,7 +72,6 @@ export type TaskApprovalResult =
 
 export type UpdateTaskContextInput = {
   readonly taskId: PublicTaskId;
-  readonly title: string;
   readonly description: string;
   readonly now: string;
 };

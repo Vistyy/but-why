@@ -129,7 +129,6 @@ const applyTaskContextDraft = (
   return Effect.map(
     tasks.updateTaskContext({
       taskId: input.taskId,
-      title: draft.draft.title,
       description: draft.draft.description,
       now: input.now,
     }),
