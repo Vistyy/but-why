@@ -1,7 +1,9 @@
 import { Effect } from "effect";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import type { ReviewerExecutionEvidence } from "../reviewerSession/executeReviewerSession.js";
+
 export type { ReviewerExecutionEvidence } from "../reviewerSession/executeReviewerSession.js";
+
 import {
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
