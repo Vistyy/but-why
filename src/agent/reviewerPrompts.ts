@@ -21,14 +21,18 @@ export const currentCandidateReReviewInstructions = [
 
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
-  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context, including its Task Verification Contract.",
+  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context.",
+  "Judge whether available evidence could distinguish a materially incorrect Candidate from the accepted result.",
+  "Do not require a preferred verification mechanism or a durable test by default.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");
 
 const universalAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
-  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context, including its Task Verification Contract.",
+  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context.",
+  "Judge whether available evidence could distinguish a materially incorrect Candidate from the accepted result.",
+  "Do not require a preferred verification mechanism or a durable test by default.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");
@@ -53,7 +57,8 @@ const acceptanceContextConstraint = (context: AcceptanceContextSnapshotV1): stri
     "Use this context only to constrain Findings and required corrections.",
     "Do not expand or contradict approved intent.",
     "Do not require behavior that the context excludes.",
-    "Do not demand verification beyond its Task Verification Contract or argue against an approved verification decision.",
+    "Respect explicit verification constraints in the context.",
+    "Do not invent required verification mechanisms or demand evidence beyond what is necessary to judge approved intent.",
   ].join("\n");
 
 export const buildAcceptanceReviewerPrompt = (input: {

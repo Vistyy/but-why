@@ -145,7 +145,7 @@ taskDependenciesCommand = group(
 );
 
 const taskContextDraftCommand = withCliHandler(
-  leaf("draft", "Create an editable Task Context draft.", { taskId: taskIdArgument }),
+  leaf("draft", "Create an editable Task description draft.", { taskId: taskIdArgument }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/contextDraft.js")).pipe(
       Effect.flatMap(({ runContextDraftCommand }) =>
@@ -154,7 +154,7 @@ const taskContextDraftCommand = withCliHandler(
     ),
 );
 const taskContextApplyCommand = withCliHandler(
-  leaf("apply", "Apply a Task Context draft.", { taskId: taskIdArgument }),
+  leaf("apply", "Apply a Task description draft.", { taskId: taskIdArgument }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/contextApply.js")).pipe(
       Effect.flatMap(({ runContextApplyCommand }) =>

@@ -418,7 +418,7 @@ describe("by task CLI", () => {
     }),
   );
 
-  it.effect("creates a managed Task Context draft with the current title and description", () =>
+  it.effect("creates a managed Task Context draft with the current description", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
@@ -436,7 +436,7 @@ describe("by task CLI", () => {
       expect(output.draft.path).toMatch(
         /\.git\/but-why\/task-context-drafts\/by-1-[a-f0-9]{12}\.md$/,
       );
-      expect(output.draft.content).toBe("# Draft title\n\nDescription for Draft title");
+      expect(output.draft.content).toBe("Description for Draft title");
       expect(existsSync(output.draft.path)).toBe(true);
       expect(readFileSync(output.draft.path, "utf8")).toBe(output.draft.content);
     }),
@@ -457,7 +457,7 @@ describe("by task CLI", () => {
     }),
   );
 
-  it.effect("replaces a prior Task Context draft with current Task Context", () =>
+  it.effect("replaces a prior Task Context draft with the current description", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
@@ -465,7 +465,7 @@ describe("by task CLI", () => {
       const firstDraft = JSON.parse(
         (yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"])).stdout,
       ) as { draft: { path: string } };
-      writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
+      writeFileSync(firstDraft.draft.path, "Current description");
       expect(
         (yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"], secondNow)).status,
       ).toBe(0);
@@ -478,11 +478,11 @@ describe("by task CLI", () => {
         0,
       );
       expect(draft.draft.path).toBe(firstDraft.draft.path);
-      expect(readFileSync(draft.draft.path, "utf8")).toBe("# Current title\n\nCurrent description");
+      expect(readFileSync(draft.draft.path, "utf8")).toBe("Current description");
     }),
   );
 
-  it.effect("applies a valid Task Context draft before Change Start and removes it", () =>
+  it.effect("applies the complete Task Context description and preserves the title", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
@@ -490,7 +490,8 @@ describe("by task CLI", () => {
 
       const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-      writeFileSync(draft.draft.path, "#  Updated title  \n\nUpdated description\n\n");
+      const description = "# Description heading\n\nUpdated description\n\n";
+      writeFileSync(draft.draft.path, description);
 
       const result = yield* runByInProcessEffect(
         root,
@@ -503,25 +504,25 @@ describe("by task CLI", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         task: {
           id: "BY-1",
-          title: "Updated title",
+          title: "Original title",
           state: "new",
           updatedAt: secondNow,
           change: null,
         },
         context: {
           id: "BY-1",
-          title: "Updated title",
-          description: "Updated description\n\n",
+          title: "Original title",
+          description,
         },
       });
       expect(existsSync(draft.draft.path)).toBe(false);
       expect(
         JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
-      ).toMatchObject({ task: { title: "Updated title", description: "Updated description\n\n" } });
+      ).toMatchObject({ task: { title: "Original title", description } });
     }),
   );
 
-  it.effect("retains an invalid Task Context draft without changing the Task", () =>
+  it.effect("retains a blank Task Context draft without changing the Task", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
@@ -529,7 +530,7 @@ describe("by task CLI", () => {
 
       const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-      writeFileSync(draft.draft.path, "Updated title\n\nUpdated description");
+      writeFileSync(draft.draft.path, " \n\t");
 
       const result = yield* runByInProcessEffect(
         root,
@@ -549,14 +550,14 @@ describe("by task CLI", () => {
     }),
   );
 
-  it.effect("retains a Task Context draft without its required blank-line separator", () =>
+  it.effect("applies a one-line Task Context description", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
       yield* createTask(root, firstNow, "Original title");
       const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-      writeFileSync(draft.draft.path, "# Updated title\nUpdated description");
+      writeFileSync(draft.draft.path, "Updated description");
 
       const result = yield* runByInProcessEffect(
         root,
@@ -564,13 +565,12 @@ describe("by task CLI", () => {
         secondNow,
       );
 
-      expect(result.status).toBe(1);
-      expect(JSON.parse(result.stdout).error.code).toBe("invalid_task_context_draft");
-      expect(existsSync(draft.draft.path)).toBe(true);
+      expect(result.status).toBe(0);
+      expect(existsSync(draft.draft.path)).toBe(false);
       expect(
         JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
       ).toMatchObject({
-        task: { title: "Original title", description: "Description for Original title" },
+        task: { title: "Original title", description: "Updated description" },
       });
     }),
   );
@@ -584,7 +584,7 @@ describe("by task CLI", () => {
         yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-        writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
+        writeFileSync(draft.draft.path, "Updated description");
         yield* setTaskState(root, "BY-1", state, secondNow);
 
         const result = yield* runByInProcessEffect(
@@ -614,7 +614,7 @@ describe("by task CLI", () => {
         yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
-        writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
+        writeFileSync(draft.draft.path, "Updated description");
         yield* setTaskState(root, "BY-1", "todo", secondNow);
 
         const result = yield* runByInProcessEffect(

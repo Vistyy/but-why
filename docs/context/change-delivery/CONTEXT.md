@@ -251,7 +251,7 @@ The fixed read-only sequence that judges changed code through Repository Prepara
 _Avoid_: Generic pipeline language, publication, implementation
 
 **Acceptance Reviewer**:
-The coding agent that owns the overall judgment of whether a Candidate satisfies supplied Acceptance Context, including its Task Verification Contract.
+The coding agent that owns the overall judgment of whether a Candidate satisfies supplied Acceptance Context.
 It may require missing work necessary for approved intent, but it does not expand approved intent or require optional improvement.
 _Avoid_: Specialist Reviewer, Implementer
 
@@ -259,7 +259,7 @@ _Avoid_: Specialist Reviewer, Implementer
 A configured coding agent that judges one named repository concern for the exact Candidate.
 It owns only its configured concern and does not investigate or report concerns outside that responsibility.
 When supplied Acceptance Context, it uses that context only as an authoritative scope constraint.
-It may judge whether existing verification evidence is defective within its concern, but it does not require evidence beyond a supplied Task Verification Contract or argue against an approved verification decision.
+It may judge whether available verification evidence is defective within its concern, but it requires a particular verification mechanism only when approved intent or the concern's owning boundary requires it.
 _Avoid_: Acceptance Reviewer, Final Reviewer
 
 **Validation Workspace**:
