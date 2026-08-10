@@ -33,8 +33,11 @@ The source hierarchy follows these owners:
 
 CLI modules select operations and translate results.
 They do not construct storage or coordinate persistence.
-Task and Change modules own the narrow persistence operations that preserve their invariants.
-Repository storage composition owns database lifecycle and constructs SQLite Adapters.
+Task and Change modules own cohesive persistence ports and the operations that preserve their invariants.
+Task and Change composition select concrete Adapters and construct their owner workflows.
+Repository Runtime composition owns Local Repository resolution and the Shared Repository State lifecycle.
+It provides a scoped database capability instead of an Adapter registry or application container.
+The private SQLite implementation may implement several owner-defined ports without exposing a broad persistence facade.
 
 ## Change workflow
 

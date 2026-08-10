@@ -25,7 +25,10 @@ Apply a lens only when the Candidate changes its relevant area:
   Treat an unsafe test cast as evidence of a possible contract mismatch.
 - **Agent experience**: Preserve supported agent-facing command contracts, including output, errors, exit codes, help, empty states, and non-interactive operation.
 - **State integrity, provenance, and recovery**: Bind stored state, reused evidence, and external effects to the correct identity; keep related transitions atomic; and preserve explicit retry, reconciliation, and cleanup behavior.
-- **External boundaries and error honesty**: Validate untrusted persisted or wire data at the applicable Adapter seam and represent dependency failures explicitly without reporting misleading success.
+- **External boundaries and error honesty**: Rely on contracts enforced by earlier runtime boundaries.
+  At the applicable Adapter seam, validate only operation-required facts that its contract does not guarantee and decode only the persisted or wire observations selected for that operation.
+  Do not inspect unrelated data for corruption.
+  Represent dependency failures explicitly without reporting misleading success.
 - **Verification and test value**: Assess changed and directly affected tests for proportionate coverage of material risks through supported interfaces, distinct observable behavior, unsupported requirements, and redundant coverage.
 - **Change completeness and current-system consistency**: Update directly affected callers, tests, configuration, generated artifacts, and authorities, and remove replaced paths unless a current accepted boundary requires them.
 - **Documentation and instruction responsibility**: Keep each supported claim in one current authority, close concrete reader knowledge gaps, and make changed instructions precise, correctly placed, and behaviorally complete.
