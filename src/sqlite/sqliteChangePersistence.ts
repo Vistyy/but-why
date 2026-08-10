@@ -456,14 +456,7 @@ const getCurrentPassingEvidence = (
     });
     if (authority === undefined) return undefined;
     const implementationDecisions = yield* listDecisions(sql, authority.id);
-    const runPredicate =
-      query?.validationRunId === undefined
-        ? `run.id = (
-            SELECT current_run.id FROM candidate_validation_runs AS current_run
-            WHERE current_run.candidate_id = candidate.id
-            ORDER BY current_run.created_at DESC, current_run.id DESC LIMIT 1
-          )`
-        : "run.id = ?";
+    const runPredicate = query?.validationRunId === undefined ? "1 = 1" : "run.id = ?";
     const parameters =
       query?.validationRunId === undefined ? [authority.id] : [authority.id, query.validationRunId];
     const rows = yield* sql.unsafe<PassingPublicationEvidenceRow>(
@@ -479,7 +472,8 @@ const getCurrentPassingEvidence = (
          SELECT current.id FROM candidates AS current
          WHERE current.change_id = ?
          ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-       ) AND ${runPredicate}`,
+       ) AND ${runPredicate}
+       ORDER BY run.created_at DESC, run.id DESC`,
       parameters,
     );
     const blockerHistory = yield* readBlockers(
@@ -505,21 +499,24 @@ const getCurrentPassingEvidence = (
     const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
     const expectedAcceptanceContext = authority.acceptanceContext ?? undefined;
-    const current = decoded[0];
-    if (
-      current === undefined ||
-      current.run.record.candidateId !== current.publicationCandidateId ||
-      current.run.record.state !== "complete" ||
-      current.run.record.outcome !== "passed" ||
-      current.run.latestResolvedBlockerId !== currentLatestResolvedBlockerId ||
-      current.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot ||
-      !isDeepStrictEqual(current.run.record.policy.acceptanceContext, expectedAcceptanceContext) ||
-      (query?.candidateId !== undefined && current.publicationCandidateId !== query.candidateId) ||
-      (query?.changeBaseSha !== undefined && current.changeBaseSha !== query.changeBaseSha) ||
-      (query?.policy !== undefined && !isDeepStrictEqual(current.run.record.policy, query.policy))
-    ) {
-      return undefined;
-    }
+    const current = decoded.find(
+      (evidence) =>
+        evidence.run.record.candidateId === evidence.publicationCandidateId &&
+        evidence.run.record.state === "complete" &&
+        evidence.run.record.outcome === "passed" &&
+        evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId &&
+        evidence.run.implementationDecisionsSnapshot === expectedDecisionsSnapshot &&
+        isDeepStrictEqual(
+          evidence.run.record.policy.acceptanceContext,
+          expectedAcceptanceContext,
+        ) &&
+        (query?.candidateId === undefined ||
+          evidence.publicationCandidateId === query.candidateId) &&
+        (query?.changeBaseSha === undefined || evidence.changeBaseSha === query.changeBaseSha) &&
+        (query?.policy === undefined ||
+          isDeepStrictEqual(evidence.run.record.policy, query.policy)),
+    );
+    if (current === undefined) return undefined;
     return {
       candidateId: current.publicationCandidateId,
       validationRunId: current.run.record.id,

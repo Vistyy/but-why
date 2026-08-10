@@ -1464,6 +1464,28 @@ describe("repository SQL storage", () => {
             reused: true,
             validationRunId: first.validationRunId,
           });
+          yield* repository.operation(
+            "make the newer policy-distinct Run non-passing",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${simplifiedCurrent.validationRunId}`,
+          );
+          const currentEvidence = {
+            candidateId: captured.candidateId,
+            validationRunId: first.validationRunId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+          };
+          expect(yield* changes.getCurrentPassingEvidence(captured.changeId)).toEqual(
+            currentEvidence,
+          );
+          expect(
+            yield* changes.getCurrentPassingEvidence(captured.changeId, {
+              candidateId: captured.candidateId,
+              validationRunId: first.validationRunId,
+              changeBaseSha: "base-sha",
+              policy,
+            }),
+          ).toEqual(currentEvidence);
 
           const policyMismatch = yield* validation.startOrReuse({
             ...exact,
