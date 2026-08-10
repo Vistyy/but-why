@@ -11,7 +11,6 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -19,7 +18,6 @@ import { RepositorySql } from "./repositorySql.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   candidateReadColumns,
-  type DecodedValidationRun,
   decodeAbandonmentContext,
   decodeActiveValidationRun,
   decodeCandidate,
@@ -37,6 +35,7 @@ import {
   type UnknownValidationFindingRow,
   type UnknownValidationRoundRow,
   type UnknownValidationRunRow,
+  validateValidationRunAuthorityRelationships,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
 import {
@@ -321,7 +320,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         if (decoded.record.candidateId !== candidate.id) {
           throw new Error("Validation Run belongs to another Candidate");
         }
-        validateRunAuthorityRelationships(decoded, candidate.changeId, blockerHistory);
+        validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockerHistory);
         return decoded;
       }),
     );
@@ -495,7 +494,7 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
       "decode Candidate Validation Run",
     );
     yield* decodePersisted("decode Candidate Validation Run", () =>
-      validateRunAuthorityRelationships(decoded, candidate.changeId, blockers),
+      validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockers),
     );
     return decoded.record;
   });
@@ -527,7 +526,7 @@ const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
           const decoded = decodeValidationRun(row);
           if (decoded.record.candidateId !== candidateId)
             throw new Error("Validation Run belongs to another Candidate");
-          validateRunAuthorityRelationships(decoded, candidate.changeId, blockers);
+          validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockers);
           return decoded.record;
         })
         .sort(
@@ -604,11 +603,13 @@ const listFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
       [validationRunId],
     );
     const rounds = yield* listRounds(sql, validationRunId);
-    return yield* decodePersisted("decode Candidate validation Finding", () =>
-      rows
-        .map((row) => assertRunOwner(decodeValidationFinding(row), validationRunId))
-        .sort((left, right) => compareEvidence(left, right, rounds)),
-    );
+    return yield* decodePersisted("decode Candidate validation Finding", () => {
+      const findings = rows.map((row) =>
+        assertRunOwner(decodeValidationFinding(row), validationRunId),
+      );
+      validateFindingRoundRelationships(findings, rounds);
+      return findings.sort((left, right) => compareEvidence(left, right, rounds));
+    });
   });
 
 const listPreviousCandidateReviewerFindings = (
@@ -653,7 +654,7 @@ const listPreviousCandidateReviewerFindings = (
         if (run.candidateId !== owner || !candidateIds.has(owner)) {
           throw new Error("Validation Run belongs to a foreign Candidate");
         }
-        validateRunAuthorityRelationships(decoded, current.changeId, blockers);
+        validateValidationRunAuthorityRelationships(decoded, current.changeId, blockers);
         return run;
       }),
     );
@@ -692,6 +693,7 @@ const listPreviousCandidateReviewerFindings = (
           throw new Error("Finding belongs to a foreign Run");
         return finding;
       });
+      validateFindingRoundRelationships(findings, rounds);
       return { rounds, findings };
     });
 
@@ -797,16 +799,26 @@ const compareEvidence = (
   findingRound(left, rounds) - findingRound(right, rounds) ||
   compareStrings(left.id, right.id);
 
+const validateFindingRoundRelationships = (
+  findings: readonly CandidateValidationFinding[],
+  rounds: readonly CandidateValidationRound[],
+): void => {
+  for (const finding of findings) findingRound(finding, rounds);
+};
+
 const findingRound = (
   finding: CandidateValidationFinding,
   rounds: readonly CandidateValidationRound[],
-): number =>
-  rounds.find(
-    (round) =>
-      round.validationRunId === finding.validationRunId &&
-      round.phase === finding.phase &&
-      round.producer === finding.producer,
-  )?.roundNumber ?? 0;
+): number => {
+  const round = rounds.find(
+    (candidate) =>
+      candidate.validationRunId === finding.validationRunId &&
+      candidate.phase === finding.phase &&
+      candidate.producer === finding.producer,
+  );
+  if (round === undefined) throw new Error("Finding has no related Validation round");
+  return round.roundNumber;
+};
 
 const artifactPathOrder = (path: string): number => {
   if (path.endsWith("/stdout.txt")) return 0;
@@ -868,44 +880,6 @@ const readBlockerHistory = (sql: SqlClient.SqlClient, changeId: string, operatio
       decodeImplementationBlockerHistory(rows, changeId),
     );
   });
-
-const validateRunAuthorityRelationships = (
-  run: DecodedValidationRun,
-  changeId: string,
-  blockers: ImplementationBlockerHistory,
-): void => {
-  if (
-    run.latestResolvedBlockerId !== null &&
-    !blockers.blockers.some(
-      (blocker) => blocker.id === run.latestResolvedBlockerId && blocker.resolution !== null,
-    )
-  ) {
-    throw new Error("Validation Run latest resolved Blocker belongs to another Change");
-  }
-  const decisionIds = new Set<string>();
-  const decisionSequences = new Set<number>();
-  let previousSequence = 0;
-  for (const decision of run.record.implementationDecisions) {
-    if (decision.changeId !== changeId) {
-      throw new Error("Validation Run Implementation Decision belongs to another Change");
-    }
-    if (!Number.isSafeInteger(decision.sequence) || decision.sequence <= 0) {
-      throw new Error(
-        "Validation Run Implementation Decision sequence must be a positive safe integer",
-      );
-    }
-    if (
-      decisionIds.has(decision.id) ||
-      decisionSequences.has(decision.sequence) ||
-      decision.sequence <= previousSequence
-    ) {
-      throw new Error("Validation Run Implementation Decision ordering is inconsistent");
-    }
-    decisionIds.add(decision.id);
-    decisionSequences.add(decision.sequence);
-    previousSequence = decision.sequence;
-  }
-};
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

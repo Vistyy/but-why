@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 
 import {
   type ChangeCleanup,
@@ -23,14 +23,15 @@ import type {
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
-import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
-  decodeSqliteCandidateValidationPolicy,
-  encodeSqliteCandidateValidationPolicy,
-} from "./sqliteCandidateValidationPolicy.js";
+  decodeValidationRun,
+  type UnknownValidationRunRow,
+  validateValidationRunAuthorityRelationships,
+} from "./sqliteCandidateValidationReadModel.js";
 import {
   changeReadColumns,
   decodeChangeRow,
@@ -45,11 +46,7 @@ import {
   type UnknownImplementationDecisionRow,
   validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
+import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangePersistence = (): Effect.Effect<
   ChangePersistence,
@@ -310,11 +307,12 @@ const getPassingPublicationEvidence = (
     if (change === undefined || change.publication === null) return undefined;
     if (change.publication.pullRequest === null) return undefined;
     const rows = yield* sql<PassingPublicationEvidenceRow>`
-      SELECT candidate.id AS candidateId, run.id AS validationRunId,
+      SELECT candidate.id AS publicationCandidateId,
         candidate.change_base_sha AS changeBaseSha, candidate.head_sha AS headSha,
-        run.policy_snapshot AS policySnapshot,
+        run.id, run.candidate_id AS candidateId, run.policy_snapshot AS policySnapshot,
         run.implementation_decisions AS implementationDecisions,
-        run.state, run.outcome, run.latest_resolved_blocker_id AS latestResolvedBlockerId
+        run.latest_resolved_blocker_id AS latestResolvedBlockerId,
+        run.state, run.outcome, run.created_at AS createdAt, run.updated_at AS updatedAt
       FROM candidates AS candidate
       JOIN candidate_validation_runs AS run ON run.id = ${change.publication.validationRunId}
       WHERE candidate.id = ${change.publication.candidateId}
@@ -326,64 +324,26 @@ const getPassingPublicationEvidence = (
         "Publication identity disappeared",
       );
     }
-    const decoded = yield* decodePersisted("get passing publication evidence", () => {
-      const state = decodeStoredString(row.state, "Validation Run state");
-      const outcome = decodeStoredNullableString(row.outcome, "Validation Run outcome");
-      if (state !== "running" && state !== "complete") {
-        throw new Error("Stored Validation Run state is unsupported");
-      }
-      if (
-        outcome !== null &&
-        outcome !== "passed" &&
-        outcome !== "blocked" &&
-        outcome !== "tooling_failed"
-      ) {
-        throw new Error("Stored Validation Run outcome is unsupported");
-      }
-      if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
-        throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
-      }
-      const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
-      decodeSqliteCandidateValidationPolicy(policySnapshot);
-      const implementationDecisions = decodeStoredString(
-        row.implementationDecisions,
-        "Implementation Decision Snapshot",
-      );
-      Schema.decodeUnknownSync(Schema.parseJson(implementationDecisionSnapshotSchema), {
-        onExcessProperty: "error",
-      })(implementationDecisions);
-      return {
-        candidateId: decodeStoredString(row.candidateId, "publication Candidate ID"),
-        validationRunId: decodeStoredString(row.validationRunId, "publication Validation Run ID"),
-        changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
-        headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
-        policySnapshot,
-        implementationDecisions,
-        state,
-        outcome,
-        latestResolvedBlockerId: decodeStoredNullableString(
-          row.latestResolvedBlockerId,
-          "Validation Run latest resolved Blocker ID",
-        ),
-      };
-    });
+    const decoded = yield* decodePersisted("get passing publication evidence", () => ({
+      publicationCandidateId: decodeStoredString(
+        row.publicationCandidateId,
+        "publication Candidate ID",
+      ),
+      changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
+      headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
+      run: decodeValidationRun(row),
+    }));
     const blockerHistory = yield* readBlockers(sql, change.id, "get passing publication evidence");
+    yield* decodePersisted("get passing publication evidence", () =>
+      validateValidationRunAuthorityRelationships(decoded.run, change.id, blockerHistory),
+    );
     if (
-      decoded.latestResolvedBlockerId !== null &&
-      !blockerHistory.blockers.some(
-        (blocker) => blocker.id === decoded.latestResolvedBlockerId && blocker.resolution !== null,
-      )
-    ) {
-      return yield* invalidData(
-        "get passing publication evidence",
-        "Validation Run latest resolved Blocker belongs to another Change",
-      );
-    }
-    if (
-      decoded.state !== "complete" ||
-      decoded.outcome !== "passed" ||
+      decoded.run.record.id !== change.publication.validationRunId ||
+      decoded.run.record.candidateId !== decoded.publicationCandidateId ||
+      decoded.run.record.state !== "complete" ||
+      decoded.run.record.outcome !== "passed" ||
       decoded.changeBaseSha !== authority.changeBaseSha ||
-      decoded.latestResolvedBlockerId !== latestResolvedBlockerId(blockerHistory)
+      decoded.run.latestResolvedBlockerId !== latestResolvedBlockerId(blockerHistory)
     ) {
       return undefined;
     }
@@ -397,14 +357,14 @@ const getPassingPublicationEvidence = (
     });
     const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
     if (
-      decoded.policySnapshot !== expectedPolicySnapshot ||
-      decoded.implementationDecisions !== expectedDecisionsSnapshot
+      decoded.run.policySnapshot !== expectedPolicySnapshot ||
+      decoded.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot
     ) {
       return undefined;
     }
     return {
-      candidateId: decoded.candidateId,
-      validationRunId: decoded.validationRunId,
+      candidateId: decoded.publicationCandidateId,
+      validationRunId: decoded.run.record.id,
       changeBaseSha: decoded.changeBaseSha,
       headSha: decoded.headSha,
     } satisfies ChangePublicationEvidence;
@@ -728,14 +688,8 @@ const mapRow = (
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
-type PassingPublicationEvidenceRow = {
-  readonly candidateId: unknown;
-  readonly validationRunId: unknown;
+type PassingPublicationEvidenceRow = UnknownValidationRunRow & {
+  readonly publicationCandidateId: unknown;
   readonly changeBaseSha: unknown;
   readonly headSha: unknown;
-  readonly policySnapshot: unknown;
-  readonly implementationDecisions: unknown;
-  readonly state: unknown;
-  readonly outcome: unknown;
-  readonly latestResolvedBlockerId: unknown;
 };

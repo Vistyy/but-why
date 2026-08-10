@@ -10,6 +10,7 @@ import type {
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
+import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
 import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
@@ -111,6 +112,44 @@ export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValida
       "Validation Run latest resolved Blocker ID",
     ),
   };
+};
+
+export const validateValidationRunAuthorityRelationships = (
+  run: DecodedValidationRun,
+  changeId: string,
+  blockers: ImplementationBlockerHistory,
+): void => {
+  if (
+    run.latestResolvedBlockerId !== null &&
+    !blockers.blockers.some(
+      (blocker) => blocker.id === run.latestResolvedBlockerId && blocker.resolution !== null,
+    )
+  ) {
+    throw new Error("Validation Run latest resolved Blocker belongs to another Change");
+  }
+  const decisionIds = new Set<string>();
+  const decisionSequences = new Set<number>();
+  let previousSequence = 0;
+  for (const decision of run.record.implementationDecisions) {
+    if (decision.changeId !== changeId) {
+      throw new Error("Validation Run Implementation Decision belongs to another Change");
+    }
+    if (!Number.isSafeInteger(decision.sequence) || decision.sequence <= 0) {
+      throw new Error(
+        "Validation Run Implementation Decision sequence must be a positive safe integer",
+      );
+    }
+    if (
+      decisionIds.has(decision.id) ||
+      decisionSequences.has(decision.sequence) ||
+      decision.sequence <= previousSequence
+    ) {
+      throw new Error("Validation Run Implementation Decision ordering is inconsistent");
+    }
+    decisionIds.add(decision.id);
+    decisionSequences.add(decision.sequence);
+    previousSequence = decision.sequence;
+  }
 };
 
 export type UnknownActiveValidationRunRow = {
