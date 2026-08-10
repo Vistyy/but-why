@@ -1,6 +1,5 @@
-import { chmodSync, readdirSync, statSync } from "node:fs";
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { Clock, Effect } from "effect";
+import { Effect } from "effect";
 
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import {
@@ -23,11 +22,10 @@ import {
 } from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
-  type ReviewerContinuity,
-  type ReviewerSessionStore,
-  reviewerSessionFingerprint,
-  reviewerSessionsPath,
-} from "../reviewerSession/reviewerSession.js";
+  executeReviewerSession,
+  type ReviewerExecutionEvidence,
+} from "../reviewerSession/executeReviewerSession.js";
+import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
@@ -40,7 +38,6 @@ import {
 } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
@@ -194,7 +191,6 @@ const runSpecialist = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
-    const startedAt = yield* Clock.currentTimeMillis;
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );
@@ -236,126 +232,74 @@ const runSpecialist = (
           : { tools: policy.profile.profile.runtimeConfig.tools }),
       },
     } as const;
-    const fingerprint = reviewerSessionFingerprint(identity);
-    const stored =
-      input.sessionStore === undefined
-        ? undefined
-        : yield* input.sessionStore.get(input.changeId, policy.id);
-    const compatible =
-      stored !== undefined &&
-      stored.fingerprint === fingerprint &&
-      stored.sessionReference.length > 0;
-    let continuity: ReviewerContinuity = compatible
-      ? "resumed"
-      : stored === undefined
-        ? "fresh"
-        : "restarted";
-    let restartReason: string | undefined =
-      stored === undefined
-        ? undefined
-        : stored.fingerprint === fingerprint && stored.sessionReference.length === 0
-          ? "session_capture_unavailable"
-          : compatible
-            ? undefined
-            : "identity_mismatch";
-
-    let reviewCalls = 0;
-    const review = (resumeSession?: string, reviewPrompt = prompt) => {
-      reviewCalls += 1;
-      return input.runtime.review({
-        sandbox: input.sandbox,
-        reviewer: policy.id,
-        decodeOutput: (output) =>
-          decodeReviewerOutputContract({ reviewer: policy.id, attempts: reviewCalls, output }).pipe(
-            Effect.flatMap((decoded) =>
-              validateReviewerArtifactRefs({
-                reviewer: policy.id,
-                attempts: reviewCalls,
-                validationRunId: input.validationRunId,
-                output: decoded,
-                availableArtifactRefs,
-              }),
-            ),
-            Effect.mapError(
-              (failure) =>
-                new ReviewerExecutionFailed({
-                  operationName: failure.operationName,
-                  message: failure.message,
-                  diagnostics: failure.diagnostics,
-                  correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
-                }),
-            ),
-          ),
-        prompt:
-          compatible && resumeSession !== undefined && reviewPrompt === prompt
-            ? buildSpecialistContinuationPrompt({
-                specialist: policy.id,
-                instructions: policy.instructions,
-                validationRunId: input.validationRunId,
-                availableArtifactRefs,
-                candidate: input.candidate,
-                previousFindings: earlierFindings,
-                ...(input.acceptanceContext === undefined
-                  ? {}
-                  : { acceptanceContext: input.acceptanceContext }),
-              })
-            : reviewPrompt,
-        profile: policy.profile,
-        commandCwd: input.commandCwd,
-        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-        ...(input.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : {
-              sessionStorageRoot: reviewerSessionsPath(
-                input.sessionStorageRoot,
-                input.changeId,
-                policy.id,
-              ),
+    const execution = yield* executeReviewerSession({
+      identity,
+      runtime: input.runtime,
+      sandbox: input.sandbox,
+      decodeOutput: (output, reviewCall) =>
+        decodeReviewerOutputContract({
+          reviewer: policy.id,
+          attempts: reviewCall,
+          output,
+        }).pipe(
+          Effect.flatMap((decoded) =>
+            validateReviewerArtifactRefs({
+              reviewer: policy.id,
+              attempts: reviewCall,
+              validationRunId: input.validationRunId,
+              output: decoded,
+              availableArtifactRefs,
             }),
-        ...(resumeSession === undefined ? {} : { resumeSession }),
-      });
-    };
-
-    let provisional = translateRuntimeResult(
-      yield* review(compatible ? stored?.sessionReference : undefined),
-      policy.id,
-    );
-    if (!provisional.ok && compatible && provisional.sessionUsability === "unusable") {
-      continuity = "restarted";
-      restartReason = "session_unusable";
-      if (input.sessionStore !== undefined)
-        yield* input.sessionStore.remove(input.changeId, policy.id);
-      provisional = translateRuntimeResult(yield* review(), policy.id);
-    }
-    yield* verifyIntegrity(input);
-
-    let result = provisional;
-    if (provisional.ok && earlierFindings.length > 0) {
-      result = translateRuntimeResult(
-        yield* review(
-          provisional.sessionReference,
-          buildReviewerRevisionPrompt({
-            reviewPrompt: prompt,
-            provisionalReport: provisional.report,
-            earlierFindings,
-          }),
+          ),
+          Effect.mapError(
+            (failure) =>
+              new ReviewerExecutionFailed({
+                operationName: failure.operationName,
+                message: failure.message,
+                diagnostics: failure.diagnostics,
+                correctionPrompt: buildReviewerOutputCorrectionPrompt(failure),
+              }),
+          ),
         ),
-        policy.id,
-      );
-      yield* verifyIntegrity(input);
-    }
-    if (result.ok && result.sessionReference === undefined && restartReason === undefined) {
-      restartReason = "session_capture_unavailable";
-    }
-    const sessionPermissionsOk =
-      result.sessionFilePath === undefined || chmodSessionFile(result.sessionFilePath);
-    if (!sessionPermissionsOk && restartReason === undefined) {
-      restartReason = "session_permissions_unavailable";
-    }
-    const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
+      prompt,
+      continuationPrompt: buildSpecialistContinuationPrompt({
+        specialist: policy.id,
+        instructions: policy.instructions,
+        validationRunId: input.validationRunId,
+        availableArtifactRefs,
+        candidate: input.candidate,
+        previousFindings: earlierFindings,
+        ...(input.acceptanceContext === undefined
+          ? {}
+          : { acceptanceContext: input.acceptanceContext }),
+      }),
+      commandCwd: input.commandCwd,
+      ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+      ...(input.sessionStorageRoot === undefined
+        ? {}
+        : { sessionStorageRoot: input.sessionStorageRoot }),
+      ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
+      completeReview: ({ initialResult, review }) =>
+        Effect.gen(function* () {
+          yield* verifyIntegrity(input);
+          if (!initialResult.ok || earlierFindings.length === 0) return initialResult;
+          const result = yield* review(
+            buildReviewerRevisionPrompt({
+              reviewPrompt: prompt,
+              provisionalReport: initialResult.report,
+              earlierFindings,
+            }),
+            initialResult.sessionReference,
+          );
+          yield* verifyIntegrity(input);
+          return result;
+        }),
+    });
+    const result = translateRuntimeResult(execution.result, policy.id);
+    const reviewerEvidence = {
+      producer: policy.id,
+      ...execution.evidence,
+    };
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.specialistReview,
@@ -363,13 +307,7 @@ const runSpecialist = (
       result,
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      executionEvidence: {
-        continuity,
-        identityFingerprint: fingerprint,
-        ...(restartReason === undefined ? {} : { restartReason }),
-        durationMs,
-        reviewCalls,
-      },
+      executionEvidence: reviewerEvidence,
     });
     const findings = result.ok
       ? result.report.findings.map((finding, findingIndex) => ({
@@ -392,26 +330,10 @@ const runSpecialist = (
       now: input.now,
     });
 
-    if (result.ok && input.sessionStore !== undefined && sessionPermissionsOk) {
-      yield* input.sessionStore.save({
-        changeId: input.changeId,
-        producer: policy.id,
-        fingerprint,
-        sessionReference: result.sessionReference ?? "",
-      });
-    }
-
     return {
       hasFindings: findings.length > 0,
       ...(result.ok ? {} : { toolingFailure: result.failure }),
-      reviewerEvidence: {
-        producer: policy.id,
-        continuity,
-        identityFingerprint: fingerprint,
-        ...(restartReason === undefined ? {} : { restartReason }),
-        durationMs,
-        reviewCalls,
-      },
+      reviewerEvidence,
     };
   });
 
@@ -420,22 +342,6 @@ const progressProfile = (profile: SpecialistReviewPolicy["profile"]): SubmitProg
   model: profile.profile.runtimeConfig?.model ?? "unknown",
   thinking: profile.profile.runtimeConfig?.thinking ?? "default",
 });
-
-const chmodSessionFile = (path: string): boolean => {
-  try {
-    chmodSync(path, 0o700);
-    if (statSync(path).isDirectory()) {
-      for (const entry of readdirSync(path)) {
-        if (!chmodSessionFile(`${path}/${entry}`)) return false;
-      }
-    } else {
-      chmodSync(path, 0o600);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const verifyIntegrity = (
   input: RunSpecialistReviewPhaseInput,

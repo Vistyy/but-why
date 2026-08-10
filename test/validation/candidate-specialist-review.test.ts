@@ -192,6 +192,9 @@ describe("Candidate Specialist Review phase", () => {
         ]);
         for (const [input] of review.mock.calls) {
           expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+          expect(input.sessionStorageRoot).toContain(
+            `change-1/${input.reviewer}/reviewer-sessions`,
+          );
           expect(input.prompt).toContain(candidate.changeBaseSha);
           expect(input.prompt).toContain(candidate.headSha);
           expect(input.prompt).toContain(`${input.reviewer} concern instructions`);
@@ -275,6 +278,7 @@ describe("Candidate Specialist Review phase", () => {
         expect(review.mock.calls[0]?.[0].prompt).not.toContain(earlier.title);
         expect(review.mock.calls[1]?.[0].prompt).toContain(earlier.title);
         expect(review.mock.calls[1]?.[0].prompt).toContain("Provisional Finding");
+        expect(review.mock.calls[1]?.[0].resumeSession).toBe("provisional-session");
         expect(harness.rounds[0]?.roundStatus).toBe("passed");
         expect(harness.rounds[0]?.findings).toEqual([]);
 

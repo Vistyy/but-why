@@ -1,20 +1,15 @@
 import { Effect } from "effect";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
-import type { ReviewerContinuity } from "../reviewerSession/reviewerSession.js";
+import type { ReviewerExecutionEvidence } from "../reviewerSession/executeReviewerSession.js";
+
+export type { ReviewerExecutionEvidence } from "../reviewerSession/executeReviewerSession.js";
+
 import {
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { writeValidationRunArtifactFile } from "./artifactFiles.js";
 import type { ValidationPhase, ValidationRunArtifactRecord } from "./validationRun.js";
-
-export type ReviewerExecutionEvidence = {
-  readonly continuity: ReviewerContinuity;
-  readonly identityFingerprint: string;
-  readonly restartReason?: string;
-  readonly durationMs: number;
-  readonly reviewCalls: number;
-};
 
 export const writeReviewerArtifacts = (input: {
   readonly validationRunId: string;
