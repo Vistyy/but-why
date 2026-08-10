@@ -53,11 +53,19 @@ Tasks do not currently represent membership in one overarching planning effort, 
 Future design must decide whether a durable planning aggregate should own the overarching outcome, accepted requirements and constraints, unresolved decisions, holistic verification mapping, and intended decomposition.
 It must support partial Task materialization without treating the currently recorded Tasks as the complete plan.
 
+Any future Planning Review must distinguish accepted requirements and observed repository constraints from candidate mechanisms before those candidates become Task scope, dependencies, implementation constraints, or verification obligations.
+Reviewer conclusions may identify unsupported or disproportionate scope, but they must not themselves expand planning authority.
+Planning Review must not require speculative within-Task implementation structure solely to make a proposal reviewable.
+
 The design must determine whether review targets the complete aggregate, an explicitly bounded Task set, or both.
 It must define how reviewers judge requirement coverage, Task ownership and overlap, decomposition, and initiative-level overengineering or underengineering when only part of the work has become Tasks.
+It must evaluate how proposed ownership, interfaces, state, and coordination compose across the reviewed boundary rather than judging each Task only in isolation.
+A locally coherent Task can still contribute to an incoherent aggregate when its building blocks duplicate knowledge, representation, state, or coordination across Tasks.
 An arbitrary Task set must not imply completeness or shared planning authority without an explicit boundary that gives the set that meaning.
+Without that boundary, a reviewer cannot conclude that the aggregate design or decomposition is complete.
 
 Before implementation, define approval authority, lifecycle, storage, review history, Task derivation, revision behavior, and the relationship with Task Approval and Task Recording Authorization.
+The design must decide whether Planning Review occurs before Task Recording Authorization, which material revisions require another review, and whether consequential structure selected after Task Approval needs a separate review before broad implementation.
 The design should replace temporary tracked planning artifacts without moving active planning intent into another repository document convention.
 
 ## Does Task readiness need another gate?

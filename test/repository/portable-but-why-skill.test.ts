@@ -80,27 +80,35 @@ describe("portable But Why skill", () => {
     expect(implementerSession).toContain("Do not repeat the Change ID, Task ID");
     expect(implementerSession).toContain("Do not retry an uncertain start or initial prompt.");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
+    expect(authority).toContain(
+      "the proposed Task Contexts and Task Dependencies for one selected work item",
+    );
+    expect(authorTasks).toContain(
+      "Propose the complete Task graph for the selected approved work item before mutation.",
+    );
+    expect(authorTasks).toContain(
+      "Do not infer approval from brainstorming or provisional planning.",
+    );
+    expect(authorTasks).toContain(
+      "Split approved intent only when material evidence identifies multiple independently acceptable bounded supported results.",
+    );
+    expect(authorTasks).toContain(
+      "Reconsider a boundary only when concrete evidence shows that a human cannot coherently review the complete result.",
+    );
     expect(authorTasks).toContain(
       "Include a `## Review path` section in every proposed Task Context.",
     );
     expect(authorTasks).toContain(
-      "State the one coherent judgment that relates the complete result's behavior groups, state relationships, interface changes, and required evidence and shows why they form one bounded supported result that a human can understand and judge.",
-    );
-    expect(authorTasks).toContain(
-      "A sequence of review areas, passes, or verification mechanisms does not supply that judgment.",
+      "State a practical path for a human to review and verify the Task as one bounded supported result.",
     );
     expect(authorTasks).toContain(
       "Use available repository evidence, including evidence from prior implementation attempts, to decide whether the path is practical.",
     );
     expect(authorTasks).toContain(
-      "When available evidence has disproved a review path, do not reuse that path or a materially equivalent Task boundary unless concrete evidence shows why the observed mismatch no longer applies.",
+      "When available evidence has disproved a review path, do not reuse it or a materially equivalent Task boundary unless concrete evidence shows why the observed mismatch no longer applies.",
     );
     expect(authorTasks).toContain(
-      "Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring either a split or concrete evidence that they form one bounded supported result.",
-    );
-    expect(authorTasks).toContain("Calling them one subsystem or lifecycle is not that evidence.");
-    expect(authorTasks).toContain(
-      "No single file, line, effort, or verification count determines the boundary.",
+      "The number of behavior groups, state relationships, interface changes, implementation areas, or verification arguments does not alone require a split or reconsideration.",
     );
     expect(authorTasks).toContain(
       "Do not turn the review path into a detailed implementation plan, an exact file forecast, a line estimate, or an effort estimate.",
@@ -111,7 +119,9 @@ describe("portable But Why skill", () => {
     expect(authorTasks).toContain(
       "If no practical review path can be stated, present the evidence and concern instead of requesting Task Recording Authorization.",
     );
-    expect(authorTasks).toContain("exact Task Contexts including each `## Review path` section");
+    expect(authorTasks).toContain(
+      "selected work item's complete Task graph, exact Task Contexts including each `## Review path` section",
+    );
     expect(taskVerification).toContain("Task Verification Contract");
     expect(taskVerification).toContain(
       "**Required Seam** is a boundary required by a Verification Claim or accepted verification plan because interaction across that boundary is part of the Claim.",
@@ -127,25 +137,19 @@ describe("portable But Why skill", () => {
     );
     expect(taskVerification).toContain("Do not require tests by default.");
     expect(implementation).toContain(
-      "Before implementation, read its accepted `## Review path` as the one coherent judgment that relates the complete result's behavior groups, state relationships, interface changes, and required evidence and shows why they form one bounded supported result that a human can understand and judge.",
+      "Before implementation, read its accepted `## Review path` as the authority for how a human can review and verify the Task as one bounded supported result.",
     );
     expect(implementation).toContain(
-      "A sequence of review areas, passes, or verification mechanisms does not supply that judgment.",
+      "For a Task-backed Change, reassess the actual implementation against the accepted bounded result and `## Review path` only when it materially differs from either or the current Acceptance Context materially changes.",
     );
     expect(implementation).toContain(
-      "For a Task-backed Change, reassess the accepted review path as soon as the implementation shape becomes concrete, before continuing materially dependent work, immediately before the first Change Submit, and after later work materially changes that shape.",
+      "Do not repeat the assessment until the actual work or Acceptance Context changes materially again.",
     );
     expect(implementation).toContain(
-      "Compare the actual behavior groups, state relationships, interface changes, and verification arguments with the one coherent judgment stated by the accepted review path.",
+      "A Task review path is disproven only when actual evidence identifies another independently acceptable bounded supported result or shows that a human can no longer understand and judge the complete Change through the accepted path.",
     );
     expect(implementation).toContain(
-      "A Task review path is disproven when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.",
-    );
-    expect(implementation).toContain(
-      "Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring a blocker unless concrete evidence shows that they form the one bounded supported result stated by the accepted review path.",
-    );
-    expect(implementation).toContain(
-      "Size, file count, line count, or Validation Run count alone does not disprove a review path.",
+      "Multiple independently understandable behavior groups, state relationships, interface changes, implementation areas, or verification arguments do not alone disprove the review path or require a blocker.",
     );
     expect(implementation).toContain(
       "raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work",
@@ -158,6 +162,12 @@ describe("portable But Why skill", () => {
     );
     expect(implementation).toContain(
       "Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery while the accepted review path remains practical.",
+    );
+    expect(implementation).toContain(
+      "The Operator pauses or stops implementation, cancels the work, or withdraws Implementation Authorization.",
+    );
+    expect(implementation).toContain(
+      "do not mutate the Change or Managed Worktree further and report only the current Change state and whether the Managed Worktree contains uncommitted or unsubmitted work",
     );
     expect(implementation).toContain("target repository's configured blocking Check");
     expect(implementation).toContain(

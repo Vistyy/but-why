@@ -5,14 +5,16 @@ Let `<but-why>` represent the command prefix resolved by the But Why command gui
 
 ## Completion control
 
-The Implementer must continue until a return condition applies.
-The Implementer must not return a final progress report.
+While Implementation Authorization remains active, the Implementer must continue until a return condition applies and must not return a progress-only report.
 The Implementer may return control only when one of these conditions applies:
 
 - Change Submit reports a ready owned pull request.
 - An Implementation Blocker requires operator authority.
 - A Tooling Failure prevents trustworthy validation.
 - An uncertain or operator-owned Submit failure provides no Submit Recovery Guidance.
+- The Operator pauses or stops implementation, cancels the work, or withdraws Implementation Authorization.
+
+When the Operator-controlled return condition applies, do not mutate the Change or Managed Worktree further and report only the current Change state and whether the Managed Worktree contains uncommitted or unsubmitted work.
 Incomplete design, routine implementation, focused Check failure, Findings, and authorized Submit recovery do not permit the Implementer to return control.
 
 ## 1. Read the accepted context
@@ -20,8 +22,7 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
-Before implementation, read its accepted `## Review path` as the one coherent judgment that relates the complete result's behavior groups, state relationships, interface changes, and required evidence and shows why they form one bounded supported result that a human can understand and judge.
-A sequence of review areas, passes, or verification mechanisms does not supply that judgment.
+Before implementation, read its accepted `## Review path` as the authority for how a human can review and verify the Task as one bounded supported result.
 Do not treat the review path as an implementation plan, file forecast, size limit, or effort estimate.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
@@ -54,11 +55,10 @@ Continue through recoverable problems and local implementation choices.
 Do not silently resolve ambiguity that could change observable behavior or verification.
 Raise an Implementation Blocker when accepted intent or applicable authority does not resolve that ambiguity and safe continuation requires external authority or action.
 Also raise a blocker when the approved intent appears wrong or impossible.
-For a Task-backed Change, reassess the accepted review path as soon as the implementation shape becomes concrete, before continuing materially dependent work, immediately before the first Change Submit, and after later work materially changes that shape.
-Compare the actual behavior groups, state relationships, interface changes, and verification arguments with the one coherent judgment stated by the accepted review path.
-A Task review path is disproven when actual implementation evidence shows that a human can no longer understand and judge the complete Change through that accepted path.
-Treat multiple independently understandable behavior groups, state relationships, interface changes, or verification arguments as boundary evidence requiring a blocker unless concrete evidence shows that they form the one bounded supported result stated by the accepted review path.
-Size, file count, line count, or Validation Run count alone does not disprove a review path.
+For a Task-backed Change, reassess the actual implementation against the accepted bounded result and `## Review path` only when it materially differs from either or the current Acceptance Context materially changes.
+Do not repeat the assessment until the actual work or Acceptance Context changes materially again.
+A Task review path is disproven only when actual evidence identifies another independently acceptable bounded supported result or shows that a human can no longer understand and judge the complete Change through the accepted path.
+Multiple independently understandable behavior groups, state relationships, interface changes, implementation areas, or verification arguments do not alone disprove the review path or require a blocker.
 When the accepted review path is disproven, preserve completed work and raise an Implementation Blocker that states the concrete mismatch between the accepted path and actual work.
 Do not split, cancel, replace, amend, or continue the Task autonomously.
 The Operator decides whether to continue, resolve, cancel, or replace the Task.
