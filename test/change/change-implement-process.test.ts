@@ -93,7 +93,6 @@ exit 1
           root,
           "Implementer prompt from piped stdin\n",
           env,
-          "--json",
           "change",
           "implement",
           fixture.id,
@@ -131,7 +130,6 @@ exit 1
         const added = runBuiltByWithEnv(
           root,
           {},
-          "--json",
           "change",
           "decision",
           "add",
@@ -142,15 +140,7 @@ exit 1
           "Keep the process boundary explicit.",
         );
         expect(added.status).toBe(0);
-        const listed = runBuiltByWithEnv(
-          root,
-          {},
-          "--json",
-          "change",
-          "decision",
-          "list",
-          changeId,
-        );
+        const listed = runBuiltByWithEnv(root, {}, "change", "decision", "list", changeId);
         expect(listed.status).toBe(0);
         expect(JSON.parse(listed.stdout)).toMatchObject({
           changeId,

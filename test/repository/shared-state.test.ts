@@ -35,9 +35,9 @@ describe("shared repository state", () => {
       const result = yield* runByInProcessEffect(linked, ["task", "list"]);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("id: BY-1");
-      expect(result.stdout).toContain("title: Shared");
-      expect(result.stdout).toContain("state: new");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        tasks: [{ id: "BY-1", title: "Shared", state: "new" }],
+      });
       expect(existsSync(sharedStatePath(root))).toBe(true);
       expect(existsSync(join(root, ".but-why", "state.sqlite"))).toBe(false);
       expect(existsSync(join(linked, ".but-why", "state.sqlite"))).toBe(false);
@@ -67,13 +67,7 @@ describe("shared repository state", () => {
         const rootStatusBeforeDraft = git(root, "status", "--short");
         const linkedStatusBeforeDraft = git(linked, "status", "--short");
 
-        const draftResult = yield* runByInProcessEffect(root, [
-          "--json",
-          "task",
-          "context",
-          "draft",
-          "BY-1",
-        ]);
+        const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Shared updated\n\nUpdated from another worktree");
 
@@ -85,9 +79,9 @@ describe("shared repository state", () => {
         const contextResult = yield* runByInProcessEffect(linked, ["task", "context", "BY-1"]);
 
         expect(applyResult.status).toBe(0);
-        expect(contextResult.stdout).toContain(
-          "title: Shared updated\n  description: Updated from another worktree",
-        );
+        expect(JSON.parse(contextResult.stdout)).toMatchObject({
+          task: { title: "Shared updated", description: "Updated from another worktree" },
+        });
         expect(existsSync(draft.draft.path)).toBe(false);
         expect(git(root, "status", "--short")).toBe(rootStatusBeforeDraft);
         expect(git(linked, "status", "--short")).toBe(linkedStatusBeforeDraft);
@@ -121,11 +115,15 @@ describe("shared repository state", () => {
       const result = yield* runByInProcessEffect(root, ["task", "list"]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toBe(`error:
-  code: shared_state_identity_conflict
-  message: Shared But Why? state belongs to a different Git repository.
-help[1]: "Restore the repository's own shared state, then run \`by init --task-prefix <prefix>\`."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "shared_state_identity_conflict",
+          message: "Shared But Why? state belongs to a different Git repository.",
+        },
+        help: [
+          "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
+        ],
+      });
     }),
   );
 });

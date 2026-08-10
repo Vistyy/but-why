@@ -9,12 +9,7 @@ describe("CLI Task ID boundary", () => {
   it.effect("rejects an overlong Task ID at the CLI boundary", () =>
     Effect.gen(function* () {
       const taskId = "A".repeat(257);
-      const result = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--json",
-        "task",
-        "show",
-        taskId,
-      ]);
+      const result = yield* runByInProcessEffect(createTestWorkspace(), ["task", "show", taskId]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");

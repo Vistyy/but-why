@@ -26,22 +26,6 @@ rule:
     - pattern: $RUNTIME.runFork($$$ARGS)
     - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: toon-package-belongs-to-output-codec
-language: TypeScript
-severity: error
-message: Do not load @toon-format/toon outside src/output/toon.ts because output ownership keeps format dependencies at the codec; return structured results and let the codec encode them.
-files:
-  - src/**/*.ts
-ignores:
-  - src/output/toon.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*["`]@toon-format/toon["`][\s\S]*'
-    - pattern: import("@toon-format/toon")
-    - pattern: require("@toon-format/toon")
----
 id: sandcastle-factories-belong-to-workspace
 language: TypeScript
 severity: error

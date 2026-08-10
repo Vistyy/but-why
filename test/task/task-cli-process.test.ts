@@ -1,5 +1,4 @@
 import { expect, it } from "@effect/vitest";
-import { decode } from "@toon-format/toon";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
@@ -25,7 +24,6 @@ describe("by task CLI process boundary", () => {
           root,
           description,
           {},
-          "--json",
           "task",
           "create",
           "--title",
@@ -44,7 +42,7 @@ describe("by task CLI process boundary", () => {
 
         const persisted = yield* runByInProcessEffect(root, ["task", "context", "BY-1"]);
         expect(persisted.status).toBe(0);
-        expect(decode(persisted.stdout)).toMatchObject({
+        expect(JSON.parse(persisted.stdout)).toMatchObject({
           task: { id: "BY-1", description },
         });
 
@@ -52,7 +50,6 @@ describe("by task CLI process boundary", () => {
           root,
           Buffer.from([0xff]),
           {},
-          "--json",
           "task",
           "create",
           "--title",

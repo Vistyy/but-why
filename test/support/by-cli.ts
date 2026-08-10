@@ -127,7 +127,7 @@ type InProcessCliOptions = {
 
 const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
   status: result.exitCode,
-  stdout: serializeOutput(result.stdout, result.outputFormat ?? "toon"),
+  stdout: serializeOutput(result.stdout),
   stderr: "",
 });
 

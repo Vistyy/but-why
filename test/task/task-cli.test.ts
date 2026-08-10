@@ -22,7 +22,6 @@ describe("by task CLI", () => {
   it.effect("documents shared recording input for Task create in generated help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--json",
         "task",
         "create",
         "--help",
@@ -51,21 +50,24 @@ describe("by task CLI", () => {
 
         expect(result.status).toBe(0);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toBe(`task:
-  id: BY-1
-  title: Add   login
-  state: new
-  createdAt: "${firstNow}"
-  updatedAt: "${firstNow}"
-  prerequisites: []
-  dependents: []
-  change: null
-context:
-  id: BY-1
-  title: Add   login
-  description: "  Preserve me exactly.\\n\\n"
-help[1]: Run \`by task list\` to see open tasks.
-`);
+        expect(JSON.parse(result.stdout)).toEqual({
+          task: {
+            id: "BY-1",
+            title: "Add   login",
+            state: "new",
+            createdAt: firstNow,
+            updatedAt: firstNow,
+            prerequisites: [],
+            dependents: [],
+            change: null,
+          },
+          context: {
+            id: "BY-1",
+            title: "Add   login",
+            description: "  Preserve me exactly.\n\n",
+          },
+          help: ["Run `by task list` to see open tasks."],
+        });
       }),
   );
 
@@ -96,20 +98,14 @@ help[1]: Run \`by task list\` to see open tasks.
 
       expect(firstApproval.status).toBe(0);
       expect(firstApproval.stderr).toBe("");
-      expect(firstApproval.stdout).toBe(`task:
-  id: BY-1
-  state: todo
-  changed: true
-  updatedAt: "${secondNow}"
-`);
+      expect(JSON.parse(firstApproval.stdout)).toEqual({
+        task: { id: "BY-1", state: "todo", changed: true, updatedAt: secondNow },
+      });
       expect(repeatedApproval.status).toBe(0);
       expect(repeatedApproval.stderr).toBe("");
-      expect(repeatedApproval.stdout).toBe(`task:
-  id: BY-1
-  state: todo
-  changed: false
-  updatedAt: "${secondNow}"
-`);
+      expect(JSON.parse(repeatedApproval.stdout)).toEqual({
+        task: { id: "BY-1", state: "todo", changed: false, updatedAt: secondNow },
+      });
     }),
   );
 
@@ -128,9 +124,15 @@ help[1]: Run \`by task list\` to see open tasks.
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_task_state");
-      expect(result.stdout).toContain("Cannot approve task BY-1 from state done");
-      expect(result.stdout).toContain("Task is already done.");
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_task_state",
+          message: "Cannot approve task BY-1 from state done",
+          taskId: "BY-1",
+          state: "done",
+        },
+        help: ["Task is already done."],
+      });
     }),
   );
 
@@ -157,7 +159,7 @@ help[1]: Run \`by task list\` to see open tasks.
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("id: BY-1");
+      expect(JSON.parse(result.stdout)).toMatchObject({ task: { id: "BY-1" } });
     }),
   );
 
@@ -196,24 +198,30 @@ help[1]: Run \`by task list\` to see open tasks.
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`count: 2
-total: 2
-tasks[2]:
-  - id: BY-1
-    title: First
-    state: new
-    createdAt: "${firstNow}"
-    updatedAt: "${firstNow}"
-    blockedBy: []
-    change: null
-  - id: BY-2
-    title: Second
-    state: todo
-    createdAt: "${secondNow}"
-    updatedAt: "${thirdNow}"
-    blockedBy: []
-    change: null
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        count: 2,
+        total: 2,
+        tasks: [
+          {
+            id: "BY-1",
+            title: "First",
+            state: "new",
+            createdAt: firstNow,
+            updatedAt: firstNow,
+            blockedBy: [],
+            change: null,
+          },
+          {
+            id: "BY-2",
+            title: "Second",
+            state: "todo",
+            createdAt: secondNow,
+            updatedAt: thirdNow,
+            blockedBy: [],
+            change: null,
+          },
+        ],
+      });
     }),
   );
 
@@ -235,25 +243,25 @@ tasks[2]:
 
       const defaultResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list"],
+        ["task", "list"],
         firstNow,
         { taskUseCases },
       );
       const numericResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list", "--limit", "2"],
+        ["task", "list", "--limit", "2"],
         firstNow,
         { taskUseCases },
       );
       const unlimitedResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list", "--limit", "all"],
+        ["task", "list", "--limit", "all"],
         firstNow,
         { taskUseCases },
       );
       const filteredResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list", "--state", "done", "--limit", "2"],
+        ["task", "list", "--state", "done", "--limit", "2"],
         firstNow,
         { taskUseCases },
       );
@@ -275,7 +283,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list", "--limit", "0"],
+        ["task", "list", "--limit", "0"],
         firstNow,
         {
           taskUseCases: fakeTaskUseCases({
@@ -300,7 +308,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--json", "task", "list"],
+        ["task", "list"],
         firstNow,
         {
           taskUseCases: fakeTaskUseCases({
@@ -335,13 +343,13 @@ tasks[2]:
         },
       });
 
-      yield* runByInProcessEffect(root, ["--json", "task", "list"], firstNow, {
+      yield* runByInProcessEffect(root, ["task", "list"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"], firstNow, {
+      yield* runByInProcessEffect(root, ["task", "list", "--all"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(root, ["--json", "task", "list", "--state", "done"], firstNow, {
+      yield* runByInProcessEffect(root, ["task", "list", "--state", "done"], firstNow, {
         taskUseCases,
       });
 
@@ -369,17 +377,19 @@ tasks[2]:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`task:
-  id: BY-1
-  title: Inspect task
-  state: todo
-  createdAt: "${firstNow}"
-  updatedAt: "${secondNow}"
-  prerequisites: []
-  dependents: []
-  change: null
-contextCommand: by task context BY-1
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        task: {
+          id: "BY-1",
+          title: "Inspect task",
+          state: "todo",
+          createdAt: firstNow,
+          updatedAt: secondNow,
+          prerequisites: [],
+          dependents: [],
+          change: null,
+        },
+        contextCommand: "by task context BY-1",
+      });
     }),
   );
 
@@ -402,11 +412,9 @@ contextCommand: by task context BY-1
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`task:
-  id: BY-1
-  title: Use context
-  description: "Full intent\\n\\nWith details."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        task: { id: "BY-1", title: "Use context", description: "Full intent\n\nWith details." },
+      });
     }),
   );
 
@@ -416,13 +424,7 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Draft title");
 
-      const result = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const result = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -446,13 +448,7 @@ contextCommand: by task context BY-1
       yield* createTask(root, firstNow, "Blocked draft");
       writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
 
-      const result = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const result = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
 
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stdout)).toMatchObject({
@@ -467,20 +463,14 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Original title");
       const firstDraft = JSON.parse(
-        (yield* runByInProcessEffect(root, ["--json", "task", "context", "draft", "BY-1"])).stdout,
+        (yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"])).stdout,
       ) as { draft: { path: string } };
       writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
       expect(
         (yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"], secondNow)).status,
       ).toBe(0);
 
-      const draftResult = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Discard this draft");
 
@@ -498,19 +488,13 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Original title");
 
-      const draftResult = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "#  Updated title  \n\nUpdated description\n\n");
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "task", "context", "apply", "BY-1"],
+        ["task", "context", "apply", "BY-1"],
         secondNow,
       );
 
@@ -531,9 +515,9 @@ contextCommand: by task context BY-1
         },
       });
       expect(existsSync(draft.draft.path)).toBe(false);
-      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-        'title: Updated title\n  description: "Updated description\\n\\n"',
-      );
+      expect(
+        JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
+      ).toMatchObject({ task: { title: "Updated title", description: "Updated description\n\n" } });
     }),
   );
 
@@ -543,13 +527,7 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Original title");
 
-      const draftResult = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Updated title\n\nUpdated description");
 
@@ -561,11 +539,13 @@ contextCommand: by task context BY-1
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_task_context_draft");
+      expect(JSON.parse(result.stdout).error.code).toBe("invalid_task_context_draft");
       expect(existsSync(draft.draft.path)).toBe(true);
-      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-        "title: Original title\n  description: Description for Original title",
-      );
+      expect(
+        JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
+      ).toMatchObject({
+        task: { title: "Original title", description: "Description for Original title" },
+      });
     }),
   );
 
@@ -574,13 +554,7 @@ contextCommand: by task context BY-1
       const root = yield* initializedRepo();
 
       yield* createTask(root, firstNow, "Original title");
-      const draftResult = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "context",
-        "draft",
-        "BY-1",
-      ]);
+      const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "# Updated title\nUpdated description");
 
@@ -591,11 +565,13 @@ contextCommand: by task context BY-1
       );
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("code: invalid_task_context_draft");
+      expect(JSON.parse(result.stdout).error.code).toBe("invalid_task_context_draft");
       expect(existsSync(draft.draft.path)).toBe(true);
-      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-        "title: Original title\n  description: Description for Original title",
-      );
+      expect(
+        JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
+      ).toMatchObject({
+        task: { title: "Original title", description: "Description for Original title" },
+      });
     }),
   );
 
@@ -606,13 +582,7 @@ contextCommand: by task context BY-1
         const root = yield* initializedRepo();
 
         yield* createTask(root, firstNow, "Original title");
-        const draftResult = yield* runByInProcessEffect(root, [
-          "--json",
-          "task",
-          "context",
-          "draft",
-          "BY-1",
-        ]);
+        const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
         yield* setTaskState(root, "BY-1", state, secondNow);
@@ -625,11 +595,13 @@ contextCommand: by task context BY-1
 
         expect(result.status).toBe(1);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toContain("code: invalid_task_state");
+        expect(JSON.parse(result.stdout).error.code).toBe("invalid_task_state");
         expect(existsSync(draft.draft.path)).toBe(true);
-        expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-          "title: Original title\n  description: Description for Original title",
-        );
+        expect(
+          JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
+        ).toMatchObject({
+          task: { title: "Original title", description: "Description for Original title" },
+        });
       }),
   );
 
@@ -640,13 +612,7 @@ contextCommand: by task context BY-1
         const root = yield* initializedRepo();
 
         yield* createTask(root, firstNow, "Original title");
-        const draftResult = yield* runByInProcessEffect(root, [
-          "--json",
-          "task",
-          "context",
-          "draft",
-          "BY-1",
-        ]);
+        const draftResult = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
         yield* setTaskState(root, "BY-1", "todo", secondNow);
@@ -659,15 +625,19 @@ contextCommand: by task context BY-1
 
         expect(result.status).toBe(1);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toContain("code: invalid_task_state");
-        expect(result.stdout).toContain("approved Task intent is immutable");
-        expect(result.stdout).toContain(
-          "Approved Task Context cannot be changed after Task Approval.",
-        );
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          error: {
+            code: "invalid_task_state",
+            message: expect.stringContaining("approved Task intent is immutable"),
+          },
+          help: ["Approved Task Context cannot be changed after Task Approval."],
+        });
         expect(existsSync(draft.draft.path)).toBe(true);
-        expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-          "title: Original title\n  description: Description for Original title",
-        );
+        expect(
+          JSON.parse((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout),
+        ).toMatchObject({
+          task: { title: "Original title", description: "Description for Original title" },
+        });
       }),
   );
 
@@ -677,8 +647,10 @@ contextCommand: by task context BY-1
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("help[1]");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+        help: [expect.any(String)],
+      });
     }),
   );
 
@@ -705,8 +677,9 @@ contextCommand: by task context BY-1
 
         expect(result.status).toBe(1);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toContain("code: remote_tasks_not_supported");
-        expect(result.stdout).toContain("taskId: ZZ-1");
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          error: { code: "remote_tasks_not_supported", taskId: "ZZ-1" },
+        });
       }),
   );
 
@@ -730,12 +703,14 @@ contextCommand: by task context BY-1
 
         expect(result.status).toBe(1);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toBe(`error:
-  code: task_not_found
-  message: "Task was not found: BY-999"
-  taskId: BY-999
-help[1]: Run \`by task list --all --limit all\` to see known Tasks.
-`);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            code: "task_not_found",
+            message: "Task was not found: BY-999",
+            taskId: "BY-999",
+          },
+          help: ["Run `by task list --all --limit all` to see known Tasks."],
+        });
       }),
   );
 
@@ -754,11 +729,12 @@ help[1]: Run \`by task list --all --limit all\` to see known Tasks.
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`count: 0
-total: 0
-tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        count: 0,
+        total: 0,
+        tasks: [],
+        help: ['Run `by task create --title "..." --file <path|->` to create a task.'],
+      });
     }),
   );
 
@@ -795,14 +771,34 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
 
         expect(result.status).toBe(0);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toBe(`bin: ${expectedBin}
-description: Validate completed code changes against approved human intent.
-count: 3
-tasks[3]{id,title,state,createdAt,updatedAt}:
-  BY-2,Todo newer,todo,"${secondNow}","${secondNow}"
-  BY-4,Todo new,todo,"${firstNow}","${thirdNow}"
-  BY-1,Todo old,todo,"${firstNow}","${firstNow}"
-`);
+        expect(JSON.parse(result.stdout)).toEqual({
+          bin: expectedBin,
+          description: "Validate completed code changes against approved human intent.",
+          count: 3,
+          tasks: [
+            {
+              id: "BY-2",
+              title: "Todo newer",
+              state: "todo",
+              createdAt: secondNow,
+              updatedAt: secondNow,
+            },
+            {
+              id: "BY-4",
+              title: "Todo new",
+              state: "todo",
+              createdAt: firstNow,
+              updatedAt: thirdNow,
+            },
+            {
+              id: "BY-1",
+              title: "Todo old",
+              state: "todo",
+              createdAt: firstNow,
+              updatedAt: firstNow,
+            },
+          ],
+        });
       }),
   );
 
@@ -814,12 +810,13 @@ tasks[3]{id,title,state,createdAt,updatedAt}:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`bin: ${expectedBin}
-description: Validate completed code changes against approved human intent.
-count: 0
-tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        bin: expectedBin,
+        description: "Validate completed code changes against approved human intent.",
+        count: 0,
+        tasks: [],
+        help: ['Run `by task create --title "..." --file <path|->` to create a task.'],
+      });
     }),
   );
 
@@ -834,11 +831,13 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_usage
-  message: "Expected one of the following cases: new, todo, done, cancelled"
-help[1]: Run \`by --help\` for generated command help.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "invalid_usage",
+          message: "Expected one of the following cases: new, todo, done, cancelled",
+        },
+        help: ["Run `by --help` for generated command help."],
+      });
     }),
   );
 
@@ -857,7 +856,7 @@ help[1]: Run \`by --help\` for generated command help.
       ]);
 
       expect(result.status).toBe(2);
-      expect(result.stdout).toContain("code: invalid_task_title");
+      expect(JSON.parse(result.stdout).error.code).toBe("invalid_task_title");
     }),
   );
 
@@ -873,8 +872,10 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain(`code: ${code}`);
-      expect(result.stdout).toContain("help[1]");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code },
+        help: [expect.any(String)],
+      });
     }),
   );
 
@@ -902,8 +903,10 @@ help[1]: Run \`by --help\` for generated command help.
 
         expect(result.status, path).toBe(2);
         expect(result.stderr, path).toBe("");
-        expect(result.stdout, path).toContain(`code: ${code}`);
-        expect(result.stdout, path).toContain("help[1]");
+        expect(JSON.parse(result.stdout), path).toMatchObject({
+          error: { code },
+          help: [expect.any(String)],
+        });
       }
     }),
   );
@@ -915,11 +918,13 @@ help[1]: Run \`by --help\` for generated command help.
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: not_initialized
-  message: This workspace is not initialized for But Why?.
-help[1]: Run \`by init --task-prefix BY\` in the repository root.
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "not_initialized",
+          message: "This workspace is not initialized for But Why?.",
+        },
+        help: ["Run `by init --task-prefix BY` in the repository root."],
+      });
     }),
   );
 
@@ -933,8 +938,10 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_repo_config");
-      expect(result.stdout).toContain("help[1]");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_repo_config" },
+        help: [expect.any(String)],
+      });
     }),
   );
 
@@ -948,11 +955,15 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: state_store_unavailable
-  message: Shared But Why? state is unavailable.
-help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."
-`);
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "state_store_unavailable",
+          message: "Shared But Why? state is unavailable.",
+        },
+        help: [
+          "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix BY`.",
+        ],
+      });
     }),
   );
 });

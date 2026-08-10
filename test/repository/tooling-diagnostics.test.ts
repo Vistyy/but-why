@@ -47,7 +47,6 @@ describe("repository-authored blocking diagnostics", () => {
       "test-child-processes-use-test-process-adapter",
       'const childProcess = await import("node:child_process/promises");',
     ],
-    ["toon-package-belongs-to-output-codec", 'import { encode } from "@toon-format/toon";'],
     [
       "sandcastle-factories-belong-to-workspace",
       'import { createSandbox } from "@ai-hero/sandcastle";',

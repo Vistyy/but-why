@@ -12,11 +12,6 @@ import type { ChangeCommandEnvironment } from "./cli/change/changeTypes.js";
 import { collapseHome } from "./cli/cliPath.js";
 import type { CliEnvironment } from "./cli.js";
 import { type CliResult, success, usageError } from "./cliResults.js";
-import {
-  hasInvalidJsonSelector,
-  nativeBooleanValue,
-  outputFormatForArgs,
-} from "./output/selection.js";
 import { taskStates } from "./task/lifecycle.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
@@ -640,7 +635,7 @@ const snapshotCommand = withCliHandler(
     ),
 );
 
-const commandRootBase = Command.make("by", { json: Options.boolean("json") }).pipe(
+const commandRootBase = Command.make("by", {}).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
 );
 const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environment) =>
@@ -673,7 +668,6 @@ export const runCommandTree = (
   Effect.gen(function* () {
     const resultRef = yield* Ref.make<CliResult | undefined>(undefined);
     const helpOutput: string[] = [];
-    const outputFormat = outputFormatForArgs(args);
     const run = Command.run(commandTree, { executable: "by", name: "by", version: packageVersion })(
       ["by", "by", ...args],
     );
@@ -700,12 +694,7 @@ export const runCommandTree = (
                   stderrLogger(environment.writeStderr ?? (() => undefined)),
                 ),
                 Layer.succeed(CliEnvironmentContext, environment),
-                Layer.succeed(CliResultSink, (result) =>
-                  Ref.set(resultRef, {
-                    ...result,
-                    outputFormat,
-                  }),
-                ),
+                Layer.succeed(CliResultSink, (result) => Ref.set(resultRef, result)),
               ),
             ),
           ),
@@ -715,8 +704,7 @@ export const runCommandTree = (
     let commandResult = initialCommandResult;
     if (
       initialCommandResult._tag === "Left" &&
-      ValidationError.isValidationError(initialCommandResult.left) &&
-      !hasInvalidJsonSelector(args)
+      ValidationError.isValidationError(initialCommandResult.left)
     ) {
       const fallbackCommandResult = yield* Effect.either(
         runWithConfig(finalCheckBuiltInConfig, true),
@@ -737,19 +725,13 @@ export const runCommandTree = (
           generatedText(commandResult.left.error),
         );
         if (missingOperation !== undefined) {
-          return {
-            ...dependencyOptionRequiredErrorResult(missingOperation),
-            outputFormat,
-          };
+          return dependencyOptionRequiredErrorResult(missingOperation);
         }
-        return {
-          ...usageError({
-            code: "invalid_usage",
-            message: generatedText(commandResult.left.error),
-            help: ["Run `by --help` for generated command help."],
-          }),
-          outputFormat,
-        };
+        return usageError({
+          code: "invalid_usage",
+          message: generatedText(commandResult.left.error),
+          help: ["Run `by --help` for generated command help."],
+        });
       }
       return yield* Effect.fail(commandResult.left);
     }
@@ -758,23 +740,17 @@ export const runCommandTree = (
     if (captured !== undefined) return captured;
     if (helpOutput.length > 0) {
       const nativeOutput = nativeHelpText(helpOutput.join("\n"));
-      return {
-        ...success(
-          nativeOutput === packageVersion
-            ? { version: packageVersion }
-            : { help: rootHelpCorrection(nativeOutput) },
-        ),
-        outputFormat,
-      };
+      return success(
+        nativeOutput === packageVersion
+          ? { version: packageVersion }
+          : { help: rootHelpCorrection(nativeOutput) },
+      );
     }
-    return {
-      ...usageError({
-        code: "invalid_usage",
-        message: "The command did not produce a result.",
-        help: ["Run `by --help` for generated command help."],
-      }),
-      outputFormat,
-    };
+    return usageError({
+      code: "invalid_usage",
+      message: "The command did not produce a result.",
+      help: ["Run `by --help` for generated command help."],
+    });
   });
 
 const dashboardResult = (environment: CliEnvironment): Effect.Effect<CliResult> =>
@@ -847,15 +823,7 @@ const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | u
       positional.push(argument);
       continue;
     }
-    if (argument.startsWith("--json=")) {
-      if (nativeBooleanValue(argument.slice("--json=".length)) === undefined) return undefined;
-      continue;
-    }
     if (argument.includes("=")) return undefined;
-    if (argument === "--json") {
-      if (nativeBooleanValue(args[index + 1]) !== undefined) index += 1;
-      continue;
-    }
     const option = aliases.get(argument) ?? argument;
     if (flags.has(option)) {
       if (seen.has(option)) return undefined;

@@ -352,7 +352,7 @@ exit 1
             agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
           })}\n`,
         );
-        const implement = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+        const implement = runTestProcess(bin, ["change", "implement", change.id], {
           cwd: repository,
           env: {
             ...env,
@@ -380,7 +380,7 @@ exit 1
 
         writeFileSync(extension, "export default 42;\n");
         rmSync(env.BY_FAKE_CAPTURE);
-        const invalidExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+        const invalidExtension = runTestProcess(bin, ["change", "implement", change.id], {
           cwd: repository,
           env: {
             ...env,
@@ -402,7 +402,7 @@ exit 1
         expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
 
         rmSync(extension);
-        const missingExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+        const missingExtension = runTestProcess(bin, ["change", "implement", change.id], {
           cwd: repository,
           env: {
             ...env,

@@ -61,17 +61,13 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["change", "start"]);
       const startedView = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
       };
 
-      const inferred = yield* runByInProcessEffect(startedView.worktreePath, [
-        "--json",
-        "change",
-        "show",
-      ]);
+      const inferred = yield* runByInProcessEffect(startedView.worktreePath, ["change", "show"]);
       yield* withTestRepository(
         root,
         Effect.gen(function* () {
@@ -84,16 +80,10 @@ describe("Change inspection CLI", () => {
         }),
       );
       const branchConflict = yield* runByInProcessEffect(startedView.worktreePath, [
-        "--json",
         "change",
         "show",
       ]);
-      const explicit = yield* runByInProcessEffect(root, [
-        "--json",
-        "change",
-        "show",
-        startedView.change.id,
-      ]);
+      const explicit = yield* runByInProcessEffect(root, ["change", "show", startedView.change.id]);
 
       expect(started.status).toBe(0);
       expect(inferred.status).toBe(0);
@@ -115,18 +105,10 @@ describe("Change inspection CLI", () => {
       const newer = yield* createChangeFixture(root, "refs/heads/newer", secondNow);
       yield* closeChangeFixture(root, newer.id, "cancelled", secondNow);
 
-      const defaultResult = yield* runInspectionCommand(
-        root,
-        ["--json", "change", "list"],
-        commandNow,
-      );
-      const allResult = yield* runInspectionCommand(
-        root,
-        ["--json", "change", "list", "--all"],
-        commandNow,
-      );
-      const openShown = yield* runInspectionCommand(root, ["--json", "change", "show", older.id]);
-      const closedShown = yield* runInspectionCommand(root, ["--json", "change", "show", newer.id]);
+      const defaultResult = yield* runInspectionCommand(root, ["change", "list"], commandNow);
+      const allResult = yield* runInspectionCommand(root, ["change", "list", "--all"], commandNow);
+      const openShown = yield* runInspectionCommand(root, ["change", "show", older.id]);
+      const closedShown = yield* runInspectionCommand(root, ["change", "show", newer.id]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({
         changes: [
@@ -169,7 +151,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("reports malformed persisted data as persisted_data_invalid in TOON and JSON", () =>
+  it.effect("reports malformed persisted data as persisted_data_invalid", () =>
     Effect.gen(function* () {
       const root = createInspectionRepository();
       const change = yield* createChangeFixture(root, "refs/heads/malformed", firstNow);
@@ -188,12 +170,11 @@ describe("Change inspection CLI", () => {
         }),
       );
 
-      const json = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
-      const toon = yield* runInspectionCommand(root, ["change", "show", change.id]);
+      const result = yield* runInspectionCommand(root, ["change", "show", change.id]);
 
-      expect(json.status).toBe(1);
-      expect(json.stderr).toBe("");
-      expect(JSON.parse(json.stdout)).toEqual({
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
         error: {
           code: "persisted_data_invalid",
           message: "Shared But Why? state contains malformed persisted data.",
@@ -203,14 +184,6 @@ describe("Change inspection CLI", () => {
           "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
         ],
       });
-      expect(toon.status).toBe(1);
-      expect(toon.stderr).toBe("");
-      expect(toon.stdout).toBe(`error:
-  code: persisted_data_invalid
-  message: Shared But Why? state contains malformed persisted data.
-  operation: read Change
-help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command."
-`);
     }),
   );
 
@@ -252,19 +225,9 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         createdAt: commandNow,
       });
       yield* createToolingFailureFixture(root, newerRun.validationRunId, commandNow);
-      const findings = yield* runInspectionCommand(root, [
-        "--json",
-        "change",
-        "findings",
-        change.id,
-      ]);
-      const history = yield* runInspectionCommand(root, [
-        "--json",
-        "change",
-        "validation-runs",
-        change.id,
-      ]);
-      const shown = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
+      const findings = yield* runInspectionCommand(root, ["change", "findings", change.id]);
+      const history = yield* runInspectionCommand(root, ["change", "validation-runs", change.id]);
+      const shown = yield* runInspectionCommand(root, ["change", "show", change.id]);
 
       expect(findings.stdout).not.toContain('"severity"');
       expect(JSON.parse(findings.stdout)).toMatchObject({
@@ -329,7 +292,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         )}\n`,
       );
       commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], firstNow);
+      const started = yield* runByInProcessEffect(root, ["change", "start"], firstNow);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -424,7 +387,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       };
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "submit", change.change.id],
+        ["change", "submit", change.change.id],
         firstNow,
         { reviewerAgentRuntime },
       );
@@ -457,14 +420,8 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           rationale: "Match the one-line Choice contract.",
           now: commandNow,
         });
-        const listed = yield* runInspectionCommand(root, [
-          "--json",
-          "change",
-          "decision",
-          "list",
-          change.id,
-        ]);
-        const shown = yield* runInspectionCommand(root, ["--json", "change", "show", change.id]);
+        const listed = yield* runInspectionCommand(root, ["change", "decision", "list", change.id]);
+        const shown = yield* runInspectionCommand(root, ["change", "show", change.id]);
 
         expect(JSON.parse(listed.stdout)).toMatchObject({
           changeId: change.id,
@@ -497,15 +454,8 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       Effect.gen(function* () {
         const root = createInspectionRepository();
         const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
-        const missing = yield* runInspectionCommand(root, [
-          "--json",
-          "change",
-          "decision",
-          "add",
-          change.id,
-        ]);
+        const missing = yield* runInspectionCommand(root, ["change", "decision", "add", change.id]);
         const empty = yield* runInspectionCommand(root, [
-          "--json",
           "change",
           "decision",
           "add",
@@ -516,7 +466,6 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           "A reason",
         ]);
         const emptyRationale = yield* runInspectionCommand(root, [
-          "--json",
           "change",
           "decision",
           "add",
@@ -534,7 +483,6 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           "--help",
         ]);
         const multiline = yield* runInspectionCommand(root, [
-          "--json",
           "change",
           "decision",
           "add",
@@ -599,7 +547,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       const branch = "refs/heads/projection";
       const change = yield* createChangeFixture(root, branch, firstNow, { taskId: "BY-1" });
       const changeId = change.id;
-      const shown = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
+      const shown = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
 
       expect(shown.status).toBe(0);
       expect(JSON.parse(shown.stdout)).toMatchObject({
@@ -614,12 +562,14 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("state");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("readiness");
       expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("activeBlocker");
-      const toonShown = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
-      expect(toonShown.stdout).toContain(`id: ${changeId}`);
-      expect(toonShown.stdout).toContain("activity: implementing");
-      expect(toonShown.stdout).not.toContain("startable");
-      expect(toonShown.stdout).not.toContain("readiness");
-      expect(toonShown.stdout).not.toContain("activeBlocker");
+      const defaultShown = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
+      const defaultOutput = JSON.parse(defaultShown.stdout);
+      expect(defaultOutput).toMatchObject({
+        task: { change: { id: changeId, activity: "implementing" } },
+      });
+      expect(defaultOutput.task.change).not.toHaveProperty("startable");
+      expect(defaultOutput.task.change).not.toHaveProperty("readiness");
+      expect(defaultOutput.task.change).not.toHaveProperty("activeBlocker");
 
       yield* createImplementationBlockerFixture(root, changeId, {
         reportedAt: firstNow,
@@ -629,19 +579,18 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       const activeBlocker = yield* createImplementationBlockerFixture(root, changeId, {
         reportedAt: commandNow,
       });
-      const blocked = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
+      const blocked = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
       expect(JSON.parse(blocked.stdout).task.change).toEqual({
         id: changeId,
         activity: "blocked",
       });
-      const blockedList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
+      const blockedList = yield* runInspectionCommand(root, ["task", "list", "--all"]);
       expect(
         JSON.parse(blockedList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "blocked" });
       const blockerHistory = yield* runInspectionCommand(root, [
-        "--json",
         "change",
         "blocker",
         "list",
@@ -658,8 +607,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       yield* resolveImplementationBlockerFixture(root, activeBlocker.id, commandNow);
 
       expect(
-        JSON.parse((yield* runInspectionCommand(root, ["--json", "task", "list", "--all"])).stdout)
-          .tasks,
+        JSON.parse((yield* runInspectionCommand(root, ["task", "list", "--all"])).stdout).tasks,
       ).toContainEqual(
         expect.objectContaining({
           id: "BY-1",
@@ -676,12 +624,12 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         createdAt: commandNow,
         updatedAt: commandNow,
       });
-      const validating = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
+      const validating = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
       expect(JSON.parse(validating.stdout).task.change).toEqual({
         id: changeId,
         activity: "validating",
       });
-      const validatingList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
+      const validatingList = yield* runInspectionCommand(root, ["task", "list", "--all"]);
       expect(
         JSON.parse(validatingList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
@@ -694,35 +642,34 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         "passed",
         commandNow,
       );
-      const ready = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
+      const ready = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
       expect(JSON.parse(ready.stdout).task.change).toEqual({
         id: changeId,
         activity: "ready",
       });
-      const readyList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
+      const readyList = yield* runInspectionCommand(root, ["task", "list", "--all"]);
       expect(
         JSON.parse(readyList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "ready" });
       expect(
-        JSON.parse((yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"])).stdout)
-          .task.state,
+        JSON.parse((yield* runInspectionCommand(root, ["task", "show", "BY-1"])).stdout).task.state,
       ).toBe("todo");
 
       yield* closeChangeFixture(root, changeId, "completed", commandNow);
-      const completed = yield* runInspectionCommand(root, ["--json", "change", "show", changeId]);
+      const completed = yield* runInspectionCommand(root, ["change", "show", changeId]);
       expect(JSON.parse(completed.stdout)).toMatchObject({
         change: { state: "closed", closeReason: "completed" },
         cleanup: { state: "pending", blockingReason: null },
       });
-      const closedTask = yield* runInspectionCommand(root, ["--json", "task", "show", "BY-1"]);
+      const closedTask = yield* runInspectionCommand(root, ["task", "show", "BY-1"]);
       expect(JSON.parse(closedTask.stdout).task).toMatchObject({
         state: "done",
         change: { id: changeId },
       });
       expect(JSON.parse(closedTask.stdout).task.change).not.toHaveProperty("activity");
-      const closedList = yield* runInspectionCommand(root, ["--json", "task", "list", "--all"]);
+      const closedList = yield* runInspectionCommand(root, ["task", "list", "--all"]);
       expect(
         JSON.parse(closedList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",

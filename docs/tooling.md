@@ -64,14 +64,14 @@ Fallow enforces these architecture contracts:
 - CLI modules do not import storage.
 - Domain modules do not import Node infrastructure.
 
-ast-grep enforces syntax contracts for process ownership, Effect tests, TOON output, workspace creation, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, Validation Workspace tests, and JSON.parse trusted assertions.
+ast-grep enforces syntax contracts for process ownership, Effect tests, workspace creation, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, Validation Workspace tests, and JSON.parse trusted assertions.
 The JSON.parse contract rejects direct trusted assertions of parsed JSON; parse into `unknown` and use the owning boundary's focused decoder or schema instead.
 Repository-authored diagnostics state the prohibited approach, the invariant reason, and the supported replacement.
 
 ## Quality ownership
 
 Behavior tests own runtime contracts at the supported interface.
-The CLI output codec owns TOON and JSON serialization.
+The CLI output codec owns JSON serialization.
 The package contract test owns package inspection.
 Documentation tests own current reader-visible command and setup contracts.
 Fallow and ast-grep own their named structural contracts.

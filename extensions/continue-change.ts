@@ -128,7 +128,7 @@ export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
 const submitCommandPattern =
-  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+(?:--json\s+)?change\s+submit(?:\s|$)/gu;
+  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
 
 type ShellLineState = {
   readonly quote: "'" | '"' | undefined;
@@ -657,8 +657,8 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
-    const args = ["--json", "change", "show", id];
-    const blockerArgs = ["--json", "change", "blocker", "list", id];
+    const args = ["change", "show", id];
+    const blockerArgs = ["change", "blocker", "list", id];
     const [changeResult, blockerResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
       await Promise.all([
         inspectCommand(args, ctx.cwd),

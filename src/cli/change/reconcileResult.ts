@@ -10,7 +10,7 @@ export const reconcileResult = (
     return runtimeError({
       code: "change_not_found",
       message: "Change was not found.",
-      help: ["Use a Change ID returned by `by change start --json`."],
+      help: ["Use a Change ID returned by `by change start`."],
     });
   }
   if (result.changes.some((change) => change.status === "unavailable")) {

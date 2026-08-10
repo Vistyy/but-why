@@ -11,11 +11,6 @@ import { runTestProcess } from "../support/testProcess.js";
 const statePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 const snapshotsPath = (root: string): string => join(root, ".git", "but-why", "snapshots");
 
-const snapshotPathFromToon = (stdout: string): string => {
-  const value = stdout.trim().replace(/^snapshotPath:\s+/u, "");
-  return value.replace(/^"|"$/gu, "");
-};
-
 const runGit = (cwd: string, ...args: readonly string[]): void => {
   const result = runTestProcess("git", args, { cwd });
   expect(result.status, result.stderr || result.stdout).toBe(0);
@@ -34,14 +29,15 @@ describe("Shared Repository State Snapshots", () => {
       );
       seededSource.close();
       const sourceBefore = readFileSync(statePath(root));
-      const toon = yield* runByInProcessEffect(root, ["snapshot"]);
-      const json = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
-      const firstPath = snapshotPathFromToon(toon.stdout);
-      const second = JSON.parse(json.stdout) as { readonly snapshotPath?: string };
+      const first = yield* runByInProcessEffect(root, ["snapshot"]);
+      const secondResult = yield* runByInProcessEffect(root, ["snapshot"]);
+      const firstPath = (JSON.parse(first.stdout) as { readonly snapshotPath: string })
+        .snapshotPath;
+      const second = JSON.parse(secondResult.stdout) as { readonly snapshotPath?: string };
 
-      expect(toon.status).toBe(0);
-      expect(json.status).toBe(0);
-      expect(toon.stdout.trim().split("\n")).toHaveLength(1);
+      expect(first.status).toBe(0);
+      expect(secondResult.status).toBe(0);
+      expect(first.stdout.trim().split("\n")).toHaveLength(1);
       expect(Object.keys(second)).toEqual(["snapshotPath"]);
       expect(second.snapshotPath).toBeDefined();
       expect(firstPath).not.toBe(second.snapshotPath);
@@ -94,8 +90,8 @@ describe("Shared Repository State Snapshots", () => {
 
       const linked = `${root}-linked`;
       runGit(root, "worktree", "add", "-q", "-b", "linked", linked);
-      const mainResult = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
-      const linkedResult = yield* runByInProcessEffect(linked, ["--json", "snapshot"]);
+      const mainResult = yield* runByInProcessEffect(root, ["snapshot"]);
+      const linkedResult = yield* runByInProcessEffect(linked, ["snapshot"]);
       const mainPath = (JSON.parse(mainResult.stdout) as { snapshotPath: string }).snapshotPath;
       const linkedPath = (JSON.parse(linkedResult.stdout) as { snapshotPath: string }).snapshotPath;
 
@@ -116,7 +112,7 @@ describe("Shared Repository State Snapshots", () => {
       expect(initialized.status).toBe(0);
       writeFileSync(snapshotsPath(root), "not a directory\n");
 
-      const result = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
+      const result = yield* runByInProcessEffect(root, ["snapshot"]);
       const output = JSON.parse(result.stdout) as {
         readonly error?: { readonly code?: string };
         readonly help?: readonly string[];
@@ -137,7 +133,7 @@ describe("Shared Repository State Snapshots", () => {
       expect(initialized.status).toBe(0);
       writeFileSync(statePath(root), "not sqlite\n");
 
-      const result = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
+      const result = yield* runByInProcessEffect(root, ["snapshot"]);
       const output = JSON.parse(result.stdout) as { readonly snapshotPath?: string };
 
       expect(result.status).toBe(1);

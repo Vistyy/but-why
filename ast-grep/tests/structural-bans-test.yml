@@ -20,15 +20,6 @@ invalid:
   - Effect.runFork(work)
   - Fx.runCallback(work)
 ---
-id: toon-package-belongs-to-output-codec
-valid:
-  - import { success } from "../cliResults.js";
-invalid:
-  - import { encode as toonEncode } from "@toon-format/toon";
-  - import * as Toon from "@toon-format/toon";
-  - import("@toon-format/toon")
-  - require("@toon-format/toon")
----
 id: sandcastle-factories-belong-to-workspace
 valid:
   - import type { Sandbox } from "@ai-hero/sandcastle";

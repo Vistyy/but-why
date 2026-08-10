@@ -18,12 +18,7 @@ describe("by change reconcile --discard-work", () => {
     () =>
       Effect.gen(function* () {
         const root = createInitializedRepo();
-        const result = yield* runByInProcessEffect(root, [
-          "--json",
-          "change",
-          "reconcile",
-          "--discard-work",
-        ]);
+        const result = yield* runByInProcessEffect(root, ["change", "reconcile", "--discard-work"]);
 
         expect(result.status).toBe(2);
         expect(JSON.parse(result.stdout)).toMatchObject({
@@ -77,7 +72,6 @@ describe("by change reconcile --discard-work", () => {
         );
 
         const result = yield* runByInProcessEffect(root, [
-          "--json",
           "change",
           "reconcile",
           "change-pending",

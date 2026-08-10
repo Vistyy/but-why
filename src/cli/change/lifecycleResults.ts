@@ -65,7 +65,7 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use an open Change ID returned by `by change start --json`."],
+      help: ["Use an open Change ID returned by `by change start`."],
     });
   }
   return operationalError(result);

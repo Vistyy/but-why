@@ -67,9 +67,9 @@ describe("public command documentation", () => {
         "utf8",
       );
       const documented = extractDocumentedCommands(`${setup}\n${config}\n${operatorWorkflow}`);
-      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
-      const taskHelp = yield* runByInProcessEffect(repoRoot, ["task", "--help", "--json"]);
-      const changeHelp = yield* runByInProcessEffect(repoRoot, ["change", "--help", "--json"]);
+      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help"]);
+      const taskHelp = yield* runByInProcessEffect(repoRoot, ["task", "--help"]);
+      const changeHelp = yield* runByInProcessEffect(repoRoot, ["change", "--help"]);
 
       expect(rootHelp.status).toBe(0);
       expect(taskHelp.status).toBe(0);

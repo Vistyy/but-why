@@ -102,7 +102,7 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
           ? [
               `Inspect the existing Implementation Blocker with \`by change blocker list ${changeId}\`, then report it and wait.`,
             ]
-          : ["Use a Change ID returned by `by change start --json`."],
+          : ["Use a Change ID returned by `by change start`."],
     });
   }
   if (result.code === "dirty_work") {
