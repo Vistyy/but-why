@@ -1521,9 +1521,11 @@ describe("repository SQL storage", () => {
             currentEvidence,
           );
           yield* repository.operation(
-            "make the later policy-distinct Run tooling-failed",
+            "make the later policy-distinct Run malformed and tooling-failed",
             (sql) =>
-              sql`UPDATE candidate_validation_runs SET outcome = 'tooling_failed' WHERE id = ${simplifiedCurrent.validationRunId}`,
+              sql`UPDATE candidate_validation_runs
+                  SET outcome = 'tooling_failed', policy_snapshot = 'malformed'
+                  WHERE id = ${simplifiedCurrent.validationRunId}`,
           );
           expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
             currentEvidence,
@@ -1532,6 +1534,11 @@ describe("repository SQL storage", () => {
             reused: true,
             validationRunId: first.validationRunId,
           });
+          yield* repository.operation(
+            "remove malformed ineligible Validation Run fixture",
+            (sql) =>
+              sql`DELETE FROM candidate_validation_runs WHERE id = ${simplifiedCurrent.validationRunId}`,
+          );
           expect(
             yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
               candidateId: captured.candidateId,

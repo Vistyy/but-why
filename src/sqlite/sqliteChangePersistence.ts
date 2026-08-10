@@ -476,6 +476,7 @@ const getPassingEvidence = (
        FROM candidates AS candidate
        JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
        WHERE ${candidatePredicate} AND ${runPredicate}
+         AND run.state = 'complete' AND run.outcome = 'passed'
        ORDER BY run.created_at DESC, run.id DESC`,
       parameters,
     );
@@ -501,8 +502,6 @@ const getPassingEvidence = (
     const current = decoded.find(
       (evidence) =>
         evidence.run.record.candidateId === evidence.publicationCandidateId &&
-        evidence.run.record.state === "complete" &&
-        evidence.run.record.outcome === "passed" &&
         evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId &&
         evidence.run.implementationDecisionsSnapshot === expectedDecisionsSnapshot &&
         isDeepStrictEqual(

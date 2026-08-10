@@ -455,7 +455,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const historyRows = yield* sql.unsafe<UnknownValidationRunRow>(
       `SELECT ${validationRunReadColumns}
        FROM candidate_validation_runs
-       WHERE candidate_id = ?
+       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
        ORDER BY created_at DESC, id DESC`,
       [candidate.id],
     );
@@ -471,8 +471,6 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     );
     const reusable = history.find(
       (run) =>
-        run.record.state === "complete" &&
-        run.record.outcome === "passed" &&
         run.policySnapshot === policySnapshot &&
         run.implementationDecisionsSnapshot === decisionsSnapshot &&
         run.latestResolvedBlockerId === currentLatestResolvedBlockerId,
