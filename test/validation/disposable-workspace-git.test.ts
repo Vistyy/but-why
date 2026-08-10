@@ -82,6 +82,34 @@ describe("Disposable workspace Git cleanup verification", () => {
     expect(refExists(repository, expectedRef)).toBe(true);
     expect(refExists(repository, unrelatedRef)).toBe(true);
   });
+
+  it("leaves a detached worktree untouched when the live temporary ref mismatches", () => {
+    const repository = initializedRepository();
+    const submittedSha = git(repository, "rev-parse", "HEAD");
+    git(repository, "commit", "--allow-empty", "-m", "Unrelated ref target");
+    const unrelatedSha = git(repository, "rev-parse", "HEAD");
+    const validationRunId = "selected";
+    const tempRefName = validationTempRefName(validationRunId);
+    const worktreePath = expectedSandcastleWorktreePath(repository, tempRefName);
+    git(repository, "update-ref", tempRefName, unrelatedSha);
+    git(repository, "worktree", "add", "--detach", worktreePath, submittedSha);
+
+    expect(
+      validationWorkspaceCleanupGit(repository).cleanup({
+        validationRunId,
+        submittedSha,
+        recordedTempRefName: tempRefName,
+        recordedWorktreePath: worktreePath,
+      }),
+    ).toEqual({
+      worktree: "failed",
+      tempRef: "failed",
+      errorMessage:
+        "Live Validation Workspace identity does not match its selected Validation Run.",
+    });
+    expect(existsSync(worktreePath)).toBe(true);
+    expect(git(repository, "rev-parse", tempRefName)).toBe(unrelatedSha);
+  });
 });
 
 const initializedRepository = (): string => {

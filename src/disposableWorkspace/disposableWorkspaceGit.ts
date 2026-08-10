@@ -138,20 +138,14 @@ export const cleanupExactDisposableWorkspace = (
   const worktree = inspectExactWorktree(repoRoot, input);
   if (tempRef === "failed" || worktree === "failed") {
     return {
-      worktree: worktree === "ready" ? "failed" : worktree,
+      worktree: worktree === "ready" || worktree === "detached" ? "failed" : worktree,
       tempRef: tempRef === "ready" ? "failed" : tempRef,
       errorMessage:
         "Live Validation Workspace identity does not match its selected Validation Run.",
     };
   }
 
-  const cleanedWorktree =
-    worktree === "removed"
-      ? "removed"
-      : removeDisposableWorktree(repoRoot, input.expectedWorktreePath)
-        ? "removed"
-        : "failed";
-  const cleanedTempRef =
+  const cleanupTempRef = (): DisposableWorkspaceCleanupState =>
     tempRef === "removed"
       ? "removed"
       : deleteExactDisposableWorkspaceRef(
@@ -159,23 +153,35 @@ export const cleanupExactDisposableWorkspace = (
           input.expectedTempRefName,
           input.expectedCommitSha,
         );
+  const cleanupWorktree = (): DisposableWorkspaceCleanupState =>
+    worktree === "removed"
+      ? "removed"
+      : removeDisposableWorktree(repoRoot, input.expectedWorktreePath)
+        ? "removed"
+        : "failed";
+
+  // Sandcastle checks out a non-branch workspace ref as detached, so handle the exact ref before using its absence to authorize detached worktree removal.
+  const cleanedTempRef = worktree === "detached" ? cleanupTempRef() : undefined;
+  const cleanedWorktree = cleanedTempRef === "failed" ? "failed" : cleanupWorktree();
+  const finalTempRef = cleanedTempRef ?? cleanupTempRef();
 
   return {
     worktree: cleanedWorktree,
-    tempRef: cleanedTempRef,
-    ...(cleanedWorktree === "failed" || cleanedTempRef === "failed"
+    tempRef: finalTempRef,
+    ...(cleanedWorktree === "failed" || finalTempRef === "failed"
       ? { errorMessage: "Exact Validation Workspace cleanup did not complete." }
       : {}),
   };
 };
 
-type ExactResourceState = "ready" | DisposableWorkspaceCleanupState;
+type ExactTempRefState = "ready" | DisposableWorkspaceCleanupState;
+type ExactWorktreeState = "ready" | "detached" | DisposableWorkspaceCleanupState;
 
 const inspectExactTempRef = (
   repoRoot: string,
   tempRefName: string,
   expectedCommitSha: string,
-): ExactResourceState => {
+): ExactTempRefState => {
   const inspected = git(repoRoot, [
     "for-each-ref",
     "--format=%(refname) %(objectname)",
@@ -197,7 +203,7 @@ const inspectExactTempRef = (
 const inspectExactWorktree = (
   repoRoot: string,
   input: ExactDisposableWorkspaceCleanupInput,
-): ExactResourceState => {
+): ExactWorktreeState => {
   const inspected = git(repoRoot, ["worktree", "list", "--porcelain"]);
   if (!inspected.ok) return "failed";
 
@@ -211,10 +217,9 @@ const inspectExactWorktree = (
   if (matching.length !== 1) return "failed";
 
   const [record] = matching;
-  return record?.head === input.expectedCommitSha &&
-    (record.branch === input.expectedTempRefName || record.detached === true)
-    ? "ready"
-    : "failed";
+  if (record?.head !== input.expectedCommitSha) return "failed";
+  if (record.branch === input.expectedTempRefName) return "ready";
+  return record.detached ? "detached" : "failed";
 };
 
 const worktreeRecords = (
