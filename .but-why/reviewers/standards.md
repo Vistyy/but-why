@@ -20,7 +20,10 @@ Apply a lens only when the Candidate changes its relevant area:
 
 - **Domain ownership and terms**: Keep behavior in its owning domain, preserve valid domain relationships, and use canonical terms from the applicable context.
 - **Design locality and necessity**: Keep caller knowledge and coordination small, put behavior in its clear owner, and require concrete justification for abstractions, seams, and indirection.
-- **Interface and agent experience**: Preserve supported interface contracts and, for agent-facing commands, review output, errors, exit codes, help, empty states, and non-interactive operation.
+- **Interface integrity**: Review changed interfaces and directly affected callers for added caller knowledge, ordering constraints, and optional capabilities.
+  Require authoritative inputs, operation-local outcomes, enforced mutation preconditions, and only the operations each caller uses.
+  Treat an unsafe test cast as evidence of a possible contract mismatch.
+- **Agent experience**: Preserve supported agent-facing command contracts, including output, errors, exit codes, help, empty states, and non-interactive operation.
 - **State integrity, provenance, and recovery**: Bind stored state, reused evidence, and external effects to the correct identity; keep related transitions atomic; and preserve explicit retry, reconciliation, and cleanup behavior.
 - **External boundaries and error honesty**: Validate untrusted persisted or wire data at the applicable Adapter seam and represent dependency failures explicitly without reporting misleading success.
 - **Verification and test value**: Assess changed and directly affected tests for proportionate coverage of material risks through supported interfaces, distinct observable behavior, unsupported requirements, and redundant coverage.
