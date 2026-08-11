@@ -62,7 +62,9 @@ A branch attached elsewhere, a missing recorded branch, or a managed path contai
 The operator may recover the branch externally or cancel the Change or its linked Task.
 
 `by change submit <change-id>` observes the current owned pull request before starting a new Submission.
-A new Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
+When the persisted Candidate, completed passed Validation Run, exact owned pull request, local Repository Branch head, and current durable Change authority still match the completed Candidate Publication, Submission returns that stored success before it fetches a newer Change Base or resolves current configuration.
+Later Change Base and configuration changes do not invalidate completed publication evidence.
+A new or revised Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
 Submission reads the Candidate's tracked Repo Config after Candidate capture for reviewer policy and Repo Agent Profiles.
@@ -77,16 +79,18 @@ A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
 Tracked-tree equality with the fetched Change Base returns `nothing_to_submit` after the ancestry check passes.
 A changed Candidate passes through Repository Preparation, Checks, Acceptance Review when task-backed, configured Specialists, and publication policy.
 
-Validation persistence owns one-active-run uniqueness and unresolved-Blocker rejection.
-Validation admission refuses a Change with an unresolved Implementation Blocker, and each admitted Validation Run records the exact Candidate, Change Base, Validation Policy Snapshot (including the current Acceptance Context when present), Implementation Decision input, and the latest resolved Implementation Blocker identity at admission.
-Validation Run reuse and publication require the exact stored Candidate identity, complete state, a passed outcome, and the current authority: the exact Change Base, current Acceptance Context when present, the resolved Validation Policy Snapshot, the current Implementation Decisions, and the same latest resolved Implementation Blocker identity.
-A changed Candidate, Resolution, Acceptance Context, policy, or implementation input invalidates current validity without deleting historical evidence.
-Candidate Publication and Change Activity use the same Change-owned current-evidence rule.
-Change Activity derives that evidence from persisted Change authority and does not resolve current configuration again.
-Implementation Decision and Implementation Blocker mutations use the Submission execution lock so admission cannot race those authority changes.
+Validation persistence owns one-active-run uniqueness, unresolved-Blocker rejection, and immutable Validation Run History.
+Validation start-or-reuse refuses a Change with an unresolved Implementation Blocker, and each new Validation Run records the exact Candidate, Change Base, Validation Policy Snapshot (including the current Acceptance Context when present), Implementation Decision input, and latest resolved Implementation Blocker identity when it starts.
+Validation Run reuse and new or revised Candidate Publication require the exact stored Candidate identity, complete state, a passed outcome, and the current authority: the exact Change Base, current Acceptance Context when present, resolved Validation Policy Snapshot, current Implementation Decisions, and same latest resolved Implementation Blocker identity.
+Current passing evidence is the newest eligible passed Run for the exact current Candidate and durable Change authority.
+A later failed or tooling-failed Run remains in Validation Run History without hiding eligible passing evidence.
+A changed Candidate, Resolution, Acceptance Context, policy, or implementation input requires eligible evidence for the new facts without deleting historical evidence.
+Completed Candidate Publication evidence uses its stored Candidate and Validation Run identities, while Change Activity selects current passing evidence for the current Candidate.
+Both derive durable authority from persisted Change state without resolving current configuration again.
+Implementation Decision and Implementation Blocker mutations use the Submission execution lock so validation start-or-reuse cannot race those authority changes.
 For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review.
 Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
-Change Submit performs no duplicate admission precheck and performs no transient Task state transitions.
+Change Submit performs no duplicate validation precheck and performs no transient Task state transitions.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the current publication facts.

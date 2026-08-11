@@ -141,9 +141,17 @@ export type ChangeReviewerTranscriptPort = {
   }) => StorageEffect<void>;
 };
 
+export type CompletedPublicationEvidencePort = {
+  readonly getCompletedPublicationEvidence: (
+    changeId: string,
+    candidateId: string,
+    validationRunId: string,
+  ) => StorageEffect<ChangePublicationEvidence | undefined>;
+};
+
 export type ChangeSubmissionPort = {
   readonly getChangeById: ChangeReadPort["getChangeById"];
-  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
+  readonly getCompletedPublicationEvidence: CompletedPublicationEvidencePort["getCompletedPublicationEvidence"];
   readonly completeMergedChange: ChangeDeliveryPort["completeMergedChange"];
 };
 

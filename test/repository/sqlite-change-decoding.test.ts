@@ -204,10 +204,6 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              INSERT INTO candidate_validation_admissions (candidate_id, validation_run_id)
-              VALUES ('owned-candidate', 'owned-run')
-            `;
-            yield* sql`
               UPDATE changes SET
                 publication_candidate_id = 'owned-candidate',
                 publication_validation_run_id = 'owned-run', publication_owner = 'acme',
@@ -232,9 +228,12 @@ describe("SQLite Change decoding", () => {
           policy: { checks: [], copyFiles: [], specialistReviews: [] },
           implementationDecisions: [],
         };
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation(
           "inject malformed publication snapshots",
           (sql) => sql`
