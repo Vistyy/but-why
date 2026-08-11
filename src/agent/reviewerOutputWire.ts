@@ -5,7 +5,7 @@ export const parseTaggedReviewerOutput = (stdout: string): unknown => {
   const matched = [...stdout.matchAll(pattern)].at(-1)?.[1];
   if (matched === undefined) return undefined;
   try {
-    const parsed: unknown = JSON.parse(matched);
+    const parsed: unknown = JSON.parse(matched) as unknown;
     return parsed;
   } catch {
     return matched;

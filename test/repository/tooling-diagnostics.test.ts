@@ -143,20 +143,21 @@ describe("repository-authored tooling diagnostics", () => {
       "scripts",
     ],
     [
-      "json-parse-variable-bindings-keep-unknown",
+      "json-parse-results-start-unknown",
       "const value: TrustedType = JSON.parse(source);",
       "scripts",
     ],
     [
-      "json-parse-variable-bindings-keep-unknown",
+      "json-parse-results-start-unknown",
       "let value: TrustedType; value = JSON.parse(source);",
       "extensions",
     ],
     [
-      "json-parse-variable-bindings-keep-unknown",
+      "json-parse-results-start-unknown",
       "const parseTrusted = (): TrustedType => JSON.parse(source);",
       "scripts",
     ],
+    ["json-parse-results-start-unknown", "acceptTrusted(JSON.parse(source));", "extensions"],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",

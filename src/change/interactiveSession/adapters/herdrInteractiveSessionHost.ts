@@ -575,7 +575,7 @@ type OpenedWorktree = { readonly rootPaneId: string };
 const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A | undefined => {
   let input: unknown;
   try {
-    const parsed: unknown = JSON.parse(source);
+    const parsed: unknown = JSON.parse(source) as unknown;
     input = parsed;
   } catch {
     return undefined;

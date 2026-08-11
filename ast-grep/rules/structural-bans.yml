@@ -92,11 +92,11 @@ rule:
           - pattern: $VALUE as unknown
           - pattern: <unknown>$VALUE
 ---
-# A variable that receives parsed JSON must expose its unknown runtime shape.
-id: json-parse-variable-bindings-keep-unknown
+# Parsed JSON must become unknown at the parse expression before it crosses any TypeScript boundary.
+id: json-parse-results-start-unknown
 language: TypeScript
 severity: error
-message: Do not bind JSON.parse output to an inferred or trusted variable type because parsed JSON has an unknown runtime shape; annotate the variable as unknown and use the owning boundary's focused decoder or schema.
+message: Do not use JSON.parse output before asserting it as unknown because parsed JSON has an unknown runtime shape; write JSON.parse(source) as unknown and use the owning boundary's focused decoder or schema.
 files:
   - extensions/**/*.ts
   - scripts/**/*.ts
@@ -106,31 +106,14 @@ ignores:
   # This immutable Effect SQL migration validates its assigned unknown value before canonicalizing the historical artifact.
   - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
 rule:
-  any:
-    - pattern: return JSON.parse($$$ARGS)
-    - pattern:
-        context: "const $FUNCTION = ($$$PARAMS): $TYPE => JSON.parse($$$ARGS)"
-        selector: arrow_function
-        strictness: relaxed
-    - pattern:
-        context: const $FUNCTION = ($$$PARAMS) => JSON.parse($$$ARGS)
-        selector: arrow_function
-        strictness: relaxed
-    - pattern: $TARGET = JSON.parse($$$ARGS)
-    - pattern:
-        context: const $NAME = JSON.parse($$$ARGS)
-        selector: variable_declarator
-        strictness: relaxed
-    - all:
-        - pattern:
-            context: "const $NAME: $TYPE = JSON.parse($$$ARGS)"
-            selector: variable_declarator
-            strictness: relaxed
-        - not:
-            pattern:
-              context: "const $NAME: unknown = JSON.parse($$$ARGS)"
-              selector: variable_declarator
-              strictness: relaxed
+  all:
+    - pattern: JSON.parse($$$ARGS)
+    - not:
+        inside:
+          any:
+            - pattern: $VALUE as unknown
+            - pattern: <unknown>$VALUE
+          stopBy: end
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
@@ -289,17 +272,29 @@ severity: error
 message: Do not forward an unconstrained executable parameter to a test-process helper because the wrapper can hide npm from static package ownership checks; use a statically constrained executable expression or call the helper directly.
 files:
   - test/**/*.ts
+ignores:
+  # The Adapter implements the helper and must forward its explicit command input.
+  - test/support/testProcess.ts
+  # The package contract owns npm and executes the installed package binary that the contract discovers.
+  - test/repository/package-contents.test.ts
+  # This external-boundary test executes the exact reviewer command produced by the Reviewer Adapter.
+  - test/agent/reviewer-agent-runtime-process.test.ts
 rule:
   any:
-    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => runTestProcess($COMMAND, $$$ARGS)"
-    - pattern: const $ALIAS = ($$$PARAMS) => runTestProcess($COMMAND, $$$ARGS)
-    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => runTestProcessOrThrow($COMMAND, $$$ARGS)"
-    - pattern: const $ALIAS = ($$$PARAMS) => runTestProcessOrThrow($COMMAND, $$$ARGS)
-    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => startTestProcess($COMMAND, $$$ARGS)"
-    - pattern: const $ALIAS = ($$$PARAMS) => startTestProcess($COMMAND, $$$ARGS)
+    - pattern: runTestProcess($COMMAND, $$$ARGS)
+    - pattern: runTestProcessOrThrow($COMMAND, $$$ARGS)
+    - pattern: startTestProcess($COMMAND, $$$ARGS)
+    - pattern: $NAMESPACE.runTestProcess($COMMAND, $$$ARGS)
+    - pattern: $NAMESPACE.runTestProcessOrThrow($COMMAND, $$$ARGS)
+    - pattern: $NAMESPACE.startTestProcess($COMMAND, $$$ARGS)
 constraints:
   COMMAND:
-    kind: identifier
+    any:
+      - kind: identifier
+      - all:
+          - kind: member_expression
+          - not:
+              pattern: process.execPath
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

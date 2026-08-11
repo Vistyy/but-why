@@ -7,7 +7,7 @@ import { describe } from "vitest";
 import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import { runCheckPhase as runCheckPhaseWithFileSystem } from "../../src/change/validation/runCheckRound.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -22,7 +22,6 @@ describe("check round Findings", () => {
       Effect.gen(function* () {
         const workspace = createTestWorkspace();
         const marker = join(workspace, "check-started");
-        const shPath = runTestProcessOrThrow("sh", ["-c", "command -v sh"], { cwd: workspace });
         // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
         const restrictedPath = (process.env["PATH"] ?? "")
           .split(delimiter)
@@ -30,13 +29,13 @@ describe("check round Findings", () => {
           .join(delimiter);
 
         expect(
-          runTestProcess(shPath, ["-c", "command -v timeout"], {
+          runTestProcess("sh", ["-c", "command -v timeout"], {
             cwd: workspace,
             env: { PATH: restrictedPath },
           }).status,
         ).not.toBe(0);
         expect(
-          runTestProcess(shPath, ["-c", "printf ok"], {
+          runTestProcess("sh", ["-c", "printf ok"], {
             cwd: workspace,
             env: { PATH: restrictedPath },
           }).status,
@@ -50,7 +49,7 @@ describe("check round Findings", () => {
             now,
             commandExecutor: (command, options) =>
               Effect.sync(() => {
-                const result = runTestProcess(shPath, ["-c", command], {
+                const result = runTestProcess("sh", ["-c", command], {
                   cwd: options?.cwd ?? workspace,
                   env: { PATH: restrictedPath },
                 });
