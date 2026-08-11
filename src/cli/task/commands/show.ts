@@ -30,22 +30,6 @@ export const runTaskShowCommand = (
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
-      if (environment.taskUseCases !== undefined && environment.taskReviewUseCases === undefined) {
-        return success({
-          task: {
-            id: task.id,
-            title: task.title,
-            state: task.state,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt,
-            ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
-            prerequisites: task.prerequisites,
-            dependents: task.dependents,
-            change: projection,
-          },
-          contextCommand: `by task context ${task.id}`,
-        });
-      }
       return yield* withTaskReviewReads(environment, (reviews) =>
         Effect.gen(function* () {
           const review = yield* reviews.getLatestForTask(taskId.taskId);

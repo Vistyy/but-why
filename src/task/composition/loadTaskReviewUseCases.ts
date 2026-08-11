@@ -16,7 +16,10 @@ import {
 import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/repoConfig.js";
-import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import {
+  openRepositoryRuntime,
+  type RepositoryRuntimeLoadError,
+} from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/repositoryFile.js";
 import {
@@ -32,9 +35,8 @@ import {
 } from "../review/taskReviewUseCases.js";
 
 export type LoadTaskReviewError =
-  | { readonly code: "task_review_config_invalid"; readonly message: string }
-  | { readonly code: "state_store_unavailable" }
-  | { readonly code: "repository_unavailable"; readonly message: string };
+  | RepositoryRuntimeLoadError
+  | { readonly code: "task_review_config_invalid"; readonly message: string };
 
 export const withTaskReviewReadUseCases = <A, E, R>(
   input: { readonly cwd: string },
@@ -46,15 +48,7 @@ export const withTaskReviewReadUseCases = <A, E, R>(
   R
 > => {
   const loaded = openRepositoryRuntime(input.cwd);
-  if (!loaded.ok) {
-    return Effect.succeed({
-      ok: false,
-      error:
-        loaded.error.code === "state_store_unavailable"
-          ? { code: "state_store_unavailable" }
-          : { code: "repository_unavailable", message: loaded.error.code },
-    });
-  }
+  if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
     openSqliteTaskReviewPersistence().pipe(
@@ -105,15 +99,7 @@ export const withTaskReviewUseCases = <A, E, R>(
   R
 > => {
   const loaded = openRepositoryRuntime(input.cwd);
-  if (!loaded.ok) {
-    return Effect.succeed({
-      ok: false,
-      error:
-        loaded.error.code === "state_store_unavailable"
-          ? { code: "state_store_unavailable" }
-          : { code: "repository_unavailable", message: loaded.error.code },
-    });
-  }
+  if (!loaded.ok) return Effect.succeed(loaded);
   const global = readGlobalConfig(input.globalConfigPath);
   if (!global.ok) {
     return Effect.succeed({

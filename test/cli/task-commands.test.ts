@@ -14,6 +14,8 @@ import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
 import { dashboard } from "../../src/cli/task/dashboard.js";
 import type { TaskCommandEnvironment } from "../../src/cli/task/taskCliSupport.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
+import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewReadUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -43,11 +45,52 @@ const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   ...overrides,
 });
 
-const environment = (taskUseCases: TaskUseCases, now = firstNow): TaskCommandEnvironment => ({
+const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReviewRecord => ({
+  id: "review-1",
+  taskId: "BY-1",
+  proposal: { title: "Inspect task", description: "Description", dependencyIds: [] },
+  dependencyEvidence: [],
+  policy: {
+    id: "task_advisory_review",
+    version: 1,
+    agentProfile: "review",
+    profileScope: "global",
+    instructions: "Review the exact proposal.",
+  },
+  baseRef: "refs/heads/main",
+  baseCommit: "a".repeat(40),
+  workspacePath: "/tmp/review-1",
+  state: "complete",
+  outcome: "passed",
+  workspaceCleanup: "removed",
+  toolingFailure: null,
+  abandonReason: null,
+  findings: [],
+  createdAt: firstNow,
+  updatedAt: firstNow,
+  ...overrides,
+});
+
+const taskReviewReads = (
+  latest: TaskReviewRecord | undefined = undefined,
+): TaskReviewReadUseCases => ({
+  abandon: () => Effect.succeed({ ok: false, code: "task_review_not_found" }),
+  getById: () => Effect.void,
+  getLatestForTask: () => Effect.succeed(latest),
+  proposalIsCurrent: () => Effect.succeed(false),
+  inspectIdentity: () => Effect.succeed({ verified: true, workspace: { state: "absent" } }),
+});
+
+const environment = (
+  taskUseCases: TaskUseCases,
+  now = firstNow,
+  taskReviewReadUseCases: TaskReviewReadUseCases = taskReviewReads(),
+): TaskCommandEnvironment => ({
   cwd: createTestWorkspace(),
   now: () => new Date(now),
   stdin: { fd: -1, isTerminal: true },
   taskUseCases,
+  taskReviewReadUseCases,
 });
 
 describe("Task command Adapters", () => {
@@ -192,8 +235,23 @@ describe("Task command Adapters", () => {
     }),
   );
 
-  it.effect("renders Task Show navigation and the complete Task Context view", () =>
+  it.effect("renders Task Show navigation, its retained Review, and Task Context", () =>
     Effect.gen(function* () {
+      const retainedReview = taskReviewRecord({
+        id: "review-retained",
+        state: "complete",
+        outcome: "blocked",
+        workspaceCleanup: "removed",
+        findings: [
+          {
+            title: "Ambiguous outcome",
+            description: "Clarify the expected result.",
+            evidence: "The proposal permits two outcomes.",
+            files: ["docs/spec.md"],
+          },
+        ],
+        updatedAt: secondNow,
+      });
       const commandEnvironment = environment(
         fakeTaskUseCases({
           getTaskForInspection: () =>
@@ -204,6 +262,8 @@ describe("Task command Adapters", () => {
             description: "Full intent\n\nWith details.",
           }),
         }),
+        firstNow,
+        taskReviewReads(retainedReview),
       );
 
       const shown = yield* runTaskShowCommand({ taskId: "BY-1" }, commandEnvironment);
@@ -219,8 +279,26 @@ describe("Task command Adapters", () => {
           prerequisites: [],
           dependents: [],
           change: null,
+          review: {
+            id: "review-retained",
+            state: "complete",
+            outcome: "blocked",
+            proposalCurrent: false,
+            findingCount: 1,
+            findings: [
+              {
+                title: "Ambiguous outcome",
+                description: "Clarify the expected result.",
+                evidence: "The proposal permits two outcomes.",
+                files: ["docs/spec.md"],
+              },
+            ],
+            workspaceCleanup: "removed",
+            toolingFailure: null,
+          },
         },
         contextCommand: "by task context BY-1",
+        reviewCommand: "by task review show review-retained",
       });
       expect(context.stdout).toEqual({
         task: {

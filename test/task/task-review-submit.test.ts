@@ -57,6 +57,23 @@ it("verifies the recorded Task Review Base without requiring its branch tip to r
   ).toMatchObject({ ok: false, message: expect.stringContaining("commit") });
 });
 
+it.effect("preserves repository load errors for Task Review commands", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+
+    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", "review-id"]);
+
+    expect(shown.status).toBe(1);
+    expect(JSON.parse(shown.stdout)).toEqual({
+      error: {
+        code: "not_initialized",
+        message: "This workspace is not initialized for But Why?.",
+      },
+      help: ["Run `by init --task-prefix BY` in the repository root."],
+    });
+  }),
+);
+
 it.effect("rejects a missing required default Agent Profile before Task Review admission", () =>
   Effect.gen(function* () {
     const root = createGitRepo();

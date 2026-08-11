@@ -13,6 +13,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import {
+  type LoadTaskReviewError,
   withTaskReviewReadUseCases,
   withTaskReviewUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
@@ -31,6 +32,7 @@ export type TaskCommandEnvironment = {
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
+  readonly taskReviewReadUseCases?: TaskReviewReadUseCases;
   readonly taskReviewUseCases?: TaskReviewUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
@@ -60,23 +62,15 @@ export const withTaskReviewReads = (
   environment: TaskCommandEnvironment,
   use: (reviews: TaskReviewReadUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
+  const injected = environment.taskReviewReadUseCases ?? environment.taskReviewUseCases;
   const program =
-    environment.taskReviewUseCases === undefined
+    injected === undefined
       ? withTaskReviewReadUseCases({ cwd: environment.cwd }, use).pipe(
           Effect.map((result) =>
-            result.ok
-              ? result.value
-              : runtimeError({
-                  code: result.error.code,
-                  message:
-                    "message" in result.error
-                      ? result.error.message
-                      : "Shared But Why? state is unavailable.",
-                  help: ["Fix the reported repository or configuration problem, then retry."],
-                }),
+            result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
-      : use(environment.taskReviewUseCases);
+      : use(injected);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
@@ -103,16 +97,7 @@ export const withTaskReviews = (
           use,
         ).pipe(
           Effect.map((result) =>
-            result.ok
-              ? result.value
-              : runtimeError({
-                  code: result.error.code,
-                  message:
-                    "message" in result.error
-                      ? result.error.message
-                      : "Shared But Why? state is unavailable.",
-                  help: ["Fix the reported repository or configuration problem, then retry."],
-                }),
+            result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
       : use(environment.taskReviewUseCases);
@@ -124,6 +109,15 @@ export const withTaskReviews = (
     ),
   );
 };
+
+const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
+  error.code === "task_review_config_invalid"
+    ? runtimeError({
+        code: error.code,
+        message: error.message,
+        help: ["Fix the reported Agent Profile configuration, then retry."],
+      })
+    : repoStateLoadError(error);
 
 export type ResolvedTaskIdResult =
   | {
