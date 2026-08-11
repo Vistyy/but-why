@@ -9,12 +9,18 @@ import type {
   RemoteBranchHeadResult,
 } from "../../change/changeCleanupRemote.js";
 import type {
-  GitHubPullRequest,
   GitHubPullRequestCloser,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
 } from "../../change/ownedPullRequestGateway.js";
+import {
+  decodeGitHubPullRequest,
+  decodeGitHubPullRequestList,
+  decodePublicationRemoteBranchQuery,
+  decodeRemoteBranchQuery,
+  isConfirmedRemoteBranchDeletion,
+} from "./githubResponseContracts.js";
 
 export type PublicationCommandResult =
   | {
@@ -100,7 +106,7 @@ const findPullRequests = (
       evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
   }
-  const parsed = parsePullRequestList(result.stdout);
+  const parsed = decodeGitHubPullRequestList(result.stdout);
   return parsed === undefined
     ? {
         ok: false,
@@ -121,7 +127,7 @@ const getPullRequest = (
       evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
   }
-  const parsed = parsePullRequest(result.stdout);
+  const parsed = decodeGitHubPullRequest(result.stdout);
   return parsed === undefined
     ? {
         ok: false,
@@ -151,7 +157,7 @@ const closePullRequest = (
       evidence: evidence("pull_request_close", result, lost ? "lost_response" : "rejected"),
     };
   }
-  const pullRequest = parsePullRequest(result.stdout);
+  const pullRequest = decodeGitHubPullRequest(result.stdout);
   return pullRequest === undefined
     ? {
         ok: false,
@@ -210,20 +216,6 @@ const githubRepository = (
 
 type RemoteBranchCleanupInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
 
-type RemoteBranchQueryJson = {
-  readonly data?: {
-    readonly repository?: {
-      readonly id?: unknown;
-      readonly defaultBranchRef?: { readonly name?: unknown } | null;
-      readonly ref?: {
-        readonly id?: unknown;
-        readonly name?: unknown;
-        readonly target?: { readonly oid?: unknown } | null;
-      } | null;
-    } | null;
-  };
-};
-
 const readRemoteBranchHead = (
   runGh: PublicationCommandRunner,
   input: RemoteBranchCleanupInput,
@@ -253,17 +245,11 @@ const readRemoteBranchHead = (
     `qualifiedName=refs/heads/${input.branchName}`,
   ]);
   if (!result.ok) return { state: "unavailable" };
-  const parsed = parseJson(result.stdout);
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    !("data" in parsed) ||
-    hasGraphqlErrors(parsed)
-  ) {
+  const parsed = decodeRemoteBranchQuery(result.stdout);
+  if (parsed === undefined || (parsed.errors !== undefined && parsed.errors.length > 0)) {
     return { state: "unavailable" };
   }
-  const repository = (parsed as RemoteBranchQueryJson).data?.repository;
+  const repository = parsed.data.repository;
   if (repository === undefined) return { state: "unavailable" };
   if (repository === null) return { state: "mismatch" };
   const defaultBranch = repository.defaultBranchRef?.name;
@@ -309,31 +295,10 @@ const deleteRemoteBranch = (
     `afterOid=${zeroSha}`,
   ]);
   if (!result.ok) return readAfterUncertainDeletion(runGh, input);
-  return decodeRemoteBranchDeletionResponse(parseJson(result.stdout))
+  return isConfirmedRemoteBranchDeletion(result.stdout)
     ? { state: "deleted" }
     : readAfterUncertainDeletion(runGh, input);
 };
-
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const decodeRemoteBranchDeletionResponse = (value: unknown): boolean => {
-  if (!isObjectRecord(value) || "errors" in value) return false;
-  const data = value["data"];
-  if (!isObjectRecord(data)) return false;
-  const updateRefs = data["updateRefs"];
-  if (!isObjectRecord(updateRefs) || !("clientMutationId" in updateRefs)) return false;
-  return (
-    updateRefs["clientMutationId"] === null || typeof updateRefs["clientMutationId"] === "string"
-  );
-};
-
-const hasGraphqlErrors = (value: unknown): boolean =>
-  typeof value === "object" &&
-  value !== null &&
-  "errors" in value &&
-  Array.isArray(value.errors) &&
-  value.errors.length > 0;
 
 const readAfterUncertainDeletion = (
   runGh: PublicationCommandRunner,
@@ -421,7 +386,7 @@ const createPullRequest = (
       evidence: evidence("pull_request_creation", result, lost ? "lost_response" : "rejected"),
     };
   }
-  const pullRequest = parsePullRequest(result.stdout);
+  const pullRequest = decodeGitHubPullRequest(result.stdout);
   return pullRequest === undefined
     ? {
         ok: false,
@@ -479,7 +444,7 @@ const updatePullRequest = (
       evidence: evidence("pull_request_update", result, lost ? "lost_response" : "rejected"),
     };
   }
-  const pullRequest = parsePullRequest(result.stdout);
+  const pullRequest = decodeGitHubPullRequest(result.stdout);
   return pullRequest === undefined
     ? {
         ok: false,
@@ -533,38 +498,20 @@ const initialRemoteHeadState = (
       kind: "unknown",
       evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
     };
-  const parsed = parseJson(result.stdout);
-  if (!isObjectRecord(parsed) || "errors" in parsed)
+  const parsed = decodePublicationRemoteBranchQuery(result.stdout);
+  if (parsed === undefined || parsed.errors !== undefined)
     return {
       kind: "unknown",
       evidence: evidence("remote_lookup", result, "response_parse_failure"),
     };
-  const data = parsed["data"];
-  if (!isObjectRecord(data))
-    return {
-      kind: "unknown",
-      evidence: evidence("remote_lookup", result, "response_parse_failure"),
-    };
-  const repository = data["repository"];
-  if (!isObjectRecord(repository))
-    return {
-      kind: "unknown",
-      evidence: evidence("remote_lookup", result, "response_parse_failure"),
-    };
-  const ref = repository["ref"];
+  const ref = parsed.data.repository.ref;
   if (ref === null) return { kind: "missing" };
-  if (!isObjectRecord(ref) || ref["name"] !== request.headBranch || ref["prefix"] !== "refs/heads/")
+  if (ref.name !== request.headBranch || ref.prefix !== "refs/heads/")
     return {
       kind: "unknown",
       evidence: evidence("remote_lookup", result, "response_parse_failure"),
     };
-  const target = ref["target"];
-  if (!isObjectRecord(target) || typeof target["oid"] !== "string")
-    return {
-      kind: "unknown",
-      evidence: evidence("remote_lookup", result, "response_parse_failure"),
-    };
-  const oid = target["oid"];
+  const oid = ref.target.oid;
   if (oid !== request.expectedHeadSha && !/^[0-9a-f]{40}$/u.test(oid))
     return {
       kind: "unknown",
@@ -726,101 +673,4 @@ const runCommand = (
         ...(result.stderr === undefined ? {} : { stderr: result.stderr }),
         ...(result.status === null ? {} : { status: result.status }),
       };
-};
-
-const parsePullRequestList = (value: string): readonly GitHubPullRequest[] | undefined => {
-  const parsed = parseJson(value);
-  if (!Array.isArray(parsed)) return undefined;
-  const pullRequests = parsed.map((item) => parsePullRequestObject(item));
-  return pullRequests.every((item) => item !== undefined)
-    ? (pullRequests as readonly GitHubPullRequest[])
-    : undefined;
-};
-
-const parsePullRequest = (value: string): GitHubPullRequest | undefined =>
-  parsePullRequestObject(parseJson(value));
-
-const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined => {
-  if (!isObjectRecord(value)) return undefined;
-  const base = isObjectRecord(value["base"]) ? value["base"] : undefined;
-  const head = isObjectRecord(value["head"]) ? value["head"] : undefined;
-  const url = selectPullRequestUrl(value);
-  const number = value["number"];
-  const repository = repositoryIdentity(base?.["repo"]);
-  const state =
-    value["state"] === "open" || value["state"] === "closed" ? value["state"] : undefined;
-  const merged =
-    typeof value["merged"] === "boolean"
-      ? value["merged"]
-      : value["merged_at"] === null
-        ? false
-        : typeof value["merged_at"] === "string" && value["merged_at"].length > 0
-          ? true
-          : undefined;
-  if (
-    typeof number !== "number" ||
-    !Number.isSafeInteger(number) ||
-    number <= 0 ||
-    url === undefined ||
-    repository === undefined ||
-    state === undefined ||
-    merged === undefined ||
-    typeof base?.["ref"] !== "string" ||
-    base["ref"].length === 0 ||
-    typeof head?.["ref"] !== "string" ||
-    head["ref"].length === 0 ||
-    typeof head["sha"] !== "string" ||
-    head["sha"].length === 0
-  ) {
-    return undefined;
-  }
-  return {
-    number,
-    url,
-    repository,
-    state,
-    merged,
-    baseBranch: base["ref"],
-    headBranch: head["ref"],
-    headSha: head["sha"],
-  };
-};
-
-const selectPullRequestUrl = (pullRequest: Record<string, unknown>): string | undefined =>
-  validHttpUrl(pullRequest["html_url"])
-    ? pullRequest["html_url"]
-    : validHttpUrl(pullRequest["url"])
-      ? pullRequest["url"]
-      : undefined;
-
-const validHttpUrl = (value: unknown): value is string => {
-  if (typeof value !== "string") return false;
-  try {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
-const repositoryIdentity = (
-  value: unknown,
-): { readonly owner: string; readonly repo: string } | undefined => {
-  if (!isObjectRecord(value) || !isObjectRecord(value["owner"])) return undefined;
-  const owner = value["owner"]["login"];
-  const repo = value["name"];
-  return typeof owner === "string" &&
-    owner.length > 0 &&
-    typeof repo === "string" &&
-    repo.length > 0
-    ? { owner, repo }
-    : undefined;
-};
-
-const parseJson = (value: string): unknown => {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return undefined;
-  }
 };

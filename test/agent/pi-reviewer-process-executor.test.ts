@@ -151,12 +151,22 @@ describe("Pi reviewer process executor", () => {
       const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
       writeFileSync(
         sessionFile,
-        `${JSON.stringify({ type: "session", id: sessionId, cwd: "/old/workspace" })}\n`,
+        `${JSON.stringify({
+          type: "session",
+          id: sessionId,
+          cwd: "/old/workspace",
+          timestamp: "2026-08-11T20:00:00.000Z",
+          version: 3,
+          externalMetadata: { retained: true },
+        })}\n`,
       );
       let calls = 0;
       const executor = createPiReviewerProcessExecutor((command) => {
         calls += 1;
-        expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/validation/workspace"');
+        const persistedSession = readFileSync(sessionFile, "utf8");
+        expect(persistedSession).toContain('"cwd":"/validation/workspace"');
+        expect(persistedSession).toContain('"timestamp":"2026-08-11T20:00:00.000Z"');
+        expect(persistedSession).toContain('"externalMetadata":{"retained":true}');
         expect(command.args).toContain("--session");
         return Effect.succeed({
           exitCode: 0,
@@ -204,6 +214,42 @@ describe("Pi reviewer process executor", () => {
 
       const result = yield* executor.execute(input);
       expect(result.invocationUsage).toBeNull();
+    }),
+  );
+
+  it.effect("preserves optional message-field fallbacks", () =>
+    Effect.gen(function* () {
+      const executor = createPiReviewerProcessExecutor(() =>
+        Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${JSON.stringify({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              usage: {
+                input: 5,
+                output: 3,
+                cacheRead: 7,
+                cacheWrite: 2,
+                totalTokens: "unavailable",
+              },
+            },
+          })}\n`,
+        }),
+      );
+
+      const result = yield* executor.execute(input);
+
+      expect(result).toMatchObject({
+        stdout: "",
+        invocationUsage: {
+          inputTokens: 7,
+          cachedInputTokens: 7,
+          outputTokens: 3,
+          totalTokens: 17,
+        },
+      });
     }),
   );
 

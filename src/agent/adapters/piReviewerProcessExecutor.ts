@@ -9,6 +9,15 @@ import {
   type HostCommandResult,
 } from "../../command/hostCommand.js";
 import type { AgentEnvironmentCommand } from "../agentEnvironment.js";
+import {
+  decodePiAssistantMessageEnd,
+  decodePiAssistantText,
+  decodePiJsonlObject,
+  decodePiMessageUsage,
+  decodePiSessionHeader,
+  decodePiSessionIdentity,
+  isPiSessionRecord,
+} from "../piJsonl.js";
 import { piResourceArgs } from "../piRuntime.js";
 import type {
   ReviewerProcessExecutor,
@@ -163,13 +172,14 @@ const preparePiSession = (input: ReviewerProcessInput): void => {
     .split("\n")
     .map((line) => {
       if (line === "") return line;
-      const entry = parseObject(line, "Reviewer Session JSONL is corrupt.");
-      if (entry["type"] !== "session") return line;
-      if (headerFound || entry["id"] !== input.resumeSession || typeof entry["cwd"] !== "string") {
+      const entry = decodeJsonlObject(line, "Reviewer Session JSONL is corrupt.");
+      if (!isPiSessionRecord(entry)) return line;
+      const header = decodePiSessionHeader(entry);
+      if (headerFound || header?.id !== input.resumeSession) {
         throw new Error("Reviewer Session header is incompatible.");
       }
       headerFound = true;
-      return JSON.stringify({ ...entry, cwd: input.commandCwd });
+      return JSON.stringify({ ...header, cwd: input.commandCwd });
     })
     .join("\n");
   if (!headerFound) throw new Error("Reviewer Session header is missing.");
@@ -196,16 +206,13 @@ const parsePiOutput = (
 
   for (const line of output.split("\n")) {
     if (line === "") continue;
-    const event = parseObject(line, "Pi reviewer returned malformed JSON output.");
-    if (event["type"] === "session" && typeof event["id"] === "string") {
-      sessionReference = event["id"];
-    }
-    if (event["type"] !== "message_end") continue;
-    const message = objectValue(event["message"]);
-    if (message?.["role"] !== "assistant") continue;
+    const event = decodeJsonlObject(line, "Pi reviewer returned malformed JSON output.");
+    sessionReference = decodePiSessionIdentity(event) ?? sessionReference;
+    const messageEnd = decodePiAssistantMessageEnd(event);
+    if (messageEnd === undefined) continue;
     assistantMessages += 1;
-    finalOutput = assistantText(message);
-    const messageUsage = piMessageUsage(message["usage"]);
+    finalOutput = decodePiAssistantText(messageEnd.message.content);
+    const messageUsage = decodePiMessageUsage(messageEnd.message.usage);
     if (messageUsage === undefined) {
       usageAvailable = false;
       continue;
@@ -227,59 +234,13 @@ const parsePiOutput = (
   };
 };
 
-const assistantText = (message: Record<string, unknown>): string => {
-  const content = message["content"];
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) => {
-      const value = objectValue(part);
-      return value?.["type"] === "text" && typeof value["text"] === "string" ? value["text"] : "";
-    })
-    .join("");
-};
-
-const piMessageUsage = (value: unknown): TokenUsage | undefined => {
-  const usage = objectValue(value);
-  if (usage === undefined) return undefined;
-  const input = tokenCount(usage["input"]);
-  const output = tokenCount(usage["output"]);
-  const cacheRead = tokenCount(usage["cacheRead"]);
-  const cacheWrite = tokenCount(usage["cacheWrite"]);
-  if (
-    input === undefined ||
-    output === undefined ||
-    cacheRead === undefined ||
-    cacheWrite === undefined
-  )
-    return undefined;
-  const totalTokens = tokenCount(usage["totalTokens"]);
-  return {
-    inputTokens: input + cacheWrite,
-    cachedInputTokens: cacheRead,
-    outputTokens: output,
-    totalTokens: totalTokens ?? input + output + cacheRead + cacheWrite,
-  };
-};
-
-const tokenCount = (value: unknown): number | undefined =>
-  typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-
-const parseObject = (line: string, message: string): Record<string, unknown> => {
-  let value: unknown;
+const decodeJsonlObject = (line: string, message: string): Readonly<Record<string, unknown>> => {
   try {
-    value = JSON.parse(line);
+    return decodePiJsonlObject(line);
   } catch {
     throw new Error(message);
   }
-  const object = objectValue(value);
-  if (object === undefined) throw new Error(message);
-  return object;
 };
-
-const objectValue = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 
 const findSessionFile = (root: string, sessionId: string): string | undefined => {
   let rootStat: ReturnType<typeof statSync>;
@@ -318,8 +279,8 @@ const hasSessionHeader = (path: string, sessionId: string): boolean => {
   }
   if (firstLine === undefined) return false;
   try {
-    const header = parseObject(firstLine, "Reviewer Session JSONL is corrupt.");
-    return header["type"] === "session" && header["id"] === sessionId;
+    const header = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
+    return decodePiSessionIdentity(header) === sessionId;
   } catch {
     return false;
   }

@@ -9,12 +9,20 @@ const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({
     data: {
       repository: {
+        unknown: true,
         ref:
           sha === undefined
             ? null
-            : { name: "feature", prefix: "refs/heads/", target: { oid: sha } },
+            : {
+                name: "feature",
+                prefix: "refs/heads/",
+                target: { oid: sha, unknown: true },
+                unknown: true,
+              },
       },
+      unknown: true,
     },
+    unknown: true,
   });
 
 describe("GitHub pull request gateway", () => {
@@ -233,6 +241,81 @@ describe("GitHub pull request gateway", () => {
         headBranch: "feature",
         headSha: "candidate-sha",
       },
+    });
+  });
+
+  it("tolerates GitHub response expansion without exposing unknown fields", () => {
+    const pullRequestGateway = localGitHubPullRequestGateway({
+      runGh: () => ({
+        ok: true,
+        stdout: JSON.stringify({
+          number: 42,
+          url: "https://api.github.com/repos/acme/widgets/pulls/42",
+          state: "open",
+          merged: false,
+          draft: true,
+          base: {
+            ref: "main",
+            label: "acme:main",
+            repo: { owner: { login: "acme", avatar_url: "unknown" }, name: "widgets", id: 1 },
+          },
+          head: { ref: "feature", sha: "candidate-sha", user: { login: "agent" } },
+        }),
+      }),
+    });
+
+    expect(
+      pullRequestGateway.getPullRequest(
+        { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+        42,
+      ),
+    ).toEqual({
+      ok: true,
+      pullRequest: {
+        number: 42,
+        url: "https://api.github.com/repos/acme/widgets/pulls/42",
+        state: "open",
+        merged: false,
+        repository: { owner: "acme", repo: "widgets" },
+        baseBranch: "main",
+        headBranch: "feature",
+        headSha: "candidate-sha",
+      },
+    });
+
+    const cleanupGateway = localGitHubChangeCleanupRemote({
+      runGh: () => ({
+        ok: true,
+        stdout: JSON.stringify({
+          data: {
+            repository: {
+              id: "repo-id",
+              databaseId: 1,
+              defaultBranchRef: { name: "main", unknown: true },
+              ref: { id: "ref-id", target: { oid: "candidate-sha", unknown: true } },
+            },
+          },
+          extensions: { requestId: "unknown" },
+        }),
+      }),
+    });
+    expect(
+      cleanupGateway.readRemoteBranchHead({
+        repositoryCommonDirectory: "/repo/.git",
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        remoteUrl: "https://github.com/acme/widgets.git",
+        branchName: "but-why/feature",
+        canonicalBranchRef: "refs/heads/but-why/feature",
+        targetBranch: "main",
+      }),
+    ).toEqual({
+      state: "present",
+      headSha: "candidate-sha",
+      remoteUrl: "https://github.com/acme/widgets.git",
+      repositoryId: "repo-id",
+      refId: "ref-id",
     });
   });
 
@@ -747,7 +830,11 @@ describe("GitHub pull request gateway", () => {
       runGh: (args) => {
         ghCalls.push(args);
         return args.some((arg) => arg.includes("updateRefs"))
-          ? { ok: true, stdout: '{"data":{"updateRefs":{"clientMutationId":null}}}' }
+          ? {
+              ok: true,
+              stdout:
+                '{"data":{"updateRefs":{"clientMutationId":null,"unknown":true},"unknown":true},"unknown":true}',
+            }
           : {
               ok: true,
               stdout:

@@ -1,4 +1,5 @@
 import { readFileSync, statSync } from "node:fs";
+import { Either, Schema } from "effect";
 import { createJiti } from "jiti/static";
 
 import { piResourceArgs } from "../../../agent/piRuntime.js";
@@ -405,146 +406,141 @@ const isUncertainMutationFailure = (message: string): boolean =>
     message,
   );
 
-type JsonRecord = Record<string, unknown>;
+const nonEmptyStringSchema = Schema.String.pipe(Schema.filter((value) => value.length > 0));
+const nonBlankStringSchema = Schema.String.pipe(Schema.filter((value) => value.trim().length > 0));
 
-type HerdrAgent = {
-  readonly cwd: string;
-  readonly agentStatus: "idle" | "working" | "blocked" | "unknown" | "done";
-  readonly paneId: string;
-  readonly name?: string;
-  readonly agent?: string;
-};
+const herdrAgentStatusSchema = Schema.Literal("idle", "working", "blocked", "unknown", "done");
+const herdrAgentSchema = Schema.Struct({
+  cwd: Schema.String,
+  agent_status: herdrAgentStatusSchema,
+  pane_id: Schema.String,
+  name: Schema.optional(Schema.String),
+  agent: Schema.optional(Schema.String),
+});
 
-type HerdrWorktree = {
-  readonly path?: string;
-  readonly worktreePath?: string;
-  readonly branch?: string | null;
-};
+const herdrAgentListResponseSchema = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("agent_list"),
+    agents: Schema.Array(herdrAgentSchema),
+  }),
+});
 
+const herdrWorktreeSchema = Schema.Union(
+  Schema.Struct({
+    path: Schema.String,
+    worktree_path: Schema.optional(Schema.String),
+    branch: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+  Schema.Struct({
+    path: Schema.optional(Schema.String),
+    worktree_path: Schema.String,
+    branch: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+);
+
+const herdrWorktreeListResponseSchema = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("worktree_list"),
+    worktrees: Schema.Array(herdrWorktreeSchema),
+  }),
+});
+
+const herdrWorktreeOpenedResponseSchema = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("worktree_opened"),
+    worktree: Schema.Struct({
+      path: Schema.String,
+      open_workspace_id: nonBlankStringSchema,
+    }),
+    workspace: Schema.Struct({
+      workspace_id: nonBlankStringSchema,
+      worktree: Schema.Struct({ checkout_path: Schema.String }),
+    }),
+    tab: Schema.Struct({
+      tab_id: nonBlankStringSchema,
+      workspace_id: Schema.String,
+    }),
+    root_pane: Schema.Struct({
+      pane_id: nonBlankStringSchema,
+      workspace_id: Schema.String,
+      tab_id: Schema.String,
+    }),
+    already_open: Schema.Boolean,
+  }),
+});
+
+const herdrAgentStartedResponseSchema = Schema.Struct({
+  result: Schema.Struct({
+    type: Schema.Literal("agent_started"),
+    agent: Schema.Struct({ terminal_id: nonEmptyStringSchema }),
+  }),
+});
+
+const herdrAgentPromptedResponseSchema = Schema.Struct({
+  result: Schema.Struct({ type: Schema.Literal("agent_prompted") }),
+});
+
+const herdrErrorResponseSchema = Schema.Struct({
+  error: Schema.Struct({ code: Schema.String }),
+});
+
+type HerdrAgentStatus = Schema.Schema.Type<typeof herdrAgentStatusSchema>;
+type HerdrAgent = Schema.Schema.Type<typeof herdrAgentSchema>;
+type HerdrWorktree = { readonly paths: readonly string[] };
 type OpenedWorktree = { readonly rootPaneId: string };
 
-const parseJsonRecord = (source: string): JsonRecord | undefined => {
+const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A | undefined => {
+  let input: unknown;
   try {
-    const value = JSON.parse(source) as unknown;
-    return isRecord(value) ? value : undefined;
+    input = JSON.parse(source);
   } catch {
     return undefined;
   }
+  const decoded = Schema.decodeUnknownEither(schema, { onExcessProperty: "ignore" })(input);
+  return Either.isRight(decoded) ? decoded.right : undefined;
 };
 
-const decodeResult = (source: string, type: string): JsonRecord | undefined => {
-  const response = parseJsonRecord(source);
-  const result = response?.["result"];
-  return isRecord(result) && result["type"] === type ? result : undefined;
-};
-
-const decodeAgentList = (source: string): readonly HerdrAgent[] | undefined => {
-  const result = decodeResult(source, "agent_list");
-  const agents = result?.["agents"];
-  if (!Array.isArray(agents)) return undefined;
-  const decoded: HerdrAgent[] = [];
-  for (const value of agents) {
-    if (!isRecord(value)) return undefined;
-    const status = value["agent_status"];
-    if (
-      typeof value["cwd"] !== "string" ||
-      typeof value["pane_id"] !== "string" ||
-      (status !== "idle" &&
-        status !== "working" &&
-        status !== "blocked" &&
-        status !== "unknown" &&
-        status !== "done") ||
-      (value["name"] !== undefined && typeof value["name"] !== "string") ||
-      (value["agent"] !== undefined && typeof value["agent"] !== "string")
-    )
-      return undefined;
-    decoded.push({
-      cwd: value["cwd"],
-      agentStatus: status,
-      paneId: value["pane_id"],
-      ...(typeof value["name"] === "string" ? { name: value["name"] } : {}),
-      ...(typeof value["agent"] === "string" ? { agent: value["agent"] } : {}),
-    });
-  }
-  return decoded;
-};
+const decodeAgentList = (source: string): readonly HerdrAgent[] | undefined =>
+  decodeHerdrJson(source, herdrAgentListResponseSchema)?.result.agents;
 
 const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefined => {
-  const result = decodeResult(source, "worktree_list");
-  const worktrees = result?.["worktrees"];
-  if (!Array.isArray(worktrees)) return undefined;
-  const decoded: HerdrWorktree[] = [];
-  for (const value of worktrees) {
-    if (
-      !isRecord(value) ||
-      (typeof value["path"] !== "string" && typeof value["worktree_path"] !== "string") ||
-      (value["path"] !== undefined && typeof value["path"] !== "string") ||
-      (value["worktree_path"] !== undefined && typeof value["worktree_path"] !== "string") ||
-      (value["branch"] !== undefined &&
-        value["branch"] !== null &&
-        typeof value["branch"] !== "string")
-    )
-      return undefined;
-    decoded.push({
-      ...(value["branch"] === null || typeof value["branch"] === "string"
-        ? { branch: value["branch"] }
-        : {}),
-      ...(typeof value["path"] === "string" ? { path: value["path"] } : {}),
-      ...(typeof value["worktree_path"] === "string"
-        ? { worktreePath: value["worktree_path"] }
-        : {}),
-    });
-  }
-  return decoded;
+  const response = decodeHerdrJson(source, herdrWorktreeListResponseSchema);
+  return response?.result.worktrees.map((worktree) => ({
+    paths: [worktree.path, worktree.worktree_path].filter(
+      (path): path is string => path !== undefined,
+    ),
+  }));
 };
 
 const decodeOpenedWorktree = (
   source: string,
   requestedWorktreePath: string,
 ): OpenedWorktree | undefined => {
-  const result = decodeResult(source, "worktree_opened");
-  const worktree = result?.["worktree"];
-  const workspace = result?.["workspace"];
-  const workspaceWorktree = isRecord(workspace) ? workspace["worktree"] : undefined;
-  const tab = result?.["tab"];
-  const rootPane = result?.["root_pane"];
-  const workspaceId = isRecord(workspace) ? workspace["workspace_id"] : undefined;
-  const tabId = isRecord(tab) ? tab["tab_id"] : undefined;
-  const rootPaneId = isRecord(rootPane) ? rootPane["pane_id"] : undefined;
-  return isRecord(worktree) &&
-    worktree["path"] === requestedWorktreePath &&
-    worktree["open_workspace_id"] === workspaceId &&
-    isNonEmptyString(workspaceId) &&
-    isRecord(workspaceWorktree) &&
-    workspaceWorktree["checkout_path"] === requestedWorktreePath &&
-    isRecord(tab) &&
-    isNonEmptyString(tabId) &&
-    tab["workspace_id"] === workspaceId &&
-    isRecord(rootPane) &&
-    isNonEmptyString(rootPaneId) &&
-    rootPane["workspace_id"] === workspaceId &&
-    rootPane["tab_id"] === tabId &&
-    typeof result?.["already_open"] === "boolean"
-    ? { rootPaneId }
+  const response = decodeHerdrJson(source, herdrWorktreeOpenedResponseSchema);
+  if (response === undefined) return undefined;
+  const { root_pane: rootPane, tab, workspace, worktree } = response.result;
+  return worktree.path === requestedWorktreePath &&
+    worktree.open_workspace_id === workspace.workspace_id &&
+    workspace.worktree.checkout_path === requestedWorktreePath &&
+    tab.workspace_id === workspace.workspace_id &&
+    rootPane.workspace_id === workspace.workspace_id &&
+    rootPane.tab_id === tab.tab_id
+    ? { rootPaneId: rootPane.pane_id }
     : undefined;
 };
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
-  const result = decodeResult(source, "agent_started");
-  const agent = result?.["agent"];
-  const terminalId = isRecord(agent) ? agent["terminal_id"] : undefined;
-  return typeof terminalId === "string" && terminalId.length > 0 ? { terminalId } : undefined;
+  const response = decodeHerdrJson(source, herdrAgentStartedResponseSchema);
+  return response === undefined ? undefined : { terminalId: response.result.agent.terminal_id };
 };
 
 const decodeAgentPrompted = (source: string): boolean =>
-  decodeResult(source, "agent_prompted") !== undefined;
+  decodeHerdrJson(source, herdrAgentPromptedResponseSchema) !== undefined;
 
 const isAgentPaneBusyFailure = (message: string): boolean => {
   const trimmed = message.trim();
   if (trimmed.split(/[:\s]/, 1)[0] === "agent_pane_busy") return true;
-  const response = parseJsonRecord(trimmed);
-  const error = response?.["error"];
-  return isRecord(error) && error["code"] === "agent_pane_busy";
+  return decodeHerdrJson(trimmed, herdrErrorResponseSchema)?.error.code === "agent_pane_busy";
 };
 
 const hasActiveSession = (
@@ -552,7 +548,7 @@ const hasActiveSession = (
   input: InteractiveSessionLaunchInput,
   sessionName: string,
 ): boolean => {
-  const status = findSession(agents, input, sessionName)?.agentStatus;
+  const status = findSession(agents, input, sessionName)?.agent_status;
   return status !== undefined && isActiveAgentStatus(status);
 };
 
@@ -560,7 +556,7 @@ const hasUnknownSession = (
   agents: readonly HerdrAgent[],
   input: InteractiveSessionLaunchInput,
   sessionName: string,
-): boolean => findSession(agents, input, sessionName)?.agentStatus === "unknown";
+): boolean => findSession(agents, input, sessionName)?.agent_status === "unknown";
 
 const findSession = (
   agents: readonly HerdrAgent[],
@@ -577,29 +573,21 @@ const hasUnknownAgentInWorktree = (
   agents: readonly HerdrAgent[],
   input: InteractiveSessionLaunchInput,
 ): boolean =>
-  agents.some((agent) => agent.cwd === input.worktreePath && agent.agentStatus === "unknown");
+  agents.some((agent) => agent.cwd === input.worktreePath && agent.agent_status === "unknown");
 
 const hasActiveAgentInWorktree = (
   agents: readonly HerdrAgent[],
   input: InteractiveSessionLaunchInput,
 ): boolean =>
   agents.some(
-    (agent) => agent.cwd === input.worktreePath && isActiveAgentStatus(agent.agentStatus),
+    (agent) => agent.cwd === input.worktreePath && isActiveAgentStatus(agent.agent_status),
   );
 
-const isActiveAgentStatus = (status: HerdrAgent["agentStatus"]): boolean =>
+const isActiveAgentStatus = (status: HerdrAgentStatus): boolean =>
   status === "idle" || status === "working" || status === "blocked";
 
 const worktreeMatchesTarget = (worktrees: readonly HerdrWorktree[], targetPath: string): boolean =>
-  worktrees.some(
-    (worktree) => worktree.path === targetPath || worktree.worktreePath === targetPath,
-  );
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
-
-const isRecord = (value: unknown): value is JsonRecord =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  worktrees.some((worktree) => worktree.paths.includes(targetPath));
 
 const executeHerdr: HerdrCommandExecutor = async (args, signal) => {
   try {

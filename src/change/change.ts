@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+
 import type { PublicTaskId } from "../task/taskId.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
@@ -21,13 +23,15 @@ export type ChangePrepareDefinition = {
   readonly timeoutSeconds: number;
 };
 
-export type ChangePrepareFailure = {
-  readonly command: string;
-  readonly exitCode: number;
-  readonly timedOut: boolean;
-  readonly stdout: string;
-  readonly stderr: string;
-};
+export const changePrepareFailureSchema = Schema.Struct({
+  command: Schema.String,
+  exitCode: Schema.Number.pipe(Schema.int()),
+  timedOut: Schema.Boolean,
+  stdout: Schema.String,
+  stderr: Schema.String,
+});
+
+export type ChangePrepareFailure = Schema.Schema.Type<typeof changePrepareFailureSchema>;
 
 export type ChangePublicationTarget = {
   readonly owner: string;
