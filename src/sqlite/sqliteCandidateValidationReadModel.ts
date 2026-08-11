@@ -131,7 +131,7 @@ export const validateValidationRunAuthorityRelationships = (
   validateValidationRunAuthoritySnapshot(run, changeId, expectedLatestResolvedBlockerId ?? null);
 };
 
-export const validateValidationRunAuthoritySnapshot = (
+const validateValidationRunAuthoritySnapshot = (
   run: DecodedValidationRun,
   changeId: string,
   expectedLatestResolvedBlockerId: string | null,
