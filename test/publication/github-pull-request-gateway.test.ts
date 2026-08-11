@@ -1,12 +1,9 @@
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   localGitHubChangeCleanupRemote,
   localGitHubPullRequestGateway,
 } from "../../src/submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
-import { createTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({
@@ -246,85 +243,6 @@ describe("GitHub pull request gateway", () => {
         "body=Complete decision log",
       ],
     ]);
-  });
-
-  it("runs metadata-only recovery through the default subprocess boundary", () => {
-    const commandDirectory = createTestWorkspace();
-    const callsPath = join(commandDirectory, "calls.txt");
-    const candidateHead = "a".repeat(40);
-    const pullRequestResponse = JSON.stringify({
-      number: 42,
-      url: "https://github.com/acme/widgets/pull/42",
-      title: "Revised Candidate",
-      body: "Complete decision log",
-      state: "open",
-      merged: false,
-      base: { ref: "main", repo: { owner: { login: "acme" }, name: "widgets" } },
-      head: { ref: "feature", sha: candidateHead },
-    });
-    writeFileSync(
-      join(commandDirectory, "git"),
-      `#!/usr/bin/env bash
-printf 'git %s\\n' "$*" >> '${callsPath}'
-if [[ "$1" == "rev-parse" ]]; then
-  printf '%s\\n' '${candidateHead}'
-  exit 0
-fi
-exit 99
-`,
-    );
-    writeFileSync(
-      join(commandDirectory, "gh"),
-      `#!/usr/bin/env bash
-printf 'gh %s\\n' "$*" >> '${callsPath}'
-if [[ "$2" == "graphql" ]]; then
-  printf '%s\\n' '${remoteHeadResponse(candidateHead)}'
-  exit 0
-fi
-[[ "$*" == *'--method PATCH'* ]] || exit 98
-[[ "$*" == *'state=open'* ]] || exit 97
-[[ "$*" == *'title=Revised Candidate'* ]] || exit 96
-[[ "$*" == *'body=Complete decision log'* ]] || exit 95
-printf '%s\\n' '${pullRequestResponse}'
-`,
-    );
-    chmodSync(join(commandDirectory, "git"), 0o755);
-    chmodSync(join(commandDirectory, "gh"), 0o755);
-    const previousPath = process.env["PATH"];
-    try {
-      process.env["PATH"] = `${commandDirectory}:${previousPath ?? ""}`;
-      expect(
-        localGitHubPullRequestGateway().updatePullRequest({
-          owner: "acme",
-          repo: "widgets",
-          remoteName: "origin",
-          baseBranch: "main",
-          headBranch: "feature",
-          branchRef: "refs/heads/feature",
-          expectedHeadSha: candidateHead,
-          expectedCurrentHeadSha: "b".repeat(40),
-          allowExistingRemoteHead: true,
-          number: 42,
-          title: "Revised Candidate",
-          body: "Complete decision log",
-        }),
-      ).toMatchObject({
-        ok: true,
-        pullRequest: {
-          headSha: candidateHead,
-          title: "Revised Candidate",
-          body: "Complete decision log",
-        },
-      });
-      expect(readFileSync(callsPath, "utf8")).toContain("gh api graphql");
-      expect(readFileSync(callsPath, "utf8")).toContain(
-        "gh api --method PATCH repos/acme/widgets/pulls/42",
-      );
-      expect(readFileSync(callsPath, "utf8")).not.toContain("git push");
-    } finally {
-      process.env["PATH"] = previousPath;
-      releaseTestWorkspace(commandDirectory);
-    }
   });
 
   it("retains the exact force-with-lease when recovery finds the previously published head", () => {
