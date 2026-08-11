@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -18,12 +17,10 @@ import type {
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
-import {
-  buildTaskReviewerPrompt,
-  taskReviewInstructions,
-} from "../../reviewerPrompts/taskReviewerPrompt.js";
+import { buildTaskReviewerPrompt } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
+import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
 import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
@@ -32,6 +29,7 @@ export type TaskReviewSubmitResult =
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
   | { readonly ok: false; readonly code: "review_base_unavailable"; readonly message: string }
+  | { readonly ok: false; readonly code: "task_review_config_invalid"; readonly message: string }
   | {
       readonly ok: false;
       readonly code: "task_review_recovery_required";
@@ -104,7 +102,10 @@ export const openTaskReviewUseCases = (input: {
   ) =>
     | { readonly ok: true; readonly config: RepoConfig }
     | { readonly ok: false; readonly message: string };
-  readonly profile: ResolvedPiAgentProfile;
+  readonly resolvePolicy: (
+    repoConfig: RepoConfig,
+    baseCommit: string,
+  ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
@@ -151,19 +152,20 @@ const submitTaskReview = (
     if (!config.ok)
       return { ok: false, code: "review_base_unavailable", message: config.message } as const;
     const repoConfig = config.config;
+    const resolvedPolicy = input.resolvePolicy(repoConfig, base.base.commit);
+    if (!resolvedPolicy.ok) {
+      return {
+        ok: false,
+        code: "task_review_config_invalid",
+        message: resolvedPolicy.message,
+      } as const;
+    }
     const reviewId = randomUUID();
     const workspacePath = expectedDisposableWorkspacePath(input.mainCheckoutRoot, reviewId);
-    const policy = {
-      id: "task_advisory_review" as const,
-      version: 1 as const,
-      agentProfile: input.profile.agentProfile,
-      profileScope: "global" as const,
-      instructions: taskReviewInstructions,
-    };
     const admitted = yield* input.persistence.admit({
       reviewId,
       taskId,
-      policy,
+      policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
       workspacePath,
@@ -239,8 +241,12 @@ const submitTaskReview = (
                       ),
                 ),
               ),
-            prompt: buildTaskReviewerPrompt(admitted),
-            profile: input.profile,
+            prompt: buildTaskReviewerPrompt({
+              policy: resolvedPolicy.policy.snapshot,
+              proposal: admitted.proposal,
+              dependencyEvidence: admitted.dependencyEvidence,
+            }),
+            profile: resolvedPolicy.policy.profile,
             commandCwd: active.worktreePath,
             resourceRoot: active.worktreePath,
             ...(agentEnvironment === undefined ? {} : { agentEnvironment }),

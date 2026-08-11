@@ -13,8 +13,10 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
-Task Submit reads Repo Config from the exact captured Review Base for Repository Preparation, copied local files, and the Agent Environment.
-Its fixed built-in reviewer policy uses the Global default Agent Profile.
+Task Submit reads Repo Config from the exact captured Review Base for Repository Preparation, copied local files, the Agent Environment, and Task Review policy.
+Its Agent Profile resolves from Repo Config, then Global Config, then the Global default Agent Profile.
+Its optional guidance file resolves from Repo Config before Global Config.
+The mandatory built-in Task Review instructions always apply.
 Change Submit reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, captures a Candidate, then reads the Candidate's tracked Repo Config for reviewer policy and Repo Agent Profiles.
 The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
 Global Config remains resolved from the configured user path.
@@ -42,6 +44,10 @@ A complete example is:
     "copyFiles": [".env.test"]
   },
   "review": {
+    "task": {
+      "agentProfile": { "scope": "repo", "name": "strict-reviewer" },
+      "instructionsFile": ".but-why/reviewers/task.md"
+    },
     "acceptance": {
       "agentProfile": { "scope": "repo", "name": "strict-reviewer" }
     },
@@ -69,7 +75,7 @@ A complete example is:
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
 `snapshotWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
-`review` selects Acceptance Review and Specialists.
+`review` selects Task Review policy, Acceptance Review policy, and Specialists.
 `reviewers` supplies Specialist instruction files.
 Each configured Specialist instruction file must positively define exactly one concern.
 It must state the concern's applicable authority, review lenses, materiality, and concern-specific exclusions.
@@ -132,6 +138,22 @@ Copied files are local environment inputs, not Candidate content.
 Their contents are not hashed, stored, or exposed through Findings.
 But Why removes them with the Snapshot Workspace.
 
+## Task Review
+
+Repo Config and Global Config may select `review.task.agentProfile` and `review.task.instructionsFile`.
+The Agent Profile selection resolves from Repo Config, then Global Config, then `defaultAgentProfile`.
+A Repo selection may reference a Repo or Global Agent Profile through its explicit scope.
+
+Task Review uses at most one optional guidance file.
+The Repo Config file takes precedence over the Global Config file.
+Repo paths and Repo Agent Profile resources resolve from the exact captured Review Base workspace.
+Global paths and Global Agent Profile resources resolve from the Global Config directory.
+A missing, empty, or unreadable selected file rejects Task Submission before a Task Review is created.
+
+The configured guidance supplements the mandatory built-in Task Review instructions and cannot remove or override them.
+Task Submission captures the resolved Agent Profile configuration, mandatory instructions, optional guidance content, and guidance source as immutable Review policy before reviewer execution.
+Later configuration changes do not alter a captured policy.
+
 ## Review and Specialists
 
 Acceptance Review is always enabled for Task-backed Changes.
@@ -172,11 +194,15 @@ The Agent Environment does not alter Repository Preparation or Checks.
 
 Global review settings
 
-Global Config may define Acceptance Review and Specialist settings:
+Global Config may define Task Review, Acceptance Review, and Specialist settings:
 
 ```json
 {
   "review": {
+    "task": {
+      "agentProfile": { "scope": "global", "name": "reviewer" },
+      "instructionsFile": "review/task.md"
+    },
     "acceptance": {
       "agentProfile": { "scope": "global", "name": "reviewer" },
       "instructionsFile": "review/acceptance.md"
@@ -192,6 +218,8 @@ Global Config may define Acceptance Review and Specialist settings:
 }
 ```
 
+`review.task.agentProfile` selects the Global Task Review profile.
+`review.task.instructionsFile` selects Global Task Review guidance relative to the Global Config directory.
 `review.acceptance.agentProfile` selects the Global Acceptance Review profile.
 `review.acceptance.instructionsFile` selects Global Acceptance Review instructions relative to the Global Config directory.
 `review.specialists` is the ordered Global Specialist list.
@@ -202,7 +230,7 @@ A Repo Config definition takes precedence for a Specialist with the same name.
 Each Agent Profile reference resolves only within its declared scope.
 A `repo` reference must be defined in Repo Config, and a `global` reference must be defined in Global Config.
 Global review settings may reference a Repo Config profile when that repository supplies the matching definition.
-Reviewer and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Acceptance Review and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Global Config may define reusable profiles and role selections:
 
@@ -253,13 +281,13 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Reviewer and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Acceptance Review and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists.
 An empty array disables that resource type.
 An omitted field preserves normal Pi behavior.
-Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
+Acceptance Review and Specialist Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
 Global relative paths resolve from the Global Config directory.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
 

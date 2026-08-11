@@ -6,7 +6,7 @@ import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { taskReviewInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
   readCanonicalMainReviewBase,
@@ -112,6 +112,115 @@ it.effect("rejects a missing required default Agent Profile before Task Review a
   }),
 );
 
+it.effect("rejects missing Review Base guidance before Task Review admission", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    writeFileSync(
+      join(root, ".but-why", "config.json"),
+      JSON.stringify({
+        taskPrefix: "BY",
+        review: { task: { instructionsFile: ".but-why/reviewers/missing.md" } },
+      }),
+    );
+    expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root }).status).toBe(0);
+    expect(
+      runTestProcess("git", ["commit", "-m", "Configure missing guidance"], { cwd: root }).status,
+    ).toBe(0);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: {
+          review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+        },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Review me",
+      "--file",
+      proposalPath,
+    ]);
+
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+    });
+    expect(submitted.status).toBe(1);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: {
+        code: "task_review_config_invalid",
+        message: expect.stringContaining("Review Base"),
+      },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({ task: { review: null } });
+  }),
+);
+
+it.effect("rejects a Review Base directory as guidance before Task Review admission", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    mkdirSync(join(root, ".but-why", "reviewers", "task"), { recursive: true });
+    writeFileSync(join(root, ".but-why", "reviewers", "task", "guidance.md"), "Guidance\n");
+    writeFileSync(
+      join(root, ".but-why", "config.json"),
+      JSON.stringify({
+        taskPrefix: "BY",
+        review: { task: { instructionsFile: ".but-why/reviewers/task" } },
+      }),
+    );
+    expect(
+      runTestProcess(
+        "git",
+        ["add", ".but-why/config.json", ".but-why/reviewers/task/guidance.md"],
+        { cwd: root },
+      ).status,
+    ).toBe(0);
+    expect(
+      runTestProcess("git", ["commit", "-m", "Configure directory guidance"], { cwd: root }).status,
+    ).toBe(0);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: {
+          review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+        },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Review me",
+      "--file",
+      proposalPath,
+    ]);
+
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+    });
+    expect(submitted.status).toBe(1);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: { code: "task_review_config_invalid" },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({ task: { review: null } });
+  }),
+);
+
 it.effect("rejects missing Agent Profile resources before Task Review admission", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
@@ -195,7 +304,7 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 version: 1,
                 agentProfile: "review",
                 profileScope: "global",
-                instructions: taskReviewInstructions,
+                instructions: taskReviewBuiltInInstructions,
               },
               baseRef: "refs/heads/main",
               baseCommit: commit,
@@ -252,7 +361,7 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 version: 1,
                 agentProfile: "review",
                 profileScope: "global",
-                instructions: taskReviewInstructions,
+                instructions: taskReviewBuiltInInstructions,
               },
               baseRef: "refs/heads/not-main",
               baseCommit: commit,
@@ -273,6 +382,107 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
     expect(JSON.parse(mismatched.stdout)).toMatchObject({
       review: { id: mismatchedReviewId, identity: { verified: false } },
       help: [expect.stringContaining("identity problem")],
+    });
+  }),
+);
+
+it.effect("captures and executes the effective Review Base Task Review policy", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    mkdirSync(join(root, ".but-why", "reviewers"), { recursive: true });
+    mkdirSync(join(root, "skills", "task"), { recursive: true });
+    writeFileSync(join(root, ".but-why", "reviewers", "task.md"), "Repository guidance\n");
+    writeFileSync(join(root, "skills", "task", "SKILL.md"), "Task skill\n");
+    writeFileSync(
+      join(root, ".but-why", "config.json"),
+      JSON.stringify({
+        taskPrefix: "BY",
+        review: {
+          task: {
+            agentProfile: { scope: "repo", name: "task-review" },
+            instructionsFile: ".but-why/reviewers/task.md",
+          },
+        },
+        agentProfiles: {
+          "task-review": {
+            agentRuntime: "pi",
+            runtimeConfig: {
+              model: "provider/repo-model",
+              thinking: "high",
+              skills: ["skills/task"],
+            },
+          },
+        },
+      }),
+    );
+    expect(
+      runTestProcess(
+        "git",
+        ["add", ".but-why/config.json", ".but-why/reviewers/task.md", "skills/task/SKILL.md"],
+        { cwd: root },
+      ).status,
+    ).toBe(0);
+    expect(
+      runTestProcess("git", ["commit", "-m", "Configure Task Review"], { cwd: root }).status,
+    ).toBe(0);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "default" },
+        agentProfiles: {
+          default: { agentRuntime: "pi", runtimeConfig: { model: "provider/default" } },
+        },
+        review: { task: { instructionsFile: "ignored.md" } },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Review configured policy",
+      "--file",
+      proposalPath,
+    ]);
+    let observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0] | undefined;
+    const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+      review: (input) => {
+        observed = input;
+        return passingReviewer.review(input);
+      },
+    };
+
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+      reviewerAgentRuntime: reviewer,
+    });
+
+    expect(submitted.status, submitted.stdout).toBe(0);
+    expect(observed).toMatchObject({
+      profile: {
+        agentProfile: "task-review",
+        scope: "repo",
+        profile: { runtimeConfig: { model: "provider/repo-model", skills: ["skills/task"] } },
+      },
+    });
+    expect(observed?.prompt).toContain("Repository guidance");
+    expect(observed?.prompt).toContain("cannot remove, weaken, or override");
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      review: {
+        policy: {
+          version: 2,
+          profile: {
+            agentProfile: "task-review",
+            scope: "repo",
+            profile: { runtimeConfig: { model: "provider/repo-model" } },
+          },
+          guidance: { content: "Repository guidance\n", source: "repo" },
+        },
+      },
     });
   }),
 );

@@ -52,12 +52,16 @@ Fallow classifies every maintained TypeScript or JavaScript source file as CLI, 
 
 ## Task Review workflow
 
-`by task submit <task-id>` captures the selected Task Context, exact direct Task Dependency set, dependency evidence, canonical main checkout branch and commit, and fixed built-in review policy.
-It resolves the required Global default Agent Profile before Review admission.
+`by task submit <task-id>` captures the selected Task Context, exact direct Task Dependency set, dependency evidence, canonical main checkout branch and commit, and immutable effective Task Review policy.
+The effective policy contains the resolved Agent Profile configuration, mandatory built-in instructions, and at most one optional guidance file with its Repo or Global source.
+The Agent Profile resolves from Review Base Repo Config, then Global Config, then the Global default Agent Profile.
+Optional guidance resolves from Review Base Repo Config before Global Config, while the mandatory built-in instructions always apply.
+Policy resolution and resource validation complete before Review admission.
 One Active Task Review prevents another Submission for the same Task.
 Task mutation and lifecycle operations remain independent, and final persistence prevents a concurrently changed proposal from receiving a passed outcome.
 
 Repository Preparation and one fresh project-owned Pi reviewer run in a native exact disposable workspace at the captured Review Base.
+Repo profile resources and guidance resolve from that exact workspace revision, while Global resources and guidance resolve from the Global Config directory.
 The Review records passed, blocked by Findings, or tooling failed only after exact workspace cleanup succeeds.
 Interruption, cleanup failure, or final persistence failure leaves the Review active for exact inspection and abandonment.
 Task Review abandonment verifies and cleans only the recorded workspace identity before completing the Review as tooling failed.

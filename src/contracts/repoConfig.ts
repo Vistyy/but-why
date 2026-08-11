@@ -63,13 +63,14 @@ const repoValidationConfigSchema = Schema.Struct({
   checks: Schema.optional(Schema.NonEmptyArray(repoCheckConfigSchema)),
 });
 
-const acceptanceReviewConfigSchema = Schema.Struct({
+const configurableReviewRoleSchema = Schema.Struct({
   agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
 const repoReviewConfigSchema = Schema.Struct({
-  acceptance: Schema.optional(acceptanceReviewConfigSchema),
+  task: Schema.optional(configurableReviewRoleSchema),
+  acceptance: Schema.optional(configurableReviewRoleSchema),
   specialists: Schema.optional(Schema.Array(configNameSchema)),
 });
 

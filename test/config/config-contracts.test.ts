@@ -78,6 +78,19 @@ describe("configuration contracts", () => {
     expect(right(decodeRepoConfig(config))).toEqual(config);
   });
 
+  it("decodes Global Task Review overrides", () => {
+    const config = {
+      review: {
+        task: {
+          instructionsFile: "reviewers/task.md",
+          agentProfile: { scope: "global", name: "strict" },
+        },
+      },
+    };
+
+    expect(right(decodeGlobalConfig(config))).toEqual(config);
+  });
+
   it("decodes global Acceptance overrides", () => {
     const config = {
       review: {
@@ -173,6 +186,20 @@ describe("configuration contracts", () => {
     const config = {
       taskPrefix: "BY",
       agentEnvironment: { command: ["nix", "develop", "-c"] },
+    };
+
+    expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
+  it("decodes repository Task Review overrides", () => {
+    const config = {
+      taskPrefix: "BY",
+      review: {
+        task: {
+          instructionsFile: ".but-why/reviewers/task.md",
+          agentProfile: { scope: "repo", name: "strict" },
+        },
+      },
     };
 
     expect(right(decodeRepoConfig(config))).toEqual(config);

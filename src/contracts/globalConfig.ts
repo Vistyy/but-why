@@ -9,7 +9,7 @@ import { GlobalConfigValidationFailed } from "./configErrors.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { repoRelativePathSchema } from "./repoConfig.js";
 
-const globalAcceptanceReviewConfigSchema = Schema.Struct({
+const globalConfigurableReviewRoleSchema = Schema.Struct({
   agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
@@ -39,7 +39,8 @@ const globalConfigSchema = Schema.Struct({
   ),
   review: Schema.optional(
     Schema.Struct({
-      acceptance: Schema.optional(globalAcceptanceReviewConfigSchema),
+      task: Schema.optional(globalConfigurableReviewRoleSchema),
+      acceptance: Schema.optional(globalConfigurableReviewRoleSchema),
       specialists: Schema.optional(Schema.Array(configNameSchema)),
     }),
   ),

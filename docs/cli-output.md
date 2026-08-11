@@ -65,7 +65,7 @@ The `restored_transient_state` result does not include Submit Recovery Guidance 
 ## Task Reviews
 
 `by task show` reports the current Task Review summary, retained Findings, proposal currency, recovery state, and exact inspection command.
-`by task review show <review-id>` returns the complete captured proposal, dependency evidence, fixed policy, Review Base, verified recovery identity state, retained Findings, and valid recovery action.
+`by task review show <review-id>` returns the complete captured proposal, dependency evidence, immutable effective Task Review policy, Review Base, verified recovery identity state, retained Findings, and valid recovery action.
 `by task review abandon <review-id> --reason <reason>` reports the completed tooling-failed Review only after exact workspace cleanup succeeds.
 Task Submission returns success only for a passed Review and returns a structured nonzero result with the complete committed Review for Findings or tooling failure.
 

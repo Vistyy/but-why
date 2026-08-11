@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { taskReviewInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
@@ -13,7 +13,7 @@ const policy = {
   version: 1 as const,
   agentProfile: "review",
   profileScope: "global" as const,
-  instructions: taskReviewInstructions,
+  instructions: taskReviewBuiltInInstructions,
 };
 
 it.scoped(

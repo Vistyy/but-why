@@ -1,8 +1,6 @@
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
-import { resolveAgentProfile } from "../../agent/agentProfiles.js";
-import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -20,12 +18,17 @@ import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
+import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
-import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
+import {
+  readRepositoryFileAtCommit,
+  repositoryPathExistsAtCommit,
+} from "../../submissionEnvironment/adapters/repositoryFile.js";
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../review/adapters/taskReviewGit.js";
+import { resolveTaskReviewPolicy } from "../review/taskReviewConfig.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
@@ -131,38 +134,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
       error: { code: "task_review_config_invalid", message: global.error.message },
     });
   }
-  const profile = resolveAgentProfile({
-    ...(global.config.defaultAgentProfile === undefined
-      ? {}
-      : { defaultSelection: global.config.defaultAgentProfile }),
-    ...(global.config.agentProfiles === undefined
-      ? {}
-      : { globalProfiles: global.config.agentProfiles }),
-    globalConfigDirectory: dirname(input.globalConfigPath),
-  });
-  if (!profile.ok) {
-    const error = profile.error;
-    const message =
-      error._tag === "MissingAgentProfile"
-        ? error.profileName === undefined
-          ? "Global Config needs a default Agent Profile for Task Review."
-          : `Global Agent Profile "${error.profileName}" was not found.`
-        : error._tag === "MissingAgentModel"
-          ? `Global Agent Profile "${error.profileName}" has no Pi model in runtimeConfig.`
-          : `Global Agent Profile "${error.profileName}" uses unsupported runtime "${error.agentRuntime}".`;
-    return Effect.succeed({
-      ok: false,
-      error: { code: "task_review_config_invalid", message },
-    });
-  }
   const context = loaded.runtime.context;
-  const resources = validatePiAgentProfileResources(profile.resolved, context.mainCheckoutRoot);
-  if (!resources.ok) {
-    return Effect.succeed({
-      ok: false,
-      error: { code: "task_review_config_invalid", message: resources.error.message },
-    });
-  }
   return loaded.runtime.provide(
     openSqliteTaskReviewPersistence().pipe(
       Effect.flatMap((persistence) =>
@@ -186,7 +158,34 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
                     message: `Repo Config taskPrefix at Review Base is ${decoded.config.taskPrefix}; expected ${context.taskPrefix}.`,
                   };
             },
-            profile: profile.resolved,
+            resolvePolicy: (repoConfig, commit) =>
+              resolveTaskReviewPolicy({
+                repoConfig,
+                globalConfig: global.config,
+                globalConfigPath: input.globalConfigPath,
+                builtInInstructions: taskReviewBuiltInInstructions,
+                readRepoGuidance: (path) => {
+                  const source = readRepositoryFileAtCommit(context.mainCheckoutRoot, commit, path);
+                  return source.ok
+                    ? { ok: true, content: source.content }
+                    : {
+                        ok: false,
+                        message: `Could not read Task Review guidance file ${path} from Review Base ${commit}.`,
+                      };
+                },
+                readGlobalGuidance: (path) => {
+                  try {
+                    return { ok: true, content: readFileSync(path, "utf8") };
+                  } catch (error) {
+                    return {
+                      ok: false,
+                      message: `Could not read Task Review guidance file ${path}: ${errorMessage(error)}`,
+                    };
+                  }
+                },
+                repoResourceExists: (path) =>
+                  repositoryPathExistsAtCommit(context.mainCheckoutRoot, commit, path),
+              }),
             persistence,
             reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
             reviewerExecutor: piReviewerProcessExecutor,
@@ -202,3 +201,6 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
     ),
   );
 };
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
