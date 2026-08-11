@@ -9,19 +9,13 @@ import {
   readCandidatesForChange,
   readCurrentCandidateForChange,
 } from "./sqliteCandidateStorage.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   listValidationArtifacts,
   listValidationFindings,
   listValidationRounds,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
-import {
-  decodeValidationRun,
-  readValidationRunById,
-  type StoredValidationRunRow,
-  validationRunReadColumns,
-} from "./sqliteValidationRunStorage.js";
+import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteChangeValidationReadPort = () =>
   Effect.map(
@@ -91,38 +85,25 @@ const getLatestRunForCandidate = (sql: SqlClient.SqlClient, candidateId: string)
 
 const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs
-       WHERE candidate_id = ?`,
-      [candidateId],
-    );
-    if (rows.length === 0) return [];
-    const candidate = yield* readCandidateById(sql, candidateId, "decode Candidate Validation Run");
-    if (candidate === undefined) {
-      return yield* invalidData(
-        "decode Candidate Validation Run",
-        "Validation Run history belongs to an unknown Candidate",
-      );
-    }
-    const selectedIds = yield* decodePersisted("decode Candidate Validation Run", () =>
-      rows.map((row) => {
-        const decoded = decodeValidationRun(row);
-        if (decoded.record.candidateId !== candidateId)
-          throw new Error("Validation Run belongs to another Candidate");
-        return decoded.record.id;
-      }),
-    );
-    const runs = yield* Effect.forEach(selectedIds, (validationRunId) =>
-      readValidationRunById(sql, validationRunId, "decode Candidate Validation Run").pipe(
-        Effect.flatMap((run) =>
-          run === undefined
-            ? invalidData(
+    const selected = yield* sql<{ readonly id: string }>`
+      SELECT id FROM candidate_validation_runs WHERE candidate_id = ${candidateId}
+    `;
+    const runs = yield* Effect.forEach(selected, ({ id }) =>
+      readValidationRunById(sql, id, "decode Candidate Validation Run").pipe(
+        Effect.flatMap((run) => {
+          if (run === undefined) {
+            return invalidData(
+              "decode Candidate Validation Run",
+              "Validation Run history contains an unknown Run",
+            );
+          }
+          return run.candidateId === candidateId
+            ? Effect.succeed(run)
+            : invalidData(
                 "decode Candidate Validation Run",
-                "Validation Run history contains an unknown Run",
-              )
-            : Effect.succeed(run),
-        ),
+                "Validation Run belongs to another Candidate",
+              );
+        }),
       ),
     );
     return runs.sort(
