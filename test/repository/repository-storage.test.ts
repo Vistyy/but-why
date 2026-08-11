@@ -1462,6 +1462,69 @@ describe("repository SQL storage", () => {
             validationRunId: first.validationRunId,
           });
 
+          yield* repository.operation("install incomplete Task authority relationship", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`
+                INSERT INTO tasks (
+                  id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                ) VALUES (
+                  'BY-904', 904, 'Incomplete evidence authority',
+                  'Require the Task Acceptance Context relationship.', 'todo', NULL,
+                  '2026-07-25T16:12:00.000Z', '2026-07-25T16:12:00.000Z'
+                )
+              `;
+              yield* sql`PRAGMA ignore_check_constraints = ON`;
+              yield* sql`UPDATE changes SET task_id = 'BY-904' WHERE id = ${captured.changeId}`;
+              yield* sql`PRAGMA ignore_check_constraints = OFF`;
+            }),
+          );
+          const incompleteAuthorityError = yield* changes.authority
+            .getCurrentPassingEvidence(captured.changeId)
+            .pipe(Effect.flip);
+          expect(incompleteAuthorityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* repository.operation(
+            "restore taskless evidence authority",
+            (sql) => sql`UPDATE changes SET task_id = NULL WHERE id = ${captured.changeId}`,
+          );
+
+          yield* repository.operation(
+            "corrupt Run authority outside a policy-mismatched query",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET implementation_decisions = '{}'
+                  WHERE id = ${first.validationRunId}`,
+          );
+          expect(
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
+              policy: {
+                checks: [{ id: "other", command: "true", timeoutSeconds: 30 }],
+                copyFiles: [],
+                specialistReviews: [],
+              },
+            }),
+          ).toBeUndefined();
+          yield* repository.operation(
+            "restore Run authority after policy-mismatched query",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET implementation_decisions = ${JSON.stringify([recordedDecision.decision])}
+                  WHERE id = ${first.validationRunId}`,
+          );
+
+          yield* repository.operation(
+            "corrupt Decision outside a base-mismatched query",
+            (sql) =>
+              sql`UPDATE implementation_decisions SET choice = x'01' WHERE id = ${recordedDecision.decision.id}`,
+          );
+          expect(
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
+              changeBaseSha: "other-base",
+            }),
+          ).toBeUndefined();
+          yield* repository.operation(
+            "restore Decision after base-mismatched query",
+            (sql) =>
+              sql`UPDATE implementation_decisions SET choice = 'Choose the passing path' WHERE id = ${recordedDecision.decision.id}`,
+          );
+
           yield* repository.operation(
             "install duplicate-representation Validation Run evidence",
             (sql) =>
@@ -1517,8 +1580,27 @@ describe("repository SQL storage", () => {
             changeBaseSha: "base-sha",
             headSha: "head-sha",
           };
+          yield* repository.operation(
+            "install malformed older passing Run",
+            (sql) =>
+              sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-older-malformed-passing', ${captured.candidateId}, 'malformed',
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T16:10:00.000Z', '2026-07-25T16:10:00.000Z'
+                )
+              `,
+          );
           expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
             currentEvidence,
+          );
+          yield* repository.operation(
+            "remove malformed older passing Run",
+            (sql) =>
+              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-older-malformed-passing'`,
           );
           yield* repository.operation(
             "make the later policy-distinct Run malformed and tooling-failed",
@@ -1617,9 +1699,71 @@ describe("repository SQL storage", () => {
             },
             latestResolvedBlockerId: resolved.blocker.id,
           });
-
+          yield* validation.execution.complete({
+            validationRunId: afterResolution.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:18:00.000Z",
+          });
+          const secondRaised = yield* changes.authority.raiseImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Wait for a second external decision.",
+            now: "2026-07-25T16:19:00.000Z",
+          });
+          if (!secondRaised.ok) throw new Error(secondRaised.code);
+          const secondResolved = yield* changes.authority.resolveImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Proceed after the second decision.",
+            now: "2026-07-25T16:20:00.000Z",
+          });
+          if (!secondResolved.ok) throw new Error(secondResolved.code);
+          const afterSecondResolution = yield* validation.execution.startOrReuse({
+            ...exact,
+            now: "2026-07-25T16:21:00.000Z",
+          });
+          if (
+            afterSecondResolution.reused ||
+            "blocked" in afterSecondResolution ||
+            "active" in afterSecondResolution
+          )
+            throw new Error("Expected a fresh Validation Run after the second Resolution");
+          yield* validation.execution.complete({
+            validationRunId: afterSecondResolution.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:22:00.000Z",
+          });
           const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
+
+          yield* repository.operation("corrupt selected Resolution relationship", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`PRAGMA ignore_check_constraints = ON`;
+              yield* sql`UPDATE implementation_blockers SET resolution_content = NULL
+                          WHERE id = ${secondResolved.blocker.id}`;
+              yield* sql`PRAGMA ignore_check_constraints = OFF`;
+            }),
+          );
+          const incompleteResolutionError = yield* changes.authority
+            .getCurrentPassingEvidence(captured.changeId)
+            .pipe(Effect.flip);
+          expect(incompleteResolutionError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* repository.operation(
+            "restore selected Resolution relationship",
+            (sql) =>
+              sql`UPDATE implementation_blockers SET resolution_content = 'Proceed after the second decision.'
+                  WHERE id = ${secondResolved.blocker.id}`,
+          );
+
+          yield* repository.operation(
+            "corrupt obsolete Blocker content",
+            (sql) =>
+              sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${resolved.blocker.id}`,
+          );
+          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+            candidateId: captured.candidateId,
+            validationRunId: afterSecondResolution.validationRunId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+          });
         }),
       ),
   );

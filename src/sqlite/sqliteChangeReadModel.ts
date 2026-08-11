@@ -159,12 +159,6 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
     throw new Error("Stored open Change has terminal cleanup state");
   }
 
-  const publicationPrNumber = decodeNullablePositiveInteger(
-    row.publicationPrNumber,
-    row.publicationPrNumberType,
-    "Change publication pull request number",
-  );
-
   return {
     id,
     repositoryCommonDirectory: decodeStoredString(
@@ -189,39 +183,7 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
       encodedPrepareFailure === null
         ? null
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
-    publication: decodeSqliteChangePublication({
-      publicationCandidateId: decodeStoredNullableString(
-        row.publicationCandidateId,
-        "Change publication Candidate ID",
-      ),
-      publicationValidationRunId: decodeStoredNullableString(
-        row.publicationValidationRunId,
-        "Change publication Validation Run ID",
-      ),
-      publicationOwner: decodeStoredNullableString(row.publicationOwner, "publication owner"),
-      publicationRepo: decodeStoredNullableString(row.publicationRepo, "publication repository"),
-      publicationBaseBranch: decodeStoredNullableString(
-        row.publicationBaseBranch,
-        "publication base branch",
-      ),
-      publicationRemoteName: decodeStoredNullableString(
-        row.publicationRemoteName,
-        "publication remote name",
-      ),
-      publicationHeadBranch: decodeStoredNullableString(
-        row.publicationHeadBranch,
-        "publication head branch",
-      ),
-      publicationExpectedHeadSha: decodeStoredNullableString(
-        row.publicationExpectedHeadSha,
-        "publication expected head SHA",
-      ),
-      publicationPrNumber,
-      publicationPrUrl: decodeStoredNullableString(
-        row.publicationPrUrl,
-        "publication pull request URL",
-      ),
-    }),
+    publication: decodeChangePublication(row),
     cleanup: { state: cleanupState, blockingReason: cleanupBlockingReason },
     state,
     closeReason,
@@ -445,41 +407,57 @@ export const validateChangeRelationships = (
       });
     }
 
-    if (change.publication !== null) {
-      const publicationRows = yield* sql<Record<string, unknown>>`
-        SELECT candidate.change_id AS candidateChangeId, candidate.head_sha AS candidateHeadSha,
-          validation_run.candidate_id AS validationRunCandidateId
-        FROM candidates AS candidate
-        LEFT JOIN candidate_validation_runs AS validation_run
-          ON validation_run.id = ${change.publication.validationRunId}
-        WHERE candidate.id = ${change.publication.candidateId}
-      `;
-      yield* decodePersisted(operationName, () => {
-        const row = publicationRows[0];
-        const candidateChangeId = decodeStoredString(
-          row?.["candidateChangeId"],
-          "publication Candidate Change ID",
-        );
-        const candidateHeadSha = decodeStoredString(
-          row?.["candidateHeadSha"],
-          "publication Candidate head SHA",
-        );
-        const validationRunCandidateId = decodeStoredString(
-          row?.["validationRunCandidateId"],
-          "publication Validation Run Candidate ID",
-        );
-        if (candidateChangeId !== change.id) {
-          throw new Error("Publication Candidate belongs to another Change");
-        }
-        if (validationRunCandidateId !== change.publication?.candidateId) {
-          throw new Error("Publication Validation Run belongs to another Candidate");
-        }
-        if (candidateHeadSha !== change.publication?.expectedHeadSha) {
-          throw new Error("Publication expected head does not match its Candidate");
-        }
-      });
-    }
+    yield* validateChangePublicationRelationships(
+      sql,
+      change.id,
+      change.publication,
+      operationName,
+    );
   });
+
+export const validateChangePublicationRelationships = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  publication: ChangeRecord["publication"],
+  operationName: string,
+) =>
+  publication === null
+    ? Effect.void
+    : Effect.flatMap(
+        sql<Record<string, unknown>>`
+          SELECT candidate.change_id AS candidateChangeId, candidate.head_sha AS candidateHeadSha,
+            validation_run.candidate_id AS validationRunCandidateId
+          FROM candidates AS candidate
+          LEFT JOIN candidate_validation_runs AS validation_run
+            ON validation_run.id = ${publication.validationRunId}
+          WHERE candidate.id = ${publication.candidateId}
+        `,
+        (rows) =>
+          decodePersisted(operationName, () => {
+            const row = rows[0];
+            const candidateChangeId = decodeStoredString(
+              row?.["candidateChangeId"],
+              "publication Candidate Change ID",
+            );
+            const candidateHeadSha = decodeStoredString(
+              row?.["candidateHeadSha"],
+              "publication Candidate head SHA",
+            );
+            const validationRunCandidateId = decodeStoredString(
+              row?.["validationRunCandidateId"],
+              "publication Validation Run Candidate ID",
+            );
+            if (candidateChangeId !== changeId) {
+              throw new Error("Publication Candidate belongs to another Change");
+            }
+            if (validationRunCandidateId !== publication.candidateId) {
+              throw new Error("Publication Validation Run belongs to another Candidate");
+            }
+            if (candidateHeadSha !== publication.expectedHeadSha) {
+              throw new Error("Publication expected head does not match its Candidate");
+            }
+          }),
+      );
 
 export const decodeCandidateCaptureChange = (row: Record<string, unknown>) => ({
   id: decodeStoredString(row["id"], "Candidate capture Change ID"),
@@ -492,7 +470,46 @@ export const decodeCandidateCaptureChange = (row: Record<string, unknown>) => ({
   state: decodeChangeState(row["state"]),
 });
 
-const decodeChangeState = (value: unknown): ChangeState => {
+export const decodeChangePublication = (row: Record<string, unknown>) =>
+  decodeSqliteChangePublication({
+    publicationCandidateId: decodeStoredNullableString(
+      row["publicationCandidateId"],
+      "Change publication Candidate ID",
+    ),
+    publicationValidationRunId: decodeStoredNullableString(
+      row["publicationValidationRunId"],
+      "Change publication Validation Run ID",
+    ),
+    publicationOwner: decodeStoredNullableString(row["publicationOwner"], "publication owner"),
+    publicationRepo: decodeStoredNullableString(row["publicationRepo"], "publication repository"),
+    publicationBaseBranch: decodeStoredNullableString(
+      row["publicationBaseBranch"],
+      "publication base branch",
+    ),
+    publicationRemoteName: decodeStoredNullableString(
+      row["publicationRemoteName"],
+      "publication remote name",
+    ),
+    publicationHeadBranch: decodeStoredNullableString(
+      row["publicationHeadBranch"],
+      "publication head branch",
+    ),
+    publicationExpectedHeadSha: decodeStoredNullableString(
+      row["publicationExpectedHeadSha"],
+      "publication expected head SHA",
+    ),
+    publicationPrNumber: decodeNullablePositiveInteger(
+      row["publicationPrNumber"],
+      row["publicationPrNumberType"],
+      "Change publication pull request number",
+    ),
+    publicationPrUrl: decodeStoredNullableString(
+      row["publicationPrUrl"],
+      "publication pull request URL",
+    ),
+  });
+
+export const decodeChangeState = (value: unknown): ChangeState => {
   const state = decodeStoredString(value, "Change state");
   if (state !== changeState.open && state !== changeState.closed) {
     throw new Error("Stored Change state is unsupported");
@@ -500,7 +517,7 @@ const decodeChangeState = (value: unknown): ChangeState => {
   return state;
 };
 
-const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] => {
+export const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] => {
   const reason = decodeStoredNullableString(value, "Change close reason");
   if (reason !== null && reason !== "completed" && reason !== "cancelled") {
     throw new Error("Stored Change close reason is unsupported");

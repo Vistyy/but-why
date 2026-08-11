@@ -69,6 +69,14 @@ export type DecodedValidationRun = {
   readonly latestResolvedBlockerId: string | null;
 };
 
+export const decodeValidationRunPolicy = (row: Pick<UnknownValidationRunRow, "policySnapshot">) => {
+  const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
+  return {
+    policy: decodeSqliteCandidateValidationPolicy(policySnapshot),
+    policySnapshot,
+  };
+};
+
 export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValidationRun => {
   const state = decodeStoredString(row.state, "Validation Run state");
   if (state !== "running" && state !== "complete") {
@@ -86,7 +94,7 @@ export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValida
   if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
     throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
   }
-  const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
+  const { policy, policySnapshot } = decodeValidationRunPolicy(row);
   const implementationDecisionsSnapshot = decodeStoredString(
     row.implementationDecisions,
     "Implementation Decision Snapshot",
@@ -95,7 +103,7 @@ export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValida
     record: {
       id: decodeStoredString(row.id, "Validation Run ID"),
       candidateId: decodeStoredString(row.candidateId, "Validation Run Candidate ID"),
-      policy: decodeSqliteCandidateValidationPolicy(policySnapshot),
+      policy,
       implementationDecisions: Schema.decodeUnknownSync(
         Schema.parseJson(implementationDecisionSnapshotSchema),
         { onExcessProperty: "error" },
@@ -128,9 +136,31 @@ export const validateValidationRunAuthorityRelationships = (
       (left, right) =>
         compareStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
     )[0]?.id;
-  if (run.latestResolvedBlockerId !== (expectedLatestResolvedBlockerId ?? null)) {
+  validateValidationRunAuthoritySnapshot(run, changeId, expectedLatestResolvedBlockerId ?? null);
+};
+
+const validateValidationRunAuthoritySnapshot = (
+  run: DecodedValidationRun,
+  changeId: string,
+  expectedLatestResolvedBlockerId: string | null,
+): void => {
+  validateValidationRunLatestResolvedBlockerRelationship(run, expectedLatestResolvedBlockerId);
+  validateValidationRunImplementationDecisionRelationships(run, changeId);
+};
+
+export const validateValidationRunLatestResolvedBlockerRelationship = (
+  run: DecodedValidationRun,
+  expectedLatestResolvedBlockerId: string | null,
+): void => {
+  if (run.latestResolvedBlockerId !== expectedLatestResolvedBlockerId) {
     throw new Error("Validation Run latest resolved Blocker identity is inconsistent");
   }
+};
+
+export const validateValidationRunImplementationDecisionRelationships = (
+  run: DecodedValidationRun,
+  changeId: string,
+): void => {
   const decisionIds = new Set<string>();
   const decisionSequences = new Set<number>();
   let previousSequence = 0;

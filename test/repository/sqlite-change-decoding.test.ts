@@ -7,6 +7,10 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import {
+  openSqliteChangeCancellationPort,
+  openSqliteChangeReconciliationPort,
+} from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
@@ -74,7 +78,7 @@ describe("SQLite Change decoding", () => {
     ),
   );
 
-  it.scoped("rejects malformed Change relationships before filtering or selection", () =>
+  it.scoped("scopes malformed Change relationship decoding", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
@@ -342,28 +346,13 @@ describe("SQLite Change decoding", () => {
           "inject open Change terminal cleanup",
           (sql) => sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
         );
-        yield* expectPersistedDataInvalid(
-          changes.delivery.listChangesForReconciliation(input.commonDirectory),
+        expect(yield* changes.delivery.listChangesForReconciliation(input.commonDirectory)).toEqual(
+          [],
         );
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "restore open Change cleanup",
           (sql) => sql`UPDATE changes SET cleanup_state = 'complete' WHERE id = 'change-malformed'`,
-        );
-
-        yield* repository.operation("inject hidden lifecycle corruption", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`PRAGMA ignore_check_constraints = ON`;
-            yield* sql`
-              UPDATE changes SET state = 'closed', close_reason = NULL, closed_at = NULL
-              WHERE id = 'change-malformed'
-            `;
-          }),
-        );
-        yield* expectPersistedDataInvalid(
-          changes.reads.listChanges({
-            repositoryCommonDirectory: input.commonDirectory,
-            includeClosed: false,
-          }),
         );
       }),
     ),
@@ -374,6 +363,8 @@ describe("SQLite Change decoding", () => {
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
+        const cancellation = yield* openSqliteChangeCancellationPort();
+        const reconciliation = yield* openSqliteChangeReconciliationPort();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
@@ -385,6 +376,25 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:20:00.000Z",
         });
         if (!captured.ok) throw new Error(captured.code);
+        yield* repository.operation("make captured Change task-backed", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO tasks (
+                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+              ) VALUES (
+                'BY-903', 903, 'Scoped task lookup', 'Ignore unrelated Blocker history.',
+                'todo', NULL, '2026-08-09T20:20:00.000Z', '2026-08-09T20:20:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET task_id = 'BY-903', acceptance_context =
+                '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
+                base_remote_url = 'https://github.com/acme/repo.git',
+                starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
         const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need authority.",
@@ -401,6 +411,13 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${raised.blocker.id}
           `,
         );
+        const decision = yield* changes.authority.recordImplementationDecision({
+          changeId: captured.changeId,
+          choice: "Keep Decision reads independent",
+          rationale: "Recording a Decision does not require Blocker history.",
+          now: "2026-08-09T20:21:30.000Z",
+        });
+        expect(decision).toMatchObject({ ok: true });
         yield* expectPersistedDataInvalid(
           changes.authority.listImplementationBlockers(captured.changeId),
         );
@@ -424,18 +441,112 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${raised.blocker.id}
           `,
         );
+        yield* repository.operation("corrupt unrelated Change history", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE implementation_decisions SET choice = 7 WHERE change_id = ${captured.changeId}`;
+            yield* sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${raised.blocker.id}`;
+            yield* sql`UPDATE changes SET acceptance_context = x'03' WHERE id = ${captured.changeId}`;
+          }),
+        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "restore Acceptance Context",
+          (sql) =>
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${captured.changeId}`,
+        );
+        expect(
+          yield* changes.authority.recordImplementationDecision({
+            changeId: captured.changeId,
+            choice: "Record only the new Decision",
+            rationale: "Earlier Decision history is not required by this mutation.",
+            now: "2026-08-09T20:22:30.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(
+          yield* changes.reads.listChanges({
+            repositoryCommonDirectory: input.commonDirectory,
+            includeClosed: true,
+          }),
+        ).toHaveLength(1);
+        yield* repository.operation(
+          "restore Decision history required by publication",
+          (sql) =>
+            sql`UPDATE implementation_decisions SET choice = 'Restored Decision'
+                WHERE change_id = ${captured.changeId}`,
+        );
         const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need another decision.",
           now: "2026-08-09T20:23:00.000Z",
         });
         if (!second.ok) throw new Error(second.code);
+        yield* repository.operation(
+          "corrupt active Blocker outside task cancellation selection",
+          (sql) =>
+            sql`UPDATE implementation_blockers SET content = x'02' WHERE id = ${second.blocker.id}`,
+        );
+        expect(yield* cancellation.getChangeByTaskId("BY-903")).toMatchObject({
+          id: captured.changeId,
+        });
+        expect(yield* changes.publication.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+          implementationDecisions: [
+            { choice: "Restored Decision" },
+            { choice: "Restored Decision" },
+          ],
+        });
+        yield* repository.operation(
+          "restore active Blocker",
+          (sql) =>
+            sql`UPDATE implementation_blockers SET content = 'Need another decision.' WHERE id = ${second.blocker.id}`,
+        );
         const secondResolution = yield* changes.authority.resolveImplementationBlocker({
           changeId: captured.changeId,
           content: "Proceed again.",
           now: "2026-08-09T20:24:00.000Z",
         });
         if (!secondResolution.ok) throw new Error(secondResolution.code);
+        expect(yield* cancellation.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
+        expect(yield* changes.submission.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
+        expect(
+          yield* changes.delivery.cancelChange({
+            changeId: captured.changeId,
+            reason: "Exercise reconciliation selection.",
+            now: "2026-08-09T20:25:00.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        yield* repository.operation("corrupt history outside closed projections", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE implementation_decisions SET choice = x'04'
+                        WHERE change_id = ${captured.changeId}`;
+            yield* sql`
+              INSERT INTO implementation_blockers (id, change_id, reported_at, content)
+              VALUES ('closed-active-blocker', ${captured.changeId},
+                '2026-08-09T20:26:00.000Z', x'05')
+            `;
+          }),
+        );
+        const [closedPublication, closedTaskProjection] = yield* Effect.all([
+          Effect.either(changes.publication.getChangeById(captured.changeId)),
+          Effect.either(changes.reads.getChangeByTaskId("BY-903")),
+        ]);
+        expect(closedPublication).toMatchObject({ _tag: "Right", right: { state: "closed" } });
+        expect(closedTaskProjection).toMatchObject({
+          _tag: "Right",
+          right: { id: captured.changeId, state: "closed" },
+        });
+        expect(
+          yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
+        ).toHaveLength(1);
+        expect(yield* reconciliation.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
         yield* repository.operation(
           "make a Resolution belong to two Blockers",
           (sql) =>
