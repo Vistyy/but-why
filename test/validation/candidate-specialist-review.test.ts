@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
+import {
+  type ReviewerAgentResult,
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { RecordCandidateSpecialistRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
@@ -18,11 +19,7 @@ import {
   runSpecialistReviewPhase,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
-import {
-  ReviewerOutputContractFailed,
-  ReviewerProcessToolingFailed,
-  validationToolingFailureRecord,
-} from "../../src/change/validation/validationToolingFailures.js";
+import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -87,11 +84,10 @@ const success = (
   ...(sessionReference === undefined ? {} : { sessionReference }),
 });
 
-const outputFailure = (reviewer: string, message: string) =>
-  new ReviewerOutputContractFailed({
+const outputFailure = (_reviewer: string, message: string) =>
+  new ReviewerExecutionFailed({
+    kind: "output_contract",
     operationName: "decode_reviewer_output",
-    reviewer,
-    attempts: 2,
     diagnostics: [],
     message,
   });
@@ -288,8 +284,9 @@ describe("Candidate Specialist Review phase", () => {
         expect(harness.rounds[0]?.findings).toEqual([]);
 
         const failedHarness = phaseHarness();
-        const revisionFailure = new ReviewerProcessToolingFailed({
-          operationName: "run_reviewer_agent",
+        const revisionFailure = new ReviewerExecutionFailed({
+          kind: "process_execution",
+          operationName: "run_reviewer_process",
           message: "Specialist revision failed.",
         });
         let calls = 0;
@@ -600,8 +597,9 @@ describe("Candidate Specialist Review phase", () => {
   it.scoped("cannot pass after producer runtime or Artifact-recording failure", () =>
     Effect.gen(function* () {
       const runtimeHarness = phaseHarness();
-      const launchFailure = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_agent",
+      const launchFailure = new ReviewerExecutionFailed({
+        kind: "process_execution",
+        operationName: "run_reviewer_process",
         message: "Reviewer launch failed.",
       });
       const runtimeResult = yield* Effect.suspend(() =>

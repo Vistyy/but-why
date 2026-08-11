@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
+import {
+  type ReviewerAgentResult,
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
@@ -16,10 +17,6 @@ import type {
   ReviewerSessionRecord,
   ReviewerSessionStore,
 } from "../../src/change/reviewerSession/reviewerSession.js";
-import {
-  ReviewerOutputContractFailed,
-  ReviewerProcessToolingFailed,
-} from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -203,8 +200,9 @@ describe("Acceptance Review phase", () => {
         review: () =>
           Effect.succeed({
             ok: false,
-            failure: new ReviewerProcessToolingFailed({
-              operationName: "run_reviewer_agent",
+            failure: new ReviewerExecutionFailed({
+              kind: "process_execution",
+              operationName: "run_reviewer_process",
               message: "Reviewer launch failed.",
             }),
             sessionUsability: "unknown",
@@ -219,7 +217,7 @@ describe("Acceptance Review phase", () => {
         findings: 0,
         toolingFailure: {
           _tag: "ReviewerProcessToolingFailed",
-          operationName: "run_reviewer_agent",
+          operationName: "run_reviewer_process",
         },
       });
       expect(fixture.rounds).toEqual([
@@ -234,10 +232,9 @@ describe("Acceptance Review phase", () => {
         review: () =>
           Effect.succeed({
             ok: false,
-            failure: new ReviewerOutputContractFailed({
+            failure: new ReviewerExecutionFailed({
+              kind: "output_contract",
               operationName: "decode_reviewer_output",
-              reviewer: "acceptance",
-              attempts: 2,
               diagnostics: [],
               message: "Structured output correction failed.",
             }),
@@ -295,8 +292,9 @@ describe("Acceptance Review phase", () => {
         const firstResult = yield* first.run();
         expect(firstResult.reviewerEvidence).toMatchObject({ continuity: "fresh", reviewCalls: 1 });
 
-        const temporaryFailure = new ReviewerProcessToolingFailed({
-          operationName: "run_reviewer_agent",
+        const temporaryFailure = new ReviewerExecutionFailed({
+          kind: "process_execution",
+          operationName: "run_reviewer_process",
           message: "Temporary reviewer failure.",
         });
         const resumedReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -345,8 +343,9 @@ describe("Acceptance Review phase", () => {
       );
       yield* initial.run();
 
-      const unusable = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_agent",
+      const unusable = new ReviewerExecutionFailed({
+        kind: "process_execution",
+        operationName: "run_reviewer_process",
         message: "Stored session cannot continue.",
       });
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>

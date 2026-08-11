@@ -29,9 +29,7 @@ export class GitToolingFailed extends Data.TaggedError("GitToolingFailed")<{
 export class ReviewerProcessToolingFailed extends Data.TaggedError("ReviewerProcessToolingFailed")<{
   readonly operationName: string;
   readonly message: string;
-}> {
-  readonly kind = "process_execution" as const;
-}
+}> {}
 
 export class PrepareCommandExecutionToolingFailed extends Data.TaggedError(
   "PrepareCommandExecutionToolingFailed",
@@ -55,9 +53,7 @@ export class ReviewerOutputContractFailed extends Data.TaggedError("ReviewerOutp
   readonly attempts: number;
   readonly diagnostics: readonly ContractDiagnostic[];
   readonly message: string;
-}> {
-  readonly kind = "output_contract" as const;
-}
+}> {}
 
 export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContractFailed")<{
   readonly operationName: string;

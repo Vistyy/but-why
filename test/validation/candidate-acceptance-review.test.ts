@@ -2,17 +2,17 @@ import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll, vi } from "vitest";
-import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
+} from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type { AcceptanceContextCandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
-import {
-  ReviewerProcessToolingFailed,
-  validationToolingFailureRecord,
-} from "../../src/change/validation/validationToolingFailures.js";
+import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
@@ -185,8 +185,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         review: () =>
           Effect.succeed({
             ok: false,
-            failure: new ReviewerProcessToolingFailed({
-              operationName: "run_reviewer_agent",
+            failure: new ReviewerExecutionFailed({
+              kind: "process_execution",
+              operationName: "run_reviewer_process",
               message: "Reviewer launch failed.",
             }),
             sessionUsability: "unknown" as const,
@@ -202,7 +203,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
         expect.objectContaining({
           errorKind: "reviewer_process_execution_failed",
-          operationName: "run_reviewer_agent",
+          operationName: "run_reviewer_process",
         }),
       ]);
       expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
@@ -237,8 +238,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       review.mockImplementationOnce(() =>
         Effect.succeed({
           ok: false,
-          failure: new ReviewerProcessToolingFailed({
-            operationName: "run_reviewer_agent",
+          failure: new ReviewerExecutionFailed({
+            kind: "process_execution",
+            operationName: "run_reviewer_process",
             message: "Temporary reviewer failure.",
           }),
           sessionUsability: "unknown" as const,
