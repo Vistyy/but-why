@@ -188,7 +188,16 @@ files:
 rule:
   all:
     - kind: import_statement
-    - regex: '[\s\S]*\b(?:runTestProcess|runTestProcessOrThrow|startTestProcess)\s+as\s+[$A-Za-z_][$0-9A-Za-z_]*[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
+    - regex: '[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
+    - has:
+        pattern:
+          context: import { $HELPER as $ALIAS } from "module"
+          selector: import_specifier
+          strictness: relaxed
+        stopBy: end
+constraints:
+  HELPER:
+    regex: '^(runTestProcess|runTestProcessOrThrow|startTestProcess)$'
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

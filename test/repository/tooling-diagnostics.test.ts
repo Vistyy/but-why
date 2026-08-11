@@ -166,7 +166,7 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "test-process-helper-imports-keep-canonical-names",
-      'import { runTestProcess as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
+      'import { runTestProcess /* equivalent alias */ as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
