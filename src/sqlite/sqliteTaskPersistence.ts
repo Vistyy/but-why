@@ -294,6 +294,16 @@ const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
     if (current.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
+    const activeReviews = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews WHERE task_id = ${input.taskId} AND state = 'running'
+    `;
+    if (activeReviews[0] !== undefined) {
+      return {
+        ok: false as const,
+        code: "active_task_review" as const,
+        reviewId: activeReviews[0].id,
+      };
+    }
     yield* sql`UPDATE tasks SET state = 'todo', updated_at = ${input.now} WHERE id = ${input.taskId}`;
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) return yield* invalidData("approve Task", "Task disappeared");

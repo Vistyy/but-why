@@ -33,8 +33,9 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 
 ## Workflow boundaries
 
-Task Submission reviews one exact New Task proposal under its captured effective policy and remains advisory.
-Task Approval is a separate Operator action.
+Task Submission reviews one exact New Task proposal under its captured effective policy.
+Passing completion records the Review outcome and moves that exact Task from New to Todo in one transaction.
+Direct Task Approval remains a separate Operator action when no Task Review is active.
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.
 Submission returns without validation when there is no changed Candidate.

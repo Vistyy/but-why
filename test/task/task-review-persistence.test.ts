@@ -81,7 +81,19 @@ it.scoped("selects the latest Review deterministically when creation times match
         now,
       });
       yield* reviews.recordCleanup("review-first", "removed", now);
-      yield* reviews.complete({ reviewId: "review-first", findings: [], now });
+      yield* reviews.complete({
+        reviewId: "review-first",
+        findings: [
+          {
+            title: "Finding",
+            description: "Description",
+            evidence: "Evidence",
+            files: [],
+            artifactRefs: [],
+          },
+        ],
+        now,
+      });
       yield* reviews.admit({
         reviewId: "review-second",
         taskId: publicTaskId("BY-1"),
@@ -95,6 +107,126 @@ it.scoped("selects the latest Review deterministically when creation times match
       expect(yield* reviews.getLatestForTask(publicTaskId("BY-1"))).toMatchObject({
         id: "review-second",
         state: "running",
+      });
+    }),
+  ),
+);
+
+it.scoped("atomically approves only a passing exact Task Review", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      yield* tasks.createTask({ title: "Approved", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-passed",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-passed",
+        now,
+      });
+      expect(yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now })).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: "review-passed",
+      });
+      yield* reviews.recordCleanup("review-passed", "removed", later);
+
+      const completed = yield* reviews.complete({
+        reviewId: "review-passed",
+        findings: [],
+        now: later,
+      });
+
+      expect(completed).toMatchObject({
+        ok: true,
+        taskState: "todo",
+        review: { outcome: "passed" },
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "todo" });
+    }),
+  ),
+);
+
+it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      for (const [sequence, completion] of [
+        {
+          findings: [
+            {
+              title: "Finding",
+              description: "Description",
+              evidence: "Evidence",
+              files: [],
+              artifactRefs: [],
+            },
+          ],
+        },
+        {
+          findings: [],
+          toolingFailure: { operation: "run_task_review", message: "Reviewer failed." },
+        },
+      ].entries()) {
+        const taskId = publicTaskId(`BY-${sequence + 1}`);
+        const reviewId = `review-${sequence + 1}`;
+        yield* tasks.createTask({ title: `Proposal ${sequence + 1}`, description: "Exact", now });
+        yield* reviews.admit({
+          reviewId,
+          taskId,
+          policy,
+          baseRef: "refs/heads/main",
+          baseCommit: "a".repeat(40),
+          workspacePath: `/tmp/${reviewId}`,
+          now,
+        });
+        yield* reviews.recordCleanup(reviewId, "removed", later);
+        const completed = yield* reviews.complete({ reviewId, ...completion, now: later });
+        expect(completed).toMatchObject({ ok: true, taskState: "new" });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "new" });
+      }
+    }),
+  ),
+);
+
+it.scoped("records the exact non-approval reason when Task state changes during review", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-cancelled",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-cancelled",
+        now,
+      });
+      yield* tasks.cancelTask({ taskId: publicTaskId("BY-1"), reason: "Superseded", now: later });
+      yield* reviews.recordCleanup("review-cancelled", "removed", later);
+
+      const completed = yield* reviews.complete({
+        reviewId: "review-cancelled",
+        findings: [],
+        now: later,
+      });
+
+      expect(completed).toMatchObject({
+        ok: true,
+        taskState: "cancelled",
+        review: {
+          outcome: "tooling_failed",
+          toolingFailure: {
+            operation: "confirm_task_review_task_state",
+            message: "Task state changed from new to cancelled during review.",
+          },
+        },
       });
     }),
   ),
@@ -141,7 +273,7 @@ it.scoped("finalizes a concurrently changed proposal as tooling failed and retai
           state: "complete",
           outcome: "tooling_failed",
           findings: [{ title: "Finding", artifactRefs: [] }],
-          toolingFailure: { operation: "confirm_task_review_proposal" },
+          toolingFailure: { operation: "confirm_task_review_context" },
         },
       });
     }),

@@ -27,9 +27,7 @@ export type TaskReviewPolicySnapshotV1 = {
   readonly instructions: string;
 };
 
-export type TaskReviewPolicySnapshotV2 = {
-  readonly id: "task_advisory_review";
-  readonly version: 2;
+type TaskReviewPolicySnapshotBody = {
   readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope" | "profile">;
   readonly builtInInstructions: string;
   readonly guidance: {
@@ -38,7 +36,20 @@ export type TaskReviewPolicySnapshotV2 = {
   } | null;
 };
 
-export type TaskReviewPolicySnapshot = TaskReviewPolicySnapshotV1 | TaskReviewPolicySnapshotV2;
+export type TaskReviewPolicySnapshotV2 = TaskReviewPolicySnapshotBody & {
+  readonly id: "task_advisory_review";
+  readonly version: 2;
+};
+
+export type TaskReviewPolicySnapshotV3 = TaskReviewPolicySnapshotBody & {
+  readonly id: "task_review";
+  readonly version: 3;
+};
+
+export type TaskReviewPolicySnapshot =
+  | TaskReviewPolicySnapshotV1
+  | TaskReviewPolicySnapshotV2
+  | TaskReviewPolicySnapshotV3;
 
 export type TaskReviewToolingFailure = {
   readonly operation: string;

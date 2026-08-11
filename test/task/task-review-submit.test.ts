@@ -471,10 +471,22 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     });
     expect(observed?.prompt).toContain("Repository guidance");
     expect(observed?.prompt).toContain("remain controlling if the guidance conflicts");
-    expect(JSON.parse(submitted.stdout)).toMatchObject({
+    const submittedOutput = JSON.parse(submitted.stdout) as { review: { id: string } };
+    expect(submittedOutput).toMatchObject({
+      review: { outcome: "passed" },
+      task: { id: "BY-1", state: "todo" },
+    });
+    const shown = yield* runByInProcessEffect(root, [
+      "task",
+      "review",
+      "show",
+      submittedOutput.review.id,
+    ]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
       review: {
         policy: {
-          version: 2,
+          id: "task_review",
+          version: 3,
           profile: {
             agentProfile: "task-review",
             scope: "repo",
@@ -523,18 +535,19 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
       reviewerAgentRuntime: passingReviewer,
     });
     expect(submitted.status, submitted.stdout).toBe(0);
-    const output: unknown = JSON.parse(submitted.stdout);
-    expect(output).toMatchObject({
-      review: {
-        taskId: "BY-1",
-        state: "complete",
-        outcome: "passed",
-        proposal: { title: "Review me", description: "Exact proposal", dependencyIds: [] },
-        reviewBase: { ref: "refs/heads/main" },
-        workspace: { cleanup: "removed" },
-      },
+    const output = JSON.parse(submitted.stdout) as { review: { id: string } };
+    expect(output).toEqual({
+      review: { id: output.review.id, outcome: "passed" },
+      task: { id: "BY-1", state: "todo" },
+      help: ["Run `by task show BY-1` to inspect its startability and next action."],
     });
-    const review = (output as { review: { workspace: { path: string } } }).review;
-    expect(existsSync(review.workspace.path)).toBe(false);
+    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", output.review.id]);
+    const shownOutput = JSON.parse(shown.stdout) as {
+      review: { workspace: { path: string; cleanup: string } };
+    };
+    expect(shownOutput.review.workspace.cleanup).toBe("removed");
+    expect(existsSync(shownOutput.review.workspace.path)).toBe(false);
+    const task = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(task.stdout)).toMatchObject({ task: { state: "todo" } });
   }),
 );

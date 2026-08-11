@@ -75,7 +75,7 @@ export const runTaskShowCommand = (
             contextCommand: `by task context ${task.id}`,
             ...(review === undefined
               ? task.state === "new"
-                ? { help: [`Run \`by task submit ${task.id}\` for an advisory Task Review.`] }
+                ? { help: [`Run \`by task submit ${task.id}\` to review and approve this Task.`] }
                 : {}
               : { reviewCommand: `by task review show ${review.id}` }),
           });

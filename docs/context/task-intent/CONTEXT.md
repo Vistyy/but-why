@@ -35,16 +35,18 @@ The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
 **Task Review**:
-One fresh advisory review of one exact New Task proposal before Task Approval.
+One fresh review of one exact New Task proposal for approval.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
 A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
-It does not approve the Task or create reusable judgment authority.
-_Avoid_: Task Approval, Acceptance Review, Validation Run
+Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
+A Task Review does not create reusable judgment authority.
+_Avoid_: Acceptance Review, Validation Run
 
 **Active Task Review**:
 The sole running Task Review for one Task until it completes or the Operator abandons it.
-It prevents another Task Submission for that Task but does not lock Task Context, Task Dependencies, lifecycle operations, or Change Start.
+It prevents another Task Submission and direct Task Approval for that Task.
+Task Context or Task Dependency changes can continue while review runs, but they prevent that Review from approving the Task.
 _Avoid_: Task state, process lock, Active Validation Run
 
 **Task Review Proposal**:
@@ -58,11 +60,11 @@ Repository Preparation and reviewer execution use a disposable exact workspace a
 _Avoid_: Change Base, caller checkout HEAD, Candidate
 
 **Task Approval**:
-The Operator's explicit confirmation that recorded Task intent can move from New to Todo.
+The transition that confirms recorded Task intent can move from New to Todo.
+It occurs either through a passing fresh Task Review or through the Operator's direct approval when no Task Review is active.
 V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
 Task Context and Task Dependencies become immutable at Task Approval.
-A Task Review is advisory and never performs Task Approval.
-_Avoid_: Change Start, Implementation Authorization, Task Review
+_Avoid_: Change Start, Implementation Authorization
 
 **Task Lifecycle**:
 The user-facing progress of a Task through New, Todo, Done, or Cancelled.

@@ -44,7 +44,8 @@ describe("Task Review configuration", () => {
       policy: {
         profile: { agentProfile: "repo", scope: "repo" },
         snapshot: {
-          version: 2,
+          id: "task_review",
+          version: 3,
           profile: {
             agentProfile: "repo",
             scope: "repo",

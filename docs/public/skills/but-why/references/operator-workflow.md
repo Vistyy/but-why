@@ -54,13 +54,13 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 ## Review and approve a Task
 
-When the Operator requests an advisory Task Review, run `<but-why> task submit <task-id>` for the exact New Task proposal.
-A Task Review does not approve the Task.
+When the Operator requests Task Review and approval, run `<but-why> task submit <task-id>` for the exact New Task proposal.
+A passing Task Review atomically approves that exact proposal by moving the Task to Todo.
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Resolve every applicable Finding by updating the Task proposal before requesting another review.
 
-When the Operator explicitly requests Task Approval, inspect the selected Task and run `<but-why> task approve <task-id>`.
+When the Operator explicitly requests direct Task Approval and no Task Review is active, inspect the selected Task and run `<but-why> task approve <task-id>`.
 Treat the returned Task state as authoritative.
 Inspect the Task again only when the result omits required approval or Change-link state.
 Task Approval does not authorize Change Start or implementation.

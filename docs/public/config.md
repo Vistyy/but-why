@@ -90,7 +90,7 @@ Change Submit starts Checks without an empty Prepare phase.
 
 Change Start runs Repository Preparation in the new Managed Worktree.
 A failure preserves the Change and Managed Worktree, is recorded as the current preparation failure, and does not block implementation or Submission.
-Task Submit runs it before advisory reviewer execution in the exact Review Base workspace.
+Task Submit runs it before reviewer execution in the exact Review Base workspace.
 A Task Review preparation failure completes as tooling failed only after exact workspace cleanup succeeds.
 Change Submit runs it before Checks in the Snapshot Workspace.
 Retry it with:

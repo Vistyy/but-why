@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
 import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type {
   TaskReviewDependencyEvidence,
   TaskReviewFinding,
@@ -163,20 +164,26 @@ const completeReview = (
     if (current === undefined) {
       return { ok: false as const, code: "task_review_not_found" as const };
     }
-    if (current.state !== "running" || current.workspaceCleanup !== "removed") {
+    if (current.state === "complete") {
+      return {
+        ok: true as const,
+        review: current,
+        taskState: yield* currentTaskState(sql, current.taskId),
+      };
+    }
+    if (current.workspaceCleanup !== "removed") {
       return { ok: false as const, code: "task_review_not_active" as const };
     }
-    const proposalStillCurrent = yield* currentProposalMatches(sql, current);
-    const failure =
-      toolingFailure ??
-      (proposalStillCurrent
-        ? undefined
-        : {
-            operation: "confirm_task_review_proposal",
-            message: "Task title, description, or direct Task Dependencies changed during review.",
-          });
+    const admission = yield* inspectCurrentAdmission(sql, current);
+    const failure = admission.ok ? toolingFailure : admission.failure;
     const outcome =
       failure !== undefined ? "tooling_failed" : findings.length > 0 ? "blocked" : "passed";
+    if (outcome === "passed") {
+      yield* sql`
+        UPDATE tasks SET state = 'todo', updated_at = ${now}
+        WHERE id = ${current.taskId} AND state = 'new'
+      `;
+    }
     yield* Effect.forEach(
       findings,
       (finding) => sql`
@@ -195,24 +202,78 @@ const completeReview = (
     const completed = yield* getReview(sql, reviewId);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
-    return { ok: true as const, review: completed };
+    return {
+      ok: true as const,
+      review: completed,
+      taskState: outcome === "passed" ? ("todo" as const) : admission.taskState,
+    };
+  });
+
+const currentTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
+  Effect.map(
+    sql<{ readonly state: TaskState }>`SELECT state FROM tasks WHERE id = ${taskId}`,
+    (tasks) => tasks[0]?.state ?? null,
+  );
+
+const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+      readonly state: TaskState;
+    }>`
+      SELECT title, description, state FROM tasks WHERE id = ${review.taskId}
+    `;
+    const task = rows[0];
+    if (task === undefined) {
+      return {
+        ok: false as const,
+        taskState: null,
+        failure: {
+          operation: "confirm_task_review_task",
+          message: "The selected Task no longer exists.",
+        },
+      };
+    }
+    if (task.state !== "new") {
+      return {
+        ok: false as const,
+        taskState: task.state,
+        failure: {
+          operation: "confirm_task_review_task_state",
+          message: `Task state changed from new to ${task.state} during review.`,
+        },
+      };
+    }
+    if (task.title !== review.proposal.title || task.description !== review.proposal.description) {
+      return {
+        ok: false as const,
+        taskState: task.state,
+        failure: {
+          operation: "confirm_task_review_context",
+          message: "Task title or description changed during review.",
+        },
+      };
+    }
+    const dependencies = yield* dependencyEvidence(sql, review.taskId);
+    if (
+      JSON.stringify(dependencies.map((dependency) => dependency.id)) !==
+      JSON.stringify(review.proposal.dependencyIds)
+    ) {
+      return {
+        ok: false as const,
+        taskState: task.state,
+        failure: {
+          operation: "confirm_task_review_dependencies",
+          message: "Direct Task Dependencies changed during review.",
+        },
+      };
+    }
+    return { ok: true as const, taskState: task.state };
   });
 
 const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly title: string; readonly description: string }>`
-      SELECT title, description FROM tasks WHERE id = ${review.taskId}
-    `;
-    const task = rows[0];
-    if (task === undefined) return false;
-    const dependencies = yield* dependencyEvidence(sql, review.taskId);
-    return (
-      task.title === review.proposal.title &&
-      task.description === review.proposal.description &&
-      JSON.stringify(dependencies.map((dependency) => dependency.id)) ===
-        JSON.stringify(review.proposal.dependencyIds)
-    );
-  });
+  Effect.map(inspectCurrentAdmission(sql, review), (admission) => admission.ok);
 
 const getReview = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.gen(function* () {
@@ -324,8 +385,7 @@ const parseDependencies = (source: string): readonly TaskReviewDependencyEvidenc
 };
 const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const value = parseObject(source);
-  if (value.id !== "task_advisory_review") throw new Error("Invalid policy");
-  if (value.version === 1) {
+  if (value.id === "task_advisory_review" && value.version === 1) {
     if (value.profileScope !== "global") throw new Error("Invalid legacy policy");
     return {
       id: "task_advisory_review",
@@ -335,14 +395,14 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
       instructions: requiredString(value.instructions),
     };
   }
-  if (value.version !== 2) throw new Error("Invalid policy version");
+  const legacy = value.id === "task_advisory_review" && value.version === 2;
+  const current = value.id === "task_review" && value.version === 3;
+  if (!legacy && !current) throw new Error("Invalid policy");
   const profile = parseObject(JSON.stringify(value.profile));
   const scope = profile.scope;
   if (scope !== "repo" && scope !== "global") throw new Error("Invalid profile scope");
   const guidance = value.guidance === null ? null : parseGuidance(value.guidance);
-  return {
-    id: "task_advisory_review",
-    version: 2,
+  const body = {
     profile: {
       agentProfile: requiredString(profile.agentProfile),
       scope,
@@ -352,11 +412,14 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
     },
     builtInInstructions: requiredString(value.builtInInstructions),
     guidance,
-  };
+  } as const;
+  return legacy
+    ? { id: "task_advisory_review", version: 2, ...body }
+    : { id: "task_review", version: 3, ...body };
 };
 const parseGuidance = (
   value: unknown,
-): NonNullable<Extract<TaskReviewPolicySnapshot, { readonly version: 2 }>["guidance"]> => {
+): NonNullable<Extract<TaskReviewPolicySnapshot, { readonly version: 2 | 3 }>["guidance"]> => {
   const parsed = parseObject(JSON.stringify(value));
   if (parsed.source !== "repo" && parsed.source !== "global") {
     throw new Error("Invalid guidance source");

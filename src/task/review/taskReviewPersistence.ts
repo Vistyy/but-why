@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
+import type { TaskState } from "../lifecycle.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
@@ -40,7 +41,11 @@ export type CompleteTaskReviewInput = {
 };
 
 export type CompleteTaskReviewResult =
-  | { readonly ok: true; readonly review: TaskReviewRecord }
+  | {
+      readonly ok: true;
+      readonly review: TaskReviewRecord;
+      readonly taskState: TaskState | null;
+    }
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {
