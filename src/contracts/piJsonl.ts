@@ -26,7 +26,7 @@ const assistantMessageEndSchema = Schema.Struct({
   type: Schema.Literal("message_end"),
   message: Schema.Struct({
     role: Schema.Literal("assistant"),
-    content: Schema.Unknown,
+    content: Schema.optional(Schema.Unknown),
     usage: Schema.optional(Schema.Unknown),
   }),
 });
@@ -45,7 +45,7 @@ const piMessageUsageSchema = Schema.Struct({
   output: tokenCountSchema,
   cacheRead: tokenCountSchema,
   cacheWrite: tokenCountSchema,
-  totalTokens: Schema.optional(tokenCountSchema),
+  totalTokens: Schema.optional(Schema.Unknown),
 });
 
 export type PiSessionHeader = Schema.Schema.Type<typeof sessionHeaderSchema>;
@@ -60,6 +60,7 @@ const decodeAssistantMessageEndValue = Schema.decodeUnknownOption(assistantMessa
 const decodeContent = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown));
 const decodeTextContent = Schema.decodeUnknownOption(textContentSchema);
 const decodeMessageUsage = Schema.decodeUnknownOption(piMessageUsageSchema);
+const decodeTokenCount = Schema.decodeUnknownOption(tokenCountSchema);
 
 export const decodePiJsonlObject = (line: string): Readonly<Record<string, unknown>> =>
   decodeJsonObject(line);
@@ -85,11 +86,11 @@ export const decodePiAssistantText = (content: unknown): string => {
 export const decodePiMessageUsage = (value: unknown): TokenUsage | undefined => {
   const usage = Option.getOrUndefined(decodeMessageUsage(value));
   if (usage === undefined) return undefined;
+  const totalTokens = Option.getOrUndefined(decodeTokenCount(usage.totalTokens));
   return {
     inputTokens: usage.input + usage.cacheWrite,
     cachedInputTokens: usage.cacheRead,
     outputTokens: usage.output,
-    totalTokens:
-      usage.totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
+    totalTokens: totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
   };
 };

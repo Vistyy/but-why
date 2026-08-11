@@ -217,6 +217,42 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
+  it.effect("preserves optional message-field fallbacks", () =>
+    Effect.gen(function* () {
+      const executor = createPiReviewerProcessExecutor(() =>
+        Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${JSON.stringify({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              usage: {
+                input: 5,
+                output: 3,
+                cacheRead: 7,
+                cacheWrite: 2,
+                totalTokens: "unavailable",
+              },
+            },
+          })}\n`,
+        }),
+      );
+
+      const result = yield* executor.execute(input);
+
+      expect(result).toMatchObject({
+        stdout: "",
+        invocationUsage: {
+          inputTokens: 7,
+          cachedInputTokens: 7,
+          outputTokens: 3,
+          totalTokens: 17,
+        },
+      });
+    }),
+  );
+
   it.effect("classifies a confirmed missing resumed session as unusable", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-missing-reviewer-session-"));
