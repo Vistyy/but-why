@@ -136,7 +136,7 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "json-parse-assertions-keep-unknown",
-      "const value = JSON.parse(source) as unknown as TrustedType;",
+      "const value = JSON.parse(source) as unknown as unknown as TrustedType;",
       "scripts",
     ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
@@ -150,7 +150,11 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "package-installation-belongs-to-package-contract",
-      'const result = runTestProcess("npm", ["i", "package"], { cwd });',
+      'const result = runTestProcess("npm", ["install-ci-test"], { cwd });',
+    ],
+    [
+      "package-installation-belongs-to-package-contract",
+      "const result = runTestProcess(`npm`, [`install`], { cwd });",
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {

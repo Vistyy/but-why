@@ -70,6 +70,7 @@ invalid:
   - JSON.parse(x) satisfies TrustedType
   - (JSON.parse(x)) satisfies Record<string, unknown>
   - JSON.parse(x) as unknown as TrustedType
+  - JSON.parse(x) as unknown as unknown as TrustedType
   - (JSON.parse(x) as unknown) as Record<string, unknown>
   - "<TrustedType><unknown>JSON.parse(x)"
   - JSON.parse(JSON.stringify(value)) as StructuredValue
@@ -103,7 +104,9 @@ invalid:
   - runTestProcess('npm', ['install', '--ignore-scripts'], { cwd })
   - runTestProcess("npm", ["add", "package"], { cwd })
   - runTestProcess("npm", ["ci"], { cwd })
+  - runTestProcess("npm", ["cit"], { cwd })
   - runTestProcess("npm", ["clean-install"], { cwd })
+  - runTestProcess("npm", ["clean-install-test"], { cwd })
   - runTestProcess("npm", ["i", "package"], { cwd })
   - runTestProcess("npm", ["ic"], { cwd })
   - runTestProcess("npm", ["in", "package"], { cwd })
@@ -111,12 +114,15 @@ invalid:
   - runTestProcess("npm", ["inst", "package"], { cwd })
   - runTestProcess("npm", ["insta", "package"], { cwd })
   - runTestProcess("npm", ["instal", "package"], { cwd })
+  - runTestProcess("npm", ["install-ci-test"], { cwd })
   - runTestProcess("npm", ["install-clean"], { cwd })
   - runTestProcess("npm", ["isnt", "package"], { cwd })
   - runTestProcess("npm", ["isnta", "package"], { cwd })
   - runTestProcess("npm", ["isntal", "package"], { cwd })
   - runTestProcess("npm", ["isntall", "package"], { cwd })
   - runTestProcess("npm", ["isntall-clean"], { cwd })
+  - runTestProcess("npm", ["sit"], { cwd })
+  - "runTestProcess(`npm`, [`install`], { cwd })"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:
