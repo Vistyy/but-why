@@ -239,13 +239,18 @@ const makeCandidateValidation = (dependencies: {
         ...failure,
         now: input.now,
       });
-      if (cleanupResult.workspace !== "failed") {
-        yield* dependencies.persistence.complete({
+      if (cleanupResult.workspace === "failed") {
+        return {
+          ok: false,
+          code: "active_validation_run",
           validationRunId: started.validationRunId,
-          outcome: "tooling_failed",
-          now: input.now,
-        });
+        } as const;
       }
+      yield* dependencies.persistence.complete({
+        validationRunId: started.validationRunId,
+        outcome: "tooling_failed",
+        now: input.now,
+      });
       return {
         ok: false,
         validationRunId: started.validationRunId,
@@ -253,10 +258,6 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    yield* dependencies.persistence.recordWorkspaceCleanup({
-      validationRunId: started.validationRunId,
-      cleanupWorkspace: workspace.setup.cleanupResult.workspace,
-    });
     const activeResult = workspace.activeWorkspaceResult;
     const toolingFailures =
       (
