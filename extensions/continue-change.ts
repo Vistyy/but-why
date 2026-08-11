@@ -1310,6 +1310,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       changeId !== undefined
     ) {
       const reassessment = persisted?.submissionReassessment;
+      if (reassessment?.state === "awaiting-settle") return;
       if (reassessment?.state === "running") {
         saveSubmissionReassessment({
           ...reassessment,

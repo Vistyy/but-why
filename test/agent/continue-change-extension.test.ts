@@ -280,6 +280,29 @@ describe("packaged Change Implement continuation extension", () => {
     ).toBeUndefined();
   });
 
+  it("starts reassessment after the initially interrupted run is aborted", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    const submit = {
+      type: "tool_call",
+      toolCallId: "submit-1",
+      toolName: "bash",
+      input: { command: `just by change submit ${changeId}` },
+    };
+
+    expect(await harness.emit("tool_call", submit)).toMatchObject({ block: true });
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toContain("required separate reassessment run");
+    expect(
+      await harness.emit("tool_call", { ...submit, toolCallId: "submit-during-reassessment" }),
+    ).toMatchObject({ block: true });
+  });
+
   it("keeps an aborted reassessment pending until a replacement run settles", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
