@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { MigrationError } from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
@@ -53,6 +55,7 @@ export class RepositorySql extends Context.Tag("@but-why/RepositorySql")<
 export type RepositorySqlConfig = {
   readonly statePath: string;
   readonly commonDirectory: string;
+  readonly lifecycle?: "initialize" | "open";
   readonly sqliteBusyTimeoutMs?: number;
   readonly migrationContentionTimeoutMs?: number;
   readonly migrationContentionRetryDelayMs?: number;
@@ -105,16 +108,44 @@ const ensureRepositoryIdentity = (sql: SqlClient.SqlClient, commonDirectory: str
     }
   });
 
-const isRepositoryMigrationLedgerComplete = (
+type MigrationLedgerState = "current" | "known_older";
+
+const classifyRepositoryMigrationLedger = (
   sql: SqlClient.SqlClient,
-): Effect.Effect<boolean, SqlError> =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly migration_id: number }>`
-      SELECT migration_id FROM effect_sql_migrations
-    `;
-    const present = new Set(rows.map((row) => row.migration_id));
-    return repositoryMigrationIds.every((id) => present.has(id));
-  });
+  lifecycle: "initialize" | "open",
+): Effect.Effect<MigrationLedgerState, SqlError | RepositoryMigrationFailed> =>
+  sql<{ readonly migrationId: unknown }>`
+    SELECT migration_id AS migrationId
+    FROM effect_sql_migrations
+    ORDER BY migration_id
+  `.pipe(
+    Effect.flatMap((rows) =>
+      Effect.try({
+        try: () => {
+          const applied = rows.map((row) => {
+            if (typeof row.migrationId !== "number" || !Number.isSafeInteger(row.migrationId)) {
+              throw new Error("Shared Repository State migration ledger is malformed");
+            }
+            return row.migrationId;
+          });
+          const expectedPrefix = repositoryMigrationIds.slice(0, applied.length);
+          if (
+            applied.length > repositoryMigrationIds.length ||
+            applied.some((id, index) => id !== expectedPrefix[index])
+          ) {
+            throw new Error(
+              "Shared Repository State has a migration gap or an unknown newer schema",
+            );
+          }
+          if (applied.length === 0 && lifecycle === "open") {
+            throw new Error("Shared Repository State has no known schema");
+          }
+          return applied.length === repositoryMigrationIds.length ? "current" : "known_older";
+        },
+        catch: (cause) => new RepositoryMigrationFailed({ statePath: "<repository-state>", cause }),
+      }),
+    ),
+  );
 
 // SQLITE_BUSY (5) and SQLITE_LOCKED (6) are the lock-contention results that mean another
 // process holds the migration write lock. A missing ledger table (errcode 1 with a
@@ -130,15 +161,27 @@ const isMigrationContentionError = (error: SqlError): boolean => {
   return sqliteMessage.includes("no such table");
 };
 
+const isMissingMigrationLedger = (error: SqlError): boolean => {
+  const cause = error.cause as
+    | { readonly errcode?: number; readonly errstr?: string; readonly message?: string }
+    | undefined;
+  return cause?.errcode === 1 && (cause.message ?? cause.errstr ?? "").includes("no such table");
+};
+
 const readMigrationLedgerState = (
   sql: SqlClient.SqlClient,
-  statePath: string,
-): Effect.Effect<boolean, RepositoryStorageError> =>
-  isRepositoryMigrationLedgerComplete(sql).pipe(
+  config: RepositorySqlConfig,
+): Effect.Effect<MigrationLedgerState, RepositoryStorageError> =>
+  classifyRepositoryMigrationLedger(sql, config.lifecycle ?? "open").pipe(
     Effect.catchTag("SqlError", (error) =>
-      isMigrationContentionError(error)
-        ? Effect.succeed(false)
-        : Effect.fail(migrationFailureToStorageError(Cause.fail(error), statePath)),
+      (config.lifecycle ?? "open") === "initialize" && isMissingMigrationLedger(error)
+        ? Effect.succeed("known_older" as const)
+        : Effect.fail(migrationFailureToStorageError(Cause.fail(error), config.statePath)),
+    ),
+    Effect.catchTag("RepositoryMigrationFailed", (error) =>
+      Effect.fail(
+        new RepositoryMigrationFailed({ statePath: config.statePath, cause: error.cause }),
+      ),
     ),
   );
 
@@ -174,7 +217,7 @@ const migrateRepositoryStateWithContention = (
         Effect.fail(migrationFailureToStorageError(Cause.die(defect), config.statePath)),
       ),
     );
-    return yield* readMigrationLedgerState(sql, config.statePath);
+    return yield* readMigrationLedgerState(sql, config);
   });
 
   const migrateWithBound = (
@@ -189,15 +232,15 @@ const migrateRepositoryStateWithContention = (
           ),
         });
       }
-      const complete = yield* attempt;
-      if (complete) return;
+      const state = yield* attempt;
+      if (state === "current") return;
       yield* Effect.sleep(`${retryDelayMs} millis`);
       return yield* migrateWithBound(startedAt);
     });
 
-  return readMigrationLedgerState(sql, config.statePath).pipe(
-    Effect.flatMap((complete) =>
-      complete ? Effect.void : Effect.flatMap(Clock.currentTimeMillis, migrateWithBound),
+  return readMigrationLedgerState(sql, config).pipe(
+    Effect.flatMap((state) =>
+      state === "current" ? Effect.void : Effect.flatMap(Clock.currentTimeMillis, migrateWithBound),
     ),
   );
 };
@@ -222,6 +265,15 @@ const migrationFailureToStorageError = (
 export const repositorySqlLayer = (
   config: RepositorySqlConfig,
 ): Layer.Layer<RepositorySql, RepositoryStorageError> => {
+  if ((config.lifecycle ?? "open") === "open" && !existsSync(config.statePath)) {
+    return Layer.fail(
+      new RepositoryStateUnavailable({
+        statePath: config.statePath,
+        cause: new Error("Shared Repository State does not exist"),
+      }),
+    );
+  }
+
   const sqlite = nodeSqliteLayer(config.statePath, {
     busyTimeoutMs: config.sqliteBusyTimeoutMs ?? defaultSqliteBusyTimeoutMs,
   }).pipe(

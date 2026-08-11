@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { RepositoryStateUnavailable } from "../../src/contracts/repositoryStorageError.js";
-import type { RepoLocalContext } from "../../src/init/repoContext.js";
+import type { LocalRepositoryContext } from "../../src/repositoryRuntime/repositoryContext.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
@@ -32,7 +32,7 @@ const task = (description = "Original description"): TaskRecord => ({
   dependents: [],
 });
 
-const contextFor = (root: string): RepoLocalContext => {
+const contextFor = (root: string): LocalRepositoryContext => {
   const operationalDir = join(root, ".git", "but-why");
   const butWhyDir = join(root, ".but-why");
   return {

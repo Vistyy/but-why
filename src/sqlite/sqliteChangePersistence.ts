@@ -10,17 +10,16 @@ import {
   changeState,
 } from "../change/change.js";
 import type {
+  CandidatePublicationChange,
   CandidatePublicationPort,
   ChangeAuthorityPort,
   ChangeCancellationPort,
-  ChangeDeliveryPort,
   ChangePublicationEvidence,
   ChangeReadPort,
   ChangeReconciliationPort,
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
   ChangeSubmissionPort,
-  CompletedPublicationEvidencePort,
   CurrentChangeEvidenceQuery,
   RecordImplementationDecisionInput,
   TerminalChangeCleanupPort,
@@ -71,209 +70,105 @@ import {
   decodeStoredNullableString,
   decodeStoredSqlitePositiveInteger,
   decodeStoredString,
+  decodeStoredTaskId,
 } from "./sqliteTaskReadModel.js";
 
-const makeSqliteChangeAdapter = (
-  repository: Context.Tag.Service<typeof RepositorySql>,
-): ChangeAuthorityPort &
-  ChangeReadPort &
-  ChangeDeliveryPort &
-  ChangeReviewerSessionPort &
-  ChangeReviewerTranscriptPort &
-  CandidatePublicationPort &
-  CompletedPublicationEvidencePort => ({
-  raiseImplementationBlocker: (input) =>
-    repository.transactionImmediate("raise Implementation Blocker", (sql) =>
-      raiseBlocker(sql, input),
-    ),
-  resolveImplementationBlocker: (input) =>
-    repository.transactionImmediate("resolve Implementation Blocker", (sql) =>
-      resolveBlocker(sql, input),
-    ),
-  listImplementationBlockers: (changeId) =>
-    repository.transaction("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
-  getChangeById: (changeId) =>
-    repository.transaction("read Change", (sql) => getById(sql, changeId)),
-  getChangeByTaskId: (taskId) =>
-    repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
-  listImplementationDecisions: (changeId) =>
-    repository.transaction("list Implementation Decisions", (sql) => listDecisions(sql, changeId)),
-  recordImplementationDecision: (input) =>
-    repository.transactionImmediate("record Implementation Decision", (sql) =>
-      recordDecision(sql, input),
-    ),
-  getCurrentPassingEvidence: (changeId, query) =>
-    repository.transaction("read current passing Change evidence", (sql) =>
-      getPassingEvidence(sql, changeId, query, false),
-    ),
-  getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
-    repository.transaction("read completed Candidate Publication evidence", (sql) =>
-      getPassingEvidence(sql, changeId, { candidateId, validationRunId }, true),
-    ),
-  listChanges: (input) => repository.transaction("list Changes", (sql) => listChanges(sql, input)),
-  listChangesForReconciliation: (commonDirectory) =>
-    repository.transaction("list Changes for reconciliation", (sql) =>
-      listForReconciliation(sql, commonDirectory),
-    ),
-  completeMergedChange: (input) =>
-    repository.transactionImmediate("complete merged Change", (sql) =>
-      completeMergedChange(sql, input),
-    ),
-  cancelChange: (input) =>
-    repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
-  recordCleanup: (input) =>
-    repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
-  getReviewerSession: (changeId, producer) =>
-    repository.transaction("read Reviewer Session", (sql) =>
-      Effect.flatMap(
-        sql<
-          Record<string, unknown>
-        >`SELECT change_id AS changeId, producer, fingerprint, session_reference AS sessionReference FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
-        (rows) => {
-          const row = rows[0];
-          return row === undefined
-            ? Effect.succeed(undefined)
-            : decodePersisted("read Reviewer Session", () => decodeReviewerSession(row, changeId));
-        },
-      ),
-    ),
-  saveReviewerSession: (input) =>
-    repository.transactionImmediate("save Reviewer Session", (sql) =>
-      Effect.asVoid(sql`
-      INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
-      VALUES (${input.changeId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
-      ON CONFLICT(change_id, producer) DO UPDATE SET fingerprint = excluded.fingerprint, session_reference = excluded.session_reference
-    `),
-    ),
-  removeReviewerSession: (changeId, producer) =>
-    repository.transactionImmediate("remove Reviewer Session", (sql) =>
-      Effect.asVoid(
-        sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
-      ),
-    ),
-  removeReviewerSessions: (changeId) =>
-    repository.transactionImmediate("remove Reviewer Sessions", (sql) =>
-      Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
-    ),
-  listReviewerTranscripts: (changeId) =>
-    repository.transaction("list Reviewer Transcripts", (sql) =>
-      Effect.flatMap(
-        sql<
-          Record<string, unknown>
-        >`SELECT change_id AS changeId, producer, pi_session_id AS piSessionId, file_path AS filePath FROM reviewer_transcripts WHERE change_id = ${changeId}`,
-        (rows) =>
-          decodePersisted("list Reviewer Transcripts", () =>
-            rows
-              .map((row) => decodeReviewerTranscript(row, changeId))
-              .sort(
-                (left, right) =>
-                  compareStoredStrings(left.producer, right.producer) ||
-                  compareStoredStrings(left.filePath, right.filePath),
-              ),
-          ),
-      ),
-    ),
-  recordReviewerTranscripts: (input) =>
-    repository.transactionImmediate("record Reviewer Transcripts", (sql) =>
-      input.transcripts.length === 0
-        ? Effect.void
-        : Effect.asVoid(
-            sql`
-      INSERT INTO reviewer_transcripts
-      ${sql.insert(
-        input.transcripts.map((transcript) => ({
-          change_id: input.changeId,
-          producer: transcript.producer,
-          pi_session_id: transcript.piSessionId,
-          file_path: transcript.filePath,
-        })),
-      )}
-      ON CONFLICT(change_id, producer, file_path) DO NOTHING
-    `,
-          ),
-    ),
-  beginPublication: (input) =>
-    repository.transactionImmediate("begin Change publication", (sql) =>
-      beginPublication(sql, input),
-    ),
-  replacePendingPublication: (input) =>
-    repository.transactionImmediate("replace pending Change publication", (sql) =>
-      replacePendingPublication(sql, input),
-    ),
-  releasePendingPublication: (input) =>
-    repository.transactionImmediate("release Change publication", (sql) =>
-      releasePendingPublication(sql, input),
-    ),
-  recordPublishedPullRequest: (input) =>
-    repository.transactionImmediate("record Change publication", (sql) =>
-      recordPublishedPullRequest(sql, input),
-    ),
-});
-
 export const openSqliteChangeAuthorityPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      raiseImplementationBlocker: adapter.raiseImplementationBlocker,
-      resolveImplementationBlocker: adapter.resolveImplementationBlocker,
-      listImplementationBlockers: adapter.listImplementationBlockers,
-      listImplementationDecisions: adapter.listImplementationDecisions,
-      recordImplementationDecision: adapter.recordImplementationDecision,
-      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeAuthorityPort => ({
+      raiseImplementationBlocker: (input) =>
+        repository.transactionImmediate("raise Implementation Blocker", (sql) =>
+          raiseBlocker(sql, input),
+        ),
+      resolveImplementationBlocker: (input) =>
+        repository.transactionImmediate("resolve Implementation Blocker", (sql) =>
+          resolveBlocker(sql, input),
+        ),
+      listImplementationBlockers: (changeId) =>
+        repository.transaction("list Implementation Blockers", (sql) =>
+          listBlockers(sql, changeId),
+        ),
+      listImplementationDecisions: (changeId) =>
+        repository.transaction("list Implementation Decisions", (sql) =>
+          listDecisions(sql, changeId),
+        ),
+      recordImplementationDecision: (input) =>
+        repository.transactionImmediate("record Implementation Decision", (sql) =>
+          recordDecision(sql, input),
+        ),
+      getCurrentPassingEvidence: (changeId, query) =>
+        repository.transaction("read current passing Change evidence", (sql) =>
+          getPassingEvidence(sql, changeId, query, false),
+        ),
+    }),
+  );
 
 export const openSqliteChangeReadPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      getChangeById: adapter.getChangeById,
-      getChangeByTaskId: adapter.getChangeByTaskId,
-      listChanges: adapter.listChanges,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeReadPort => ({
+      getChangeById: (changeId) =>
+        repository.transaction("read Change", (sql) => getById(sql, changeId)),
+      getChangeByTaskId: (taskId) =>
+        repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
+      listChanges: (input) =>
+        repository.transaction("list Changes", (sql) => listChanges(sql, input)),
+    }),
+  );
 
-export const openSqliteChangeDeliveryPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      listChangesForReconciliation: adapter.listChangesForReconciliation,
-      completeMergedChange: adapter.completeMergedChange,
-      cancelChange: adapter.cancelChange,
-      recordCleanup: adapter.recordCleanup,
-    };
-  });
+const completedPublicationEvidence = (
+  repository: Context.Tag.Service<typeof RepositorySql>,
+  changeId: string,
+  candidateId: string,
+  validationRunId: string,
+) =>
+  repository.transaction("read completed Candidate Publication evidence", (sql) =>
+    getPassingEvidence(sql, changeId, { candidateId, validationRunId }, true),
+  );
+
+const completeMerged = (
+  repository: Context.Tag.Service<typeof RepositorySql>,
+  input: CompleteMergedChangeInput,
+) =>
+  repository.transactionImmediate("complete merged Change", (sql) =>
+    completeMergedChange(sql, input),
+  );
 
 export const openSqliteChangeSubmissionPort = () =>
-  Effect.map(RepositorySql, (repository): ChangeSubmissionPort => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeSubmissionPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for submission", (sql) =>
           getChangeWithoutHistoryById(sql, changeId, "read Change for submission"),
         ),
-      getCompletedPublicationEvidence: adapter.getCompletedPublicationEvidence,
-      completeMergedChange: adapter.completeMergedChange,
-    };
-  });
+      getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
+        completedPublicationEvidence(repository, changeId, candidateId, validationRunId),
+      completeMergedChange: (input) => completeMerged(repository, input),
+    }),
+  );
 
 export const openSqliteChangeReconciliationPort = () =>
-  Effect.map(RepositorySql, (repository): ChangeReconciliationPort => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeReconciliationPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for reconciliation", (sql) =>
           getChangeWithoutHistoryById(sql, changeId, "read Change for reconciliation"),
         ),
-      listChangesForReconciliation: adapter.listChangesForReconciliation,
-      completeMergedChange: adapter.completeMergedChange,
-    };
-  });
+      listChangesForReconciliation: (commonDirectory) =>
+        repository.transaction("list Changes for reconciliation", (sql) =>
+          listForReconciliation(sql, commonDirectory),
+        ),
+      completeMergedChange: (input) => completeMerged(repository, input),
+    }),
+  );
 
 export const openSqliteChangeCancellationPort = () =>
-  Effect.map(RepositorySql, (repository): ChangeCancellationPort => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeCancellationPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for cancellation", (sql) =>
           getChangeWithoutHistoryById(sql, changeId, "read Change for cancellation"),
@@ -282,55 +177,150 @@ export const openSqliteChangeCancellationPort = () =>
         repository.transaction("read Change by Task for cancellation", (sql) =>
           getChangeWithoutHistoryByTaskId(sql, taskId, "read Change by Task for cancellation"),
         ),
-      completeMergedChange: adapter.completeMergedChange,
-      cancelChange: adapter.cancelChange,
-    };
-  });
+      completeMergedChange: (input) => completeMerged(repository, input),
+      cancelChange: (input) =>
+        repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
+    }),
+  );
 
 export const openSqliteTerminalChangeCleanupPort = () =>
-  Effect.map(RepositorySql, (repository): TerminalChangeCleanupPort => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      recordCleanup: adapter.recordCleanup,
-      removeReviewerSessions: adapter.removeReviewerSessions,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): TerminalChangeCleanupPort => ({
+      recordCleanup: (input) =>
+        repository.transactionImmediate("record Change cleanup", (sql) =>
+          recordCleanup(sql, input),
+        ),
+      removeReviewerSessions: (changeId) =>
+        repository.transactionImmediate("remove Reviewer Sessions", (sql) =>
+          Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
+        ),
+    }),
+  );
 
 export const openSqliteChangeReviewerSessionPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      getReviewerSession: adapter.getReviewerSession,
-      saveReviewerSession: adapter.saveReviewerSession,
-      removeReviewerSession: adapter.removeReviewerSession,
-      removeReviewerSessions: adapter.removeReviewerSessions,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeReviewerSessionPort => ({
+      getReviewerSession: (changeId, producer) =>
+        repository.transaction("read Reviewer Session", (sql) =>
+          Effect.flatMap(
+            sql<Record<string, unknown>>`
+            SELECT change_id AS changeId, producer, fingerprint,
+              session_reference AS sessionReference
+            FROM reviewer_sessions
+            WHERE change_id = ${changeId} AND producer = ${producer}
+          `,
+            (rows) => {
+              const row = rows[0];
+              return row === undefined
+                ? Effect.succeed(undefined)
+                : decodePersisted("read Reviewer Session", () =>
+                    decodeReviewerSession(row, changeId),
+                  );
+            },
+          ),
+        ),
+      saveReviewerSession: (input) =>
+        repository.transactionImmediate("save Reviewer Session", (sql) =>
+          Effect.asVoid(sql`
+          INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
+          VALUES (${input.changeId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
+          ON CONFLICT(change_id, producer) DO UPDATE SET
+            fingerprint = excluded.fingerprint,
+            session_reference = excluded.session_reference
+        `),
+        ),
+      removeReviewerSession: (changeId, producer) =>
+        repository.transactionImmediate("remove Reviewer Session", (sql) =>
+          Effect.asVoid(
+            sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
+          ),
+        ),
+      removeReviewerSessions: (changeId) =>
+        repository.transactionImmediate("remove Reviewer Sessions", (sql) =>
+          Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
+        ),
+    }),
+  );
 
 export const openSqliteChangeReviewerTranscriptPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      listReviewerTranscripts: adapter.listReviewerTranscripts,
-      recordReviewerTranscripts: adapter.recordReviewerTranscripts,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): ChangeReviewerTranscriptPort => ({
+      listReviewerTranscripts: (changeId) =>
+        repository.transaction("list Reviewer Transcripts", (sql) =>
+          Effect.flatMap(
+            sql<Record<string, unknown>>`
+            SELECT change_id AS changeId, producer, pi_session_id AS piSessionId,
+              file_path AS filePath
+            FROM reviewer_transcripts
+            WHERE change_id = ${changeId}
+          `,
+            (rows) =>
+              decodePersisted("list Reviewer Transcripts", () =>
+                rows
+                  .map((row) => decodeReviewerTranscript(row, changeId))
+                  .sort(
+                    (left, right) =>
+                      compareStoredStrings(left.producer, right.producer) ||
+                      compareStoredStrings(left.filePath, right.filePath),
+                  ),
+              ),
+          ),
+        ),
+      recordReviewerTranscripts: (input) =>
+        repository.transactionImmediate("record Reviewer Transcripts", (sql) =>
+          input.transcripts.length === 0
+            ? Effect.void
+            : Effect.asVoid(
+                sql`
+                INSERT INTO reviewer_transcripts
+                ${sql.insert(
+                  input.transcripts.map((transcript) => ({
+                    change_id: input.changeId,
+                    producer: transcript.producer,
+                    pi_session_id: transcript.piSessionId,
+                    file_path: transcript.filePath,
+                  })),
+                )}
+                ON CONFLICT(change_id, producer, file_path) DO NOTHING
+              `,
+              ),
+        ),
+    }),
+  );
 
 export const openSqliteCandidatePublicationPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeAdapter(repository);
-    return {
-      getChangeById: (changeId: string) =>
+  Effect.map(
+    RepositorySql,
+    (repository): CandidatePublicationPort => ({
+      getChangeById: (changeId) =>
         repository.transaction("read Change for publication", (sql) =>
           getPublicationById(sql, changeId),
         ),
-      getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
-      beginPublication: adapter.beginPublication,
-      replacePendingPublication: adapter.replacePendingPublication,
-      releasePendingPublication: adapter.releasePendingPublication,
-      recordPublishedPullRequest: adapter.recordPublishedPullRequest,
-    };
-  });
+      getCurrentPassingEvidence: (changeId, query) =>
+        repository.transaction("read current passing Change evidence", (sql) =>
+          getPassingEvidence(sql, changeId, query, false),
+        ),
+      beginPublication: (input) =>
+        repository.transactionImmediate("begin Change publication", (sql) =>
+          beginPublication(sql, input),
+        ),
+      replacePendingPublication: (input) =>
+        repository.transactionImmediate("replace pending Change publication", (sql) =>
+          replacePendingPublication(sql, input),
+        ),
+      releasePendingPublication: (input) =>
+        repository.transactionImmediate("release Change publication", (sql) =>
+          releasePendingPublication(sql, input),
+        ),
+      recordPublishedPullRequest: (input) =>
+        repository.transactionImmediate("record Change publication", (sql) =>
+          recordPublishedPullRequest(sql, input),
+        ),
+    }),
+  );
 
 const publicationSelectionColumns = `
   id, state,
@@ -530,16 +520,63 @@ const getChangeWithoutHistoryById = (
     (rows) => mapChangeWithoutHistoryRow(rows[0], operationName, sql),
   );
 
-const getPublicationById = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.flatMap(
-    getChangeWithoutHistoryById(sql, changeId, "read Change for publication"),
-    (changeWithoutHistory) =>
-      changeWithoutHistory === undefined || changeWithoutHistory.state === changeState.closed
-        ? Effect.succeed(changeWithoutHistory)
-        : Effect.map(listDecisions(sql, changeWithoutHistory.id), (implementationDecisions) => ({
-            ...changeWithoutHistory,
-            implementationDecisions,
-          })),
+const getPublicationById = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName = "read Change for publication",
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<Record<string, unknown>>(
+      `SELECT ${publicationSelectionColumns}, branch_ref AS branchRef,
+        starting_commit AS startingCommit, task_id AS taskId,
+        acceptance_context AS acceptanceContext
+       FROM changes WHERE id = ?`,
+      [changeId],
+    );
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    const selected = yield* decodePersisted(operationName, () => {
+      const state = decodeSelectedChangeState(row, changeId);
+      const storedTaskId = decodeStoredNullableString(row["taskId"], "Change Task ID");
+      const taskId =
+        storedTaskId === null ? null : decodeStoredTaskId(storedTaskId, "Change Task ID");
+      const encodedContext = decodeStoredNullableString(
+        row["acceptanceContext"],
+        "Change Acceptance Context",
+      );
+      if ((taskId === null) !== (encodedContext === null)) {
+        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
+      }
+      return {
+        ...state,
+        branchRef: decodeStoredString(row["branchRef"], "Change branch reference"),
+        startingCommit: decodeStoredNullableString(row["startingCommit"], "Change starting commit"),
+        taskId,
+        acceptanceContext:
+          encodedContext === null ? null : decodeSqliteAcceptanceContextSnapshot(encodedContext),
+        publication: decodeChangePublication(row),
+      };
+    });
+    yield* validateChangePublicationRelationships(
+      sql,
+      selected.id,
+      selected.publication,
+      operationName,
+    );
+    const implementationDecisions =
+      selected.state === changeState.open ? yield* listDecisions(sql, selected.id) : [];
+    return { ...selected, implementationDecisions } satisfies CandidatePublicationChange;
+  });
+
+const requireCandidatePublicationChange = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(getPublicationById(sql, changeId, operationName), (change) =>
+    change === undefined
+      ? invalidData(operationName, "Change disappeared")
+      : Effect.succeed(change),
   );
 
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
@@ -992,14 +1029,22 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
       return {
         ok: true as const,
         created: false,
-        change: yield* requireChangeWithoutHistory(sql, input.changeId, "begin Change publication"),
+        change: yield* requireCandidatePublicationChange(
+          sql,
+          input.changeId,
+          "begin Change publication",
+        ),
       };
     }
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
       created: true,
-      change: yield* requireChangeWithoutHistory(sql, input.changeId, "begin Change publication"),
+      change: yield* requireCandidatePublicationChange(
+        sql,
+        input.changeId,
+        "begin Change publication",
+      ),
     };
   });
 
@@ -1031,7 +1076,7 @@ const replacePendingPublication = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
     return {
       ok: true as const,
-      change: yield* requireChangeWithoutHistory(
+      change: yield* requireCandidatePublicationChange(
         sql,
         input.changeId,
         "replace pending Change publication",
@@ -1059,7 +1104,11 @@ const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangeP
     yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireChangeWithoutHistory(sql, input.changeId, "release Change publication"),
+      change: yield* requireCandidatePublicationChange(
+        sql,
+        input.changeId,
+        "release Change publication",
+      ),
     };
   });
 
@@ -1083,7 +1132,11 @@ const recordPublishedPullRequest = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireChangeWithoutHistory(sql, input.changeId, "record Change publication"),
+      change: yield* requireCandidatePublicationChange(
+        sql,
+        input.changeId,
+        "record Change publication",
+      ),
     };
   });
 
@@ -1176,11 +1229,10 @@ const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput
     if (changed) {
       yield* sql`UPDATE changes SET cleanup_state = ${input.cleanup.state}, cleanup_blocking_reason = ${input.cleanup.blockingReason}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     }
-    return {
-      ok: true as const,
-      changed,
-      change: yield* requireChangeWithoutHistory(sql, input.changeId, "record Change cleanup"),
-    };
+    const committed = yield* readCleanupChange(sql, input.changeId);
+    if (committed === undefined)
+      return yield* invalidData("record Change cleanup", "Change disappeared");
+    return { ok: true as const, changed, cleanup: committed.cleanup };
   });
 
 const requireChangeWithoutHistory = (sql: SqlClient.SqlClient, id: string, operationName: string) =>

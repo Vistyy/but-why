@@ -2,7 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeFindings } from "../../change/loadChangeInspection.js";
+import { loadChangeFindings } from "../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import { structuredValue } from "../../output/structuredValue.js";

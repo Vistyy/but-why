@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { loadChangeTaskProjection } from "../../../change/loadChangeInspection.js";
+import { loadChangeTaskProjection } from "../../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
@@ -17,7 +17,7 @@ export const runTaskShowCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, false, (tasks) => {
+  return withTasks(environment, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.gen(function* () {

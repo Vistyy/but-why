@@ -1,57 +1,53 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect } from "effect";
 
-import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
-import { decodeRepoConfigSource, readRepoConfig } from "../init/repoConfig.js";
-import {
-  type LoadRepoLocalContextError,
-  loadRepoLocalSubmissionContext,
-} from "../init/repoContext.js";
-import { repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../sqlite/sqliteCandidateCapturePersistence.js";
+import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
+import { decodeRepoConfigSource, readRepoConfig } from "../../init/repoConfig.js";
+import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
+import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
 import {
   openSqliteCandidatePublicationPort,
   openSqliteChangeReviewerSessionPort,
   openSqliteChangeSubmissionPort,
-} from "../sqlite/sqliteChangePersistence.js";
-import { openSqliteCandidateValidationExecutionPort } from "../sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
-import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
-import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
-import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
-import { readRepositoryFileAtCommit } from "../submissionEnvironment/repositoryFile.js";
-import type { CandidateCapturePersistence } from "./candidateCapture/candidateCapturePersistence.js";
-import { openCandidateCapture } from "./candidateCapture/captureLocalCandidate.js";
+} from "../../sqlite/sqliteChangePersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
+import { detectGitHubPrTarget } from "../../submissionEnvironment/githubTarget.js";
+import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { refreshRemoteChangeBase } from "../../submissionEnvironment/remoteChangeBase.js";
+import { readRepositoryFileAtCommit } from "../../submissionEnvironment/repositoryFile.js";
+import type { CandidateCapturePersistence } from "../candidateCapture/candidateCapturePersistence.js";
+import { openCandidateCapture } from "../candidateCapture/captureLocalCandidate.js";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
-} from "./candidateCapture/localGitCandidate.js";
-import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
-import { resolveCandidateValidationPolicy } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+} from "../candidateCapture/localGitCandidate.js";
+import { candidateValidationLayer } from "../candidateValidation/candidateValidationLayer.js";
+import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidatePublicationPort,
   ChangeReviewerSessionPort,
   ChangeSubmissionPort,
-} from "./changePorts.js";
-import { openCandidatePublication } from "./publication/candidatePublication.js";
-import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
+} from "../changePorts.js";
+import { openCandidatePublication } from "../publication/candidatePublication.js";
+import { localCandidatePublicationGit } from "../publication/localCandidatePublicationGit.js";
 import {
   type ChangeSubmit,
   type ChangeSubmitResult,
   type ManagedRepoConfigResolution,
   openChangeSubmit,
-} from "./submitChange.js";
-import type { CandidateValidationExecutionPort } from "./validation/changeValidationPorts.js";
+} from "../submitChange.js";
+import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
   | {
       readonly ok: false;
-      readonly error: LoadRepoLocalContextError | { readonly code: "state_store_unavailable" };
+      readonly error: ResolveLocalRepositoryError | { readonly code: "state_store_unavailable" };
     };
 
 export const loadChangeSubmit = (input: {
@@ -59,15 +55,9 @@ export const loadChangeSubmit = (input: {
   readonly globalConfigPath: string;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
 }): LoadChangeSubmitResult => {
-  const repoContext = loadRepoLocalSubmissionContext(input.cwd);
-  if (!repoContext.ok) return repoContext;
-  const context = repoContext.context;
-  if (!existsSync(context.paths.statePath)) {
-    return {
-      ok: false,
-      error: { code: "state_store_unavailable" },
-    };
-  }
+  const loaded = openSubmissionRepositoryRuntime(input.cwd);
+  if (!loaded.ok) return loaded;
+  const { context } = loaded.runtime;
 
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
@@ -160,11 +150,6 @@ export const loadChangeSubmit = (input: {
       reviewerSessionsRoot: context.paths.operationalDir,
     });
 
-  const repositoryLayer = repositorySqlLayer({
-    statePath: context.paths.statePath,
-    commonDirectory: context.commonDirectory,
-  });
-
   return {
     ok: true,
     submit: {
@@ -181,7 +166,7 @@ export const loadChangeSubmit = (input: {
               .submit(submitInput)
               .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
           ),
-          Effect.provide(repositoryLayer),
+          loaded.runtime.provide,
         ),
     },
   };

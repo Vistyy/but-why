@@ -8,8 +8,10 @@ import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositorySt
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import {
+  openSqliteCandidatePublicationPort,
   openSqliteChangeCancellationPort,
   openSqliteChangeReconciliationPort,
+  openSqliteTerminalChangeCleanupPort,
 } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -370,6 +372,62 @@ describe("SQLite Change decoding", () => {
     ),
   );
 
+  it.scoped("decodes only Candidate Publication facts", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const publication = yield* openSqliteCandidatePublicationPort();
+        const repository = yield* RepositorySql;
+        const created = yield* starts.create({
+          id: "change-publication-selection",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/change-publication-selection",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "base-sha",
+          worktreePath: `${input.commonDirectory}/worktrees/change-publication-selection`,
+          now: "2026-08-09T20:15:00.000Z",
+        });
+        if (!created.ok) throw new Error(created.code);
+
+        yield* repository.operation("inject unrelated malformed Change facts", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`PRAGMA ignore_check_constraints = ON`;
+            yield* sql`
+              UPDATE changes SET prepare_command = 'just init', cleanup_state = 'unsupported'
+              WHERE id = 'change-publication-selection'
+            `;
+          }),
+        );
+        expect(yield* publication.getChangeById("change-publication-selection")).toMatchObject({
+          id: "change-publication-selection",
+          publication: null,
+        });
+
+        yield* repository.operation("inject malformed selected publication metadata", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO tasks (
+                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+              ) VALUES (
+                ' BY-904', 904, 'Malformed selected metadata', 'Reject it.', 'todo', NULL,
+                '2026-08-09T20:15:00.000Z', '2026-08-09T20:15:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET task_id = ' BY-904', acceptance_context =
+                '{"version":1,"title":"Malformed selected metadata","description":"Reject it."}'
+              WHERE id = 'change-publication-selection'
+            `;
+          }),
+        );
+        yield* expectPersistedDataInvalid(
+          publication.getChangeById("change-publication-selection"),
+        );
+      }),
+    ),
+  );
+
   it.scoped("rejects partial blocker resolution and malformed Change-shaped capture rows", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
@@ -580,5 +638,65 @@ describe("SQLite Change decoding", () => {
         yield* expectPersistedDataInvalid(capture.getChangeById(captured.changeId));
       }),
     ),
+  );
+
+  it.scoped(
+    "returns authoritative cleanup facts without decoding unrelated Change observations",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const starts = yield* openSqliteChangeStartPersistence();
+          const cleanup = yield* openSqliteTerminalChangeCleanupPort();
+          const repository = yield* RepositorySql;
+          const created = yield* starts.create({
+            id: "cleanup-selected-data",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/cleanup-selected-data",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "base-sha",
+            worktreePath: `${input.commonDirectory}/worktrees/cleanup-selected-data`,
+            now: "2026-08-09T20:30:00.000Z",
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* repository.operation("close Change with malformed unrelated data", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`PRAGMA ignore_check_constraints = ON`;
+              yield* sql`
+                UPDATE changes
+                SET state = 'closed', close_reason = 'cancelled',
+                  closed_at = '2026-08-09T20:31:00.000Z', cleanup_state = 'pending',
+                  acceptance_context = x'01'
+                WHERE id = 'cleanup-selected-data'
+              `;
+            }),
+          );
+
+          expect(
+            yield* cleanup.recordCleanup({
+              changeId: "cleanup-selected-data",
+              cleanup: { state: "complete", blockingReason: null },
+              now: "2026-08-09T20:32:00.000Z",
+            }),
+          ).toEqual({
+            ok: true,
+            changed: true,
+            cleanup: { state: "complete", blockingReason: null },
+          });
+
+          yield* repository.operation(
+            "malform selected cleanup data",
+            (sql) =>
+              sql`UPDATE changes SET cleanup_state = x'02' WHERE id = 'cleanup-selected-data'`,
+          );
+          yield* expectPersistedDataInvalid(
+            cleanup.recordCleanup({
+              changeId: "cleanup-selected-data",
+              cleanup: { state: "complete", blockingReason: null },
+              now: "2026-08-09T20:33:00.000Z",
+            }),
+          );
+        }),
+      ),
   );
 });

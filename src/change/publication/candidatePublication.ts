@@ -5,10 +5,9 @@ import type {
   ChangeOwnedPullRequest,
   ChangePublication,
   ChangePublicationTarget,
-  ChangeRecord,
 } from "../change.js";
 import { branchNameForRef } from "../changeBranch.js";
-import type { CandidatePublicationPort } from "../changePorts.js";
+import type { CandidatePublicationChange, CandidatePublicationPort } from "../changePorts.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import {
   classifyOwnedPullRequest,
@@ -137,7 +136,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
 const create = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   metadata: Metadata,
@@ -188,7 +187,7 @@ const create = (
 const createFailure = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  _change: ChangeRecord,
+  _change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
@@ -253,7 +252,7 @@ const release = (
 const recover = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
 ): PublicationEffect =>
@@ -332,7 +331,7 @@ const createRecoveryAttempt = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
 ): PublicationEffect =>
   Effect.gen(function* () {
     const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
@@ -464,7 +463,7 @@ const selectSingleRecoveredPullRequest = (
 const updateOrReuse = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   metadata: Metadata,
@@ -503,7 +502,7 @@ type UpdatePreparation =
 const preparePullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
@@ -524,7 +523,7 @@ const ownedPublicationMatchesTarget = (
 const prepareOwnedPullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   expectedHeadSha: string,
 ): UpdatePreparation => {
@@ -565,7 +564,7 @@ const prepareOwnedPullRequestUpdate = (
 const prepareExactOpenUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   expectedHeadSha: string,
   remote: GitHubPullRequest,
@@ -592,7 +591,7 @@ const prepareExactOpenUpdate = (
 const executePullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
@@ -777,14 +776,14 @@ const record = (
   );
 
 const implementationDecisionSection = (
-  decisions: ChangeRecord["implementationDecisions"],
+  decisions: CandidatePublicationChange["implementationDecisions"],
 ): string =>
   decisions === undefined || decisions.length === 0
     ? ""
     : `\n\n## Implementation Decision Log\n\n${implementationDecisionMarkdown(decisions)}`;
 
 const metadataFor = (
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headSha: string,
   git: CandidatePublicationGit,
 ): Metadata | Extract<PublishCandidateResult, { readonly ok: false }> => {

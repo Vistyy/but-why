@@ -2,26 +2,53 @@ import { Effect } from "effect";
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
-  ChangeDeliveryPort,
+  ChangeCancellationPort,
   ChangeReadPort,
+  ChangeReconciliationPort,
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
   ChangeSubmissionPort,
+  TerminalChangeCleanupPort,
 } from "../../src/change/changePorts.js";
 import {
   openSqliteCandidatePublicationPort,
   openSqliteChangeAuthorityPort,
-  openSqliteChangeDeliveryPort,
+  openSqliteChangeCancellationPort,
   openSqliteChangeReadPort,
+  openSqliteChangeReconciliationPort,
   openSqliteChangeReviewerSessionPort,
   openSqliteChangeReviewerTranscriptPort,
   openSqliteChangeSubmissionPort,
+  openSqliteTerminalChangeCleanupPort,
 } from "../../src/sqlite/sqliteChangePersistence.js";
+
+type ChangeDeliveryTestPort = {
+  readonly listChangesForReconciliation: ChangeReconciliationPort["listChangesForReconciliation"];
+  readonly completeMergedChange: ChangeReconciliationPort["completeMergedChange"];
+  readonly cancelChange: ChangeCancellationPort["cancelChange"];
+  readonly recordCleanup: TerminalChangeCleanupPort["recordCleanup"];
+};
+
+const openChangeDeliveryTestPort = () =>
+  Effect.all({
+    reconciliation: openSqliteChangeReconciliationPort(),
+    cancellation: openSqliteChangeCancellationPort(),
+    cleanup: openSqliteTerminalChangeCleanupPort(),
+  }).pipe(
+    Effect.map(
+      ({ reconciliation, cancellation, cleanup }): ChangeDeliveryTestPort => ({
+        listChangesForReconciliation: reconciliation.listChangesForReconciliation,
+        completeMergedChange: reconciliation.completeMergedChange,
+        cancelChange: cancellation.cancelChange,
+        recordCleanup: cleanup.recordCleanup,
+      }),
+    ),
+  );
 
 export const openSqliteChangeTestDependencies = () =>
   Effect.all({
     authority: openSqliteChangeAuthorityPort(),
-    delivery: openSqliteChangeDeliveryPort(),
+    delivery: openChangeDeliveryTestPort(),
     reads: openSqliteChangeReadPort(),
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
@@ -31,7 +58,7 @@ export const openSqliteChangeTestDependencies = () =>
 
 export type ChangeTestDependencies = {
   readonly authority: ChangeAuthorityPort;
-  readonly delivery: ChangeDeliveryPort;
+  readonly delivery: ChangeDeliveryTestPort;
   readonly reads: ChangeReadPort;
   readonly reviewerSessions: ChangeReviewerSessionPort;
   readonly reviewerTranscripts: ChangeReviewerTranscriptPort;

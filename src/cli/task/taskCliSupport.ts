@@ -9,8 +9,8 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { loadRepoLocalContext } from "../../init/repoContext.js";
-import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
+import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
@@ -25,22 +25,21 @@ export type TaskCommandEnvironment = {
 
 export const withTasks = (
   environment: TaskCommandEnvironment,
-  requireState: boolean,
   use: (tasks: TaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
   const program =
     environment.taskUseCases === undefined
-      ? withTaskUseCases({ cwd: environment.cwd, requireState }, use).pipe(
+      ? withTaskUseCases({ cwd: environment.cwd }, use).pipe(
           Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
         )
       : use(environment.taskUseCases);
 
   return program.pipe(
-    Effect.catchAll((error) => {
-      const context = loadRepoLocalContext(environment.cwd);
-      const taskPrefix = context.ok ? context.context.taskPrefix : undefined;
-      return Effect.succeed(repositoryStorageErrorResult(error, taskPrefix));
-    }),
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+      ),
+    ),
   );
 };
 

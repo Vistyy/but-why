@@ -199,3 +199,21 @@ rule:
         - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - pattern: createSandbox($$$ARGS)
     - pattern: noSandbox($$$ARGS)
+---
+# Repository Runtime is the only production owner of the Shared Repository State database lifecycle.
+id: repository-sql-layer-belongs-to-repository-runtime
+language: TypeScript
+severity: error
+message: Do not construct the Shared Repository State SQL layer outside Repository Runtime because Repository Runtime owns state existence, migration, and connection lifecycle; use a Repository Runtime capability in behavior composition.
+files:
+  - src/**/*.ts
+ignores:
+  - src/repositoryRuntime/repositoryContext.ts
+  - src/repositoryRuntime/repositoryRuntime.ts
+  - src/sqlite/repositorySql.ts
+rule:
+  any:
+    - pattern: repositorySqlLayer($$$ARGS)
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*repositorySqlLayer[\s\S]*from\s+["`][^"`]+["`][\s\S]*'

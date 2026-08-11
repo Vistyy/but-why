@@ -65,13 +65,14 @@
         "name": "composition",
         "patterns": [
           "src/change/candidateValidation/candidateValidationLayer.ts",
-          "src/change/candidateValidation/loadCandidateValidationRunInspection.ts",
-          "src/change/loadAbandonValidationRun.ts",
-          "src/change/loadChangeInspection.ts",
-          "src/change/loadChangeSubmit.ts",
-          "src/change/loadChangeLifecycle.ts",
-          "src/task/loadTaskUseCases.ts"
+          "src/change/**/composition/**",
+          "src/change/composition/**",
+          "src/task/composition/**"
         ]
+      },
+      {
+        "name": "repository-runtime",
+        "patterns": ["src/repositoryRuntime/**"]
       },
       {
         "name": "storage",
@@ -112,6 +113,10 @@
       {
         "from": "domain",
         "allow": []
+      },
+      {
+        "from": "repository-runtime",
+        "allow": ["storage"]
       },
       {
         "from": "change-workflows",

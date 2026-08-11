@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { RepoLocalContext } from "../init/repoContext.js";
 import {
   type RepositoryPreparationEffectExecutor,
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
+import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
 import { type PublicTaskId, taskSlugForId } from "../task/taskId.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
@@ -114,7 +114,7 @@ export const prepareChange = (
   });
 
 export const implementChange = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,

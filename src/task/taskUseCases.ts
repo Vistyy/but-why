@@ -3,7 +3,7 @@ import {
   RepositoryStateUnavailable,
   type RepositoryStorageError,
 } from "../contracts/repositoryStorageError.js";
-import type { RepoLocalContext } from "../init/repoContext.js";
+import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
 import {
   readTaskContextDraft,
   removeTaskContextDraft,
@@ -81,7 +81,7 @@ export type RepoTaskApprovalResult = TaskApprovalResult;
 export type RepoEditTaskDependenciesResult = EditTaskDependenciesResult;
 
 export const openTaskUseCases = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   tasks: TaskPersistence,
 ): TaskUseCases => ({
   taskPrefix: context.taskPrefix,
@@ -99,7 +99,7 @@ export const openTaskUseCases = (
 });
 
 const createTaskContextDraft = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   tasks: TaskPersistence,
   taskId: PublicTaskId,
 ): Effect.Effect<TaskContextDraft | undefined, RepositoryStorageError> =>
@@ -119,7 +119,7 @@ const createTaskContextDraft = (
   );
 
 const applyTaskContextDraft = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   tasks: TaskPersistence,
   input: ApplyTaskContextDraftInput,
 ): Effect.Effect<ApplyTaskContextDraftResult, RepositoryStorageError> => {

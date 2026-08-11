@@ -112,3 +112,10 @@ invalid:
   - import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
   - createSandbox(input)
   - noSandbox()
+---
+id: repository-sql-layer-belongs-to-repository-runtime
+valid:
+  - runtime.provide(program)
+invalid:
+  - repositorySqlLayer(config)
+  - import { repositorySqlLayer } from "../sqlite/repositorySql.js";

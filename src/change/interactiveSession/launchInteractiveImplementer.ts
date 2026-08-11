@@ -5,7 +5,7 @@ import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import { readRepoConfig } from "../../init/repoConfig.js";
-import type { RepoLocalContext } from "../../init/repoContext.js";
+import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { taskSlugForId } from "../../task/taskId.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 import {
@@ -38,7 +38,7 @@ export type ChangeImplementResult =
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
 export const launchInteractiveImplementer = (input: {
-  readonly context: RepoLocalContext;
+  readonly context: LocalRepositoryContext;
   readonly change: ChangeStartRecord;
   readonly interactiveSessionHost: InteractiveSessionHost;
   readonly globalConfigPath: string;

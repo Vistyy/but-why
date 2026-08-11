@@ -4,9 +4,9 @@ import type {
   RestoredTransientChangeFact,
   RestoredTransientTaskFact,
 } from "./contracts/repositoryStorageError.js";
-import type { LoadRepoLocalContextError } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
+import type { ResolveLocalRepositoryError } from "./repositoryRuntime/repositoryContext.js";
 
 export type CliResult = CliSuccessResult | CliRuntimeErrorResult | CliUsageErrorResult;
 
@@ -26,7 +26,7 @@ export type CliUsageErrorResult = {
 };
 
 export type RepoStateLoadError =
-  | LoadRepoLocalContextError
+  | ResolveLocalRepositoryError
   | {
       readonly code: "state_store_unavailable";
       readonly taskPrefix?: string;
@@ -82,7 +82,7 @@ const mainCheckoutUnavailable = (path: string | undefined): CliResult =>
   });
 
 const invalidRepoConfig = (
-  error: Extract<LoadRepoLocalContextError, { readonly code: "invalid_repo_config" }>["error"],
+  error: Extract<ResolveLocalRepositoryError, { readonly code: "invalid_repo_config" }>["error"],
 ): CliResult =>
   runtimeError({
     code: "invalid_repo_config",

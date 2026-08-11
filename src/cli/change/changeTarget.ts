@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { loadChangeList } from "../../change/loadChangeInspection.js";
+import { loadChangeList } from "../../change/composition/loadChangeInspection.js";
 import {
   type CliResult,
   repoStateLoadError,

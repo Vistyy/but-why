@@ -47,7 +47,7 @@ export const runCreateCommand = (
   const description = readRecordingText(environment.cwd, command.file, environment.stdin);
   if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
-  return withTasks(environment, true, (tasks) => {
+  return withTasks(environment, (tasks) => {
     const dependencies = resolveDependencies(command.dependsOn, tasks);
     if (!dependencies.ok) return Effect.succeed(dependencies.result);
     return Effect.map(

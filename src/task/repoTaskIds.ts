@@ -1,4 +1,4 @@
-import type { RepoLocalContext } from "../init/repoContext.js";
+import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
 import { hasPublicTaskIdShape, type PublicTaskId } from "./taskId.js";
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -21,7 +21,7 @@ export type RepoTaskIdResolution =
     };
 
 export const resolveRepoTaskId = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   taskId: PublicTaskId,
 ): RepoTaskIdResolution => {
   if (hasPublicTaskIdShape(taskId) && isPublicTaskIdForPrefix(taskId, context.taskPrefix)) {

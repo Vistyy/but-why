@@ -9,9 +9,9 @@ import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.
 import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
-} from "../../src/change/loadChangeInspection.js";
+} from "../../src/change/composition/loadChangeInspection.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
-import { loadRepoLocalContext } from "../../src/init/repoContext.js";
+import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
@@ -70,7 +70,7 @@ describe("Change inspection CLI", () => {
       const started = yield* runByInProcessEffect(root, ["change", "start"]);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
-      const context = loadRepoLocalContext(root);
+      const context = resolveLocalRepository(root);
       if (!context.ok) throw new Error(context.error.code);
       const decision = loadRecordImplementationDecision({ cwd: root });
       const blocker = loadRaiseImplementationBlocker({ cwd: root });

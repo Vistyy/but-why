@@ -46,6 +46,7 @@ const withReconcileRepository = <A, E>(
 const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
   commonDirectory: fixture.commonDirectory,
   statePath: fixture.statePath,
+  lifecycle: "initialize",
 });
 
 const createTerminalChange = (fixture: ReconcileFixture, id: string) =>

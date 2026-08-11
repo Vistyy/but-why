@@ -6,7 +6,7 @@ import {
 } from "../../contracts/configErrors.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
-import type { RepoLocalContext } from "../../init/repoContext.js";
+import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
@@ -31,7 +31,9 @@ export type CandidateValidationPolicyResolution =
     };
 
 export const resolveCandidateValidationPolicy = (input: {
-  readonly context: RepoLocalContext | { readonly root: string; readonly config?: RepoConfig };
+  readonly context:
+    | LocalRepositoryContext
+    | { readonly root: string; readonly config?: RepoConfig };
   readonly globalConfigPath: string;
   readonly acceptanceContextSupplied: boolean;
   readonly repoConfig?: RepoConfig;

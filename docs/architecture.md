@@ -26,7 +26,8 @@ The source hierarchy follows these owners:
 - `src/cli/` owns command Adapters, and `src/cli.ts` owns the executable entry boundary.
 - `src/cli/change/implementerPromptFile.ts` owns Implementer Prompt file input handling and `src/cli/change/implementResult.ts` owns Change Implement result rendering.
 - `src/contracts/` owns configuration, output, and shared error contracts.
-- `src/init/` owns Local Repository initialization and repository-context Adapters.
+- `src/repositoryRuntime/` owns Local Repository resolution, initialization coordination, and the Shared Repository State open lifecycle.
+- `src/init/` owns initialization-specific Git and Repo Config Adapters selected by Repository Runtime.
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
 - `src/disposableWorkspace/` owns disposable exact-commit workspace creation, identity verification, project-owned command execution, interruption cleanup registration, and cleanup.
@@ -38,8 +39,8 @@ The source hierarchy follows these owners:
 CLI modules select operations and translate results.
 They do not construct storage or coordinate persistence.
 Task and Change modules own cohesive persistence ports and the operations that preserve their invariants.
-Task and Change composition select concrete Adapters and construct their owner workflows.
-Repository Runtime composition owns Local Repository resolution and the Shared Repository State lifecycle.
+Each Task and Change behavior selects concrete Adapters and constructs its workflow in its own `composition/` directory.
+Repository Runtime owns Local Repository resolution and the Shared Repository State lifecycle.
 It provides a scoped database capability instead of an Adapter registry or application container.
 The private SQLite implementation may implement several owner-defined ports without exposing a broad persistence facade.
 

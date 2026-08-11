@@ -95,10 +95,14 @@ const cleanupTerminalChange = (
       : { state: "pending", blockingReason: "artifact_content_removal_failed" };
     const recorded = yield* recordCleanup(dependencies, change, now, cleanup);
     if (!recorded.ok) return recorded;
-    if (recorded.change.cleanup.state === "complete") {
+    if (recorded.cleanup.state === "complete") {
       yield* dependencies.persistence.removeReviewerSessions(change.id);
     }
-    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
+    return {
+      ok: true,
+      change: { ...change, cleanup: recorded.cleanup },
+      cleanup: recorded.cleanup,
+    };
   });
 
 const removeArtifactContent = (
@@ -120,7 +124,11 @@ const recordCleanup = (
       now,
     });
     if (!recorded.ok) return { ok: false, code: recorded.code };
-    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
+    return {
+      ok: true,
+      change: { ...change, cleanup: recorded.cleanup },
+      cleanup: recorded.cleanup,
+    };
   });
 
 const indexTranscripts = (

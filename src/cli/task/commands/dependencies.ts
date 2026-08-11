@@ -52,7 +52,7 @@ export const runDependenciesCommand = (
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  return withTasks(environment, false, (tasks) => {
+  return withTasks(environment, (tasks) => {
     const dependent = resolveTaskId(tasks, parsedDependent.taskId);
     if (!dependent.ok) return Effect.succeed(dependent.result);
     const prerequisiteTaskIds: PublicTaskId[] = [];

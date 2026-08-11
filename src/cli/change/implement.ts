@@ -2,7 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { withChangeImplement } from "../../change/loadChangeLifecycle.js";
+import { withChangeImplement } from "../../change/composition/loadChangeLifecycle.js";
 import type { CliResult } from "../../cliResults.js";
 import { runtimeError } from "../../cliResults.js";
 import * as support from "./changeSupport.js";

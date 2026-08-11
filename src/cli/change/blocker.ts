@@ -6,7 +6,7 @@ import {
   loadImplementationBlockers,
   loadRaiseImplementationBlocker,
   loadResolveImplementationBlocker,
-} from "../../change/loadChangeInspection.js";
+} from "../../change/composition/loadChangeInspection.js";
 import { type RecordingTextReadError, readRecordingText } from "../../cli/input/recordingText.js";
 import type { CliResult } from "../../cliResults.js";
 import { runtimeError, success } from "../../cliResults.js";

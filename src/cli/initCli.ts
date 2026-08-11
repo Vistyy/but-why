@@ -13,14 +13,14 @@ import {
   success,
   usageError,
 } from "../cliResults.js";
-import { initRepoLocalContext } from "../init/repoContext.js";
 import { structuredContractDiagnostics } from "../output/contractDiagnostics.js";
+import { initializeRepositoryRuntime } from "../repositoryRuntime/repositoryContext.js";
 
 export const runInitCommand = (
   command: { readonly taskPrefix: string },
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> =>
-  initRepoLocalContext({
+  initializeRepositoryRuntime({
     cwd: environment.cwd,
     taskPrefix: command.taskPrefix,
   }).pipe(

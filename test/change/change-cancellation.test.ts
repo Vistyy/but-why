@@ -790,7 +790,11 @@ const cancellationDependencies = (input: {
         ...currentChange,
         cleanup: input.cleanupResult ?? { state: "complete", blockingReason: null },
       };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        cleanup: currentChange.cleanup,
+      });
     },
     removeReviewerSessions: () => {
       input.events.push("remove-reviewer-sessions");
