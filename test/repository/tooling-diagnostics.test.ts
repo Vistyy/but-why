@@ -118,26 +118,46 @@ describe("repository-authored tooling diagnostics", () => {
       "test-child-processes-use-test-process-adapter",
       'const childProcess = await import("node:child_process/promises");',
     ],
+    [
+      "test-child-processes-use-test-process-adapter",
+      'export { spawn } from "node:child_process";',
+    ],
     ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],
     ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
+    [
+      "json-parse-assertions-keep-unknown",
+      "const value = JSON.parse(source) as TrustedType;",
+      "extensions",
+    ],
+    [
+      "json-parse-assertions-keep-unknown",
+      "const value = JSON.parse(source) as TrustedType;",
+      "scripts",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",
       'const result = spawnSync("npm", ["pack"]);',
     ],
+    [
+      "package-installation-belongs-to-package-contract",
+      'const result = runTestProcess("npm", ["install"], { cwd });',
+    ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
-  ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
+  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
-    const fixtureDirectory = [
-      "effect-tests-use-effect-vitest-runtime",
-      "test-child-processes-use-test-process-adapter",
-      "process-test-helpers-belong-to-process-boundaries",
-      "package-installation-belongs-to-package-contract",
-      "live-agent-helper-belongs-to-test-host",
-    ].includes(ruleId)
-      ? "test"
-      : "src";
+    const fixtureDirectory =
+      configuredDirectory ??
+      ([
+        "effect-tests-use-effect-vitest-runtime",
+        "test-child-processes-use-test-process-adapter",
+        "process-test-helpers-belong-to-process-boundaries",
+        "package-installation-belongs-to-package-contract",
+        "live-agent-helper-belongs-to-test-host",
+      ].includes(ruleId)
+        ? "test"
+        : "src");
     mkdirSync(join(fixtureRoot, fixtureDirectory));
     mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
     copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));

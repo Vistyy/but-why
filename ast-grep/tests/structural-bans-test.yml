@@ -77,12 +77,22 @@ invalid:
   - runJustBy("task", "list")
   - builtByExecutable()
 ---
+id: test-child-processes-use-test-process-adapter
+valid:
+  - export { runTestProcess } from "./testProcess.js"
+invalid:
+  - export { spawn } from "node:child_process"
+  - export * as childProcess from "child_process/promises"
+---
 id: package-installation-belongs-to-package-contract
 valid:
   - spawnSync("git", ["status"])
+  - runTestProcess("npm", ["view", "but-why"])
 invalid:
   - spawnSync("npm", ["pack"])
   - execFileSync("npm", ["pack"])
+  - runTestProcess("npm", ["pack", "--json"], { cwd })
+  - runTestProcess('npm', ['install', '--ignore-scripts'], { cwd })
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:

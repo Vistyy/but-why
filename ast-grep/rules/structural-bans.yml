@@ -64,6 +64,8 @@ language: TypeScript
 severity: error
 message: Do not assert JSON.parse output directly to a trusted type because parsed JSON has an unknown runtime shape until the owning boundary establishes it; parse into unknown and use the owning boundary's focused decoder or schema.
 files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
   - src/**/*.ts
 ignores:
   - src/output/structuredValue.ts
@@ -121,6 +123,12 @@ rule:
     - all:
         - kind: import_statement
         - regex: '[\\s\\S]*["`]child_process([^"`]*)?["`][\\s\\S]*'
+    - all:
+        - kind: export_statement
+        - regex: '[\\s\\S]*["`]node:child_process([^"`]*)?["`][\\s\\S]*'
+    - all:
+        - kind: export_statement
+        - regex: '[\\s\\S]*["`]child_process([^"`]*)?["`][\\s\\S]*'
     - pattern: import("node:child_process")
     - pattern: import('node:child_process')
     - pattern: require("node:child_process")
@@ -151,6 +159,14 @@ rule:
     - pattern: execFileSync("npm", $$$ARGS)
     - pattern: spawnSync('npm', $$$ARGS)
     - pattern: execFileSync('npm', $$$ARGS)
+    - pattern: runTestProcess("npm", ["pack"], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['pack'], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["pack", $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['pack', $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["install"], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['install'], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["install", $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['install', $$$ARGS], $$$OPTIONS)
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host
