@@ -174,8 +174,7 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
     prerequisite_task_id TEXT NOT NULL,
     PRIMARY KEY (dependent_task_id, prerequisite_task_id),
     FOREIGN KEY (dependent_task_id) REFERENCES tasks(id),
-    FOREIGN KEY (prerequisite_task_id) REFERENCES tasks(id),
-    CHECK (dependent_task_id <> prerequisite_task_id)
+    FOREIGN KEY (prerequisite_task_id) REFERENCES tasks(id)
   ) STRICT`);
   yield* sql.unsafe(
     `INSERT INTO task_dependencies SELECT * FROM task_dependencies_before_stable_constraints`,

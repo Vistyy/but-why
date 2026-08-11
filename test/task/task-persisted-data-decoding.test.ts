@@ -88,6 +88,27 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
   ),
 );
 
+it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const starts = yield* openSqliteChangeStartPersistence();
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "Self-dependent Task");
+      yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
+      yield* repository.operation("insert self-referential Task dependency", (sql) =>
+        sql.unsafe(`
+          INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
+          VALUES ('BY-1', 'BY-1')
+        `),
+      );
+
+      yield* expectPersistedDataInvalid(tasks.listTasks({ includeDone: true }));
+      yield* expectPersistedDataInvalid(starts.prepareTask(publicTaskId("BY-1")));
+    }),
+  ),
+);
+
 const createTask = (tasks: TaskPersistence, title: string, dependencies: readonly string[] = []) =>
   Effect.gen(function* () {
     const result = yield* tasks.createTask({
@@ -98,4 +119,10 @@ const createTask = (tasks: TaskPersistence, title: string, dependencies: readonl
     });
     if (!result.ok) throw new Error(result.code);
     return result.task;
+  });
+
+const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(effect);
+    expect(error).toMatchObject({ _tag: "RepositoryPersistedDataInvalid" });
   });

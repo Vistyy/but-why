@@ -72,13 +72,17 @@ export const decodeTaskContextRow = (row: UnknownTaskContextRow) => ({
 
 export const decodeTaskDependencyFacts = (
   rows: readonly UnknownTaskDependencyFactRow[],
-  _ownerTaskId: PublicTaskId,
+  ownerTaskId: PublicTaskId,
 ): readonly TaskDependencyFact[] => {
-  return rows.map((row) => ({
-    id: decodeStoredTaskId(row.id, "related Task ID"),
-    title: decodeStoredString(row.title, "related Task title"),
-    state: decodeStoredTaskState(row.state),
-  }));
+  return rows.map((row) => {
+    const id = decodeStoredTaskId(row.id, "related Task ID");
+    if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
+    return {
+      id,
+      title: decodeStoredString(row.title, "related Task title"),
+      state: decodeStoredTaskState(row.state),
+    };
+  });
 };
 
 export const decodePersisted = <A>(
