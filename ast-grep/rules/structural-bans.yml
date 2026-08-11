@@ -154,7 +154,7 @@ rule:
 id: package-installation-belongs-to-package-contract
 language: TypeScript
 severity: error
-message: Do not install or pack the package outside the package contract test because package setup is expensive; use source-level interfaces for behavior variations.
+message: Do not invoke npm outside the package contract test because external package operations belong to that contract and are expensive; use source-level interfaces or the repository's pnpm workflow for other behavior variations.
 files:
   - test/**/*.ts
 ignores:
@@ -165,17 +165,15 @@ rule:
     - pattern: execFileSync("npm", $$$ARGS)
     - pattern: spawnSync('npm', $$$ARGS)
     - pattern: execFileSync('npm', $$$ARGS)
-    - pattern: runTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
-    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
-    - pattern: startTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: runTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: startTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, $$$ARGS)
 constraints:
   NPM_EXECUTABLE:
-    regex: '^["''`]npm["''`]$'
-  NPM_ARGUMENTS:
-    regex: '^[^\[]*\[\s*["''`](?:add|ci|cit|clean-install|clean-install-test|i|ic|in|ins|inst|insta|instal|install|install-ci-test|install-clean|install-test|isnt|isnta|isntal|isntall|isntall-clean|it|pack|sit)["''`]'
+    regex: '(^|[^A-Za-z])npm([^A-Za-z]|$)'
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host
