@@ -78,12 +78,20 @@ rule:
         - pattern: <$TYPE>(JSON.parse($$$ARGS))
         - pattern: JSON.parse($$$ARGS) satisfies $TYPE
         - pattern: (JSON.parse($$$ARGS)) satisfies $TYPE
+        - pattern: JSON.parse($$$ARGS) as unknown as $TYPE
+        - pattern: (JSON.parse($$$ARGS) as unknown) as $TYPE
+        - pattern: <$TYPE><unknown>JSON.parse($$$ARGS)
+        - pattern: <$TYPE>(<unknown>JSON.parse($$$ARGS))
     - not:
         any:
           - pattern: JSON.parse($$$ARGS) as unknown
           - pattern: (JSON.parse($$$ARGS)) as unknown
           - pattern: <unknown>JSON.parse($$$ARGS)
           - pattern: <unknown>(JSON.parse($$$ARGS))
+          - pattern: JSON.parse($$$ARGS) as unknown as unknown
+          - pattern: (JSON.parse($$$ARGS) as unknown) as unknown
+          - pattern: <unknown><unknown>JSON.parse($$$ARGS)
+          - pattern: <unknown>(<unknown>JSON.parse($$$ARGS))
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
@@ -161,14 +169,13 @@ rule:
     - pattern: execFileSync("npm", $$$ARGS)
     - pattern: spawnSync('npm', $$$ARGS)
     - pattern: execFileSync('npm', $$$ARGS)
-    - pattern: runTestProcess("npm", ["pack"], $$$OPTIONS)
-    - pattern: runTestProcess('npm', ['pack'], $$$OPTIONS)
-    - pattern: runTestProcess("npm", ["pack", $$$ARGS], $$$OPTIONS)
-    - pattern: runTestProcess('npm', ['pack', $$$ARGS], $$$OPTIONS)
-    - pattern: runTestProcess("npm", ["install"], $$$OPTIONS)
-    - pattern: runTestProcess('npm', ['install'], $$$OPTIONS)
-    - pattern: runTestProcess("npm", ["install", $$$ARGS], $$$OPTIONS)
-    - pattern: runTestProcess('npm', ['install', $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess("npm", [$NPM_COMMAND], $$$OPTIONS)
+    - pattern: runTestProcess('npm', [$NPM_COMMAND], $$$OPTIONS)
+    - pattern: runTestProcess("npm", [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess('npm', [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
+constraints:
+  NPM_COMMAND:
+    regex: '^["''](?:add|ci|clean-install|i|ic|in|ins|inst|insta|instal|install|install-clean|isnt|isnta|isntal|isntall|isntall-clean|pack)["'']$'
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

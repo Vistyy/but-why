@@ -49,6 +49,8 @@ valid:
   - "<unknown>JSON.parse(x)"
   - (JSON.parse(x)) as unknown
   - "<unknown>(JSON.parse(x))"
+  - JSON.parse(x) as unknown as unknown
+  - "<unknown><unknown>JSON.parse(x)"
   - "const value: unknown = JSON.parse(source);"
   - decode(value, path)
 invalid:
@@ -67,6 +69,9 @@ invalid:
   - JSON.parse(x) satisfies unknown
   - JSON.parse(x) satisfies TrustedType
   - (JSON.parse(x)) satisfies Record<string, unknown>
+  - JSON.parse(x) as unknown as TrustedType
+  - (JSON.parse(x) as unknown) as Record<string, unknown>
+  - "<TrustedType><unknown>JSON.parse(x)"
   - JSON.parse(JSON.stringify(value)) as StructuredValue
 ---
 id: process-test-helpers-belong-to-process-boundaries
@@ -96,6 +101,22 @@ invalid:
   - execFileSync("npm", ["pack"])
   - runTestProcess("npm", ["pack", "--json"], { cwd })
   - runTestProcess('npm', ['install', '--ignore-scripts'], { cwd })
+  - runTestProcess("npm", ["add", "package"], { cwd })
+  - runTestProcess("npm", ["ci"], { cwd })
+  - runTestProcess("npm", ["clean-install"], { cwd })
+  - runTestProcess("npm", ["i", "package"], { cwd })
+  - runTestProcess("npm", ["ic"], { cwd })
+  - runTestProcess("npm", ["in", "package"], { cwd })
+  - runTestProcess("npm", ["ins", "package"], { cwd })
+  - runTestProcess("npm", ["inst", "package"], { cwd })
+  - runTestProcess("npm", ["insta", "package"], { cwd })
+  - runTestProcess("npm", ["instal", "package"], { cwd })
+  - runTestProcess("npm", ["install-clean"], { cwd })
+  - runTestProcess("npm", ["isnt", "package"], { cwd })
+  - runTestProcess("npm", ["isnta", "package"], { cwd })
+  - runTestProcess("npm", ["isntal", "package"], { cwd })
+  - runTestProcess("npm", ["isntall", "package"], { cwd })
+  - runTestProcess("npm", ["isntall-clean"], { cwd })
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:
