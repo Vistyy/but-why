@@ -3,27 +3,16 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { Effect } from "effect";
 import { executeHostCommandEffect } from "../../command/hostCommand.js";
-import type { DisposableWorkspaceCleanupResult } from "../disposableWorkspace.js";
+import type {
+  DisposableWorktreeInspection,
+  ExactDisposableWorkspaceCleanupInput,
+  ExactDisposableWorkspaceCleanupResult,
+} from "../disposableWorkspace.js";
 import {
   disposableWorkspaceRoot,
   expectedDisposableWorkspacePath,
   isExpectedDisposableWorkspacePath,
 } from "../disposableWorkspacePath.js";
-
-export type DisposableWorktreeInspection =
-  | { readonly state: "absent" }
-  | { readonly state: "matching"; readonly dirty: boolean }
-  | { readonly state: "unproven"; readonly message: string };
-
-export type ExactDisposableWorkspaceCleanupInput = {
-  readonly workspaceId: string;
-  readonly expectedCommitSha: string;
-  readonly recordedWorktreePath?: string;
-};
-
-export type ExactDisposableWorkspaceCleanupResult = DisposableWorkspaceCleanupResult & {
-  readonly errorMessage?: string;
-};
 
 export const prepareDisposableWorkspaceParent = (
   mainCheckoutRoot: string,

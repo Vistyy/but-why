@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-
-export type TaskReviewBase = { readonly ref: string; readonly commit: string };
+import type { TaskReviewBase } from "./taskReview.js";
 
 export const verifyRecordedTaskReviewBase = (
   mainCheckoutRoot: string,

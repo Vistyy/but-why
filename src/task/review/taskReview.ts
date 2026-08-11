@@ -3,6 +3,8 @@ import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
 
+export type TaskReviewBase = { readonly ref: string; readonly commit: string };
+
 export type TaskReviewProposal = {
   readonly title: string;
   readonly description: string;

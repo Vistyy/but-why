@@ -7,28 +7,25 @@ import {
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
+import { decodeReviewerOutputContract, type ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { reviewerOutputTag } from "../../agent/reviewerOutputWire.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import {
-  decodeReviewerOutputContract,
-  type ReviewerOutput,
-} from "../../contracts/reviewerOutput.js";
 import type {
   DisposableWorktreeInspection,
   ExactDisposableWorkspaceCleanupInput,
   ExactDisposableWorkspaceCleanupResult,
-} from "../../disposableWorkspace/disposableWorkspaceGit.js";
+} from "../../disposableWorkspace/disposableWorkspace.js";
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import type { PublicTaskId } from "../taskId.js";
 import {
+  type TaskReviewBase,
   type TaskReviewRecord,
   type TaskReviewToolingFailure,
   taskReviewInstructions,
 } from "./taskReview.js";
-import type { TaskReviewBase } from "./taskReviewGit.js";
 import type { AdmitTaskReviewResult, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =

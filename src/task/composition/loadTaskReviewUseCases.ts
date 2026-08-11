@@ -1,27 +1,27 @@
 import { dirname } from "node:path";
 import { Effect } from "effect";
+import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
 import { resolveAgentProfile } from "../../agent/agentProfiles.js";
-import { piReviewerProcessExecutor } from "../../agent/piReviewerProcessExecutor.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import {
   cleanupExactDisposableWorkspace,
   inspectDisposableWorktree,
-} from "../../disposableWorkspace/disposableWorkspaceGit.js";
-import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
-import { decodeRepoConfigSource } from "../../init/repoConfig.js";
+} from "../../disposableWorkspace/adapters/disposableWorkspaceGit.js";
+import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
+import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
-import { readRepositoryFileAtCommit } from "../../submissionEnvironment/repositoryFile.js";
+import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,

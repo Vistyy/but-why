@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import type { CliResult } from "../../cliResults.js";
@@ -10,7 +11,6 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import {
   type LoadTaskReviewError,

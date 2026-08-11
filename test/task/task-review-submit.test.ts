@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
