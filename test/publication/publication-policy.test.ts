@@ -713,7 +713,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
-        let remote = pullRequest(branchHead);
+        let remote: GitHubPullRequest = pullRequest(branchHead);
         const updates: unknown[] = [];
         const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
