@@ -23,6 +23,9 @@
     "plugins": [
       {
         "name": "@effect/language-service",
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": true,
+        "ignoreEffectErrorsInTscExitCode": false,
         "diagnosticSeverity": {
           "outdatedApi": "off",
           "promiseInEffectSuccess": "error"
