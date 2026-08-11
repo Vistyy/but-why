@@ -9,13 +9,9 @@ import {
   piReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
-import {
-  createReviewerProcessExecutor,
-  type ReviewerProcessRuntimeRunner,
-  type ReviewerProcessRuntimeRunResult,
-} from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
@@ -54,11 +50,6 @@ const profile = {
     },
   },
 };
-
-const runResult = (stdout: string): ReviewerProcessRuntimeRunResult => ({
-  iterations: [],
-  stdout,
-});
 
 describe("Pi reviewer agent runtime process boundary", () => {
   it.effect(
@@ -147,34 +138,42 @@ describe("Pi reviewer agent runtime process boundary", () => {
           ].join("\n"),
         );
 
-        let command = "";
+        let commandArgs: readonly string[] = [];
         let processOutput = "";
-        const run: ReviewerProcessRuntimeRunner = async (options) => {
-          const built = options.buildPrintCommand({
-            prompt: options.prompt ?? "",
-            dangerouslySkipPermissions: true,
-          });
-          command = built.command;
-          const rpcCommand = `${built.command.replace("pi -p --mode json", "pi --mode rpc --no-session")} --extension ${probeExtension}`;
-          const spawned = runTestProcess("sh", ["-c", rpcCommand], {
-            cwd: workspace,
-            env: { PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
-            isolatedHome: home,
-            input:
-              '{"type":"get_commands","id":"commands"}\n{"type":"prompt","message":"/probe-command","id":"probe"}\n',
-            timeout: reviewerProbeProcessTimeoutMs,
-          });
-          if (spawned.error) throw spawned.error;
-          if (spawned.status !== 0) {
-            throw new Error(spawned.stderr || `Pi exited with ${spawned.status}`);
-          }
-          processOutput = spawned.stdout;
-          return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-        };
+        const reviewerExecutor = createPiReviewerProcessExecutor((command) =>
+          Effect.sync(() => {
+            commandArgs = command.args ?? [];
+            const rpcArgs = [...commandArgs];
+            rpcArgs.splice(rpcArgs.indexOf("-p"), 1);
+            rpcArgs[rpcArgs.indexOf("json")] = "rpc";
+            const nameIndex = rpcArgs.indexOf("--name");
+            rpcArgs.splice(nameIndex, 2);
+            rpcArgs.pop();
+            rpcArgs.push("--extension", probeExtension);
+            const spawned = runTestProcess(command.command, rpcArgs, {
+              cwd: workspace,
+              env: { PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
+              isolatedHome: home,
+              input:
+                '{"type":"get_commands","id":"commands"}\n{"type":"prompt","message":"/probe-command","id":"probe"}\n',
+              timeout: reviewerProbeProcessTimeoutMs,
+            });
+            if (spawned.error) throw spawned.error;
+            if (spawned.status !== 0) {
+              throw new Error(spawned.stderr || `Pi exited with ${spawned.status}`);
+            }
+            processOutput = spawned.stdout;
+            return {
+              exitCode: 0,
+              stderr: "",
+              stdout: `${JSON.stringify({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: '<reviewer-output>{"findings":[]}</reviewer-output>' }], usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 } } })}\n`,
+            };
+          }),
+        );
 
         try {
           const result = yield* piReviewerAgentRuntime.review({
-            reviewerExecutor: createReviewerProcessExecutor(run),
+            reviewerExecutor,
             reviewer: "acceptance",
             decodeOutput: decodeEmptyFindings,
             prompt: "Review the Candidate.",
@@ -182,17 +181,15 @@ describe("Pi reviewer agent runtime process boundary", () => {
           });
 
           expect(result).toMatchObject({ ok: true, attempts: 1 });
-          expect(command).toContain("--no-extensions");
-          expect(command).toContain("--no-skills");
-          expect(command).toContain("--no-prompt-templates");
-          expect(command).toContain("--no-themes");
-          expect(command).not.toContain("--no-context-files");
-          expect(command).toContain("--extension '~/.pi/agent/extensions/package-manager-policy'");
-          expect(command).toContain("--extension '~/.pi/agent/extensions/web-search'");
-          expect(command).toContain(
-            "--extension '~/.pi/agent/extensions/openai-remote-compaction'",
-          );
-          expect(command).toContain("--skill '~/.pi/agent/skills/codebase-design'");
+          expect(commandArgs).toContain("--no-extensions");
+          expect(commandArgs).toContain("--no-skills");
+          expect(commandArgs).toContain("--no-prompt-templates");
+          expect(commandArgs).toContain("--no-themes");
+          expect(commandArgs).not.toContain("--no-context-files");
+          expect(commandArgs).toContain("~/.pi/agent/extensions/package-manager-policy");
+          expect(commandArgs).toContain("~/.pi/agent/extensions/web-search");
+          expect(commandArgs).toContain("~/.pi/agent/extensions/openai-remote-compaction");
+          expect(commandArgs).toContain("~/.pi/agent/skills/codebase-design");
           const probe = JSON.parse(readFileSync(probeOutput, "utf8")) as {
             readonly prompt: string;
             readonly tools: readonly string[];

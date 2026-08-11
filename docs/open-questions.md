@@ -32,20 +32,12 @@ But Why does not edit consumer tool configuration automatically.
 After v1, move Validation Workspaces outside the consumer repository and remove Sandcastle's control of their placement.
 Before implementation, select the external location and define naming, Git registration, cleanup, recovery, and repository-relocation behavior.
 
-## How should agent usage and cost be measured?
-
-Sandcastle does not return trustworthy Pi token or monetary usage.
-Future reporting must distinguish unknown usage from zero usage.
-After trustworthy usage exists, decide whether automatic work needs user-defined spending limits.
-
 ## How should agent execution identities work?
 
 V1 resolves Pi Agent Profiles from explicit Repo or Global references.
 Each profile selects its model, thinking level, and optional Pi resource allowlists.
 The remaining design question is whether later runtimes require a separate execution identity interface.
-
-Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
-Keep Sandcastle inside its private workspace runtime Adapter until evidence justifies that decision.
+The current Pi Reviewer Adapter is project-owned and another runtime must satisfy the reviewer-execution contract without changing Agent Profile identity.
 
 ## How should But Why represent and review planning above individual Tasks?
 
@@ -164,7 +156,7 @@ Use named conditions instead of a generic workflow language.
 
 ## Where should lifecycle customization use hooks?
 
-Sandcastle demonstrates that generic lifecycle hooks can make an orchestration engine more reusable and customizable than But Why's fixed named phases.
+Generic lifecycle hooks can make an orchestration engine more reusable and customizable than But Why's fixed named phases.
 Explore hooks only after a concrete repository workflow requires lifecycle behavior that the current Preparation, Checks, Specialists, integrity, and cleanup boundaries cannot represent coherently.
 
 Before adding hooks, define trusted configuration, execution location, ordering, timeout, cancellation, failure behavior, evidence capture, and permitted side effects.
@@ -176,24 +168,25 @@ Prefer named extension points when the behavior has stable domain meaning, and d
 V1 supports host execution only.
 Containerized reviewer execution is unsupported in v1 and deferred until after v1.
 The Agent Environment configures the repository toolchain for host-run agents.
-Sandcastle host cancellation can return while Pi reviewer descendants continue running.
-Automatic interrupted-run recovery remains unsupported until an execution provider proves bounded descendant ownership.
+The project-owned Pi Reviewer Adapter uses Effect command interruption to terminate its process tree before Validation Workspace cleanup.
+Automatic interrupted-run recovery remains unsupported.
 
 Before reconsidering containerized reviewers after v1, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
 Measure whether CPU limits prevent reviewer experiments or repository Checks from monopolizing the development host.
-Decide whether Sandcastle can own this behavior through a maintained supported contract or whether But Why needs another execution provider.
+Select another execution provider only when it can preserve the current reviewer process, session, resource, usage, and interruption contracts.
 
 ## Does automatic writing need stronger isolation?
 
-Read-only validation uses project-owned workspace and execution contracts backed by the private Sandcastle runtime Adapter.
-Before Sandcastle performs automatic writing, its container path must use a fixed image, non-root execution, restricted mounts and environment, no host credentials, no devices or Docker socket, bounded diagnostics, and complete validation before a parent-controlled push.
+Read-only validation uses project-owned workspace and execution contracts.
+Sandcastle remains private to Validation Workspace creation, command execution, and cleanup and provides no container isolation.
+Before automatic writing uses a container provider, that path must use a fixed image, non-root execution, restricted mounts and environment, no host credentials, no devices or Docker socket, bounded diagnostics, and complete validation before a parent-controlled push.
 
 OpenShell, Gondolin, or another provider requires an adapter and conformance tests.
 
 ## Which observability is useful?
 
 Dogfooding should determine whether Validation Run history, Change activity, agent-session inspection, and external tracing justify their maintenance cost.
-Usage reporting must distinguish unknown values from zero.
+Usage reporting must preserve the distinction between recorded `null` usage and measured zero usage.
 
 ## How should optional Effect CLI built-ins fit the public interface?
 

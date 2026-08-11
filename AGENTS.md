@@ -43,12 +43,12 @@
 - `src/change/validationRun/`: Validation Run domain records and evidence.
 - `src/change/publication/`: Candidate publication policy and Git Adapter.
 - `src/change/submit/`: Change submission configuration and errors.
-- `src/agent/`: project-owned reviewer execution, reviewer behavior, and Agent Profile resolution.
+- `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/contracts/`: configuration, output, and shared error contracts.
 - `src/init/`: Local Repository initialization and repository-context Adapters.
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
-- `src/disposableWorkspace/`: disposable exact-commit workspace Adapter and the private Sandcastle runtime Adapter.
+- `src/disposableWorkspace/`: disposable exact-commit workspace Adapter and the private Sandcastle Validation Workspace Adapter.
 - `src/sqlite/`: SQLite persistence Adapters.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
 

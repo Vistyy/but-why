@@ -120,7 +120,7 @@ const resolveLocalPiResource = (
   return resolvePiResource(source, context);
 };
 
-const resolvePiResource = (source: string, context: PiRuntimeResourceContext): string => {
+export const resolvePiResource = (source: string, context: PiRuntimeResourceContext): string => {
   if (context.scope === "global") {
     if (source.startsWith("~/")) return source;
     if (isAbsolute(source) || isPiPackageSource(source)) return source;

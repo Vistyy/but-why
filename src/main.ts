@@ -13,6 +13,16 @@ const executablePath =
 const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
+const interruption = new AbortController();
+let receivedSignal: "SIGINT" | "SIGTERM" | undefined;
+const interrupt = (signal: "SIGINT" | "SIGTERM") => {
+  receivedSignal = signal;
+  interruption.abort();
+};
+const interruptWithSigint = () => interrupt("SIGINT");
+const interruptWithSigterm = () => interrupt("SIGTERM");
+process.once("SIGINT", interruptWithSigint);
+process.once("SIGTERM", interruptWithSigterm);
 
 Effect.runPromise(
   runCli(args, {
@@ -23,13 +33,20 @@ Effect.runPromise(
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
     writeStderr: (message) => process.stderr.write(message),
   }),
+  { signal: interruption.signal },
 )
   .then((result) => {
     process.stdout.write(serializeOutput(result.stdout));
-    process.exitCode = result.exitCode;
+    process.exitCode =
+      receivedSignal === "SIGINT" ? 130 : receivedSignal === "SIGTERM" ? 143 : result.exitCode;
   })
   .catch(() => {
     const result = mapRuntimeError();
     process.stdout.write(serializeOutput(result.stdout));
-    process.exitCode = result.exitCode;
+    process.exitCode =
+      receivedSignal === "SIGINT" ? 130 : receivedSignal === "SIGTERM" ? 143 : result.exitCode;
+  })
+  .finally(() => {
+    process.off("SIGINT", interruptWithSigint);
+    process.off("SIGTERM", interruptWithSigterm);
   });

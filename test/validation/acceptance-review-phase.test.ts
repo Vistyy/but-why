@@ -113,7 +113,10 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({ findings: 0 });
+      expect(result).toMatchObject({
+        findings: 0,
+        reviewerEvidence: { reviewCalls: 1, invocationUsage: [null] },
+      });
       expect(review).toHaveBeenCalledOnce();
       const call = review.mock.calls[0]?.[0];
       expect(call).toMatchObject({
@@ -380,6 +383,7 @@ describe("Acceptance Review phase", () => {
           continuity: "restarted",
           restartReason: "session_unusable",
           reviewCalls: 2,
+          invocationUsage: [null, null],
         },
       });
       expect(review.mock.calls.map(([input]) => input.resumeSession)).toEqual([

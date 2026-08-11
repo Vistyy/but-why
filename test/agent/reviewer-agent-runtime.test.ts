@@ -1,6 +1,3 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
@@ -18,11 +15,6 @@ import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../../src/contracts/reviewerOutput.js";
-import {
-  createReviewerProcessExecutor,
-  type ReviewerProcessRuntimeRunner,
-  type ReviewerProcessRuntimeRunResult,
-} from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
@@ -90,6 +82,7 @@ describe("Pi reviewer agent runtime", () => {
         report: { findings: [] },
         attempts: 1,
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+        invocationUsage: [null],
       });
       expect(prompt).toBe("Judge only approved intent for the exact Candidate.");
     }),
@@ -150,359 +143,6 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
-  it.effect("launches reviewers with an isolated Pi resource and tool boundary", () =>
-    Effect.gen(function* () {
-      let command = "";
-      const run: ReviewerProcessRuntimeRunner = async (options) => {
-        const built = options.buildPrintCommand({
-          prompt: options.prompt ?? "",
-          dangerouslySkipPermissions: true,
-        });
-        command = built.command;
-        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      };
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
-        reviewer: "specialist:security",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile,
-        agentEnvironment: ["nix", "develop", "-c"],
-      });
-
-      expect(result).toMatchObject({ ok: true, attempts: 1 });
-      expect(command).toBe(
-        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-prompt-templates --no-themes --no-extensions --extension '~/.pi/agent/extensions/package-manager-policy' --extension '~/.pi/agent/extensions/web-search' --extension '~/.pi/agent/extensions/openai-remote-compaction' --no-skills --skill '~/.pi/agent/skills/codebase-design' --tools 'read,bash,grep,find,ls,web_search,web_fetch,web_content_get'",
-      );
-      expect(command).not.toContain("--subagent");
-      expect(command).not.toContain("--edit");
-      expect(command).not.toContain("--write");
-    }),
-  );
-
-  it.effect("stores host-run Pi sessions in the Change-owned session directory", () =>
-    Effect.gen(function* () {
-      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
-      const workspace = "/validation-workspace-two";
-      const sessionId = "123e4567-e89b-42d3-a456-426614174001";
-      let command = "";
-      const run: ReviewerProcessRuntimeRunner = async (options) => {
-        command = options.buildPrintCommand({
-          prompt: options.prompt ?? "",
-          dangerouslySkipPermissions: true,
-        }).command;
-        writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), '{"type":"session"}\n');
-        return {
-          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
-          iterations: [{ sessionId }],
-        };
-      };
-
-      try {
-        const result = yield* piReviewerAgentRuntime.review({
-          reviewerExecutor: createReviewerProcessExecutor(run),
-          reviewer: "acceptance",
-          decodeOutput: decodeEmptyFindings,
-          prompt: "Review the Candidate.",
-          profile,
-          commandCwd: workspace,
-          sessionStorageRoot: sessionRoot,
-        });
-
-        expect(command).toContain(`--session-dir '${sessionRoot}'`);
-        expect(result).toMatchObject({
-          ok: true,
-          sessionReference: sessionId,
-          sessionFilePath: expect.stringContaining(`review_${sessionId}.jsonl`),
-        });
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
-    }),
-  );
-
-  it.effect("does not promote session metadata after capture-failure recovery", () =>
-    Effect.gen(function* () {
-      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
-      const sessionId = "123e4567-e89b-42d3-a456-426614174003";
-      const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
-      writeFileSync(
-        sessionFile,
-        `{"type":"session","id":"${sessionId}","cwd":"/removed-workspace"}\n`,
-      );
-      const observedCwds: string[] = [];
-      let attempts = 0;
-      const run: ReviewerProcessRuntimeRunner = async () => {
-        attempts += 1;
-        const header = JSON.parse(readFileSync(sessionFile, "utf8")) as { cwd: string };
-        observedCwds.push(header.cwd);
-        if (attempts === 1) throw new Error("Session capture failed");
-        return {
-          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
-          iterations: [{ sessionId }],
-        };
-      };
-
-      try {
-        const result = yield* piReviewerAgentRuntime.review({
-          reviewerExecutor: createReviewerProcessExecutor(run),
-          reviewer: "acceptance",
-          decodeOutput: decodeEmptyFindings,
-          prompt: "Review the Candidate.",
-          profile,
-          commandCwd: "/validation-workspace",
-          sessionStorageRoot: sessionRoot,
-          resumeSession: sessionId,
-        });
-
-        expect(result).toEqual({
-          ok: true,
-          report: { findings: [] },
-          attempts: 1,
-          stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
-        });
-        expect(attempts).toBe(2);
-        expect(observedCwds).toEqual(["/validation-workspace", "/validation-workspace"]);
-        expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/removed-workspace"');
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
-    }),
-  );
-
-  it.effect("rejects a corrupt stored Pi session before resume", () =>
-    Effect.gen(function* () {
-      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
-      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
-      writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "not-json\n");
-      const run = vi.fn<ReviewerProcessRuntimeRunner>(() =>
-        Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
-      );
-
-      try {
-        const result = yield* piReviewerAgentRuntime.review({
-          reviewerExecutor: createReviewerProcessExecutor(run),
-          reviewer: "acceptance",
-          decodeOutput: decodeEmptyFindings,
-          prompt: "Review the Candidate.",
-          profile,
-          commandCwd: "/validation-workspace",
-          sessionStorageRoot: sessionRoot,
-          resumeSession: sessionId,
-        });
-
-        expect(result).toMatchObject({
-          ok: false,
-          failure: {
-            _tag: "ReviewerExecutionFailed",
-            operationName: "run_reviewer_process",
-            message: "Reviewer Session JSONL is corrupt.",
-          },
-          sessionUsability: "unusable",
-        });
-        expect(run).not.toHaveBeenCalled();
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
-    }),
-  );
-
-  it.effect("rejects a non-object Pi session entry before resume", () =>
-    Effect.gen(function* () {
-      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
-      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
-      writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "null\n");
-      const run = vi.fn<ReviewerProcessRuntimeRunner>(() =>
-        Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
-      );
-
-      try {
-        const result = yield* piReviewerAgentRuntime.review({
-          reviewerExecutor: createReviewerProcessExecutor(run),
-          reviewer: "acceptance",
-          decodeOutput: decodeEmptyFindings,
-          prompt: "Review the Candidate.",
-          profile,
-          commandCwd: "/validation-workspace",
-          sessionStorageRoot: sessionRoot,
-          resumeSession: sessionId,
-        });
-
-        expect(result).toMatchObject({
-          ok: false,
-          failure: {
-            _tag: "ReviewerExecutionFailed",
-            operationName: "run_reviewer_process",
-            message: "Reviewer Session JSONL is corrupt.",
-          },
-          sessionUsability: "unusable",
-        });
-        expect(run).not.toHaveBeenCalled();
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
-    }),
-  );
-
-  it.effect("preserves unknown Pi JSONL content while rewriting the session header", () =>
-    Effect.gen(function* () {
-      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
-      const sessionId = "123e4567-e89b-42d3-a456-426614174005";
-      const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
-      writeFileSync(
-        sessionFile,
-        [
-          `{"type":"session","id":"${sessionId}","cwd":"/original-workspace","vendor":{"name":"pi"}}`,
-          '{"type":"message","role":"user","content":"hello"}',
-          "",
-        ].join("\n"),
-      );
-      let rewritten = "";
-      const run: ReviewerProcessRuntimeRunner = async () => {
-        rewritten = readFileSync(sessionFile, "utf8");
-        return {
-          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
-          iterations: [{ sessionId }],
-        };
-      };
-
-      try {
-        const result = yield* piReviewerAgentRuntime.review({
-          reviewerExecutor: createReviewerProcessExecutor(run),
-          reviewer: "acceptance",
-          decodeOutput: decodeEmptyFindings,
-          prompt: "Review the Candidate.",
-          profile,
-          commandCwd: "/validation-workspace",
-          sessionStorageRoot: sessionRoot,
-          resumeSession: sessionId,
-        });
-
-        expect(result).toMatchObject({ ok: true, attempts: 1 });
-        const lines = rewritten.split("\n");
-        const header = JSON.parse(lines[0] ?? "") as { cwd: string; vendor: { name: string } };
-        expect(header.cwd).toBe("/validation-workspace");
-        expect(header.vendor).toEqual({ name: "pi" });
-        expect(lines[1]).toBe('{"type":"message","role":"user","content":"hello"}');
-      } finally {
-        rmSync(fixtureRoot, { recursive: true, force: true });
-      }
-    }),
-  );
-
-  it.effect("resolves Repo resources from the Managed Worktree root", () =>
-    Effect.gen(function* () {
-      let command = "";
-      const run: ReviewerProcessRuntimeRunner = async (options) => {
-        command = options.buildPrintCommand({
-          prompt: options.prompt ?? "",
-          dangerouslySkipPermissions: true,
-        }).command;
-        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      };
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile: {
-          ...profile,
-          scope: "repo",
-          profile: {
-            ...profile.profile,
-            runtimeConfig: {
-              ...profile.profile.runtimeConfig,
-              extensions: ["extensions/reviewer"],
-              skills: ["skills/reviewer"],
-            },
-          },
-        },
-        commandCwd: "/validation-workspace",
-        resourceRoot: "/managed-worktree",
-      });
-
-      expect(result).toMatchObject({ ok: true, attempts: 1 });
-      expect(command).toContain("--extension '/managed-worktree/extensions/reviewer'");
-      expect(command).toContain("--skill '/managed-worktree/skills/reviewer'");
-      expect(command).not.toContain("/validation-workspace");
-    }),
-  );
-
-  it.effect("preserves Global Pi package URL sources", () =>
-    Effect.gen(function* () {
-      let command = "";
-      const run: ReviewerProcessRuntimeRunner = async (options) => {
-        command = options.buildPrintCommand({
-          prompt: options.prompt ?? "",
-          dangerouslySkipPermissions: true,
-        }).command;
-        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      };
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile: {
-          ...profile,
-          profile: {
-            ...profile.profile,
-            runtimeConfig: {
-              ...profile.profile.runtimeConfig,
-              extensions: [
-                "https://github.com/user/reviewer-extension",
-                "ssh://git@github.com/user/another-extension",
-              ],
-            },
-          },
-        },
-      });
-
-      expect(result).toMatchObject({ ok: true, attempts: 1 });
-      expect(command).toContain("--extension 'https://github.com/user/reviewer-extension'");
-      expect(command).toContain("--extension 'ssh://git@github.com/user/another-extension'");
-      expect(command).not.toContain(".config");
-    }),
-  );
-
-  it.effect("stops after a configured Agent Environment launch failure", () =>
-    Effect.gen(function* () {
-      let attempts = 0;
-      let command = "";
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(async (options) => {
-          attempts += 1;
-          command = options.buildPrintCommand({
-            prompt: options.prompt ?? "",
-            dangerouslySkipPermissions: true,
-          }).command;
-          throw new Error("wrapper failed");
-        }),
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile,
-        agentEnvironment: ["nix", "develop", "-c"],
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        attempts: 1,
-        failure: {
-          _tag: "ReviewerExecutionFailed",
-          operationName: "run_reviewer_process",
-          message: "wrapper failed",
-        },
-        sessionUsability: "unknown",
-      });
-      expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
-      expect(attempts).toBe(1);
-    }),
-  );
-
   it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
     Effect.gen(function* () {
       const corrected = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
@@ -527,18 +167,18 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("accepts a corrected report on the third attempt", () =>
     Effect.gen(function* () {
-      const third = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      const third = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
       const resumeSecond = vi.fn(() => Promise.resolve(third));
-      const second = runResult(
+      const second = processResult(
         '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
         resumeSecond,
       );
       const resumeFirst = vi.fn(() => Promise.resolve(second));
-      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
+      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
+        reviewerExecutor: { execute: run },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -550,6 +190,7 @@ describe("Pi reviewer agent runtime", () => {
         report: { findings: [] },
         attempts: 3,
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+        invocationUsage: [null, null, null],
       });
       expect(run).toHaveBeenCalledTimes(1);
       expect(resumeFirst).toHaveBeenCalledTimes(1);
@@ -563,22 +204,22 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("fails after three invalid outputs without a fourth invocation", () =>
     Effect.gen(function* () {
-      const resumeThird = vi.fn(() => Promise.resolve(runResult("must not run")));
-      const third = runResult(
+      const resumeThird = vi.fn(() => Promise.resolve(processResult("must not run")));
+      const third = processResult(
         '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
         resumeThird,
       );
       const resumeSecond = vi.fn(() => Promise.resolve(third));
-      const second = runResult(
+      const second = processResult(
         '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
         resumeSecond,
       );
       const resumeFirst = vi.fn(() => Promise.resolve(second));
-      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
+      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
+        reviewerExecutor: { execute: run },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -609,11 +250,11 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("stops after a failed output correction invocation", () =>
     Effect.gen(function* () {
       const resumeFirst = vi.fn(() => Promise.reject(new Error("provider failed")));
-      const first = runResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
+      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: createReviewerProcessExecutor(run),
+        reviewerExecutor: { execute: run },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -635,22 +276,6 @@ describe("Pi reviewer agent runtime", () => {
       expect(resumeFirst).toHaveBeenCalledTimes(1);
     }),
   );
-});
-
-const isolatedSessionRoot = (): { readonly fixtureRoot: string; readonly sessionRoot: string } => {
-  const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-fixture-"));
-  const sessionRoot = join(fixtureRoot, "sessions");
-  mkdirSync(sessionRoot, { recursive: true });
-  return { fixtureRoot, sessionRoot };
-};
-
-const runResult = (
-  stdout: string,
-  resume?: ReviewerProcessRuntimeRunResult["resume"],
-): ReviewerProcessRuntimeRunResult => ({
-  iterations: [],
-  stdout,
-  ...(resume === undefined ? {} : { resume }),
 });
 
 const processResult = (
