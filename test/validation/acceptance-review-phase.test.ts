@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
@@ -9,7 +10,7 @@ import {
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
-import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
+import { runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
 import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
@@ -86,6 +87,10 @@ const cleanReport: ReviewerAgentResult<ReviewerOutput> = {
   attempts: 1,
   stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
 };
+
+const runAcceptanceReviewPhase = (
+  input: Parameters<typeof runAcceptanceReviewPhaseWithFileSystem>[0],
+) => runAcceptanceReviewPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 const finding = (title: string) => ({
   title,

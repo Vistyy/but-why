@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import type { ReviewerExecutionEvidence } from "../reviewerSession/executeReviewerSession.js";
@@ -33,49 +34,53 @@ export const writeReviewerArtifacts = (input: {
   readonly executionEvidence: ReviewerExecutionEvidence;
 }): Effect.Effect<
   readonly Omit<ValidationRunArtifactRecord, "createdAt">[],
-  ValidationToolingFailure
+  ValidationToolingFailure,
+  FileSystem.FileSystem
 > =>
-  Effect.try({
-    try: () => {
-      const contents = [
-        { fileName: "stdout.txt", content: input.result.stdout },
-        {
-          fileName: "reviewer-output.json",
-          content: input.result.ok
-            ? `${encodeReviewerWireValue(input.result.report)}\n`
-            : `${encodeReviewerWireValue({ error: input.result.failure._tag })}\n`,
-        },
-        {
-          fileName: "execution.json",
-          content: `${encodeReviewerWireValue({ ...input.executionEvidence, attempts: input.result.attempts })}\n`,
-        },
-      ] as const;
+  Effect.gen(function* () {
+    const contents = [
+      { fileName: "stdout.txt", content: input.result.stdout },
+      {
+        fileName: "reviewer-output.json",
+        content: input.result.ok
+          ? `${encodeReviewerWireValue(input.result.report)}\n`
+          : `${encodeReviewerWireValue({ error: input.result.failure._tag })}\n`,
+      },
+      {
+        fileName: "execution.json",
+        content: `${encodeReviewerWireValue({ ...input.executionEvidence, attempts: input.result.attempts })}\n`,
+      },
+    ] as const;
 
-      return contents.map(({ fileName, content }) => {
-        const artifact = writeValidationRunArtifactFile({
-          artifactsRoot: input.artifactsRoot,
-          validationRunId: input.validationRunId,
-          phase: input.phase,
-          producer: input.producer,
-          fileName,
-          content,
-          ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
-        });
-        return {
-          ref: `artifact:${input.validationRunId}/${input.phase}/${input.producer}/${fileName}`,
-          validationRunId: input.validationRunId,
-          phase: input.phase,
-          producer: input.producer,
-          ...artifact,
-        };
+    const artifacts: Omit<ValidationRunArtifactRecord, "createdAt">[] = [];
+    for (const { fileName, content } of contents) {
+      const artifact = yield* writeValidationRunArtifactFile({
+        artifactsRoot: input.artifactsRoot,
+        validationRunId: input.validationRunId,
+        phase: input.phase,
+        producer: input.producer,
+        fileName,
+        content,
+        ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
       });
-    },
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_reviewer_artifacts",
-        message: errorMessage(error),
-      }),
-  });
+      artifacts.push({
+        ref: `artifact:${input.validationRunId}/${input.phase}/${input.producer}/${fileName}`,
+        validationRunId: input.validationRunId,
+        phase: input.phase,
+        producer: input.producer,
+        ...artifact,
+      });
+    }
+    return artifacts;
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new InfrastructureToolingFailed({
+          operationName: "record_reviewer_artifacts",
+          message: errorMessage(error),
+        }),
+    ),
+  );
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

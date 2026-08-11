@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll, vi } from "vitest";
@@ -371,7 +372,7 @@ const runReviewPhases = (
         listPreviousCandidateReviewerFindings:
           persistence.execution.listPreviousCandidateReviewerFindings,
         recordAcceptanceRound: persistence.execution.recordAcceptanceRound,
-      });
+      }).pipe(Effect.provide(NodeFileSystem.layer));
       if (acceptance.toolingFailure !== undefined) {
         yield* persistence.execution.recordToolingFailure({
           validationRunId: started.validationRunId,

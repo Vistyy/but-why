@@ -1,3 +1,4 @@
+import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
 import type { ResolveLocalRepositoryError } from "../../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../../repositoryRuntime/repositoryRuntime.js";
@@ -40,12 +41,14 @@ export const loadCandidateValidationRunInspection = (input: {
     inspection: {
       inspectRun: (validationRunId) =>
         loaded.runtime.provide(
-          Effect.flatMap(inspectionFor, (inspection) => inspection.inspectRun(validationRunId)),
+          Effect.flatMap(inspectionFor, (inspection) =>
+            inspection.inspectRun(validationRunId),
+          ).pipe(Effect.provide(NodeFileSystem.layer)),
         ),
       readArtifact: (validationRunId, artifactRef) =>
         Effect.flatMap(inspectionFor, (inspection) =>
           inspection.readArtifact(validationRunId, artifactRef),
-        ).pipe(loaded.runtime.provide),
+        ).pipe(Effect.provide(NodeFileSystem.layer), loaded.runtime.provide),
     },
   };
 };
