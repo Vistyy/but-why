@@ -209,6 +209,9 @@ describe("SQLite Candidate and Validation read decoding", () => {
           expect(yield* validation.artifacts.listRunIdsForChange(current.changeId)).toContain(
             priorRun.validationRunId,
           );
+          expect(
+            yield* validation.reads.listToolingFailures(priorRun.validationRunId),
+          ).toMatchObject([{ sequence: 1, errorKind: "infrastructure_tooling_failed" }]);
           const strictError = yield* validation.reads
             .getRunById(priorRun.validationRunId)
             .pipe(Effect.flip);
@@ -217,7 +220,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
       ),
   );
 
-  it.scoped("rejects representative malformed Candidate and Validation facts before use", () =>
+  it.scoped("scopes representative malformed Candidate and Validation facts by operation", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
@@ -317,18 +320,16 @@ describe("SQLite Candidate and Validation read decoding", () => {
           (sql) => sql`UPDATE candidates SET head_sha = X'07' WHERE id = ${prior.candidateId}`,
         );
         expect(
-          yield* capture
-            .commitCapture({
-              repositoryCommonDirectory: input.commonDirectory,
-              branchRef: "refs/heads/malformed-decoding",
-              baseRef: "refs/remotes/origin/main",
-              changeBaseSha: "base",
-              headSha: "current",
-              expectedChangeId: prior.changeId,
-              now,
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/malformed-decoding",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base",
+            headSha: "current",
+            expectedChangeId: prior.changeId,
+            now,
+          }),
+        ).toMatchObject({ ok: true, candidateId: current.candidateId, reused: true });
         yield* repository.operation(
           "restore Candidate scalar",
           (sql) => sql`UPDATE candidates SET head_sha = 'prior' WHERE id = ${prior.candidateId}`,
@@ -449,14 +450,12 @@ describe("SQLite Candidate and Validation read decoding", () => {
           yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
-          yield* validation.execution
-            .listPreviousCandidateReviewerFindings({
-              candidateId: current.candidateId,
-              phase: "acceptance_review",
-              producer: "acceptance",
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* validation.execution.listPreviousCandidateReviewerFindings({
+            candidateId: current.candidateId,
+            phase: "acceptance_review",
+            producer: "acceptance",
+          }),
+        ).toEqual([]);
         yield* repository.operation(
           "restore Finding relationship",
           (sql) =>
@@ -494,15 +493,19 @@ describe("SQLite Candidate and Validation read decoding", () => {
         expect(
           yield* validation.reads.listRounds(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(yield* validation.reads.listFindings(started.validationRunId)).toMatchObject([
+          { id: "finding-malformed" },
+        ]);
+        expect(yield* validation.reads.listArtifacts(started.validationRunId)).toMatchObject([
+          { ref: "artifact-malformed" },
+        ]);
         expect(
-          yield* validation.execution
-            .listPreviousCandidateReviewerFindings({
-              candidateId: current.candidateId,
-              phase: "acceptance_review",
-              producer: "acceptance",
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* validation.execution.listPreviousCandidateReviewerFindings({
+            candidateId: current.candidateId,
+            phase: "acceptance_review",
+            producer: "acceptance",
+          }),
+        ).toMatchObject([{ id: "finding-malformed" }]);
         yield* repository.operation(
           "restore Check producer",
           (sql) =>
@@ -543,14 +546,12 @@ describe("SQLite Candidate and Validation read decoding", () => {
             sql`UPDATE candidate_validation_rounds SET phase = 'retired_phase' WHERE validation_run_id = ${started.validationRunId}`,
         );
         expect(
-          yield* validation.execution
-            .listPreviousCandidateReviewerFindings({
-              candidateId: current.candidateId,
-              phase: "acceptance_review",
-              producer: "acceptance",
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* validation.execution.listPreviousCandidateReviewerFindings({
+            candidateId: current.candidateId,
+            phase: "acceptance_review",
+            producer: "acceptance",
+          }),
+        ).toEqual([]);
         yield* repository.operation(
           "restore history round",
           (sql) =>
