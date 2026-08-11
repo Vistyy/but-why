@@ -217,6 +217,10 @@ const makeCandidateValidation = (dependencies: {
     });
 
     if (!workspace.ok) {
+      const cleanupResult =
+        "toolingFailure" in workspace
+          ? workspace.cleanupResult
+          : workspace.toolingError.cleanupResult;
       const failure =
         "toolingFailure" in workspace
           ? validationToolingFailureRecord(workspace.toolingFailure)
@@ -227,7 +231,7 @@ const makeCandidateValidation = (dependencies: {
                 submittedSha: workspace.toolingError.expectedCommitSha,
                 worktreePath: workspace.toolingError.worktreePath,
                 errorMessage: workspace.toolingError.errorMessage,
-                cleanupResult: workspace.toolingError.cleanupResult,
+                cleanupResult,
               }),
             );
       yield* dependencies.persistence.recordToolingFailure({
@@ -235,11 +239,13 @@ const makeCandidateValidation = (dependencies: {
         ...failure,
         now: input.now,
       });
-      yield* dependencies.persistence.complete({
-        validationRunId: started.validationRunId,
-        outcome: "tooling_failed",
-        now: input.now,
-      });
+      if (cleanupResult.workspace !== "failed") {
+        yield* dependencies.persistence.complete({
+          validationRunId: started.validationRunId,
+          outcome: "tooling_failed",
+          now: input.now,
+        });
+      }
       return {
         ok: false,
         validationRunId: started.validationRunId,

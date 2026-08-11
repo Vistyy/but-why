@@ -51,17 +51,20 @@ export const runDisposableExactCommitWorkspace = <Error>(
     const worktreePath = expectedDisposableWorkspacePath(input.repoRoot, input.workspaceId);
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
 
-    if (input.recordWorkspaceCleanup !== undefined) {
-      yield* input.recordWorkspaceCleanup(initialCleanupResult);
-    }
-
-    const attempt = yield* withInterruptedCleanupRecording(
-      Effect.scoped(runWorkspaceScope(input, worktreePath, cleanupResult)),
-      input,
-      worktreePath,
-      cleanupResult,
+    const workspaceExit = yield* Effect.exit(
+      withInterruptedCleanupRecording(
+        Effect.scoped(runWorkspaceScope(input, worktreePath, cleanupResult)),
+        input,
+        worktreePath,
+        cleanupResult,
+      ),
     );
     const finalCleanupResult = yield* Ref.get(cleanupResult);
+    if (input.recordWorkspaceCleanup !== undefined) {
+      yield* Effect.uninterruptible(input.recordWorkspaceCleanup(finalCleanupResult));
+    }
+    if (workspaceExit._tag === "Failure") return yield* Effect.failCause(workspaceExit.cause);
+    const attempt = workspaceExit.value;
 
     if (!attempt.ok) {
       return {
@@ -184,10 +187,6 @@ const runWorkspaceScope = <Error>(
       input.copyFiles,
     );
     if (!copied.ok) return setupFailed("copy_allowlisted_file", copied.message);
-
-    if (input.recordWorkspaceCleanup !== undefined) {
-      yield* input.recordWorkspaceCleanup(yield* Ref.get(cleanupResult));
-    }
 
     if (input.runInWorkspace !== undefined) {
       yield* input.runInWorkspace({

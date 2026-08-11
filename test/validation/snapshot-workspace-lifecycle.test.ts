@@ -62,7 +62,7 @@ describe("Snapshot Workspace lifecycle", () => {
           cleanupResult: { workspace: "removed" },
         },
       });
-      expect(cleanupResults[0]).toEqual({ workspace: "not_created" });
+      expect(cleanupResults).toEqual([{ workspace: "removed" }]);
       expect(existsSync(worktreePath)).toBe(false);
       expect(git(repository, "for-each-ref", "--format=%(refname)", "refs/but-why")).toBe("");
     }),
@@ -98,12 +98,17 @@ describe("Snapshot Workspace lifecycle", () => {
       const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
       mkdirSync(worktreePath, { recursive: true });
       writeFileSync(join(worktreePath, "keep"), "unowned\n");
+      const cleanupResults: unknown[] = [];
 
       const result = yield* createSnapshotWorkspace({
         repoRoot: repository,
         validationRunId,
         submittedSha: commitSha,
         copyFiles: [],
+        recordWorkspaceCleanup: (cleanupResult) =>
+          Effect.sync(() => {
+            cleanupResults.push(cleanupResult);
+          }),
       });
 
       expect(result).toMatchObject({
@@ -113,6 +118,7 @@ describe("Snapshot Workspace lifecycle", () => {
           cleanupResult: { workspace: "failed" },
         },
       });
+      expect(cleanupResults).toEqual([{ workspace: "failed" }]);
       expect(existsSync(join(worktreePath, "keep"))).toBe(true);
     }),
   );

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
+  DisposableWorkspaceCleanupResult,
   DisposableWorkspaceError,
   DisposableWorkspaceSetup,
 } from "../../disposableWorkspace/disposableWorkspace.js";
@@ -42,26 +43,38 @@ export type CreateSnapshotWorkspaceResult =
       readonly activeWorkspaceResult?: ActiveSnapshotWorkspaceResult;
     }
   | { readonly ok: false; readonly toolingError: SnapshotWorkspaceToolingError }
-  | { readonly ok: false; readonly toolingFailure: ValidationToolingFailure };
+  | {
+      readonly ok: false;
+      readonly toolingFailure: ValidationToolingFailure;
+      readonly cleanupResult: DisposableWorkspaceCleanupResult;
+    };
 
 export const createSnapshotWorkspace = (
   input: CreateSnapshotWorkspaceInput,
-): Effect.Effect<CreateSnapshotWorkspaceResult, RepositoryStorageError> =>
-  createSnapshotWorkspaceAdapter(input).pipe(
+): Effect.Effect<CreateSnapshotWorkspaceResult, RepositoryStorageError> => {
+  let cleanupResult: DisposableWorkspaceCleanupResult = { workspace: "not_created" };
+  const observeCleanup = (result: DisposableWorkspaceCleanupResult): void => {
+    cleanupResult = result;
+  };
+  const failure = (toolingFailure: ValidationToolingFailure) =>
+    toolingFailureResult(toolingFailure, cleanupResult);
+  return createSnapshotWorkspaceAdapter(input, observeCleanup).pipe(
     Effect.catchTags({
-      SnapshotWorkspaceSetupFailed: toolingFailureResult,
-      InfrastructureToolingFailed: toolingFailureResult,
-      GitToolingFailed: toolingFailureResult,
-      ReviewerProcessToolingFailed: toolingFailureResult,
-      PrepareCommandExecutionToolingFailed: toolingFailureResult,
-      CheckCommandExecutionToolingFailed: toolingFailureResult,
-      ReviewerOutputContractFailed: toolingFailureResult,
-      TokenUsageContractFailed: toolingFailureResult,
+      SnapshotWorkspaceSetupFailed: failure,
+      InfrastructureToolingFailed: failure,
+      GitToolingFailed: failure,
+      ReviewerProcessToolingFailed: failure,
+      PrepareCommandExecutionToolingFailed: failure,
+      CheckCommandExecutionToolingFailed: failure,
+      ReviewerOutputContractFailed: failure,
+      TokenUsageContractFailed: failure,
     }),
   );
+};
 
 const createSnapshotWorkspaceAdapter = (
   input: CreateSnapshotWorkspaceInput,
+  observeCleanup: (cleanupResult: DisposableWorkspaceCleanupResult) => void,
 ): Effect.Effect<
   CreateSnapshotWorkspaceResult,
   ValidationToolingFailure | RepositoryStorageError
@@ -75,12 +88,10 @@ const createSnapshotWorkspaceAdapter = (
       workspaceId: input.validationRunId,
       commitSha: input.submittedSha,
       copyFiles: input.copyFiles,
-      ...(input.recordWorkspaceCleanup === undefined
-        ? {}
-        : {
-            recordWorkspaceCleanup: (cleanupResult) =>
-              input.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void,
-          }),
+      recordWorkspaceCleanup: (cleanupResult) =>
+        Effect.sync(() => observeCleanup(cleanupResult)).pipe(
+          Effect.zipRight(input.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void),
+        ),
       ...(input.recordInterruptedCleanupResult === undefined
         ? {}
         : {
@@ -143,5 +154,7 @@ const validationOperation = (operationName: string): string => {
   return operationName;
 };
 
-const toolingFailureResult = (toolingFailure: ValidationToolingFailure) =>
-  Effect.succeed({ ok: false as const, toolingFailure });
+const toolingFailureResult = (
+  toolingFailure: ValidationToolingFailure,
+  cleanupResult: DisposableWorkspaceCleanupResult,
+) => Effect.succeed({ ok: false as const, toolingFailure, cleanupResult });

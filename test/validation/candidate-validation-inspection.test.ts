@@ -82,6 +82,40 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("keeps failed cleanup recoverable until abandonment succeeds", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.recordWorkspaceCleanup({
+        validationRunId: fixture.validationRunId,
+        cleanupWorkspace: "failed",
+      });
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
+
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "running",
+        outcome: null,
+      });
+
+      const abandoned = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "abandon",
+        fixture.validationRunId,
+        "--reason",
+        "Retry failed cleanup.",
+      ]);
+      expect(abandoned.status).toBe(0);
+      expect(JSON.parse(abandoned.stdout).status).toBe("abandoned");
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "tooling_failed",
+      });
+    }),
+  );
+
   it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
