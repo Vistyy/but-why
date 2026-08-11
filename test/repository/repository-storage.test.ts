@@ -1636,9 +1636,52 @@ describe("repository SQL storage", () => {
             },
             latestResolvedBlockerId: resolved.blocker.id,
           });
-
+          yield* validation.execution.complete({
+            validationRunId: afterResolution.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:18:00.000Z",
+          });
+          const secondRaised = yield* changes.authority.raiseImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Wait for a second external decision.",
+            now: "2026-07-25T16:19:00.000Z",
+          });
+          if (!secondRaised.ok) throw new Error(secondRaised.code);
+          const secondResolved = yield* changes.authority.resolveImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Proceed after the second decision.",
+            now: "2026-07-25T16:20:00.000Z",
+          });
+          if (!secondResolved.ok) throw new Error(secondResolved.code);
+          const afterSecondResolution = yield* validation.execution.startOrReuse({
+            ...exact,
+            now: "2026-07-25T16:21:00.000Z",
+          });
+          if (
+            afterSecondResolution.reused ||
+            "blocked" in afterSecondResolution ||
+            "active" in afterSecondResolution
+          )
+            throw new Error("Expected a fresh Validation Run after the second Resolution");
+          yield* validation.execution.complete({
+            validationRunId: afterSecondResolution.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:22:00.000Z",
+          });
           const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
+
+          yield* repository.operation(
+            "corrupt obsolete Blocker content",
+            (sql) =>
+              sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${resolved.blocker.id}`,
+          );
+          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+            candidateId: captured.candidateId,
+            validationRunId: afterSecondResolution.validationRunId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+          });
         }),
       ),
   );

@@ -128,9 +128,31 @@ export const validateValidationRunAuthorityRelationships = (
       (left, right) =>
         compareStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
     )[0]?.id;
-  if (run.latestResolvedBlockerId !== (expectedLatestResolvedBlockerId ?? null)) {
+  validateValidationRunAuthoritySnapshot(run, changeId, expectedLatestResolvedBlockerId ?? null);
+};
+
+export const validateValidationRunAuthoritySnapshot = (
+  run: DecodedValidationRun,
+  changeId: string,
+  expectedLatestResolvedBlockerId: string | null,
+): void => {
+  validateValidationRunLatestResolvedBlockerRelationship(run, expectedLatestResolvedBlockerId);
+  validateValidationRunImplementationDecisionRelationships(run, changeId);
+};
+
+export const validateValidationRunLatestResolvedBlockerRelationship = (
+  run: DecodedValidationRun,
+  expectedLatestResolvedBlockerId: string | null,
+): void => {
+  if (run.latestResolvedBlockerId !== expectedLatestResolvedBlockerId) {
     throw new Error("Validation Run latest resolved Blocker identity is inconsistent");
   }
+};
+
+export const validateValidationRunImplementationDecisionRelationships = (
+  run: DecodedValidationRun,
+  changeId: string,
+): void => {
   const decisionIds = new Set<string>();
   const decisionSequences = new Set<number>();
   let previousSequence = 0;

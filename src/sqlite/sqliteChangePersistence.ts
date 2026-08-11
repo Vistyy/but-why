@@ -41,7 +41,8 @@ import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContext
 import {
   decodeValidationRun,
   type UnknownValidationRunRow,
-  validateValidationRunAuthorityRelationships,
+  validateValidationRunImplementationDecisionRelationships,
+  validateValidationRunLatestResolvedBlockerRelationship,
 } from "./sqliteCandidateValidationReadModel.js";
 import {
   changeReadColumns,
@@ -54,7 +55,6 @@ import {
   decodeReviewerSession,
   decodeReviewerTranscript,
   implementationBlockerReadColumns,
-  latestResolvedBlockerId,
   type UnknownChangeRow,
   type UnknownImplementationBlockerRow,
   type UnknownImplementationDecisionRow,
@@ -64,6 +64,7 @@ import {
 import {
   decodePersisted,
   decodeStoredNullableString,
+  decodeStoredSqlitePositiveInteger,
   decodeStoredString,
 } from "./sqliteTaskReadModel.js";
 
@@ -432,6 +433,43 @@ const readBlockerById = (
     (history) => history.blockers[0],
   );
 
+const readLatestResolvedBlockerId = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+  resolvedAtOrBefore?: string,
+) =>
+  Effect.gen(function* () {
+    const upperBound = resolvedAtOrBefore === undefined ? "" : "AND resolved_at <= ?";
+    const rows = yield* sql.unsafe<{
+      readonly id: unknown;
+      readonly changeId: unknown;
+      readonly sequence: unknown;
+      readonly sequenceType: unknown;
+      readonly resolvedAt: unknown;
+    }>(
+      `SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
+        typeof(sequence) AS sequenceType, resolved_at AS resolvedAt
+       FROM implementation_blockers
+       WHERE change_id = ? AND resolved_at IS NOT NULL ${upperBound}
+       ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
+      resolvedAtOrBefore === undefined ? [changeId] : [changeId, resolvedAtOrBefore],
+    );
+    return yield* decodePersisted(operationName, () => {
+      const row = rows[0];
+      if (row === undefined) return null;
+      const owner = decodeStoredString(row.changeId, "Implementation Blocker Change ID");
+      if (owner !== changeId) throw new Error("Implementation Blocker belongs to another Change");
+      decodeStoredSqlitePositiveInteger(
+        row.sequence,
+        row.sequenceType,
+        "Implementation Blocker sequence",
+      );
+      decodeStoredString(row.resolvedAt, "Implementation Blocker resolution time");
+      return decodeStoredString(row.id, "Implementation Blocker ID");
+    });
+  });
+
 const readSelectedBlockers = (
   sql: SqlClient.SqlClient,
   changeId: string,
@@ -778,8 +816,11 @@ const getPassingEvidence = (
       return encoded === null ? null : decodeSqliteAcceptanceContextSnapshot(encoded);
     });
     const implementationDecisions = yield* listDecisions(sql, authority.id);
-    const blockerHistory = yield* readBlockers(sql, authority.id, operationName);
-    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
+    const currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
+      sql,
+      authority.id,
+      operationName,
+    );
     const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
     const expectedAcceptanceContext = acceptanceContext ?? undefined;
     let current: PassingPublicationEvidence | undefined;
@@ -794,22 +835,38 @@ const getPassingEvidence = (
           headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
           run: decodeValidationRun(row),
         };
-        validateValidationRunAuthorityRelationships(decoded.run, authority.id, blockerHistory);
         return decoded;
       });
+      yield* decodePersisted(operationName, () =>
+        validateValidationRunImplementationDecisionRelationships(evidence.run, authority.id),
+      );
       if (
-        evidence.run.record.candidateId === evidence.publicationCandidateId &&
-        evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId &&
-        evidence.run.implementationDecisionsSnapshot === expectedDecisionsSnapshot &&
-        isDeepStrictEqual(
+        evidence.run.record.candidateId !== evidence.publicationCandidateId ||
+        evidence.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot ||
+        !isDeepStrictEqual(
           evidence.run.record.policy.acceptanceContext,
           expectedAcceptanceContext,
-        ) &&
-        (query?.candidateId === undefined ||
-          evidence.publicationCandidateId === query.candidateId) &&
-        (query?.changeBaseSha === undefined || evidence.changeBaseSha === query.changeBaseSha) &&
-        (query?.policy === undefined || isDeepStrictEqual(evidence.run.record.policy, query.policy))
-      ) {
+        ) ||
+        (query?.candidateId !== undefined &&
+          evidence.publicationCandidateId !== query.candidateId) ||
+        (query?.changeBaseSha !== undefined && evidence.changeBaseSha !== query.changeBaseSha) ||
+        (query?.policy !== undefined &&
+          !isDeepStrictEqual(evidence.run.record.policy, query.policy))
+      )
+        continue;
+      const latestResolvedBlockerIdAtRun = yield* readLatestResolvedBlockerId(
+        sql,
+        authority.id,
+        operationName,
+        evidence.run.record.createdAt,
+      );
+      yield* decodePersisted(operationName, () =>
+        validateValidationRunLatestResolvedBlockerRelationship(
+          evidence.run,
+          latestResolvedBlockerIdAtRun,
+        ),
+      );
+      if (evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId) {
         current = evidence;
         break;
       }
