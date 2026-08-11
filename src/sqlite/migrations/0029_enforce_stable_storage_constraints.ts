@@ -135,7 +135,8 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
       OR
       (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL AND
        (cleanup_state = 'pending' OR cleanup_blocking_reason IS NULL))
-    )
+    ),
+    CHECK (cancel_reason IS NULL OR (state = 'closed' AND close_reason = 'cancelled'))
   ) STRICT`);
   yield* sql.unsafe(`INSERT INTO changes SELECT * FROM changes_before_stable_constraints`);
 
@@ -390,7 +391,10 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
     ON candidate_validation_runs (
       candidate_id, policy_snapshot, implementation_decisions, latest_resolved_blocker_id
     )
-    WHERE outcome = 'passed'`);
+    WHERE outcome = 'passed' AND latest_resolved_blocker_id IS NOT NULL`);
+  yield* sql.unsafe(`CREATE UNIQUE INDEX candidate_validation_runs_reuse_without_blocker_idx
+    ON candidate_validation_runs (candidate_id, policy_snapshot, implementation_decisions)
+    WHERE outcome = 'passed' AND latest_resolved_blocker_id IS NULL`);
   yield* sql.unsafe(
     "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
   );

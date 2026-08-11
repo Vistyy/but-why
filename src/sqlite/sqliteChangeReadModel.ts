@@ -2,7 +2,6 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
-import { changeState } from "../change/change.js";
 import type { ChangeStartRecord } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,
@@ -117,9 +116,6 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
   const closeReason = decodeCloseReason(row.closeReason);
   const closedAt = decodeStoredNullableString(row.closedAt, "Change closure time");
   const cancelReason = decodeStoredNullableString(row.cancelReason, "Change cancellation reason");
-  if (cancelReason !== null && (state !== changeState.closed || closeReason !== "cancelled")) {
-    throw new Error("Stored Change cancellation reason is inconsistent with lifecycle");
-  }
 
   const cleanupState = decodeStoredString(
     row.cleanupState,

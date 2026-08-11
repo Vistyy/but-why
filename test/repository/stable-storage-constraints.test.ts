@@ -47,6 +47,19 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
         ),
       );
       yield* expectSqlRejection(
+        repository.operation("reject a Change cancellation reason without cancellation", (sql) =>
+          sql.unsafe(`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, state,
+              created_at, updated_at, cancel_reason
+            ) VALUES (
+              'change-cancel-reason', '/repo/.git', 'refs/heads/change-cancel-reason',
+              'open', 'now', 'now', 'reason'
+            )
+          `),
+        ),
+      );
+      yield* expectSqlRejection(
         repository.operation("reject an unsupported Tooling Failure kind", (sql) =>
           sql.unsafe(`
             INSERT INTO candidate_validation_tooling_failures (
@@ -60,6 +73,40 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           sql.unsafe(`
             INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
             VALUES ('missing-dependent', 'missing-prerequisite')
+          `),
+        ),
+      );
+      yield* repository.operation("install passed Validation Run reuse facts", (sql) =>
+        Effect.gen(function* () {
+          yield* sql.unsafe(`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, state, created_at, updated_at
+            ) VALUES ('change-reuse', '/repo/.git', 'refs/heads/change-reuse', 'open', 'now', 'now')
+          `);
+          yield* sql.unsafe(`
+            INSERT INTO candidates (
+              id, change_id, change_base_sha, head_sha, created_at
+            ) VALUES ('candidate-reuse', 'change-reuse', 'base', 'head', 'now')
+          `);
+          yield* sql.unsafe(`
+            INSERT INTO candidate_validation_runs (
+              id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at,
+              implementation_decisions, latest_resolved_blocker_id
+            ) VALUES (
+              'run-reuse-1', 'candidate-reuse', '{}', 'complete', 'passed', 'now', 'now', '[]', NULL
+            )
+          `);
+        }),
+      );
+      yield* expectSqlRejection(
+        repository.operation("reject duplicate passed Validation Run reuse facts", (sql) =>
+          sql.unsafe(`
+            INSERT INTO candidate_validation_runs (
+              id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at,
+              implementation_decisions, latest_resolved_blocker_id
+            ) VALUES (
+              'run-reuse-2', 'candidate-reuse', '{}', 'complete', 'passed', 'now', 'now', '[]', NULL
+            )
           `),
         ),
       );

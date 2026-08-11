@@ -2838,8 +2838,20 @@ describe("repository SQL storage", () => {
         const repository = yield* RepositorySql;
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
-            yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
+            yield* sql.unsafe("PRAGMA foreign_keys = OFF");
+            yield* sql.unsafe(`CREATE TABLE changes_pre_cancel_reason AS SELECT
+              id, repository_common_directory, branch_ref, task_id, state, close_reason,
+              created_at, updated_at, closed_at, base_ref, base_remote_url, starting_commit,
+              worktree_path, acceptance_context, prepare_command, prepare_timeout_seconds,
+              prepare_failure, publication_candidate_id, publication_validation_run_id,
+              publication_owner, publication_repo, publication_base_branch,
+              publication_remote_name, publication_head_branch, publication_expected_head_sha,
+              publication_pr_number, publication_pr_url, cleanup_state, cleanup_blocking_reason
+              FROM changes`);
+            yield* sql.unsafe("DROP TABLE changes");
+            yield* sql.unsafe("ALTER TABLE changes_pre_cancel_reason RENAME TO changes");
             yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 29`;
+            yield* sql.unsafe("PRAGMA foreign_keys = ON");
           }),
         );
 
