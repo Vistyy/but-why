@@ -8,7 +8,10 @@ import {
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
 } from "../../src/reviewerPrompts/specialistReviewerPrompt.js";
-import { buildTaskReviewerPrompt } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import {
+  buildTaskReviewerPrompt,
+  taskReviewInstructions,
+} from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 
 const expectOrdered = (prompt: string, values: readonly string[]): void => {
   let previousIndex = -1;
@@ -63,10 +66,14 @@ describe("reviewer prompts", () => {
     const prompt = buildTaskReviewerPrompt({ proposal, dependencyEvidence });
 
     expectOrdered(prompt, [
+      "Determine whether the Task is ready to authorize for implementation from the current repository state.",
+      "When a consequential technical hypothesis requires real-system evidence, recommend a bounded spike before Task Approval.",
+      "An exclusion in a prerequisite Task limits that prerequisite's work; it does not prohibit later dependent work unless current accepted authority establishes that prohibition.",
       `Exact Task proposal:\n${JSON.stringify(proposal)}`,
       `Captured direct Task Dependency evidence:\n${JSON.stringify({ dependencies: dependencyEvidence })}`,
-      "Inspect the repository at the exact Review Base before deciding.",
+      "Return exactly one JSON object inside this XML tag:",
     ]);
+    expect(taskReviewInstructions).not.toMatch(/shell|parser|external integration/iu);
   });
 
   it("composes an Acceptance Reviewer prompt from the exact authority and review inputs", () => {
