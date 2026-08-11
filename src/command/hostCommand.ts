@@ -38,7 +38,9 @@ const runCommand = (
 ): Effect.Effect<HostCommandResult, unknown, never> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const baseCommand = Command.make(input.command, ...(input.args ?? []));
+      const baseCommand = Command.make(input.command, ...(input.args ?? [])).pipe(
+        Command.stdin(Stream.empty),
+      );
       const command =
         input.cwd === undefined ? baseCommand : Command.workingDirectory(baseCommand, input.cwd);
       const runningCommand = yield* Effect.uninterruptible(
