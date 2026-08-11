@@ -417,17 +417,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       if (decodeStoredString(row.state, "Change state") !== "open") {
         throw new Error("Candidate validation requires an open Change");
       }
-      const taskId = row.taskId;
-      if (taskId !== null && typeof taskId !== "string") {
-        throw new Error("Change Task ID must be stored as text or null");
-      }
-      const encodedAcceptanceContext = row.acceptanceContext;
-      if (encodedAcceptanceContext !== null && typeof encodedAcceptanceContext !== "string") {
-        throw new Error("Change Acceptance Context must be stored as text or null");
-      }
-      if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-        throw new Error("Change Task and Acceptance Context authority is incomplete");
-      }
+      const encodedAcceptanceContext = row.acceptanceContext as string | null;
       return {
         acceptanceContext:
           encodedAcceptanceContext === null

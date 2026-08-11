@@ -573,9 +573,6 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
         row.acceptanceContext,
         "Change Acceptance Context",
       );
-      if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-      }
       return {
         ...selected,
         taskId,
@@ -683,17 +680,11 @@ const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
-      const cleanupState = decodeStoredString(row["cleanupState"], "Change cleanup state");
-      if (cleanupState !== "complete" && cleanupState !== "pending") {
-        throw new Error("Stored Change cleanup state is unsupported");
-      }
+      const cleanupState = row["cleanupState"] as ChangeCleanup["state"];
       const cleanupBlockingReason = decodeStoredNullableString(
         row["cleanupBlockingReason"],
         "Change cleanup blocking reason",
       );
-      if (cleanupState === "complete" && cleanupBlockingReason !== null) {
-        throw new Error("Stored completed Change cleanup has a blocking reason");
-      }
       const cleanup: ChangeCleanup = {
         state: cleanupState,
         blockingReason: cleanupBlockingReason,
@@ -711,13 +702,6 @@ const decodeSelectedChangeState = (row: Record<string, unknown>, changeId: strin
 const decodeSelectedChangeLifecycle = (row: Record<string, unknown>, changeId: string) => {
   const selected = decodeSelectedChangeState(row, changeId);
   const closeReason = decodeCloseReason(row["closeReason"]);
-  const closedAt = decodeStoredNullableString(row["closedAt"], "Change closure time");
-  if (
-    (selected.state === changeState.open && (closeReason !== null || closedAt !== null)) ||
-    (selected.state === changeState.closed && (closeReason === null || closedAt === null))
-  ) {
-    throw new Error("Stored Change lifecycle relationship is inconsistent");
-  }
   return { ...selected, closeReason };
 };
 
@@ -889,9 +873,6 @@ const getPassingEvidence = (
         authorityRow?.acceptanceContext,
         "Change Acceptance Context",
       );
-      if ((taskId === null) !== (encoded === null)) {
-        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-      }
       return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
     });
     const expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));

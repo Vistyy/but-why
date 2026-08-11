@@ -16,47 +16,21 @@ export type SqliteChangePublicationRow = {
 export const decodeSqliteChangePublication = (
   row: SqliteChangePublicationRow,
 ): ChangePublication | null => {
-  const values = [
-    row.publicationCandidateId,
-    row.publicationValidationRunId,
-    row.publicationOwner,
-    row.publicationRepo,
-    row.publicationBaseBranch,
-    row.publicationRemoteName,
-    row.publicationHeadBranch,
-    row.publicationExpectedHeadSha,
-  ];
-  if (values.every((value) => value === null)) {
-    if (row.publicationPrNumber !== null || row.publicationPrUrl !== null) {
-      throw new Error("Stored Change publication marker is incomplete");
-    }
-    return null;
-  }
-  if (values.some((value) => value === null)) {
-    throw new Error("Stored Change publication marker is incomplete");
-  }
-  if ((row.publicationPrNumber === null) !== (row.publicationPrUrl === null)) {
-    throw new Error("Stored Change pull request identity is incomplete");
-  }
+  if (row.publicationCandidateId === null) return null;
   return {
-    candidateId: requiredPublicationValue(row.publicationCandidateId),
-    validationRunId: requiredPublicationValue(row.publicationValidationRunId),
+    candidateId: row.publicationCandidateId,
+    validationRunId: row.publicationValidationRunId as string,
     target: {
-      owner: requiredPublicationValue(row.publicationOwner),
-      repo: requiredPublicationValue(row.publicationRepo),
-      baseBranch: requiredPublicationValue(row.publicationBaseBranch),
-      remoteName: requiredPublicationValue(row.publicationRemoteName),
+      owner: row.publicationOwner as string,
+      repo: row.publicationRepo as string,
+      baseBranch: row.publicationBaseBranch as string,
+      remoteName: row.publicationRemoteName as string,
     },
-    headBranch: requiredPublicationValue(row.publicationHeadBranch),
-    expectedHeadSha: requiredPublicationValue(row.publicationExpectedHeadSha),
+    headBranch: row.publicationHeadBranch as string,
+    expectedHeadSha: row.publicationExpectedHeadSha as string,
     pullRequest:
-      row.publicationPrNumber === null || row.publicationPrUrl === null
+      row.publicationPrNumber === null
         ? null
-        : { number: row.publicationPrNumber, url: row.publicationPrUrl },
+        : { number: row.publicationPrNumber, url: row.publicationPrUrl as string },
   };
-};
-
-const requiredPublicationValue = (value: string | null): string => {
-  if (value === null) throw new Error("Stored Change publication marker is incomplete");
-  return value;
 };

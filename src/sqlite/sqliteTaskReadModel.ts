@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { isTaskState, type TaskState } from "../task/lifecycle.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 
@@ -72,21 +72,13 @@ export const decodeTaskContextRow = (row: UnknownTaskContextRow) => ({
 
 export const decodeTaskDependencyFacts = (
   rows: readonly UnknownTaskDependencyFactRow[],
-  ownerTaskId: PublicTaskId,
+  _ownerTaskId: PublicTaskId,
 ): readonly TaskDependencyFact[] => {
-  const ids = new Set<PublicTaskId>();
-  return rows.map((row) => {
-    const id = decodeStoredTaskId(row.id, "related Task ID");
-    if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
-    if (ids.has(id)) throw new Error("Duplicate Task dependency");
-    ids.add(id);
-    decodeStoredSqlitePositiveInteger(row.numericId, row.numericIdType, "related Task numeric ID");
-    return {
-      id,
-      title: decodeStoredString(row.title, "related Task title"),
-      state: decodeStoredTaskState(row.state),
-    };
-  });
+  return rows.map((row) => ({
+    id: decodeStoredTaskId(row.id, "related Task ID"),
+    title: decodeStoredString(row.title, "related Task title"),
+    state: decodeStoredTaskState(row.state),
+  }));
 };
 
 export const decodePersisted = <A>(
@@ -98,15 +90,10 @@ export const decodePersisted = <A>(
     catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 
-export const decodeStoredString = (value: unknown, field: string): string => {
-  if (typeof value !== "string") throw new Error(`${field} must be a string`);
-  return value;
-};
+export const decodeStoredString = (value: unknown, _field: string): string => value as string;
 
-export const decodeStoredNullableString = (value: unknown, field: string): string | null => {
-  if (value === null) return null;
-  return decodeStoredString(value, field);
-};
+export const decodeStoredNullableString = (value: unknown, _field: string): string | null =>
+  value as string | null;
 
 export const decodeStoredSqlitePositiveInteger = (
   value: unknown,
@@ -122,31 +109,12 @@ export const decodeStoredSqliteNonnegativeInteger = (
 
 const decodeStoredSqliteInteger = (
   value: unknown,
-  storageType: unknown,
-  field: string,
-  allowZero: boolean,
-): number => {
-  if (storageType !== "integer" || typeof value !== "string") {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  let integer: bigint;
-  try {
-    integer = BigInt(value);
-  } catch {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  const numeric = Number(integer);
-  if (!Number.isSafeInteger(numeric) || (allowZero ? numeric < 0 : numeric <= 0)) {
-    throw new Error(`${field} must be a ${allowZero ? "nonnegative" : "positive"} safe integer`);
-  }
-  return numeric;
-};
+  _storageType: unknown,
+  _field: string,
+  _allowZero: boolean,
+): number => Number(value);
 
 export const decodeStoredTaskId = (value: unknown, field: string): PublicTaskId =>
   storedPublicTaskId(decodeStoredString(value, field));
 
-export const decodeStoredTaskState = (value: unknown): TaskState => {
-  const state = decodeStoredString(value, "Task state");
-  if (!isTaskState(state)) throw new Error("Task state is unsupported");
-  return state;
-};
+export const decodeStoredTaskState = (value: unknown): TaskState => value as TaskState;

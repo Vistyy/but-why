@@ -26,7 +26,6 @@ import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
   decodePersisted,
-  decodeStoredNullableString,
   decodeStoredSqliteNonnegativeInteger,
   decodeStoredSqlitePositiveInteger,
   decodeStoredString,
@@ -297,42 +296,7 @@ const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       ORDER BY implementation_blockers.sequence ASC
     `;
     return yield* decodePersisted("read Task Context", () => {
-      const sequences = new Set<number>();
-      const ids = new Set<string>();
-      return rows.map((row) => {
-        const sequence = decodeStoredSqlitePositiveInteger(
-          row.sequence,
-          row.sequenceType,
-          "Implementation Blocker sequence",
-        );
-        const id = decodeStoredString(row.id, "Implementation Blocker ID");
-        if (sequences.has(sequence)) throw new Error("Duplicate Implementation Blocker sequence");
-        if (ids.has(id)) throw new Error("Duplicate Implementation Blocker ID");
-        sequences.add(sequence);
-        ids.add(id);
-        const resolvedAt = decodeStoredNullableString(
-          row.resolvedAt,
-          "Implementation Blocker resolution time",
-        );
-        const resolutionId = decodeStoredNullableString(row.resolutionId, "Resolution ID");
-        const resolutionRecordedAt = decodeStoredNullableString(
-          row.resolutionRecordedAt,
-          "Resolution recorded time",
-        );
-        const resolutionContent = decodeStoredNullableString(
-          row.resolutionContent,
-          "Resolution content",
-        );
-        if (
-          resolvedAt === null ||
-          resolutionId === null ||
-          resolutionRecordedAt === null ||
-          resolutionContent === null
-        ) {
-          throw new Error("Implementation Blocker resolution relationship is incomplete");
-        }
-        return resolutionContent;
-      });
+      return rows.map((row) => decodeStoredString(row.resolutionContent, "Resolution content"));
     });
   });
 

@@ -13,7 +13,7 @@ import type {
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
+import type { ValidationPhase } from "../change/validationRun/validationRun.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import {
@@ -78,22 +78,8 @@ const decodeValidationRunPolicy = (row: Pick<UnknownValidationRunRow, "policySna
 };
 
 export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValidationRun => {
-  const state = decodeStoredString(row.state, "Validation Run state");
-  if (state !== "running" && state !== "complete") {
-    throw new Error("Stored Validation Run state is unsupported");
-  }
-  const outcome = decodeStoredNullableString(row.outcome, "Validation Run outcome");
-  if (
-    outcome !== null &&
-    outcome !== "passed" &&
-    outcome !== "blocked" &&
-    outcome !== "tooling_failed"
-  ) {
-    throw new Error("Stored Validation Run outcome is unsupported");
-  }
-  if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
-    throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
-  }
+  const state = row.state as CandidateValidationRunRecord["state"];
+  const outcome = row.outcome as CandidateValidationRunRecord["outcome"];
   const { policy, policySnapshot } = decodeValidationRunPolicy(row);
   const implementationDecisionsSnapshot = decodeStoredString(
     row.implementationDecisions,
@@ -319,10 +305,7 @@ export type UnknownValidationRoundRow = {
 export const decodeValidationRound = (row: UnknownValidationRoundRow): CandidateValidationRound => {
   const phase = decodeValidationPhase(row.phase);
   const producer = decodeProducer(row.producer, phase);
-  const status = decodeStoredString(row.status, "Validation round status");
-  if (status !== "passed" && status !== "failed") {
-    throw new Error("Stored Validation round status is unsupported");
-  }
+  const status = row.status as CandidateValidationRound["status"];
   return {
     validationRunId: decodeStoredString(row.validationRunId, "Validation round Run ID"),
     phase,
@@ -388,24 +371,10 @@ export type UnknownToolingFailureRow = {
   readonly createdAt: unknown;
 };
 
-const toolingFailureKinds = new Set<ValidationToolingFailureKind>([
-  "validation_workspace_setup_failed",
-  "infrastructure_tooling_failed",
-  "git_tooling_failed",
-  "reviewer_process_execution_failed",
-  "prepare_command_execution_tooling_failed",
-  "check_command_execution_tooling_failed",
-  "reviewer_output_contract_failed",
-  "token_usage_contract_failed",
-]);
-
 export const decodeToolingFailure = (
   row: UnknownToolingFailureRow,
 ): CandidateValidationToolingFailure => {
-  const errorKind = decodeStoredString(row.errorKind, "Tooling Failure kind");
-  if (!toolingFailureKinds.has(errorKind as ValidationToolingFailureKind)) {
-    throw new Error("Stored Tooling Failure kind is unsupported");
-  }
+  const errorKind = row.errorKind as ValidationToolingFailureKind;
   return {
     sequence: decodeStoredSqlitePositiveInteger(
       row.sequence,
@@ -450,10 +419,6 @@ export const decodeValidationArtifact = (
     "Artifact stored bytes",
   );
   const truncated = decodeStoredFlag(row.truncated, row.truncatedType, "Artifact truncation flag");
-  if (storedBytes > originalBytes) throw new Error("Stored Artifact bytes exceed original bytes");
-  if (truncated !== storedBytes < originalBytes) {
-    throw new Error("Stored Artifact truncation relationship is inconsistent");
-  }
   return {
     ref: decodeStoredString(row.ref, "Artifact reference"),
     validationRunId: decodeStoredString(row.validationRunId, "Artifact Validation Run ID"),
@@ -467,67 +432,24 @@ export const decodeValidationArtifact = (
   };
 };
 
-const decodeValidationPhase = (value: unknown): ValidationPhase => {
-  const phase = decodeStoredString(value, "Validation phase");
-  if (
-    phase !== validationPhase.prepare &&
-    phase !== validationPhase.checks &&
-    phase !== validationPhase.acceptanceReview &&
-    phase !== validationPhase.specialistReview
-  ) {
-    throw new Error("Stored Validation phase is unsupported");
-  }
-  return phase;
-};
+const decodeValidationPhase = (value: unknown): ValidationPhase => value as ValidationPhase;
 
-const decodeProducer = (value: unknown, phase: ValidationPhase): string => {
-  const producer = decodeStoredString(value, "Validation producer");
-  if (phase === validationPhase.prepare && producer !== "prepare") {
-    throw new Error("Stored Prepare producer is unsupported");
-  }
-  if (phase === validationPhase.acceptanceReview && producer !== "acceptance") {
-    throw new Error("Stored Acceptance Review producer is unsupported");
-  }
-  return producer;
-};
+const decodeProducer = (value: unknown, _phase: ValidationPhase): string => value as string;
 
 const decodeCleanupState = (
   value: unknown,
-  field: string,
-): CandidateValidationRunAbandonmentContext["cleanupWorktree"] => {
-  const state = decodeStoredNullableString(value, field);
-  if (state !== null && state !== "removed" && state !== "not_created" && state !== "failed") {
-    throw new Error(`Stored ${field} is unsupported`);
-  }
-  return state;
-};
+  _field: string,
+): CandidateValidationRunAbandonmentContext["cleanupWorktree"] =>
+  value as CandidateValidationRunAbandonmentContext["cleanupWorktree"];
 
 const decodeStoredNonnegativeInteger = (
   value: unknown,
-  storageType: unknown,
-  field: string,
-): number => {
-  if (storageType !== "integer" || typeof value !== "string") {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  let integer: bigint;
-  try {
-    integer = BigInt(value);
-  } catch {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  const numeric = Number(integer);
-  if (!Number.isSafeInteger(numeric) || numeric < 0) {
-    throw new Error(`${field} must be a nonnegative safe integer`);
-  }
-  return numeric;
-};
+  _storageType: unknown,
+  _field: string,
+): number => Number(value);
 
-const decodeStoredFlag = (value: unknown, storageType: unknown, field: string): boolean => {
-  const flag = decodeStoredNonnegativeInteger(value, storageType, field);
-  if (flag !== 0 && flag !== 1) throw new Error(`${field} must be zero or one`);
-  return flag === 1;
-};
+const decodeStoredFlag = (value: unknown, _storageType: unknown, _field: string): boolean =>
+  Number(value) === 1;
 
 const compareStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;

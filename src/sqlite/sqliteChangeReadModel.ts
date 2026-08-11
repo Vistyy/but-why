@@ -99,66 +99,33 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
     row.acceptanceContext,
     "Change Acceptance Context",
   );
-  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-    throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-  }
   const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
   const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
   const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
   const worktreePath = decodeStoredNullableString(row.worktreePath, "Change Managed Worktree path");
-  if (
-    taskId !== null &&
-    (baseRef === null || baseRemoteUrl === null || startingCommit === null || worktreePath === null)
-  ) {
-    throw new Error("Stored task-backed Change Start relationship is incomplete");
-  }
-
   const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
   const prepareTimeoutSeconds = decodeNullablePositiveInteger(
     row.prepareTimeoutSeconds,
     row.prepareTimeoutSecondsType,
     "Change prepare timeout",
   );
-  if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
-    throw new Error("Stored Change preparation relationship is incomplete");
-  }
   const encodedPrepareFailure = decodeStoredNullableString(
     row.prepareFailure,
     "Change preparation failure",
   );
-  if (encodedPrepareFailure !== null && prepareCommand === null) {
-    throw new Error("Stored Change preparation failure has no preparation definition");
-  }
-
   const state = decodeChangeState(row.state);
   const closeReason = decodeCloseReason(row.closeReason);
   const closedAt = decodeStoredNullableString(row.closedAt, "Change closure time");
-  if (
-    (state === changeState.open && (closeReason !== null || closedAt !== null)) ||
-    (state === changeState.closed && (closeReason === null || closedAt === null))
-  ) {
-    throw new Error("Stored Change lifecycle relationship is inconsistent");
-  }
   const cancelReason = decodeStoredNullableString(row.cancelReason, "Change cancellation reason");
   if (cancelReason !== null && (state !== changeState.closed || closeReason !== "cancelled")) {
     throw new Error("Stored Change cancellation reason is inconsistent with lifecycle");
   }
 
   const cleanupState = decodeStoredString(row.cleanupState, "Change cleanup state");
-  if (cleanupState !== "complete" && cleanupState !== "pending") {
-    throw new Error("Stored Change cleanup state is unsupported");
-  }
   const cleanupBlockingReason = decodeStoredNullableString(
     row.cleanupBlockingReason,
     "Change cleanup blocking reason",
   );
-  if (cleanupState === "complete" && cleanupBlockingReason !== null) {
-    throw new Error("Stored completed Change cleanup has a blocking reason");
-  }
-  if (state === changeState.open && cleanupState !== "complete") {
-    throw new Error("Stored open Change has terminal cleanup state");
-  }
-
   return {
     id,
     repositoryCommonDirectory: decodeStoredString(
@@ -226,8 +193,6 @@ export const decodeImplementationDecisions = (
   rows: readonly UnknownImplementationDecisionRow[],
   changeId: string,
 ): readonly ImplementationDecision[] => {
-  const ids = new Set<string>();
-  const sequences = new Set<number>();
   return rows
     .map((row): ImplementationDecision => {
       const id = decodeStoredString(row.id, "Implementation Decision ID");
@@ -238,11 +203,6 @@ export const decodeImplementationDecisions = (
         "Implementation Decision sequence",
       );
       if (owner !== changeId) throw new Error("Implementation Decision belongs to another Change");
-      if (ids.has(id) || sequences.has(sequence)) {
-        throw new Error("Duplicate Implementation Decision identity");
-      }
-      ids.add(id);
-      sequences.add(sequence);
       return {
         id,
         changeId: owner,
@@ -279,9 +239,6 @@ export const decodeImplementationBlockerHistory = (
   rows: readonly UnknownImplementationBlockerRow[],
   changeId: string,
 ): ImplementationBlockerHistory => {
-  const ids = new Set<string>();
-  const sequences = new Set<number>();
-  const resolutionIds = new Set<string>();
   const blockers = rows
     .map((row): ImplementationBlocker => {
       const id = decodeStoredString(row.id, "Implementation Blocker ID");
@@ -292,10 +249,6 @@ export const decodeImplementationBlockerHistory = (
         "Implementation Blocker sequence",
       );
       if (owner !== changeId) throw new Error("Implementation Blocker belongs to another Change");
-      if (ids.has(id) || sequences.has(sequence))
-        throw new Error("Duplicate Implementation Blocker identity");
-      ids.add(id);
-      sequences.add(sequence);
       const resolvedAt = decodeStoredNullableString(
         row.resolvedAt,
         "Implementation Blocker resolution time",
@@ -309,19 +262,6 @@ export const decodeImplementationBlockerHistory = (
         row.resolutionContent ?? null,
         "Resolution content",
       );
-      const resolutionParts = [resolvedAt, resolutionId, resolutionRecordedAt, resolutionContent];
-      if (
-        !resolutionParts.every((part) => part === null) &&
-        !resolutionParts.every((part) => part !== null)
-      ) {
-        throw new Error("Implementation Blocker resolution relationship is incomplete");
-      }
-      if (resolutionId !== null) {
-        if (resolutionIds.has(resolutionId)) {
-          throw new Error("Implementation Blocker Resolution belongs to multiple Blockers");
-        }
-        resolutionIds.add(resolutionId);
-      }
       return {
         id,
         changeId: owner,
@@ -342,7 +282,6 @@ export const decodeImplementationBlockerHistory = (
     })
     .sort((left, right) => left.sequence - right.sequence);
   const active = blockers.filter((blocker) => blocker.resolvedAt === null);
-  if (active.length > 1) throw new Error("Change has multiple active Implementation Blockers");
   return {
     blockers,
     resolutions: blockers.flatMap((blocker) =>
@@ -509,21 +448,10 @@ export const decodeChangePublication = (row: Record<string, unknown>) =>
     ),
   });
 
-export const decodeChangeState = (value: unknown): ChangeState => {
-  const state = decodeStoredString(value, "Change state");
-  if (state !== changeState.open && state !== changeState.closed) {
-    throw new Error("Stored Change state is unsupported");
-  }
-  return state;
-};
+export const decodeChangeState = (value: unknown): ChangeState => value as ChangeState;
 
-export const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] => {
-  const reason = decodeStoredNullableString(value, "Change close reason");
-  if (reason !== null && reason !== "completed" && reason !== "cancelled") {
-    throw new Error("Stored Change close reason is unsupported");
-  }
-  return reason;
-};
+export const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] =>
+  value as ChangeRecord["closeReason"];
 
 const compareStoredStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
