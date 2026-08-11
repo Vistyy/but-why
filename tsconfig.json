@@ -1,4 +1,5 @@
 {
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
   "compilerOptions": {
     "target": "ES2024",
     "module": "NodeNext",
@@ -18,7 +19,46 @@
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": true,
+        "ignoreEffectErrorsInTscExitCode": false,
+        "diagnosticSeverity": {
+          "missingEffectContext": "warning",
+          "missingEffectError": "warning",
+          "missingLayerContext": "warning",
+          "outdatedApi": "off",
+          "promiseInEffectSuccess": "error",
+          "schemaLiteralNonFinite": "off",
+          "schemaOpaqueInstanceMember": "off"
+        },
+        "overrides": [
+          {
+            "include": [
+              "src/agent/piReviewerProcessExecutor.ts",
+              "src/change/validation/ensureCandidateIntegrity.ts",
+              "src/change/validation/runCheckRound.ts",
+              "src/change/validation/runPreparePhase.ts",
+              "src/change/validation/verifyCandidateIntegrity.ts",
+              "src/command/hostCommand.ts",
+              "src/command/runTimedCommand.ts",
+              "src/command/workspaceCommand.ts",
+              "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
+              "src/repositoryPreparation/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "anyUnknownInErrorContext": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["test/effect-diagnostics/*.ts"]
 }
