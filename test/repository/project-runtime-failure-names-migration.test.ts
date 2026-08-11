@@ -2,7 +2,7 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { projectRuntimeFailureNamesMigration } from "../../src/sqlite/migrations/0027_project_runtime_failure_names.js";
+import { projectRuntimeFailureNamesMigration } from "../../src/sqlite/migrations/0028_project_runtime_failure_names.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 
 it.scoped("migrates provider-specific Tooling Failure names to project runtime names", () =>

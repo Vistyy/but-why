@@ -66,10 +66,12 @@ _Avoid_: Latest historical Candidate, dirty workspace
 
 **Candidate Publication**:
 The act of placing one exact Candidate and its passed Validation Run as the head of a Change's owned pull request.
-Publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
+New or revised publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
 Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
 Current publication facts record the exact Candidate, Validation Run, target, head branch, expected head commit, and owned pull request.
-A changed Candidate invalidates current publication until that Candidate is on the owned pull request.
+A completed publication remains ready when its persisted Candidate, persisted Validation Run, exact owned pull request, local Repository Branch head, and current durable Change authority still match.
+Later Change Base or configuration changes do not alter that completed evidence.
+A changed Candidate or durable Change authority requires eligible evidence for the new facts.
 _Avoid_: Current Candidate, mutable pull request state, Submission
 
 **Exact Merged Candidate**:
@@ -90,10 +92,12 @@ _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Im
 
 **Validation Run**:
 One durable execution and judgment of one Candidate under one resolved validation policy.
-Validation persistence admits a new Run only when no unresolved Implementation Blocker exists for the Change, and it keeps at most one Active Validation Run per Change.
-Each Validation Run records the exact Candidate, the Validation Policy Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity at admission.
-Reuse and publication require the exact Candidate, Change Base, current Acceptance Context when present, Validation Policy Snapshot, Implementation Decision input, and latest resolved Implementation Blocker identity, plus Run state `complete` and outcome `passed`.
-A changed Candidate, Resolution, Acceptance Context, policy, or implementation input invalidates current validity without deleting historical evidence.
+Validation start-or-reuse rejects a Change with an unresolved Implementation Blocker, and validation persistence keeps at most one Active Validation Run per Change.
+Each Validation Run records the exact Candidate, the Validation Policy Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity when the Run starts.
+Reuse and new or revised publication require the exact Candidate, Change Base, current Acceptance Context when present, Validation Policy Snapshot, Implementation Decision input, and latest resolved Implementation Blocker identity, plus Run state `complete` and outcome `passed`.
+Current passing evidence is the newest eligible passed Run in immutable Validation Run History.
+A later failed or tooling-failed Run does not hide eligible passing evidence.
+A changed Candidate, Resolution, Acceptance Context, policy, or implementation input requires eligible evidence for the new facts without deleting historical evidence.
 For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
 _Avoid_: Candidate, retry Attempt, generic job
 
@@ -115,7 +119,8 @@ The completed result of a Validation Run: passed, blocked by Findings, or failed
 _Avoid_: Needs Input, reviewer status, Task state
 
 **Validation Run History**:
-The ordered immutable Validation Runs retained for one Change and its Candidates.
+The ordered immutable Validation Runs retained for one Change and its Candidates, including passed, Findings-blocked, tooling-failed, and abandoned Runs.
+History does not select or invalidate current passing evidence by recency alone.
 _Avoid_: Mutable current report
 
 **Validation Policy Snapshot**:
@@ -200,7 +205,8 @@ Durable authority must use the applicable Task or Change operation instead.
 _Avoid_: Task Context, Acceptance Context, Implementation Decision, complete implementation instructions
 
 **Submission**:
-The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.
+The point-in-time act of asking But Why to return an exact completed publication when it remains ready or otherwise fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.
+Submission checks completed publication evidence before it fetches a newer Change Base or resolves current configuration.
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
 _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 

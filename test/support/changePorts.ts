@@ -6,6 +6,7 @@ import type {
   ChangeReadPort,
   ChangeReviewerSessionPort,
   ChangeReviewerTranscriptPort,
+  ChangeSubmissionPort,
 } from "../../src/change/changePorts.js";
 import {
   openSqliteCandidatePublicationPort,
@@ -14,6 +15,7 @@ import {
   openSqliteChangeReadPort,
   openSqliteChangeReviewerSessionPort,
   openSqliteChangeReviewerTranscriptPort,
+  openSqliteChangeSubmissionPort,
 } from "../../src/sqlite/sqliteChangePersistence.js";
 
 export const openSqliteChangeTestDependencies = () =>
@@ -24,6 +26,7 @@ export const openSqliteChangeTestDependencies = () =>
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     publication: openSqliteCandidatePublicationPort(),
+    submission: openSqliteChangeSubmissionPort(),
   });
 
 export type ChangeTestDependencies = {
@@ -33,4 +36,5 @@ export type ChangeTestDependencies = {
   readonly reviewerSessions: ChangeReviewerSessionPort;
   readonly reviewerTranscripts: ChangeReviewerTranscriptPort;
   readonly publication: CandidatePublicationPort;
+  readonly submission: ChangeSubmissionPort;
 };

@@ -267,11 +267,6 @@ export const createValidationRunFixture = (
               ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
             )
           `;
-          yield* sql`
-            INSERT INTO candidate_validation_admissions (candidate_id, validation_run_id)
-            VALUES (${input.candidateId}, ${id})
-            ON CONFLICT(candidate_id) DO UPDATE SET validation_run_id = excluded.validation_run_id
-          `;
         }),
       );
       if (input.state === "running") {
