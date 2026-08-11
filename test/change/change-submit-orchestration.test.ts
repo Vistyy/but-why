@@ -12,7 +12,7 @@ import type { ChangeRecord } from "../../src/change/change.js";
 import type { ChangeSubmissionPort } from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
-  GitHubPullRequestGateway,
+  GitHubPullRequestReader,
 } from "../../src/change/ownedPullRequestGateway.js";
 import type {
   PublishCandidateInput,
@@ -1597,7 +1597,7 @@ const pullRequestGateway = (
   },
   events: string[],
   observations: PullRequestObservation[],
-): GitHubPullRequestGateway => ({
+): GitHubPullRequestReader => ({
   getPullRequest: () => {
     events.push("observe_pull_request");
     if (input.observedPullRequest !== undefined) {
@@ -1626,9 +1626,6 @@ const pullRequestGateway = (
       },
     };
   },
-  findPullRequests: () => ({ ok: true, pullRequests: [] }),
-  createPullRequest: () => ({ ok: false, code: "remote_rejected" }),
-  updatePullRequest: () => ({ ok: false, code: "remote_rejected" }),
 });
 
 const unavailablePullRequestRead = {

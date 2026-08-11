@@ -32,7 +32,7 @@ import {
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { GitHubPullRequestReader } from "./ownedPullRequestGateway.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
@@ -174,7 +174,7 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
-  readonly github: GitHubPullRequestGateway;
+  readonly github: GitHubPullRequestReader;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
     worktreePath: string,
