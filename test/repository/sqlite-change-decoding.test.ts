@@ -376,6 +376,25 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:20:00.000Z",
         });
         if (!captured.ok) throw new Error(captured.code);
+        yield* repository.operation("make captured Change task-backed", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO tasks (
+                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+              ) VALUES (
+                'BY-903', 903, 'Scoped task lookup', 'Ignore unrelated Blocker history.',
+                'todo', NULL, '2026-08-09T20:20:00.000Z', '2026-08-09T20:20:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET task_id = 'BY-903', acceptance_context =
+                '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
+                base_remote_url = 'https://github.com/acme/repo.git',
+                starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
         const raised = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need authority.",
@@ -448,6 +467,19 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:23:00.000Z",
         });
         if (!second.ok) throw new Error(second.code);
+        yield* repository.operation(
+          "corrupt active Blocker outside task cancellation selection",
+          (sql) =>
+            sql`UPDATE implementation_blockers SET content = x'02' WHERE id = ${second.blocker.id}`,
+        );
+        expect(yield* cancellation.getChangeByTaskId("BY-903")).toMatchObject({
+          id: captured.changeId,
+        });
+        yield* repository.operation(
+          "restore active Blocker",
+          (sql) =>
+            sql`UPDATE implementation_blockers SET content = 'Need another decision.' WHERE id = ${second.blocker.id}`,
+        );
         const secondResolution = yield* changes.authority.resolveImplementationBlocker({
           changeId: captured.changeId,
           content: "Proceed again.",

@@ -272,7 +272,10 @@ export const openSqliteChangeCancellationPort = () =>
         repository.transaction("read Change for cancellation", (sql) =>
           getBaseById(sql, changeId, "read Change for cancellation"),
         ),
-      getChangeByTaskId: adapter.getChangeByTaskId,
+      getChangeByTaskId: (taskId) =>
+        repository.transaction("read Change by Task for cancellation", (sql) =>
+          getBaseByTaskId(sql, taskId, "read Change by Task for cancellation"),
+        ),
       completeMergedChange: adapter.completeMergedChange,
       cancelChange: adapter.cancelChange,
     };
@@ -697,6 +700,14 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
       taskId,
     ]),
     (rows) => mapTaskRow(rows[0], "read Change by Task", sql),
+  );
+
+const getBaseByTaskId = (sql: SqlClient.SqlClient, taskId: string, operationName: string) =>
+  Effect.flatMap(
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
+      taskId,
+    ]),
+    (rows) => mapBaseRow(rows[0], operationName, sql),
   );
 
 const getPassingEvidence = (
