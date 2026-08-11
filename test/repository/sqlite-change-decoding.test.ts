@@ -342,9 +342,9 @@ describe("SQLite Change decoding", () => {
           "inject open Change terminal cleanup",
           (sql) => sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
         );
-        expect(
-          yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
-        ).toEqual([]);
+        expect(yield* changes.delivery.listChangesForReconciliation(input.commonDirectory)).toEqual(
+          [],
+        );
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "restore open Change cleanup",
