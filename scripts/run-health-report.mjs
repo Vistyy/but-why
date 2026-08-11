@@ -106,6 +106,8 @@ const duplication = decodeObject(
     "dupes",
     "--no-production",
     "--no-cache",
+    "--threshold",
+    "0",
     "--format",
     "json",
     "--quiet",

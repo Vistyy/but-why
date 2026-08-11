@@ -258,7 +258,7 @@ case "$*" in
     printf '%s' '{"findings":[{"path":"src/complex.ts","name":"complexWork","line":4,"col":7,"severity":"high","actions":[{"description":"Extract focused helper functions"}]}]}'
     ;;
   *"fallow dupes"*)
-    [[ " $* " != *" --fail-on-issues "* ]] || exit 8
+    [[ " $* " == *" --threshold 0 "* && " $* " != *" --fail-on-issues "* ]] || exit 8
     printf '%s' '{"clone_groups":[{"fingerprint":"dup:1234","instances":[{"file":"src/first.ts","start_line":8,"start_col":3,"end_line":12,"end_col":5},{"file":"src/second.ts","start_line":20,"start_col":2,"end_line":24,"end_col":4}],"actions":[{"description":"Extract the shared behavior"}]}]}'
     ;;
   *"effect-tsgo diagnostics"*)
