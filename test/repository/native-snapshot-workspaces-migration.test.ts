@@ -2,9 +2,9 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { nativeSnapshotWorkspacesMigration } from "../../src/sqlite/migrations/0029_native_snapshot_workspaces.js";
-import { preNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0030_pre_native_snapshot_workspace_cleanup.js";
-import { backfillPreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0031_backfill_pre_native_snapshot_workspace_cleanup.js";
+import { nativeSnapshotWorkspacesMigration } from "../../src/sqlite/migrations/0030_native_snapshot_workspaces.js";
+import { preNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0031_pre_native_snapshot_workspace_cleanup.js";
+import { backfillPreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0032_backfill_pre_native_snapshot_workspace_cleanup.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 
 it.scoped("backfills exact cleanup identity after the original native migration", () =>
@@ -33,9 +33,13 @@ it.scoped("backfills exact cleanup identity after the original native migration"
     `);
     yield* sql.unsafe(`
       CREATE TABLE candidate_validation_tooling_failures (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        validation_run_id TEXT NOT NULL,
         error_kind TEXT NOT NULL,
-        operation_name TEXT NOT NULL
-      )
+        operation_name TEXT NOT NULL,
+        error_message TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT
     `);
     yield* sql.unsafe(`
       INSERT INTO candidate_validation_workspace_setups (
@@ -55,11 +59,15 @@ it.scoped("backfills exact cleanup identity after the original native migration"
       VALUES ('change-1', 'run-1')
     `);
     yield* sql.unsafe(`
-      INSERT INTO candidate_validation_tooling_failures (error_kind, operation_name)
-      VALUES
-        ('validation_workspace_setup_failed', 'create_temp_ref'),
-        ('validation_workspace_setup_failed', 'create_disposable_workspace'),
-        ('validation_workspace_setup_failed', 'cleanup_validation_workspace')
+      INSERT INTO candidate_validation_tooling_failures (
+        validation_run_id, error_kind, operation_name, error_message, created_at
+      ) VALUES
+        ('run-1', 'validation_workspace_setup_failed', 'create_temp_ref', 'failure',
+         '2026-08-11T10:01:00.000Z'),
+        ('run-1', 'validation_workspace_setup_failed', 'create_disposable_workspace', 'failure',
+         '2026-08-11T10:02:00.000Z'),
+        ('run-1', 'validation_workspace_setup_failed', 'cleanup_validation_workspace', 'failure',
+         '2026-08-11T10:03:00.000Z')
     `);
 
     yield* nativeSnapshotWorkspacesMigration;

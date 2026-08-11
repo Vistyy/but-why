@@ -10,6 +10,5 @@ export const preNativeSnapshotWorkspaceCleanupMigration = Effect.gen(function* (
       workspace_path TEXT NOT NULL,
       expected_commit_sha TEXT NOT NULL,
       FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
-    )
-  `);
+    ) STRICT`);
 });

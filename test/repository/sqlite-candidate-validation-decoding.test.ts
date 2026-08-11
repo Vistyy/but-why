@@ -201,21 +201,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
           ]);
 
           yield* repository.operation(
-            "install malformed historical Candidate",
-            (sql) => sql`UPDATE candidates SET head_sha = X'07' WHERE id = ${prior.candidateId}`,
-          );
-          expect(
-            yield* validation.reads.getCurrentCandidateForChange(current.changeId),
-          ).toMatchObject({
-            id: current.candidateId,
-            headSha: "current",
-          });
-          yield* repository.operation(
-            "restore historical Candidate",
-            (sql) => sql`UPDATE candidates SET head_sha = 'prior' WHERE id = ${prior.candidateId}`,
-          );
-
-          yield* repository.operation(
             "install opaque malformed Snapshot",
             (sql) =>
               sql`UPDATE candidate_validation_runs SET policy_snapshot = '{not-json' WHERE id = ${priorRun.validationRunId}`,
@@ -316,58 +301,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
         });
         if (!current.ok) throw new Error(`Candidate capture failed: ${current.code}`);
 
-        yield* repository.operation("install orphan Tooling Failure", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`PRAGMA foreign_keys = OFF`;
-            yield* sql`INSERT INTO candidate_validation_tooling_failures (validation_run_id, error_kind, operation_name, error_message, created_at) VALUES ('unknown-run', 'infrastructure_tooling_failed', 'orphan operation', 'orphan failure', ${now})`;
-            yield* sql`PRAGMA foreign_keys = ON`;
-          }),
-        );
-        expect(
-          yield* validation.reads.listToolingFailures("unknown-run").pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "remove orphan Tooling Failure",
-          (sql) =>
-            sql`DELETE FROM candidate_validation_tooling_failures WHERE validation_run_id = 'unknown-run'`,
-        );
-
-        yield* repository.operation(
-          "install wrong Candidate scalar",
-          (sql) => sql`UPDATE candidates SET head_sha = X'07' WHERE id = ${prior.candidateId}`,
-        );
-        expect(
-          yield* capture.commitCapture({
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/malformed-decoding",
-            baseRef: "refs/remotes/origin/main",
-            changeBaseSha: "base",
-            headSha: "current",
-            expectedChangeId: prior.changeId,
-            now,
-          }),
-        ).toMatchObject({ ok: true, candidateId: current.candidateId, reused: true });
-        yield* repository.operation(
-          "restore Candidate scalar",
-          (sql) => sql`UPDATE candidates SET head_sha = 'prior' WHERE id = ${prior.candidateId}`,
-        );
-
-        yield* repository.operation("install invalid Validation Run lifecycle", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`PRAGMA ignore_check_constraints = ON`;
-            yield* sql`UPDATE candidate_validation_runs SET state = 'running', outcome = 'passed' WHERE id = ${started.validationRunId}`;
-          }),
-        );
-        expect(
-          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation("restore Validation Run lifecycle", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`UPDATE candidate_validation_runs SET state = 'complete', outcome = 'blocked' WHERE id = ${started.validationRunId}`;
-            yield* sql`PRAGMA ignore_check_constraints = OFF`;
-          }),
-        );
-
         yield* repository.operation("install resolved Blocker history", (sql) =>
           Effect.gen(function* () {
             yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('older-blocker', ${prior.changeId}, '2026-08-09T22:00:00.000Z', 'Older blocker.', '2026-08-09T22:01:00.000Z', 'older-resolution', '2026-08-09T22:01:00.000Z', 'Older resolution.')`;
@@ -413,53 +346,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
         );
 
         yield* repository.operation(
-          "install unsafe Artifact number",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET original_bytes = 9007199254740992, stored_bytes = 10, truncated = 1 WHERE ref = 'artifact-malformed'`,
-        );
-        expect(
-          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "install invalid Artifact relationship",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET original_bytes = 9, stored_bytes = 10, truncated = 0 WHERE ref = 'artifact-malformed'`,
-        );
-        expect(
-          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation("install invalid Artifact flag", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`PRAGMA ignore_check_constraints = ON`;
-            yield* sql`UPDATE candidate_validation_artifacts SET original_bytes = 10, stored_bytes = 10, truncated = 2 WHERE ref = 'artifact-malformed'`;
-          }),
-        );
-        expect(
-          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation("restore Artifact", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`UPDATE candidate_validation_artifacts SET original_bytes = 10, stored_bytes = 10, truncated = 0 WHERE ref = 'artifact-malformed'`;
-            yield* sql`PRAGMA ignore_check_constraints = OFF`;
-          }),
-        );
-
-        yield* repository.operation(
-          "detach Artifact from its Validation round",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET phase = 'checks', producer = 'retired-check' WHERE ref = 'artifact-malformed'`,
-        );
-        expect(
-          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "restore Artifact round relationship",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET phase = 'acceptance_review', producer = 'acceptance' WHERE ref = 'artifact-malformed'`,
-        );
-
-        yield* repository.operation(
-          "install Finding without a related round",
+          "attach Finding to a passed Check round",
           (sql) =>
             sql`UPDATE candidate_validation_findings SET phase = 'checks', producer = 'types' WHERE id = 'finding-malformed'`,
         );
@@ -542,49 +429,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
           (sql) =>
             sql`UPDATE candidate_validation_rounds SET round_number = 1 WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
         );
-
-        yield* repository.operation(
-          "install duplicate Acceptance Review round",
-          (sql) =>
-            sql`INSERT INTO candidate_validation_rounds (validation_run_id, phase, producer, round_number, status, created_at) VALUES (${started.validationRunId}, 'acceptance_review', 'acceptance', 2, 'failed', ${now})`,
-        );
-        expect(
-          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "remove duplicate Acceptance Review round",
-          (sql) =>
-            sql`DELETE FROM candidate_validation_rounds WHERE validation_run_id = ${started.validationRunId} AND phase = 'acceptance_review' AND round_number = 2`,
-        );
-
-        yield* repository.operation(
-          "install malformed skipped history round",
-          (sql) =>
-            sql`UPDATE candidate_validation_rounds SET phase = 'retired_phase' WHERE validation_run_id = ${started.validationRunId}`,
-        );
-        expect(
-          yield* validation.execution.listPreviousCandidateReviewerFindings({
-            candidateId: current.candidateId,
-            phase: "acceptance_review",
-            producer: "acceptance",
-          }),
-        ).toEqual([]);
-        yield* repository.operation(
-          "restore history round",
-          (sql) =>
-            sql`UPDATE candidate_validation_rounds SET phase = 'acceptance_review' WHERE validation_run_id = ${started.validationRunId}`,
-        );
-
-        yield* repository.operation("install foreign Candidate relationship", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`PRAGMA foreign_keys = OFF`;
-            yield* sql`UPDATE candidates SET change_id = 'foreign-change' WHERE id = ${prior.candidateId}`;
-            yield* sql`PRAGMA foreign_keys = ON`;
-          }),
-        );
-        expect(
-          yield* validation.reads.getCandidateById(prior.candidateId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),
   );

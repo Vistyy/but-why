@@ -6,6 +6,7 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { encodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -14,16 +15,15 @@ import {
   changeReadColumns,
   decodeChangeRow,
   requireChangeStartRecord,
-  type UnknownChangeRow,
+  type StoredChangeRow,
   validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import {
   decodePersisted,
-  decodeStoredTaskState,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
-  type UnknownTaskContextRow,
-  type UnknownTaskDependencyFactRow,
+  type StoredTaskContextRow,
+  type StoredTaskDependencyFactRow,
 } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeStartPersistence = (): Effect.Effect<
@@ -107,21 +107,20 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
 
 const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownEligibilityTaskRow>`
+    const rows = yield* sql<StoredEligibilityTaskRow>`
       SELECT id, title, description, state FROM tasks WHERE id = ${taskId}
     `;
     const row = rows[0];
     if (row === undefined) return { ok: false as const, code: "task_not_found" as const };
     const task = yield* decodePersisted("prepare Task-backed Change Start", () => ({
       ...decodeTaskContextRow(row),
-      state: decodeStoredTaskState(row.state),
+      state: row.state,
     }));
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
-    const dependencyRows = yield* sql<UnknownTaskDependencyFactRow>`
-      SELECT tasks.id, CAST(tasks.numeric_id AS TEXT) AS numericId,
-        typeof(tasks.numeric_id) AS numericIdType, tasks.title, tasks.state
+    const dependencyRows = yield* sql<StoredTaskDependencyFactRow>`
+      SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
       FROM task_dependencies
       LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId}
@@ -137,16 +136,10 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly state: unknown }>`
+    const rows = yield* sql<{ readonly state: TaskState }>`
       SELECT state FROM tasks WHERE id = ${taskId}
     `;
-    return rows[0] === undefined
-      ? undefined
-      : {
-          state: yield* decodePersisted("prepare Task-backed Change Start", () =>
-            decodeStoredTaskState(rows[0]?.state),
-          ),
-        };
+    return rows[0] === undefined ? undefined : { state: rows[0].state };
   });
 
 const recordPrepareOutcome = (
@@ -168,7 +161,7 @@ const recordPrepareOutcome = (
 
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.flatMap(
-    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
+    sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
       taskId,
     ]),
     (rows) => mapRow(rows[0], sql),
@@ -176,13 +169,13 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
+    sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
       changeId,
     ]),
     (rows) => mapRow(rows[0], sql),
   );
 
-const mapRow = (row: UnknownChangeRow | undefined, sql: SqlClient.SqlClient) =>
+const mapRow = (row: StoredChangeRow | undefined, sql: SqlClient.SqlClient) =>
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
@@ -196,6 +189,6 @@ const mapRow = (row: UnknownChangeRow | undefined, sql: SqlClient.SqlClient) =>
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
-type UnknownEligibilityTaskRow = UnknownTaskContextRow & {
-  readonly state: unknown;
+type StoredEligibilityTaskRow = StoredTaskContextRow & {
+  readonly state: TaskState;
 };

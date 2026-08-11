@@ -1495,31 +1495,6 @@ describe("repository SQL storage", () => {
             validationRunId: first.validationRunId,
           });
 
-          yield* repository.operation("install incomplete Task authority relationship", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`
-                INSERT INTO tasks (
-                  id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
-                ) VALUES (
-                  'BY-904', 904, 'Incomplete evidence authority',
-                  'Require the Task Acceptance Context relationship.', 'todo', NULL,
-                  '2026-07-25T16:12:00.000Z', '2026-07-25T16:12:00.000Z'
-                )
-              `;
-              yield* sql`PRAGMA ignore_check_constraints = ON`;
-              yield* sql`UPDATE changes SET task_id = 'BY-904' WHERE id = ${captured.changeId}`;
-              yield* sql`PRAGMA ignore_check_constraints = OFF`;
-            }),
-          );
-          const incompleteAuthorityError = yield* changes.authority
-            .getCurrentPassingEvidence(captured.changeId)
-            .pipe(Effect.flip);
-          expect(incompleteAuthorityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          yield* repository.operation(
-            "restore taskless evidence authority",
-            (sql) => sql`UPDATE changes SET task_id = NULL WHERE id = ${captured.changeId}`,
-          );
-
           yield* repository.operation(
             "corrupt Run authority outside a policy-mismatched query",
             (sql) =>
@@ -1540,22 +1515,6 @@ describe("repository SQL storage", () => {
             (sql) =>
               sql`UPDATE candidate_validation_runs SET implementation_decisions = ${JSON.stringify([recordedDecision.decision])}
                   WHERE id = ${first.validationRunId}`,
-          );
-
-          yield* repository.operation(
-            "corrupt Decision outside a base-mismatched query",
-            (sql) =>
-              sql`UPDATE implementation_decisions SET choice = x'01' WHERE id = ${recordedDecision.decision.id}`,
-          );
-          expect(
-            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
-              changeBaseSha: "other-base",
-            }),
-          ).toBeUndefined();
-          yield* repository.operation(
-            "restore Decision after base-mismatched query",
-            (sql) =>
-              sql`UPDATE implementation_decisions SET choice = 'Choose the passing path' WHERE id = ${recordedDecision.decision.id}`,
           );
 
           yield* repository.operation(
@@ -1757,30 +1716,6 @@ describe("repository SQL storage", () => {
           const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
 
-          yield* repository.operation("corrupt selected Resolution relationship", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`PRAGMA ignore_check_constraints = ON`;
-              yield* sql`UPDATE implementation_blockers SET resolution_content = NULL
-                          WHERE id = ${secondResolved.blocker.id}`;
-              yield* sql`PRAGMA ignore_check_constraints = OFF`;
-            }),
-          );
-          const incompleteResolutionError = yield* changes.authority
-            .getCurrentPassingEvidence(captured.changeId)
-            .pipe(Effect.flip);
-          expect(incompleteResolutionError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          yield* repository.operation(
-            "restore selected Resolution relationship",
-            (sql) =>
-              sql`UPDATE implementation_blockers SET resolution_content = 'Proceed after the second decision.'
-                  WHERE id = ${secondResolved.blocker.id}`,
-          );
-
-          yield* repository.operation(
-            "corrupt obsolete Blocker content",
-            (sql) =>
-              sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${resolved.blocker.id}`,
-          );
           expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
             candidateId: captured.candidateId,
             validationRunId: afterSecondResolution.validationRunId,
@@ -2111,7 +2046,8 @@ describe("repository SQL storage", () => {
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
               yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 31`;
+
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 32`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -2411,9 +2347,10 @@ describe("repository SQL storage", () => {
           { migration_id: 26, name: "current_candidate_validation_admissions" },
           { migration_id: 27, name: "remove_candidate_validation_admissions" },
           { migration_id: 28, name: "project_runtime_failure_names" },
-          { migration_id: 29, name: "native_snapshot_workspaces" },
-          { migration_id: 30, name: "pre_native_snapshot_workspace_cleanup" },
-          { migration_id: 31, name: "backfill_pre_native_snapshot_workspace_cleanup" },
+          { migration_id: 29, name: "enforce_stable_storage_constraints" },
+          { migration_id: 30, name: "native_snapshot_workspaces" },
+          { migration_id: 31, name: "pre_native_snapshot_workspace_cleanup" },
+          { migration_id: 32, name: "backfill_pre_native_snapshot_workspace_cleanup" },
         ]);
         expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -2422,20 +2359,6 @@ describe("repository SQL storage", () => {
           "change_base_sha",
           "head_sha",
           "created_at",
-        ]);
-        const workspaceColumns = yield* repositorySql.operation(
-          "read Snapshot Workspace shape",
-          (sql) =>
-            sql<{
-              readonly name: string;
-            }>`PRAGMA table_info(candidate_snapshot_workspaces)`,
-        );
-        expect(workspaceColumns.map(({ name }) => name)).toEqual([
-          "validation_run_id",
-          "expected_commit_sha",
-          "cleanup_workspace",
-          "created_at",
-          "workspace_path",
         ]);
         const decisionColumns = yield* repositorySql.operation(
           "read Implementation Decision shape",
@@ -2480,9 +2403,21 @@ describe("repository SQL storage", () => {
                 ('BY-4', 4, 'Cancelled Task', 'Supported cancelled.', 'cancelled', 'Not needed', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z')`;
               yield* sql`INSERT INTO task_comments (id, task_id, created_at, content) VALUES ('comment-1', 'BY-2', '2026-07-25T16:31:00.000Z', 'Keep this comment.')`;
               yield* sql`INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id) VALUES ('BY-2', 'BY-3')`;
-              yield* sql`INSERT INTO changes (id, repository_common_directory, branch_ref, task_id, state, close_reason, cancel_reason, created_at, updated_at, closed_at, cleanup_state) VALUES
-                ('change-open', ${directory}, 'refs/heads/open', 'BY-2', 'open', NULL, NULL, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', NULL, 'complete'),
-                ('change-closed', ${directory}, 'refs/heads/closed', 'BY-3', 'closed', 'completed', NULL, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete')`;
+              yield* sql`INSERT INTO changes (
+                id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                cancel_reason, created_at, updated_at, closed_at, cleanup_state,
+                base_ref, base_remote_url, starting_commit, worktree_path, acceptance_context
+              ) VALUES
+                ('change-open', ${directory}, 'refs/heads/open', 'BY-2', 'open', NULL, NULL,
+                 '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', NULL, 'complete',
+                 'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-open',
+                 ${join(directory, "open")},
+                 '{"version":1,"title":"Todo Task","description":"Supported todo."}'),
+                ('change-closed', ${directory}, 'refs/heads/closed', 'BY-3', 'closed', 'completed', NULL,
+                 '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z',
+                 '2026-07-25T16:30:00.000Z', 'complete', 'refs/remotes/origin/main',
+                 'https://github.com/acme/repo.git', 'base-closed', ${join(directory, "closed")},
+                 '{"version":1,"title":"Done Task","description":"Supported done."}')`;
             }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
           );
 
@@ -2673,16 +2608,21 @@ describe("repository SQL storage", () => {
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, task_id, state, close_reason,
-                      created_at, updated_at, closed_at
+                      created_at, updated_at, closed_at, base_ref, base_remote_url,
+                      starting_commit, worktree_path, acceptance_context
                     ) VALUES (
                       'change-supported-merged', ${directory}, 'refs/heads/supported-merged',
                       'BY-1', 'closed', 'completed', '2026-07-25T16:30:00.000Z',
-                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "supported-merged")},
+                      '{"version":1,"title":"Merged Done Task","description":"Must survive migration."}'
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2938,9 +2878,22 @@ describe("repository SQL storage", () => {
         const repository = yield* RepositorySql;
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
-            yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
+            yield* sql.unsafe("PRAGMA foreign_keys = OFF");
+            yield* sql.unsafe(`CREATE TABLE changes_pre_cancel_reason AS SELECT
+              id, repository_common_directory, branch_ref, task_id, state, close_reason,
+              created_at, updated_at, closed_at, base_ref, base_remote_url, starting_commit,
+              worktree_path, acceptance_context, prepare_command, prepare_timeout_seconds,
+              prepare_failure, publication_candidate_id, publication_validation_run_id,
+              publication_owner, publication_repo, publication_base_branch,
+              publication_remote_name, publication_head_branch, publication_expected_head_sha,
+              publication_pr_number, publication_pr_url, cleanup_state, cleanup_blocking_reason
+              FROM changes`);
+            yield* sql.unsafe("DROP TABLE changes");
+            yield* sql.unsafe("ALTER TABLE changes_pre_cancel_reason RENAME TO changes");
             yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 31`;
+
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 32`;
+            yield* sql.unsafe("PRAGMA foreign_keys = ON");
           }),
         );
 
@@ -3050,7 +3003,8 @@ describe("repository SQL storage", () => {
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3127,7 +3081,8 @@ describe("repository SQL storage", () => {
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3202,7 +3157,8 @@ describe("repository SQL storage", () => {
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 32`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -3459,17 +3415,23 @@ describe("repository SQL storage", () => {
                   `;
                   yield* sql`
                     INSERT INTO changes (
-                      id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at,
+                      id, repository_common_directory, branch_ref, task_id, state,
+                      created_at, updated_at, base_ref, base_remote_url, starting_commit,
+                      worktree_path, acceptance_context,
                       no_change_candidate_id, no_change_validation_run_id
                     ) VALUES (
                       'change-unsupported-no-change', ${directory}, 'refs/heads/unsupported-no-change',
                       'BY-1', 'open', '2026-07-25T17:00:00.000Z', '2026-07-25T17:00:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "unsupported-no-change")},
+                      '{"version":1,"title":"Unsupported No-Change Task","description":"Must stop migration."}',
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3507,24 +3469,19 @@ describe("repository SQL storage", () => {
               const repository = yield* RepositorySql;
               yield* repository.operation("restore persisted readiness facts", (sql) =>
                 Effect.gen(function* () {
+                  yield* sql`PRAGMA defer_foreign_keys = ON`;
                   yield* sql`ALTER TABLE changes ADD COLUMN readiness TEXT`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state, created_at, updated_at,
                       base_ref, base_remote_url, starting_commit, worktree_path,
-                      readiness, prepare_command, prepare_timeout_seconds, prepare_failure,
-                      publication_candidate_id, publication_validation_run_id, publication_owner,
-                      publication_repo, publication_base_branch, publication_remote_name,
-                      publication_head_branch, publication_expected_head_sha,
-                      publication_pr_number, publication_pr_url
+                      readiness, prepare_command, prepare_timeout_seconds, prepare_failure
                     ) VALUES (
                       'change-with-failure', ${directory}, 'refs/heads/with-failure', 'open',
                       '2026-07-25T17:30:00.000Z', '2026-07-25T17:30:00.000Z',
                       'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
                       ${join(directory, "worktree")}, 'prepare_failed', 'just prepare', 1200,
-                      '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}',
-                      'candidate-1', 'run-1', 'acme', 'repo', 'main', 'origin',
-                      'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
+                      '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}'
                     )
                   `;
                   yield* sql`
@@ -3546,9 +3503,20 @@ describe("repository SQL storage", () => {
                       '2026-07-25T17:30:00.000Z'
                     )
                   `;
+                  yield* sql`
+                    UPDATE changes SET
+                      publication_candidate_id = 'candidate-1',
+                      publication_validation_run_id = 'run-1', publication_owner = 'acme',
+                      publication_repo = 'repo', publication_base_branch = 'main',
+                      publication_remote_name = 'origin', publication_head_branch = 'with-failure',
+                      publication_expected_head_sha = 'head-sha', publication_pr_number = 42,
+                      publication_pr_url = 'https://github.com/acme/repo/pull/42'
+                    WHERE id = 'change-with-failure'
+                  `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3660,7 +3628,8 @@ describe("repository SQL storage", () => {
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                     yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 31`;
+
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 32`;
                   }),
                 );
               }).pipe(
@@ -3767,7 +3736,8 @@ describe("repository SQL storage", () => {
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3854,7 +3824,8 @@ describe("repository SQL storage", () => {
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
                   yield* rollbackNativeSnapshotWorkspaceMigration(sql);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 31`;
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -4010,43 +3981,6 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("reports a malformed Change record through the typed error channel", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestDependencies();
-        const started = yield* starts.create({
-          id: "change-malformed",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-malformed",
-          baseRef: "main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-malformed"),
-          now: "2026-07-17T23:10:00.000Z",
-        });
-        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
-
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "corrupt Change publication marker",
-          (sql) => sql`
-            UPDATE changes
-            SET publication_candidate_id = 'candidate-malformed'
-            WHERE id = ${started.change.id}
-          `,
-        );
-
-        const error = yield* changes.reads.getChangeById(started.change.id).pipe(Effect.flip);
-        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(error).toMatchObject({
-          _tag: "RepositoryPersistedDataInvalid",
-          operationName: "read Change",
-        });
-      }),
-    ),
-  );
-
   it.scoped("reports SQL operation failures through the typed error channel", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {
@@ -4134,8 +4068,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(31);
-          expect(yield* readMigrationCount).toBe(31);
+          expect(yield* readMigrationCount).toBe(32);
+          expect(yield* readMigrationCount).toBe(32);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -4235,9 +4169,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(31);
+              expect(migrations.length).toBe(32);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 31 }, (_, index) => index + 1),
+                Array.from({ length: 32 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -4336,7 +4270,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 31,
+              migrationCount: 32,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

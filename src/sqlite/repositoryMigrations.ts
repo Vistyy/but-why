@@ -28,9 +28,10 @@ import { repairValidationPolicySnapshotOkFieldMigration as repairValidationPolic
 import { currentCandidateValidationAdmissionsMigration as currentCandidateValidationAdmissions } from "./migrations/0026_current_candidate_validation_admissions.js";
 import { removeCandidateValidationAdmissionsMigration as removeCandidateValidationAdmissions } from "./migrations/0027_remove_candidate_validation_admissions.js";
 import { projectRuntimeFailureNamesMigration as projectRuntimeFailureNames } from "./migrations/0028_project_runtime_failure_names.js";
-import { nativeSnapshotWorkspacesMigration as nativeSnapshotWorkspaces } from "./migrations/0029_native_snapshot_workspaces.js";
-import { preNativeSnapshotWorkspaceCleanupMigration as preNativeSnapshotWorkspaceCleanup } from "./migrations/0030_pre_native_snapshot_workspace_cleanup.js";
-import { backfillPreNativeSnapshotWorkspaceCleanupMigration as backfillPreNativeSnapshotWorkspaceCleanup } from "./migrations/0031_backfill_pre_native_snapshot_workspace_cleanup.js";
+import { enforceStableStorageConstraintsMigration as enforceStableStorageConstraints } from "./migrations/0029_enforce_stable_storage_constraints.js";
+import { nativeSnapshotWorkspacesMigration as nativeSnapshotWorkspaces } from "./migrations/0030_native_snapshot_workspaces.js";
+import { preNativeSnapshotWorkspaceCleanupMigration as preNativeSnapshotWorkspaceCleanup } from "./migrations/0031_pre_native_snapshot_workspace_cleanup.js";
+import { backfillPreNativeSnapshotWorkspaceCleanupMigration as backfillPreNativeSnapshotWorkspaceCleanup } from "./migrations/0032_backfill_pre_native_snapshot_workspace_cleanup.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -61,9 +62,10 @@ const migrations = {
   "0026_current_candidate_validation_admissions": currentCandidateValidationAdmissions,
   "0027_remove_candidate_validation_admissions": removeCandidateValidationAdmissions,
   "0028_project_runtime_failure_names": projectRuntimeFailureNames,
-  "0029_native_snapshot_workspaces": nativeSnapshotWorkspaces,
-  "0030_pre_native_snapshot_workspace_cleanup": preNativeSnapshotWorkspaceCleanup,
-  "0031_backfill_pre_native_snapshot_workspace_cleanup": backfillPreNativeSnapshotWorkspaceCleanup,
+  "0029_enforce_stable_storage_constraints": enforceStableStorageConstraints,
+  "0030_native_snapshot_workspaces": nativeSnapshotWorkspaces,
+  "0031_pre_native_snapshot_workspace_cleanup": preNativeSnapshotWorkspaceCleanup,
+  "0032_backfill_pre_native_snapshot_workspace_cleanup": backfillPreNativeSnapshotWorkspaceCleanup,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

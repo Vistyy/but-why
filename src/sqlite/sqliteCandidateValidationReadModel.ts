@@ -13,21 +13,16 @@ import type {
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
+import type { ValidationPhase } from "../change/validationRun/validationRun.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
-import {
-  decodeStoredNullableString,
-  decodeStoredSqlitePositiveInteger,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
 
-export type UnknownCandidateRow = {
-  readonly id: unknown;
-  readonly changeId: unknown;
-  readonly changeBaseSha: unknown;
-  readonly headSha: unknown;
-  readonly createdAt: unknown;
+export type StoredCandidateRow = {
+  readonly id: string;
+  readonly changeId: string;
+  readonly changeBaseSha: string;
+  readonly headSha: string;
+  readonly createdAt: string;
 };
 
 export const candidateReadColumns = `
@@ -35,24 +30,24 @@ export const candidateReadColumns = `
   candidate.head_sha AS headSha, candidate.created_at AS createdAt
 `;
 
-export const decodeCandidate = (row: UnknownCandidateRow): CandidateRecord => ({
-  id: decodeStoredString(row.id, "Candidate ID"),
-  changeId: decodeStoredString(row.changeId, "Candidate Change ID"),
-  changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
-  headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
-  createdAt: decodeStoredString(row.createdAt, "Candidate creation time"),
+export const decodeCandidate = (row: StoredCandidateRow): CandidateRecord => ({
+  id: row.id,
+  changeId: row.changeId,
+  changeBaseSha: row.changeBaseSha,
+  headSha: row.headSha,
+  createdAt: row.createdAt,
 });
 
-export type UnknownValidationRunRow = {
-  readonly id: unknown;
-  readonly candidateId: unknown;
-  readonly policySnapshot: unknown;
-  readonly implementationDecisions: unknown;
-  readonly latestResolvedBlockerId: unknown;
-  readonly state: unknown;
-  readonly outcome: unknown;
-  readonly createdAt: unknown;
-  readonly updatedAt: unknown;
+export type StoredValidationRunRow = {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly policySnapshot: string;
+  readonly implementationDecisions: string;
+  readonly latestResolvedBlockerId: string | null;
+  readonly state: CandidateValidationRunRecord["state"];
+  readonly outcome: CandidateValidationRunRecord["outcome"];
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
 
 export const validationRunReadColumns = `
@@ -69,40 +64,22 @@ export type DecodedValidationRun = {
   readonly latestResolvedBlockerId: string | null;
 };
 
-const decodeValidationRunPolicy = (row: Pick<UnknownValidationRunRow, "policySnapshot">) => {
-  const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
+const decodeValidationRunPolicy = (row: Pick<StoredValidationRunRow, "policySnapshot">) => {
+  const policySnapshot = row.policySnapshot;
   return {
     policy: decodeSqliteCandidateValidationPolicy(policySnapshot),
     policySnapshot,
   };
 };
 
-export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValidationRun => {
-  const state = decodeStoredString(row.state, "Validation Run state");
-  if (state !== "running" && state !== "complete") {
-    throw new Error("Stored Validation Run state is unsupported");
-  }
-  const outcome = decodeStoredNullableString(row.outcome, "Validation Run outcome");
-  if (
-    outcome !== null &&
-    outcome !== "passed" &&
-    outcome !== "blocked" &&
-    outcome !== "tooling_failed"
-  ) {
-    throw new Error("Stored Validation Run outcome is unsupported");
-  }
-  if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
-    throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
-  }
+export const decodeValidationRun = (row: StoredValidationRunRow): DecodedValidationRun => {
+  const { state, outcome } = row;
   const { policy, policySnapshot } = decodeValidationRunPolicy(row);
-  const implementationDecisionsSnapshot = decodeStoredString(
-    row.implementationDecisions,
-    "Implementation Decision Snapshot",
-  );
+  const implementationDecisionsSnapshot = row.implementationDecisions;
   return {
     record: {
-      id: decodeStoredString(row.id, "Validation Run ID"),
-      candidateId: decodeStoredString(row.candidateId, "Validation Run Candidate ID"),
+      id: row.id,
+      candidateId: row.candidateId,
       policy,
       implementationDecisions: Schema.decodeUnknownSync(
         Schema.parseJson(implementationDecisionSnapshotSchema),
@@ -110,15 +87,12 @@ export const decodeValidationRun = (row: UnknownValidationRunRow): DecodedValida
       )(implementationDecisionsSnapshot),
       state,
       outcome,
-      createdAt: decodeStoredString(row.createdAt, "Validation Run creation time"),
-      updatedAt: decodeStoredString(row.updatedAt, "Validation Run update time"),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     },
     policySnapshot,
     implementationDecisionsSnapshot,
-    latestResolvedBlockerId: decodeStoredNullableString(
-      row.latestResolvedBlockerId,
-      "Validation Run latest resolved Blocker ID",
-    ),
+    latestResolvedBlockerId: row.latestResolvedBlockerId,
   };
 };
 
@@ -186,31 +160,31 @@ export const validateValidationRunImplementationDecisionRelationships = (
   }
 };
 
-export type UnknownActiveValidationRunRow = {
-  readonly validationRunId: unknown;
-  readonly changeId: unknown;
-  readonly runId: unknown;
-  readonly runCandidateId: unknown;
-  readonly runState: unknown;
-  readonly runOutcome: unknown;
-  readonly candidateId: unknown;
-  readonly candidateChangeId: unknown;
-  readonly storedChangeId: unknown;
+export type StoredActiveValidationRunRow = {
+  readonly validationRunId: string;
+  readonly changeId: string;
+  readonly runId: string;
+  readonly runCandidateId: string;
+  readonly runState: CandidateValidationRunRecord["state"];
+  readonly runOutcome: string | null;
+  readonly candidateId: string;
+  readonly candidateChangeId: string;
+  readonly storedChangeId: string;
 };
 
 export const decodeActiveValidationRun = (
-  row: UnknownActiveValidationRunRow,
+  row: StoredActiveValidationRunRow,
   expectedChangeId: string,
 ): ActiveCandidateValidationRun => {
-  const validationRunId = decodeStoredString(row.validationRunId, "Active Validation Run ID");
-  const changeId = decodeStoredString(row.changeId, "Active Validation Run Change ID");
-  const runId = decodeStoredString(row.runId, "related Validation Run ID");
-  const runCandidateId = decodeStoredString(row.runCandidateId, "Validation Run Candidate ID");
-  const candidateId = decodeStoredString(row.candidateId, "related Candidate ID");
-  const candidateChangeId = decodeStoredString(row.candidateChangeId, "Candidate Change ID");
-  const storedChangeId = decodeStoredString(row.storedChangeId, "related Change ID");
-  const runState = decodeStoredString(row.runState, "Active Validation Run state");
-  const runOutcome = decodeStoredNullableString(row.runOutcome, "Active Validation Run outcome");
+  const validationRunId = row.validationRunId;
+  const changeId = row.changeId;
+  const runId = row.runId;
+  const runCandidateId = row.runCandidateId;
+  const candidateId = row.candidateId;
+  const candidateChangeId = row.candidateChangeId;
+  const storedChangeId = row.storedChangeId;
+  const runState = row.runState;
+  const runOutcome = row.runOutcome;
   if (
     changeId !== expectedChangeId ||
     candidateChangeId !== changeId ||
@@ -229,84 +203,64 @@ export const decodeActiveValidationRun = (
   return { validationRunId, changeId };
 };
 
-export type UnknownAbandonmentContextRow = {
-  readonly validationRunId: unknown;
-  readonly runCandidateId: unknown;
-  readonly changeId: unknown;
-  readonly storedChangeId: unknown;
-  readonly candidateId: unknown;
-  readonly submittedSha: unknown;
-  readonly setupValidationRunId: unknown;
-  readonly setupExpectedCommitSha: unknown;
-  readonly worktreePath: unknown;
-  readonly cleanupWorkspace: unknown;
-  readonly preNativeRefName: unknown;
-  readonly preNativeWorkspacePath: unknown;
-  readonly preNativeExpectedCommitSha: unknown;
+export type StoredAbandonmentContextRow = {
+  readonly validationRunId: string;
+  readonly runCandidateId: string;
+  readonly changeId: string;
+  readonly storedChangeId: string;
+  readonly candidateId: string;
+  readonly submittedSha: string;
+  readonly setupValidationRunId: string | null;
+  readonly setupExpectedCommitSha: string | null;
+  readonly worktreePath: string | null;
+  readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
+  readonly preNativeRefName: string | null;
+  readonly preNativeWorkspacePath: string | null;
+  readonly preNativeExpectedCommitSha: string | null;
 };
 
 export const decodeAbandonmentContext = (
-  row: UnknownAbandonmentContextRow,
+  row: StoredAbandonmentContextRow,
   expectedValidationRunId: string,
 ): CandidateValidationRunAbandonmentContext => {
-  const validationRunId = decodeStoredString(row.validationRunId, "Validation Run ID");
-  const runCandidateId = decodeStoredString(row.runCandidateId, "Validation Run Candidate ID");
-  const candidateId = decodeStoredString(row.candidateId, "Candidate ID");
+  const validationRunId = row.validationRunId;
+  const runCandidateId = row.runCandidateId;
+  const candidateId = row.candidateId;
   if (validationRunId !== expectedValidationRunId || runCandidateId !== candidateId) {
     throw new Error("Validation Run abandonment relationship is inconsistent");
   }
-  const changeId = decodeStoredString(row.changeId, "Candidate Change ID");
-  const storedChangeId = decodeStoredString(row.storedChangeId, "related Change ID");
+  const changeId = row.changeId;
+  const storedChangeId = row.storedChangeId;
   if (changeId !== storedChangeId) {
     throw new Error("Validation Run Candidate belongs to an unknown Change");
   }
-  const submittedSha = decodeStoredString(row.submittedSha, "Candidate submitted SHA");
-  const setupValidationRunId = decodeStoredNullableString(
-    row.setupValidationRunId,
-    "Snapshot Workspace Setup Run ID",
-  );
-  const setupExpectedCommitSha = decodeStoredNullableString(
-    row.setupExpectedCommitSha,
-    "Snapshot Workspace expected commit SHA",
-  );
+  const submittedSha = row.submittedSha;
+  const setupValidationRunId = row.setupValidationRunId;
+  const setupExpectedCommitSha = row.setupExpectedCommitSha;
   if (
     setupValidationRunId !== null &&
     (setupValidationRunId !== validationRunId || setupExpectedCommitSha !== submittedSha)
   ) {
     throw new Error("Snapshot Workspace Setup relationship is inconsistent");
   }
-  const cleanupWorkspace = decodeCleanupState(
-    row.cleanupWorkspace,
-    "Snapshot Workspace cleanup state",
-  );
+  const cleanupWorkspace = row.cleanupWorkspace;
   if (setupValidationRunId === null && cleanupWorkspace !== null) {
     throw new Error("Validation Run cleanup state has no Snapshot Workspace Setup");
   }
-  const worktreePath = decodeStoredNullableString(row.worktreePath, "Snapshot Workspace path");
+  const worktreePath = row.worktreePath;
   if (setupValidationRunId !== null && (worktreePath === null || cleanupWorkspace === null)) {
     throw new Error("Snapshot Workspace Setup is incomplete");
   }
-  const preNativeRefName = decodeStoredNullableString(
-    row.preNativeRefName,
-    "pre-native Snapshot Workspace ref name",
-  );
-  const preNativeWorkspacePath = decodeStoredNullableString(
-    row.preNativeWorkspacePath,
-    "pre-native Snapshot Workspace path",
-  );
-  const preNativeExpectedCommitSha = decodeStoredNullableString(
-    row.preNativeExpectedCommitSha,
-    "pre-native Snapshot Workspace expected commit SHA",
-  );
   const preNativeIdentityParts = [
-    preNativeRefName,
-    preNativeWorkspacePath,
-    preNativeExpectedCommitSha,
+    row.preNativeRefName,
+    row.preNativeWorkspacePath,
+    row.preNativeExpectedCommitSha,
   ].filter((value) => value !== null).length;
   if (
     (preNativeIdentityParts !== 0 && preNativeIdentityParts !== 3) ||
-    (preNativeRefName !== null &&
-      (preNativeWorkspacePath !== worktreePath || preNativeExpectedCommitSha !== submittedSha))
+    (row.preNativeRefName !== null &&
+      (row.preNativeWorkspacePath !== worktreePath ||
+        row.preNativeExpectedCommitSha !== submittedSha))
   ) {
     throw new Error("Pre-native Snapshot Workspace cleanup identity is inconsistent");
   }
@@ -316,54 +270,46 @@ export const decodeAbandonmentContext = (
     candidateId,
     submittedSha,
     ...(worktreePath === null ? {} : { worktreePath }),
-    ...(preNativeRefName === null ? {} : { preNativeRefName }),
+    ...(row.preNativeRefName === null ? {} : { preNativeRefName: row.preNativeRefName }),
     cleanupWorkspace,
   };
 };
 
-export type UnknownValidationRoundRow = {
-  readonly validationRunId: unknown;
-  readonly phase: unknown;
-  readonly producer: unknown;
-  readonly roundNumber: unknown;
-  readonly roundNumberType: unknown;
-  readonly status: unknown;
-  readonly createdAt: unknown;
+export type StoredValidationRoundRow = {
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly roundNumber: number;
+  readonly status: CandidateValidationRound["status"];
+  readonly createdAt: string;
 };
 
-export const decodeValidationRound = (row: UnknownValidationRoundRow): CandidateValidationRound => {
-  const phase = decodeValidationPhase(row.phase);
-  const producer = decodeProducer(row.producer, phase);
-  const status = decodeStoredString(row.status, "Validation round status");
-  if (status !== "passed" && status !== "failed") {
-    throw new Error("Stored Validation round status is unsupported");
-  }
+export const decodeValidationRound = (row: StoredValidationRoundRow): CandidateValidationRound => {
+  const phase = row.phase;
+  const producer = row.producer;
+  const status = row.status;
   return {
-    validationRunId: decodeStoredString(row.validationRunId, "Validation round Run ID"),
+    validationRunId: row.validationRunId,
     phase,
     producer,
-    roundNumber: decodeStoredSqlitePositiveInteger(
-      row.roundNumber,
-      row.roundNumberType,
-      "Validation round number",
-    ),
+    roundNumber: row.roundNumber,
     status,
-    createdAt: decodeStoredString(row.createdAt, "Validation round creation time"),
+    createdAt: row.createdAt,
   };
 };
 
-export type UnknownValidationFindingRow = {
-  readonly id: unknown;
-  readonly validationRunId: unknown;
-  readonly phase: unknown;
-  readonly producer: unknown;
-  readonly title: unknown;
-  readonly description: unknown;
-  readonly evidence: unknown;
-  readonly files: unknown;
-  readonly artifactRefs: unknown;
-  readonly createdAt: unknown;
-  readonly updatedAt: unknown;
+export type StoredValidationFindingRow = {
+  readonly id: string;
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly title: string;
+  readonly description: string;
+  readonly evidence: string;
+  readonly files: string;
+  readonly artifactRefs: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
 
 export const findingReadColumns = `
@@ -373,175 +319,76 @@ export const findingReadColumns = `
 `;
 
 export const decodeValidationFinding = (
-  row: UnknownValidationFindingRow,
+  row: StoredValidationFindingRow,
 ): CandidateValidationFinding => {
-  const phase = decodeValidationPhase(row.phase);
+  const phase = row.phase;
   return {
-    id: decodeStoredString(row.id, "Finding ID"),
-    validationRunId: decodeStoredString(row.validationRunId, "Finding Validation Run ID"),
+    id: row.id,
+    validationRunId: row.validationRunId,
     phase,
-    producer: decodeProducer(row.producer, phase),
-    title: decodeStoredString(row.title, "Finding title"),
-    description: decodeStoredString(row.description, "Finding description"),
-    evidence: decodeStoredString(row.evidence, "Finding evidence"),
-    files: decodeSqliteJsonStringArray(decodeStoredString(row.files, "Finding files")),
-    artifactRefs: decodeSqliteJsonStringArray(
-      decodeStoredString(row.artifactRefs, "Finding Artifact references"),
-    ),
-    createdAt: decodeStoredString(row.createdAt, "Finding creation time"),
-    updatedAt: decodeStoredString(row.updatedAt, "Finding update time"),
+    producer: row.producer,
+    title: row.title,
+    description: row.description,
+    evidence: row.evidence,
+    files: decodeSqliteJsonStringArray(row.files),
+    artifactRefs: decodeSqliteJsonStringArray(row.artifactRefs),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 };
 
-export type UnknownToolingFailureRow = {
-  readonly sequence: unknown;
-  readonly sequenceType: unknown;
-  readonly validationRunId: unknown;
-  readonly errorKind: unknown;
-  readonly operationName: unknown;
-  readonly errorMessage: unknown;
-  readonly createdAt: unknown;
+export type StoredToolingFailureRow = {
+  readonly sequence: number;
+  readonly validationRunId: string;
+  readonly errorKind: ValidationToolingFailureKind;
+  readonly operationName: string;
+  readonly errorMessage: string;
+  readonly createdAt: string;
 };
-
-const toolingFailureKinds = new Set<ValidationToolingFailureKind>([
-  "snapshot_workspace_setup_failed",
-  "infrastructure_tooling_failed",
-  "git_tooling_failed",
-  "reviewer_process_execution_failed",
-  "prepare_command_execution_tooling_failed",
-  "check_command_execution_tooling_failed",
-  "reviewer_output_contract_failed",
-  "token_usage_contract_failed",
-]);
 
 export const decodeToolingFailure = (
-  row: UnknownToolingFailureRow,
+  row: StoredToolingFailureRow,
 ): CandidateValidationToolingFailure => {
-  const errorKind = decodeStoredString(row.errorKind, "Tooling Failure kind");
-  if (!toolingFailureKinds.has(errorKind as ValidationToolingFailureKind)) {
-    throw new Error("Stored Tooling Failure kind is unsupported");
-  }
+  const errorKind = row.errorKind;
   return {
-    sequence: decodeStoredSqlitePositiveInteger(
-      row.sequence,
-      row.sequenceType,
-      "Tooling Failure sequence",
-    ),
-    validationRunId: decodeStoredString(row.validationRunId, "Tooling Failure Validation Run ID"),
+    sequence: row.sequence,
+    validationRunId: row.validationRunId,
     errorKind,
-    operationName: decodeStoredString(row.operationName, "Tooling Failure operation name"),
-    errorMessage: decodeStoredString(row.errorMessage, "Tooling Failure error message"),
-    createdAt: decodeStoredString(row.createdAt, "Tooling Failure creation time"),
+    operationName: row.operationName,
+    errorMessage: row.errorMessage,
+    createdAt: row.createdAt,
   };
 };
 
-export type UnknownValidationArtifactRow = {
-  readonly ref: unknown;
-  readonly validationRunId: unknown;
-  readonly phase: unknown;
-  readonly producer: unknown;
-  readonly path: unknown;
-  readonly originalBytes: unknown;
-  readonly originalBytesType: unknown;
-  readonly storedBytes: unknown;
-  readonly storedBytesType: unknown;
-  readonly truncated: unknown;
-  readonly truncatedType: unknown;
-  readonly createdAt: unknown;
+export type StoredValidationArtifactRow = {
+  readonly ref: string;
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly path: string;
+  readonly originalBytes: number;
+  readonly storedBytes: number;
+  readonly truncated: number;
+  readonly createdAt: string;
 };
 
 export const decodeValidationArtifact = (
-  row: UnknownValidationArtifactRow,
+  row: StoredValidationArtifactRow,
 ): CandidateValidationArtifact => {
-  const phase = decodeValidationPhase(row.phase);
-  const originalBytes = decodeStoredNonnegativeInteger(
-    row.originalBytes,
-    row.originalBytesType,
-    "Artifact original bytes",
-  );
-  const storedBytes = decodeStoredNonnegativeInteger(
-    row.storedBytes,
-    row.storedBytesType,
-    "Artifact stored bytes",
-  );
-  const truncated = decodeStoredFlag(row.truncated, row.truncatedType, "Artifact truncation flag");
-  if (storedBytes > originalBytes) throw new Error("Stored Artifact bytes exceed original bytes");
-  if (truncated !== storedBytes < originalBytes) {
-    throw new Error("Stored Artifact truncation relationship is inconsistent");
-  }
+  const phase = row.phase;
+  const { originalBytes, storedBytes } = row;
+  const truncated = row.truncated === 1;
   return {
-    ref: decodeStoredString(row.ref, "Artifact reference"),
-    validationRunId: decodeStoredString(row.validationRunId, "Artifact Validation Run ID"),
+    ref: row.ref,
+    validationRunId: row.validationRunId,
     phase,
-    producer: decodeProducer(row.producer, phase),
-    path: decodeStoredString(row.path, "Artifact path"),
+    producer: row.producer,
+    path: row.path,
     originalBytes,
     storedBytes,
     truncated,
-    createdAt: decodeStoredString(row.createdAt, "Artifact creation time"),
+    createdAt: row.createdAt,
   };
-};
-
-const decodeValidationPhase = (value: unknown): ValidationPhase => {
-  const phase = decodeStoredString(value, "Validation phase");
-  if (
-    phase !== validationPhase.prepare &&
-    phase !== validationPhase.checks &&
-    phase !== validationPhase.acceptanceReview &&
-    phase !== validationPhase.specialistReview
-  ) {
-    throw new Error("Stored Validation phase is unsupported");
-  }
-  return phase;
-};
-
-const decodeProducer = (value: unknown, phase: ValidationPhase): string => {
-  const producer = decodeStoredString(value, "Validation producer");
-  if (phase === validationPhase.prepare && producer !== "prepare") {
-    throw new Error("Stored Prepare producer is unsupported");
-  }
-  if (phase === validationPhase.acceptanceReview && producer !== "acceptance") {
-    throw new Error("Stored Acceptance Review producer is unsupported");
-  }
-  return producer;
-};
-
-const decodeCleanupState = (
-  value: unknown,
-  field: string,
-): CandidateValidationRunAbandonmentContext["cleanupWorkspace"] => {
-  const state = decodeStoredNullableString(value, field);
-  if (state !== null && state !== "removed" && state !== "not_created" && state !== "failed") {
-    throw new Error(`Stored ${field} is unsupported`);
-  }
-  return state;
-};
-
-const decodeStoredNonnegativeInteger = (
-  value: unknown,
-  storageType: unknown,
-  field: string,
-): number => {
-  if (storageType !== "integer" || typeof value !== "string") {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  let integer: bigint;
-  try {
-    integer = BigInt(value);
-  } catch {
-    throw new Error(`${field} must be a stored integer`);
-  }
-  const numeric = Number(integer);
-  if (!Number.isSafeInteger(numeric) || numeric < 0) {
-    throw new Error(`${field} must be a nonnegative safe integer`);
-  }
-  return numeric;
-};
-
-const decodeStoredFlag = (value: unknown, storageType: unknown, field: string): boolean => {
-  const flag = decodeStoredNonnegativeInteger(value, storageType, field);
-  if (flag !== 0 && flag !== 1) throw new Error(`${field} must be zero or one`);
-  return flag === 1;
 };
 
 const compareStrings = (left: string, right: string): number =>
