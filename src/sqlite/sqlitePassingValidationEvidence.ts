@@ -9,19 +9,12 @@ import type {
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   candidateReadColumns,
   decodeCandidate,
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
-import {
-  decodeValidationRun,
-  type StoredValidationRunRow,
-  validateValidationRunImplementationDecisionRelationships,
-  validateValidationRunLatestResolvedBlockerRelationship,
-  validationRunReadColumns,
-} from "./sqliteValidationRunStorage.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationDecisions,
   type StoredImplementationBlockerRow,
@@ -33,6 +26,13 @@ import {
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import {
+  decodeValidationRun,
+  type StoredValidationRunRow,
+  validateValidationRunImplementationDecisionRelationships,
+  validateValidationRunLatestResolvedBlockerRelationship,
+  validationRunReadColumns,
+} from "./sqliteValidationRunStorage.js";
 
 const currentPassingEvidenceOperation = "read current passing Change evidence";
 const completedPublicationEvidenceOperation = "read completed Candidate Publication evidence";

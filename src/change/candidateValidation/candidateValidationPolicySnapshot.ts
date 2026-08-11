@@ -1,12 +1,6 @@
 import { Schema } from "effect";
 
-const acceptanceContextSnapshotSchema = Schema.Struct({
-  version: Schema.Literal(1),
-  title: Schema.String,
-  description: Schema.String,
-  comments: Schema.optional(Schema.Array(Schema.String)),
-  resolutions: Schema.optional(Schema.Array(Schema.String)),
-});
+import { acceptanceContextSnapshotSchema } from "../validationRun/acceptanceContextSnapshot.js";
 
 const piRuntimeConfigSnapshotSchema = Schema.Struct({
   model: Schema.optional(Schema.String),

@@ -8,8 +8,8 @@ import type {
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
+import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationBlockerHistory,
   implementationBlockerReadColumns,
