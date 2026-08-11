@@ -98,6 +98,7 @@
           "src/submissionEnvironment/remoteChangeBase.ts",
           "src/submissionEnvironment/repositoryFile.ts",
           "src/disposableWorkspace/disposableWorkspaceGit.ts",
+          "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
           "src/disposableWorkspace/workspaceRuntimeAdapter.ts",
           "src/init/git.ts",
           "src/init/gitignore.ts",

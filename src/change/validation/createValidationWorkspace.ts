@@ -4,9 +4,9 @@ import type {
   DisposableWorkspaceError,
   DisposableWorkspaceSetup,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import {
-  type RunDisposableExactCommitWorkspaceInput,
-  runDisposableExactCommitWorkspace,
+import type {
+  RunDisposableExactCommitWorkspace,
+  RunDisposableExactCommitWorkspaceInput,
 } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
@@ -51,24 +51,31 @@ export type CreateValidationWorkspaceResult =
       readonly toolingFailure: ValidationToolingFailure;
     };
 
-export const createValidationWorkspace = (
+export type CreateValidationWorkspace = (
   input: CreateValidationWorkspaceInput,
-): Effect.Effect<CreateValidationWorkspaceResult, RepositoryStorageError> =>
-  createValidationWorkspaceAdapter(input).pipe(
-    Effect.catchTags({
-      ValidationWorkspaceSetupFailed: toolingFailureResult,
-      InfrastructureToolingFailed: toolingFailureResult,
-      GitToolingFailed: toolingFailureResult,
-      ReviewerProcessToolingFailed: toolingFailureResult,
-      PrepareCommandExecutionToolingFailed: toolingFailureResult,
-      CheckCommandExecutionToolingFailed: toolingFailureResult,
-      ReviewerOutputContractFailed: toolingFailureResult,
-      TokenUsageContractFailed: toolingFailureResult,
-    }),
-  );
+) => Effect.Effect<CreateValidationWorkspaceResult, RepositoryStorageError>;
+
+export const makeCreateValidationWorkspace =
+  (
+    runDisposableExactCommitWorkspace: RunDisposableExactCommitWorkspace,
+  ): CreateValidationWorkspace =>
+  (input) =>
+    createValidationWorkspaceAdapter(input, runDisposableExactCommitWorkspace).pipe(
+      Effect.catchTags({
+        ValidationWorkspaceSetupFailed: toolingFailureResult,
+        InfrastructureToolingFailed: toolingFailureResult,
+        GitToolingFailed: toolingFailureResult,
+        ReviewerProcessToolingFailed: toolingFailureResult,
+        PrepareCommandExecutionToolingFailed: toolingFailureResult,
+        CheckCommandExecutionToolingFailed: toolingFailureResult,
+        ReviewerOutputContractFailed: toolingFailureResult,
+        TokenUsageContractFailed: toolingFailureResult,
+      }),
+    );
 
 const createValidationWorkspaceAdapter = (
   input: CreateValidationWorkspaceInput,
+  runDisposableExactCommitWorkspace: RunDisposableExactCommitWorkspace,
 ): Effect.Effect<
   CreateValidationWorkspaceResult,
   ValidationToolingFailure | RepositoryStorageError

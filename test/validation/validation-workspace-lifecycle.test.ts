@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { afterEach, describe, vi } from "vitest";
 
-import type { createValidationWorkspace as createValidationWorkspaceType } from "../../src/change/validation/createValidationWorkspace.js";
+import type { CreateValidationWorkspace } from "../../src/change/validation/createValidationWorkspace.js";
 
 const input = {
   repoRoot: "/repo",
@@ -610,7 +610,7 @@ type FakeOptions = {
 const loadCreateValidationWorkspace = async (
   events: string[],
   options: FakeOptions = {},
-): Promise<typeof createValidationWorkspaceType> => {
+): Promise<CreateValidationWorkspace> => {
   vi.resetModules();
   let existingWorktree = options.existingWorktree;
   let worktreeExists = false;
@@ -701,7 +701,14 @@ const loadCreateValidationWorkspace = async (
     isDisposableWorktreeRemoved: () => !worktreeExists && existingWorktree === undefined,
   }));
 
-  const module = await import("../../src/change/validation/createValidationWorkspace.js");
+  const validationWorkspace = await import(
+    "../../src/change/validation/createValidationWorkspace.js"
+  );
+  const disposableWorkspace = await import(
+    "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js"
+  );
 
-  return module.createValidationWorkspace;
+  return validationWorkspace.makeCreateValidationWorkspace(
+    disposableWorkspace.runDisposableExactCommitWorkspace,
+  );
 };

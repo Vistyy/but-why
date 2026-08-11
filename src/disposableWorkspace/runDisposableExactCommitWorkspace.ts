@@ -44,6 +44,10 @@ export type RunDisposableExactCommitWorkspaceResult =
       readonly toolingError: DisposableWorkspaceError;
     };
 
+export type RunDisposableExactCommitWorkspace = <Error>(
+  input: RunDisposableExactCommitWorkspaceInput<Error>,
+) => Effect.Effect<RunDisposableExactCommitWorkspaceResult, Error>;
+
 type DisposableExactCommitWorkspaceAdapters = {
   readonly createTempRef: (
     repoRoot: string,

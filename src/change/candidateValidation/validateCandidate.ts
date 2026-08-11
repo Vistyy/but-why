@@ -15,7 +15,7 @@ import {
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
-import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
+import type { CreateValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { SubmitProgress } from "../validation/submitProgress.js";
@@ -111,6 +111,11 @@ export class CandidateValidationExecution extends Context.Tag("CandidateValidati
   CandidateValidationExecutionPort
 >() {}
 
+export class CandidateValidationWorkspace extends Context.Tag("CandidateValidationWorkspace")<
+  CandidateValidationWorkspace,
+  CreateValidationWorkspace
+>() {}
+
 type CandidateReviewerExecutionValue = {
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly processExecutor: ReviewerProcessExecutor;
@@ -150,7 +155,13 @@ export const CandidateValidationLive = Layer.effect(
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
-    return makeCandidateValidation({ ...paths, persistence, reviewerExecution });
+    const createValidationWorkspace = yield* CandidateValidationWorkspace;
+    return makeCandidateValidation({
+      ...paths,
+      persistence,
+      reviewerExecution,
+      createValidationWorkspace,
+    });
   }),
 );
 
@@ -159,6 +170,7 @@ const makeCandidateValidation = (dependencies: {
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
+  readonly createValidationWorkspace: CreateValidationWorkspace;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
@@ -194,7 +206,7 @@ const makeCandidateValidation = (dependencies: {
     }
     if (started.reused) return { ok: true, ...started } as const;
 
-    const workspace = yield* createValidationWorkspace({
+    const workspace = yield* dependencies.createValidationWorkspace({
       repoRoot: dependencies.localRepositoryMainCheckoutRoot,
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,

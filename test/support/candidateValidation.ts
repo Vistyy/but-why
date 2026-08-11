@@ -10,9 +10,12 @@ import {
   CandidateValidationExecution,
   CandidateValidationLive,
   CandidateValidationPaths,
+  CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
+import { makeCreateValidationWorkspace } from "../../src/change/validation/createValidationWorkspace.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
+import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import {
   type ChangeValidationTestDependencies,
@@ -47,6 +50,10 @@ export const candidateValidationForTest = (input: {
           ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
         }),
         persistenceLayer,
+        Layer.succeed(
+          CandidateValidationWorkspace,
+          makeCreateValidationWorkspace(runDisposableExactCommitWorkspace),
+        ),
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
           processExecutor: piReviewerProcessExecutor,
