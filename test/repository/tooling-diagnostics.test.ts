@@ -150,7 +150,15 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "package-installation-belongs-to-package-contract",
-      'const result = runTestProcess("npm", ["install-ci-test"], { cwd });',
+      'const result = runTestProcess("npm", ["install-test"], { cwd });',
+    ],
+    [
+      "package-installation-belongs-to-package-contract",
+      'const result = runTestProcessOrThrow("npm", ["pack"], { cwd });',
+    ],
+    [
+      "package-installation-belongs-to-package-contract",
+      'const child = startTestProcess("npm", ["it"], { cwd });',
     ],
     [
       "package-installation-belongs-to-package-contract",

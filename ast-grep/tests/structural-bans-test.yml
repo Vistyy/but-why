@@ -116,12 +116,17 @@ invalid:
   - runTestProcess("npm", ["instal", "package"], { cwd })
   - runTestProcess("npm", ["install-ci-test"], { cwd })
   - runTestProcess("npm", ["install-clean"], { cwd })
+  - runTestProcess("npm", ["install-test"], { cwd })
   - runTestProcess("npm", ["isnt", "package"], { cwd })
   - runTestProcess("npm", ["isnta", "package"], { cwd })
   - runTestProcess("npm", ["isntal", "package"], { cwd })
   - runTestProcess("npm", ["isntall", "package"], { cwd })
   - runTestProcess("npm", ["isntall-clean"], { cwd })
+  - runTestProcess("npm", ["it"], { cwd })
   - runTestProcess("npm", ["sit"], { cwd })
+  - runTestProcessOrThrow("npm", ["pack"], { cwd })
+  - startTestProcess("npm", ["install"], { cwd })
+  - testProcess.runTestProcess("npm", ["install"], { cwd })
   - "runTestProcess(`npm`, [`install`], { cwd })"
 ---
 id: live-agent-helper-belongs-to-test-host
