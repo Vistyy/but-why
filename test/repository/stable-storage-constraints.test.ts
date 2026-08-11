@@ -62,6 +62,18 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
         ),
       );
       yield* expectSqlRejection(
+        repository.operation("reject an unsupported Change lifecycle state", (sql) =>
+          sql.unsafe(`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, state, created_at, updated_at
+            ) VALUES (
+              'change-invalid-state', '/repo/.git', 'refs/heads/invalid',
+              'invalid', 'now', 'now'
+            )
+          `),
+        ),
+      );
+      yield* expectSqlRejection(
         repository.operation("reject an unsupported Tooling Failure kind", (sql) =>
           sql.unsafe(`
             INSERT INTO candidate_validation_tooling_failures (

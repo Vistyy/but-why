@@ -1,0 +1,1510 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { expect, it } from "@effect/vitest";
+import { Cause, Effect } from "effect";
+import { describe } from "vitest";
+
+import {
+  RepositoryMigrationFailed,
+  RepositoryPersistedDataInvalid,
+  RepositorySqlOperationFailed,
+  RepositoryRestoredTransientState,
+} from "../../src/contracts/repositoryStorageError.js";
+import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
+import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
+import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
+import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import {
+  migrateTestRepositoryThrough,
+  testRepositoryMigrationLedger,
+} from "../support/repositoryMigrations.js";
+
+const createPreNativeCleanupTable = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe(`
+    CREATE TABLE pre_native_snapshot_workspace_cleanups (
+      validation_run_id TEXT PRIMARY KEY,
+      retired_ref_name TEXT NOT NULL,
+      workspace_path TEXT NOT NULL,
+      expected_commit_sha TEXT NOT NULL
+    ) STRICT
+  `);
+});
+
+describe("Shared Repository State migrations", () => {
+  it.effect(
+    "drops Candidate Publication chronology while preserving current publication facts",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                yield* migrateTestRepositoryThrough(19);
+                yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, state, created_at, updated_at,
+                  publication_candidate_id, publication_validation_run_id, publication_owner,
+                  publication_repo, publication_base_branch, publication_remote_name,
+                  publication_head_branch, publication_expected_head_sha,
+                  publication_pr_number, publication_pr_url
+                ) VALUES (
+                  'change-publication', ${directory}, 'refs/heads/legacy', 'open',
+                  '2026-07-25T15:30:00.000Z', '2026-07-25T15:30:00.000Z',
+                  'candidate-publication', 'run-publication', 'acme', 'repo', 'main', 'origin',
+                  'legacy', 'head-legacy', 7, 'https://github.test/pull/7'
+                )
+              `;
+                yield* sql`
+                INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+                VALUES (
+                  'candidate-publication', 'change-publication', 'base-legacy', 'head-legacy',
+                  '2026-07-25T15:30:00.000Z'
+                )
+              `;
+                yield* sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-publication', 'candidate-publication',
+                  '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                  'complete', 'passed', '2026-07-25T15:30:00.000Z',
+                  '2026-07-25T15:30:00.000Z'
+                )
+              `;
+                yield* sql`
+                INSERT INTO candidate_publications (
+                  change_id, candidate_id, validation_run_id, change_base_sha, head_sha,
+                  publication_owner, publication_repo, publication_base_branch,
+                  publication_remote_name, publication_head_branch, pull_request_number,
+                  pull_request_url, published_at
+                ) VALUES (
+                  'change-publication', 'candidate-publication', 'run-publication',
+                  'base-legacy', 'head-legacy', 'acme', 'repo', 'main', 'origin', 'legacy', 7,
+                  'https://github.test/pull/7', '2026-07-25T15:30:00.000Z'
+                )
+              `;
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
+
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const repository = yield* RepositorySql;
+                const changes = yield* openSqliteChangeTestDependencies();
+                expect(yield* changes.reads.getChangeById("change-publication")).toMatchObject({
+                  publication: {
+                    candidateId: "candidate-publication",
+                    validationRunId: "run-publication",
+                    expectedHeadSha: "head-legacy",
+                    pullRequest: { number: 7, url: "https://github.test/pull/7" },
+                  },
+                });
+                const tables = yield* repository.operation(
+                  "read retired Candidate Publication tables",
+                  (sql) => sql<{ readonly name: string }>`
+                  SELECT name FROM sqlite_schema
+                  WHERE type = 'table' AND name = 'candidate_publications'
+                `,
+                );
+                expect(tables).toEqual([]);
+              }).pipe(
+                Effect.provide(
+                  repositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
+              ),
+            );
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
+  );
+
+  it.scoped("applies the complete immutable ordered migration chain", () =>
+    withTemporaryState(() =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const migrations = yield* repository.operation(
+          "read repository migration chain",
+          (sql) => sql<{ readonly migration_id: number; readonly name: string }>`
+            SELECT migration_id, name
+            FROM effect_sql_migrations
+            ORDER BY migration_id
+          `,
+        );
+
+        expect(migrations).toEqual(
+          testRepositoryMigrationLedger.map(([key]) => ({
+            migration_id: Number(key.slice(0, 4)),
+            name: key.slice(5),
+          })),
+        );
+      }),
+    ),
+  );
+
+  it.effect("migrates every historical schema prefix to the current schema", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-prefixes-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          for (const [key] of testRepositoryMigrationLedger.slice(0, -1)) {
+            const migrationId = Number(key.slice(0, 4));
+            const prefixDirectory = join(directory, key);
+            const statePath = join(prefixDirectory, "state.sqlite");
+            yield* Effect.sync(() => mkdirSync(prefixDirectory, { recursive: true }));
+            yield* Effect.scoped(
+              migrateTestRepositoryThrough(migrationId).pipe(
+                Effect.provide(nodeSqliteLayer(statePath)),
+              ),
+            );
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const repository = yield* RepositorySql;
+                const rows = yield* repository.operation(
+                  "read migrated prefix ledger",
+                  (sql) => sql<{ readonly count: number }>`
+                    SELECT COUNT(*) AS count FROM effect_sql_migrations
+                  `,
+                );
+                expect(rows).toEqual([{ count: testRepositoryMigrationLedger.length }]);
+              }).pipe(
+                Effect.provide(
+                  repositorySqlLayer({
+                    commonDirectory: prefixDirectory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
+              ),
+            );
+          }
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("upgrades supported lifecycle state records through the strict active schema", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(23);
+              yield* sql`INSERT INTO tasks (id, numeric_id, title, description, state, cancel_reason, created_at, updated_at) VALUES
+                ('BY-1', 1, 'New Task', 'Supported new.', 'new', NULL, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'),
+                ('BY-2', 2, 'Todo Task', 'Supported todo.', 'todo', NULL, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'),
+                ('BY-3', 3, 'Done Task', 'Supported done.', 'done', NULL, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'),
+                ('BY-4', 4, 'Cancelled Task', 'Supported cancelled.', 'cancelled', 'Not needed', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z')`;
+              yield* sql`INSERT INTO task_comments (id, task_id, created_at, content) VALUES ('comment-1', 'BY-2', '2026-07-25T16:31:00.000Z', 'Keep this comment.')`;
+              yield* sql`INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id) VALUES ('BY-2', 'BY-3')`;
+              yield* sql`INSERT INTO changes (
+                id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                cancel_reason, created_at, updated_at, closed_at, cleanup_state,
+                base_ref, base_remote_url, starting_commit, worktree_path, acceptance_context
+              ) VALUES
+                ('change-open', ${directory}, 'refs/heads/open', 'BY-2', 'open', NULL, NULL,
+                 '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', NULL, 'complete',
+                 'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-open',
+                 ${join(directory, "open")},
+                 '{"version":1,"title":"Todo Task","description":"Supported todo."}'),
+                ('change-closed', ${directory}, 'refs/heads/closed', 'BY-3', 'closed', 'completed', NULL,
+                 '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z',
+                 '2026-07-25T16:30:00.000Z', 'complete', 'refs/remotes/origin/main',
+                 'https://github.com/acme/repo.git', 'base-closed', ${join(directory, "closed")},
+                 '{"version":1,"title":"Done Task","description":"Supported done."}')`;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const tasks = yield* repository.operation(
+                "read migrated lifecycle Tasks",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly state: string;
+                  readonly cancel_reason: string | null;
+                }>`
+                  SELECT id, state, cancel_reason FROM tasks ORDER BY numeric_id
+                `,
+              );
+              const changes = yield* repository.operation(
+                "read migrated lifecycle Changes",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly task_id: string | null;
+                  readonly state: string;
+                }>`
+                  SELECT id, task_id, state FROM changes ORDER BY id
+                `,
+              );
+              const commentsTable = yield* repository.operation(
+                "verify discarded Task comment storage",
+                (sql) => sql<{ readonly name: string }>`
+                  SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'task_comments'
+                `,
+              );
+              const dependencies = yield* repository.operation(
+                "read migrated Task dependencies",
+                (sql) => sql<{
+                  readonly dependent_task_id: string;
+                  readonly prerequisite_task_id: string;
+                }>`
+                  SELECT dependent_task_id, prerequisite_task_id FROM task_dependencies
+                `,
+              );
+              const migrations = yield* repository.operation(
+                "read lifecycle migration chain",
+                (sql) => sql<{ readonly name: string }>`
+                  SELECT name FROM effect_sql_migrations WHERE migration_id = 24
+                `,
+              );
+              expect(tasks).toEqual([
+                { id: "BY-1", state: "new", cancel_reason: null },
+                { id: "BY-2", state: "todo", cancel_reason: null },
+                { id: "BY-3", state: "done", cancel_reason: null },
+                { id: "BY-4", state: "cancelled", cancel_reason: "Not needed" },
+              ]);
+              expect(changes).toEqual([
+                { id: "change-closed", task_id: "BY-3", state: "closed" },
+                { id: "change-open", task_id: "BY-2", state: "open" },
+              ]);
+              expect(commentsTable).toEqual([]);
+              expect(dependencies).toEqual([
+                { dependent_task_id: "BY-2", prerequisite_task_id: "BY-3" },
+              ]);
+              expect(migrations).toEqual([{ name: "remove_task_comments" }]);
+
+              const transientInsert = yield* repository
+                .operation(
+                  "attempt retired Task state insert",
+                  (sql) => sql`
+                    INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
+                    VALUES ('BY-5', 5, 'Retired', 'Must be rejected.', 'implementing', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z')
+                  `,
+                )
+                .pipe(Effect.flip);
+              expect(transientInsert).toBeInstanceOf(RepositorySqlOperationFailed);
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect(
+    "stops a restored database containing each retired Task state with and without a linked Change",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            for (const state of ["implementing", "blocked", "validating", "ready"] as const) {
+              for (const linked of [false, true] as const) {
+                const label = `${state}-${linked ? "linked" : "unlinked"}`;
+                const stateDirectory = join(directory, label);
+                mkdirSync(stateDirectory, { recursive: true });
+                const statePath = join(stateDirectory, "state.sqlite");
+                yield* Effect.scoped(
+                  Effect.gen(function* () {
+                    const sql = yield* SqlClient.SqlClient;
+                    yield* migrateTestRepositoryThrough(22);
+                    yield* sql`INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at) VALUES ('BY-1', 1, 'Restored Task', 'Retired state.', ${state}, '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z')`;
+                    if (linked) {
+                      yield* sql`INSERT INTO changes (id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at, cleanup_state) VALUES ('change-linked', ${stateDirectory}, 'refs/heads/linked', 'BY-1', 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete')`;
+                    }
+                  }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+                );
+
+                const failure = yield* Effect.scoped(
+                  Effect.gen(function* () {
+                    yield* RepositorySql;
+                    return null;
+                  }).pipe(
+                    Effect.provide(
+                      repositorySqlLayer({ commonDirectory: stateDirectory, statePath }),
+                    ),
+                  ),
+                ).pipe(Effect.flip);
+                expect(failure).toBeInstanceOf(RepositoryRestoredTransientState);
+                if (!(failure instanceof RepositoryRestoredTransientState)) return;
+                expect(failure.tasks).toEqual([
+                  {
+                    id: "BY-1",
+                    numericId: 1,
+                    title: "Restored Task",
+                    state,
+                    changeId: linked ? "change-linked" : null,
+                  },
+                ]);
+                expect(failure.changes).toEqual([]);
+              }
+            }
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
+  );
+
+  it.effect("stops a restored database containing a retired Change state", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(22);
+              yield* sql`INSERT INTO changes (id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at, cleanup_state) VALUES ('change-blocked', ${directory}, 'refs/heads/blocked', NULL, 'blocked', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete')`;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const failure = yield* Effect.scoped(
+            Effect.gen(function* () {
+              yield* RepositorySql;
+              return null;
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          ).pipe(Effect.flip);
+          expect(failure).toBeInstanceOf(RepositoryRestoredTransientState);
+          if (!(failure instanceof RepositoryRestoredTransientState)) return;
+          expect(failure.tasks).toEqual([]);
+          expect(failure.changes).toEqual([
+            { id: "change-blocked", taskId: null, state: "blocked" },
+          ]);
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("preserves supported merged Done records while removing legacy columns", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(12);
+              yield* sql`
+                    INSERT INTO tasks (
+                      id, numeric_id, title, description, state, completion_kind, created_at, updated_at
+                    ) VALUES (
+                      'BY-1', 1, 'Merged Done Task', 'Must survive migration.',
+                      'done', 'merged_pr', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                      created_at, updated_at, closed_at, base_ref, base_remote_url,
+                      starting_commit, worktree_path, acceptance_context
+                    ) VALUES (
+                      'change-supported-merged', ${directory}, 'refs/heads/supported-merged',
+                      'BY-1', 'closed', 'completed', '2026-07-25T16:30:00.000Z',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "supported-merged")},
+                      '{"version":1,"title":"Merged Done Task","description":"Must survive migration."}'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const tasks = yield* repository.operation(
+                "read migrated supported Task",
+                (sql) => sql<{ readonly state: string }>`SELECT state FROM tasks WHERE id = 'BY-1'`,
+              );
+              const changes = yield* repository.operation(
+                "read migrated supported Change",
+                (sql) =>
+                  sql<{ readonly state: string; readonly close_reason: string }>`
+                    SELECT state, close_reason FROM changes WHERE id = 'change-supported-merged'
+                  `,
+              );
+              const taskColumns = yield* repository.operation(
+                "read migrated Task columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(tasks)`,
+              );
+              const changeColumns = yield* repository.operation(
+                "read migrated Change columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+              );
+              expect(tasks).toEqual([{ state: "done" }]);
+              expect(changes).toEqual([{ state: "closed", close_reason: "completed" }]);
+              expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
+              expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
+              expect(changeColumns.map(({ name }) => name)).not.toContain(
+                "no_change_validation_run_id",
+              );
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("repairs only affected current Validation Policy Snapshot rows on upgrade", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          const buildAffectedPolicy = (instructions: string, acceptanceModel: string) => ({
+            agentEnvironment: ["nix", "develop", "-c"] as const,
+            prepare: { command: "pnpm install", timeoutSeconds: 60 },
+            checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
+            copyFiles: [".env.test"],
+            specialistReviews: [
+              {
+                id: "security",
+                instructions: "Review security.",
+                instructionsSource: "repo" as const,
+                profile: {
+                  agentProfile: "security",
+                  scope: "repo" as const,
+                  profile: {
+                    agentRuntime: "pi" as const,
+                    runtimeConfig: { model: "security-model" },
+                  },
+                },
+              },
+            ],
+            acceptanceReview: {
+              instructions,
+              instructionsSource: "built_in" as const,
+              profile: {
+                agentProfile: "acceptance",
+                scope: "global" as const,
+                profile: {
+                  agentRuntime: "pi" as const,
+                  runtimeConfig: { model: acceptanceModel },
+                },
+              },
+            },
+            acceptanceContext: {
+              version: 1 as const,
+              title: "Keep the exact intent",
+              description: "Review the Candidate against this immutable context.",
+            },
+          });
+          const affectedPolicy = buildAffectedPolicy(
+            "Review against the accepted intent.",
+            "acceptance-model",
+          );
+          const reorderedAffectedPolicy = buildAffectedPolicy(
+            "Reordered acceptance instructions.",
+            "acceptance-reordered-model",
+          );
+          const affectedCorrectedText = encodeSqliteCandidateValidationPolicy(affectedPolicy);
+          const affectedBuggyText = affectedCorrectedText.replace(
+            '"acceptanceReview":{',
+            '"acceptanceReview":{"ok":true,',
+          );
+          const reorderedAffectedBuggyText = JSON.stringify({
+            ...reorderedAffectedPolicy,
+            acceptanceReview: {
+              profile: reorderedAffectedPolicy.acceptanceReview.profile,
+              ok: true,
+              instructions: reorderedAffectedPolicy.acceptanceReview.instructions,
+              instructionsSource: reorderedAffectedPolicy.acceptanceReview.instructionsSource,
+            },
+          });
+          const protoAffectedBuggyText = affectedBuggyText.replace(
+            '"instructionsSource":"built_in"',
+            '"instructionsSource":"built_in","__proto__":{"polluted":true}',
+          );
+          const whitespaceAffectedBuggyText = `{\n${affectedBuggyText.slice(1)}`;
+          const currentPolicy = { checks: [], copyFiles: [], specialistReviews: [] };
+          const currentPolicyText = JSON.stringify(currentPolicy);
+          const legacyPolicyText =
+            '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"repo","agentProfile":"a","profileScope":"repo","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}';
+          const malformedPolicyText = '{"checks":';
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(24);
+              yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, state, created_at, updated_at, cleanup_state
+                ) VALUES (
+                  'change-repair', ${directory}, 'refs/heads/repair', 'open',
+                  '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete'
+                )
+              `;
+              yield* sql`
+                INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+                VALUES ('candidate-repair', 'change-repair', 'base-sha', 'head-sha', '2026-07-25T16:31:00.000Z')
+              `;
+              for (const run of [
+                {
+                  id: "run-affected",
+                  policy: affectedBuggyText,
+                  now: "2026-07-25T16:32:00.000Z",
+                },
+                {
+                  id: "run-affected-reordered",
+                  policy: reorderedAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.500Z",
+                },
+                {
+                  id: "run-proto",
+                  policy: protoAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.750Z",
+                },
+                {
+                  id: "run-whitespace",
+                  policy: whitespaceAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.875Z",
+                },
+                { id: "run-legacy", policy: legacyPolicyText, now: "2026-07-25T16:32:01.000Z" },
+                {
+                  id: "run-malformed",
+                  policy: malformedPolicyText,
+                  now: "2026-07-25T16:32:02.000Z",
+                },
+                { id: "run-current", policy: currentPolicyText, now: "2026-07-25T16:32:03.000Z" },
+              ] as const) {
+                yield* sql`
+                  INSERT INTO candidate_validation_runs (
+                    id, candidate_id, policy_snapshot, implementation_decisions,
+                    latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                  ) VALUES (
+                    ${run.id}, 'candidate-repair', ${run.policy}, '[]', NULL,
+                    'complete', 'passed', ${run.now}, ${run.now}
+                  )
+                `;
+              }
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const validation = yield* openSqliteChangeValidationTestDependencies();
+              const rows = yield* repository.operation(
+                "read repaired Validation Policy Snapshot text",
+                (sql) => sql<{ readonly id: string; readonly policySnapshot: string }>`
+                  SELECT id, policy_snapshot AS policySnapshot
+                  FROM candidate_validation_runs
+                  ORDER BY created_at
+                `,
+              );
+              const retiredAdmissionTables = yield* repository.operation(
+                "confirm retired validation admission storage is absent",
+                (sql) => sql<{ readonly name: string }>`
+                  SELECT name FROM sqlite_schema
+                  WHERE type = 'table' AND name = 'candidate_validation_admissions'
+                `,
+              );
+              expect(retiredAdmissionTables).toEqual([]);
+              const byId = new Map(rows.map((row) => [row.id, row.policySnapshot]));
+              expect(byId.get("run-affected")).toBe(affectedCorrectedText);
+              expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedBuggyText);
+              expect(byId.get("run-proto")).toBe(protoAffectedBuggyText);
+              expect(byId.get("run-whitespace")).toBe(whitespaceAffectedBuggyText);
+              expect(byId.get("run-legacy")).toBe(legacyPolicyText);
+              expect(byId.get("run-malformed")).toBe(malformedPolicyText);
+              expect(byId.get("run-current")).toBe(currentPolicyText);
+
+              const repaired = yield* validation.reads.getRunById("run-affected");
+              expect(repaired).toBeDefined();
+              expect(repaired?.policy).toEqual(affectedPolicy);
+              const reorderedError = yield* validation.reads
+                .getRunById("run-affected-reordered")
+                .pipe(Effect.flip);
+              expect(reorderedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const protoError = yield* validation.reads.getRunById("run-proto").pipe(Effect.flip);
+              expect(protoError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const whitespaceError = yield* validation.reads
+                .getRunById("run-whitespace")
+                .pipe(Effect.flip);
+              expect(whitespaceError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const legacyError = yield* validation.reads
+                .getRunById("run-legacy")
+                .pipe(Effect.flip);
+              expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const malformedError = yield* validation.reads
+                .getRunById("run-malformed")
+                .pipe(Effect.flip);
+              expect(malformedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const current = yield* validation.reads.getRunById("run-current");
+              expect(current?.policy).toEqual(currentPolicy);
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("upgrades a Taskless Change with cancellation reason storage", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(21);
+              yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, state, created_at, updated_at,
+                  cleanup_state, base_ref, base_remote_url, starting_commit, worktree_path
+                ) VALUES (
+                  'change-cancel-upgrade', ${directory}, 'refs/heads/cancel-upgrade', 'open',
+                  '2026-07-17T23:00:00.000Z', '2026-07-17T23:00:00.000Z', 'complete',
+                  'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
+                  '1111111111111111111111111111111111111111', ${join(directory, "worktree")}
+                )
+              `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const changes = yield* openSqliteChangeTestDependencies();
+              expect(yield* changes.reads.getChangeById("change-cancel-upgrade")).toMatchObject({
+                state: "open",
+                cancelReason: null,
+              });
+              expect(
+                yield* changes.delivery.cancelChange({
+                  changeId: "change-cancel-upgrade",
+                  reason: "Not needed after upgrade",
+                  now: "2026-07-17T23:02:00.000Z",
+                }),
+              ).toMatchObject({
+                ok: true,
+                changed: true,
+                change: {
+                  state: "closed",
+                  closeReason: "cancelled",
+                  cancelReason: "Not needed after upgrade",
+                },
+              });
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("drops Finding severity while preserving supported Findings", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(17);
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state,
+                      created_at, updated_at
+                    ) VALUES (
+                      'change-severity', ${directory}, 'refs/heads/severity',
+                      'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO candidates (
+                      id, change_id, change_base_sha, head_sha, created_at
+                    ) VALUES (
+                      'candidate-severity', 'change-severity', 'base-sha', 'head-sha',
+                      '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO candidate_validation_runs (
+                      id, candidate_id, policy_snapshot, state, outcome,
+                      created_at, updated_at
+                    ) VALUES (
+                      'run-severity', 'candidate-severity',
+                      '{"checks":[{"id":"quality","command":"just quality","timeoutSeconds":60}],"copyFiles":[]}',
+                      'complete', 'passed',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO candidate_validation_rounds (
+                      validation_run_id, phase, producer, round_number, status, created_at
+                    ) VALUES (
+                      'run-severity', 'checks', 'quality', 1, 'failed',
+                      '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO candidate_validation_findings (
+                      id, validation_run_id, phase, producer, title, description, severity,
+                      evidence, files, artifact_refs, created_at, updated_at
+                    ) VALUES (
+                      'finding-severity', 'run-severity', 'checks', 'quality',
+                      'Historical Check Finding', 'Remains readable after migration.', 'high',
+                      'exitCode: 1', '[]', '[]',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const validation = yield* openSqliteChangeValidationTestDependencies();
+              const findings = yield* validation.reads.listFindings("run-severity");
+              expect(findings).toEqual([
+                {
+                  id: "finding-severity",
+                  validationRunId: "run-severity",
+                  phase: "checks",
+                  producer: "quality",
+                  title: "Historical Check Finding",
+                  description: "Remains readable after migration.",
+                  evidence: "exitCode: 1",
+                  files: [],
+                  artifactRefs: [],
+                  createdAt: "2026-07-25T16:30:00.000Z",
+                  updatedAt: "2026-07-25T16:30:00.000Z",
+                },
+              ]);
+              const findingColumns = yield* repository.operation(
+                "read migrated Finding columns",
+                (sql) =>
+                  sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
+              );
+              expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("drops retired Reviewer Session fields while preserving supported sessions", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(18);
+              yield* sql`
+                      INSERT INTO changes (
+                        id, repository_common_directory, branch_ref, state,
+                        created_at, updated_at
+                      ) VALUES (
+                        'change-session', ${directory}, 'refs/heads/session',
+                        'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                      )
+                    `;
+              yield* sql`
+                      INSERT INTO reviewer_sessions (
+                        change_id, producer, identity, fingerprint, session_reference,
+                        last_candidate_id, updated_at
+                      ) VALUES (
+                        'change-session', 'acceptance', 'not-json',
+                        'fingerprint-legacy', 'session-legacy',
+                        'candidate-legacy', '2026-07-25T16:30:00.000Z'
+                      )
+                    `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangeTestDependencies();
+              const session = yield* changes.reviewerSessions.getReviewerSession(
+                "change-session",
+                "acceptance",
+              );
+              expect(session).toEqual({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-legacy",
+                sessionReference: "session-legacy",
+              });
+              yield* changes.reviewerSessions.saveReviewerSession({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-new",
+                sessionReference: "session-new",
+              });
+              const replaced = yield* changes.reviewerSessions.getReviewerSession(
+                "change-session",
+                "acceptance",
+              );
+              expect(replaced).toEqual({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-new",
+                sessionReference: "session-new",
+              });
+              const sessionColumns = yield* repository.operation(
+                "read migrated Reviewer Session columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(reviewer_sessions)`,
+              );
+              expect(sessionColumns.map(({ name }) => name)).toEqual([
+                "change_id",
+                "producer",
+                "fingerprint",
+                "session_reference",
+              ]);
+              const indexRows = yield* repository.operation(
+                "read migrated Reviewer Session indexes",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'index' AND name = 'reviewer_sessions_fingerprint_idx'
+                  `,
+              );
+              expect(indexRows).toEqual([]);
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("preserves active Reviewer Sessions while adding Reviewer Transcript storage", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(20);
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state,
+                      created_at, updated_at
+                    ) VALUES (
+                      'change-session-retained', ${directory}, 'refs/heads/retained',
+                      'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO reviewer_sessions (
+                      change_id, producer, fingerprint, session_reference
+                    ) VALUES (
+                      'change-session-retained', 'acceptance', 'fingerprint-retained', 'session-1'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangeTestDependencies();
+              const session = yield* changes.reviewerSessions.getReviewerSession(
+                "change-session-retained",
+                "acceptance",
+              );
+              expect(session).toEqual({
+                changeId: "change-session-retained",
+                producer: "acceptance",
+                fingerprint: "fingerprint-retained",
+                sessionReference: "session-1",
+              });
+              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
+                changeId: "change-session-retained",
+                transcripts: [
+                  {
+                    changeId: "change-session-retained",
+                    producer: "acceptance",
+                    piSessionId: "session-1",
+                    filePath: "reviewer-sessions/review_session-1.jsonl",
+                  },
+                ],
+              });
+              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
+                changeId: "change-session-retained",
+                transcripts: [
+                  {
+                    changeId: "change-session-retained",
+                    producer: "acceptance",
+                    piSessionId: "session-1",
+                    filePath: "reviewer-sessions/review_session-1.jsonl",
+                  },
+                ],
+              });
+              const transcripts =
+                yield* changes.reviewerTranscripts.listReviewerTranscripts(
+                  "change-session-retained",
+                );
+              expect(transcripts).toEqual([
+                {
+                  changeId: "change-session-retained",
+                  producer: "acceptance",
+                  piSessionId: "session-1",
+                  filePath: "reviewer-sessions/review_session-1.jsonl",
+                },
+              ]);
+              const migrations = yield* repository.operation(
+                "read re-applied Reviewer Transcript migration",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM effect_sql_migrations WHERE migration_id IN (21, 22)
+                  `,
+              );
+              expect(migrations).toEqual([
+                { name: "reviewer_transcripts" },
+                { name: "change_cancel_reason" },
+              ]);
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("stops migration with Task and Change facts for unsupported No-Change records", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(12);
+              yield* sql`
+                    INSERT INTO tasks (
+                      id, numeric_id, title, description, state, completion_kind, created_at, updated_at
+                    ) VALUES (
+                      'BY-1', 1, 'Unsupported No-Change Task', 'Must stop migration.',
+                      'done', 'no_change', '2026-07-25T17:00:00.000Z', '2026-07-25T17:00:00.000Z'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, task_id, state,
+                      created_at, updated_at, base_ref, base_remote_url, starting_commit,
+                      worktree_path, acceptance_context,
+                      no_change_candidate_id, no_change_validation_run_id
+                    ) VALUES (
+                      'change-unsupported-no-change', ${directory}, 'refs/heads/unsupported-no-change',
+                      'BY-1', 'open', '2026-07-25T17:00:00.000Z', '2026-07-25T17:00:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "unsupported-no-change")},
+                      '{"version":1,"title":"Unsupported No-Change Task","description":"Must stop migration."}',
+                      'candidate-unsupported', 'run-unsupported'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const error = yield* Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          ).pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+          const migrationError = Array.from(
+            Cause.defects(error.cause as Cause.Cause<unknown>),
+          )[0] as {
+            readonly cause?: unknown;
+          };
+          expect(String(migrationError.cause)).toContain("taskId=BY-1 taskState=done");
+          expect(String(migrationError.cause)).toContain("changeId=change-unsupported-no-change");
+          expect(String(migrationError.cause)).toContain("candidateId=candidate-unsupported");
+          expect(String(migrationError.cause)).toContain("validationRunId=run-unsupported");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("preserves supported Change data while removing persisted readiness", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(13);
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, created_at, updated_at,
+                      base_ref, base_remote_url, starting_commit, worktree_path,
+                      readiness, prepare_command, prepare_timeout_seconds, prepare_failure
+                    ) VALUES (
+                      'change-with-failure', ${directory}, 'refs/heads/with-failure', 'open',
+                      '2026-07-25T17:30:00.000Z', '2026-07-25T17:30:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "worktree")}, 'prepare_failed', 'just prepare', 1200,
+                      '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changeColumns = yield* repository.operation(
+                "read migrated Change columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+              );
+              expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
+              const changes = yield* openSqliteChangeTestDependencies();
+              const stored = yield* changes.reads.getChangeById("change-with-failure");
+              expect(stored).toMatchObject({
+                id: "change-with-failure",
+                state: "open",
+                baseRef: "refs/remotes/origin/main",
+                worktreePath: join(directory, "worktree"),
+                prepare: { command: "just prepare", timeoutSeconds: 1200 },
+                prepareFailure: {
+                  command: "just prepare",
+                  exitCode: 7,
+                  timedOut: false,
+                  stdout: "",
+                  stderr: "failed",
+                },
+              });
+              expect(stored).not.toHaveProperty("readiness");
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect(
+    "removes Acceptance Context version history while preserving current context and snapshots",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                yield* migrateTestRepositoryThrough(14);
+                yield* sql`
+                      INSERT INTO tasks (
+                        id, numeric_id, title, description, state, cancel_reason,
+                        created_at, updated_at
+                      ) VALUES (
+                        'BY-1', 1, 'Current intent', 'Must survive.', 'todo', NULL,
+                        '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z'
+                      )
+                    `;
+                yield* sql`
+                      INSERT INTO changes (
+                        id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                        created_at, updated_at, closed_at, acceptance_context, base_ref,
+                        base_remote_url, starting_commit, worktree_path
+                      ) VALUES (
+                        'change-with-context', ${directory}, 'refs/heads/with-context', 'BY-1',
+                        'open', NULL, '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z',
+                        NULL,
+                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}',
+                        'refs/remotes/origin/main', 'https://github.test/acme/repo.git',
+                        'base-sha', ${join(directory, "worktree")}
+                      )
+                    `;
+                yield* sql`
+                      INSERT INTO acceptance_context_versions (change_id, version, context, created_at)
+                      VALUES (
+                        'change-with-context', 1,
+                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}',
+                        '2026-07-25T18:00:00.000Z'
+                      )
+                    `;
+                yield* sql`
+                      INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+                      VALUES ('candidate-1', 'change-with-context', 'base-sha', 'head-sha', '2026-07-25T18:01:00.000Z')
+                    `;
+                yield* sql`
+                      INSERT INTO candidate_validation_runs (
+                        id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+                      ) VALUES (
+                        'run-1', 'candidate-1',
+                        '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceContext":{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}}',
+                        'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
+                      )
+                    `;
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
+
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const repository = yield* RepositorySql;
+                const tables = yield* repository.operation(
+                  "read migrated Acceptance Context version tables",
+                  (sql) => sql<{ readonly name: string }>`
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'table' AND name = 'acceptance_context_versions'
+                  `,
+                );
+                expect(tables).toEqual([]);
+                const changes = yield* openSqliteChangeTestDependencies();
+                const stored = yield* changes.reads.getChangeById("change-with-context");
+                expect(stored?.acceptanceContext).toEqual({
+                  version: 1,
+                  title: "Current intent",
+                  description: "Must survive.",
+                  comments: ["Historical Task comment."],
+                });
+                const runs = yield* repository.operation(
+                  "read preserved Validation Run snapshot",
+                  (sql) => sql<{ readonly policySnapshot: string }>`
+                    SELECT policy_snapshot AS policySnapshot
+                    FROM candidate_validation_runs WHERE id = 'run-1'
+                  `,
+                );
+                const run = runs[0];
+                expect(run).toBeDefined();
+                if (run !== undefined) {
+                  expect(JSON.parse(run.policySnapshot)).toMatchObject({
+                    acceptanceContext: {
+                      version: 1,
+                      title: "Current intent",
+                      description: "Must survive.",
+                      comments: ["Historical Task comment."],
+                    },
+                  });
+                }
+              }).pipe(
+                Effect.provide(
+                  repositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
+              ),
+            );
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
+  );
+
+  it.effect("deletes legacy-only Implementation Decisions and preserves structured rows", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(15);
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, close_reason,
+                      created_at, updated_at, closed_at
+                    ) VALUES (
+                      'change-decisions', ${directory}, 'refs/heads/decisions',
+                      'open', NULL, '2026-07-25T18:30:00.000Z', '2026-07-25T18:30:00.000Z', NULL
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content, choice, rationale
+                    ) VALUES (
+                      'structured-decision', 'change-decisions', '2026-07-25T18:31:00.000Z',
+                      '', 'Structured choice', 'Structured rationale'
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content
+                    ) VALUES (
+                      'legacy-decision', 'change-decisions', '2026-07-25T18:32:00.000Z',
+                      'Legacy unstructured decision'
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangeTestDependencies();
+              const decisions =
+                yield* changes.authority.listImplementationDecisions("change-decisions");
+              expect(decisions).toEqual([
+                {
+                  id: "structured-decision",
+                  changeId: "change-decisions",
+                  sequence: 1,
+                  recordedAt: "2026-07-25T18:31:00.000Z",
+                  choice: "Structured choice",
+                  rationale: "Structured rationale",
+                },
+              ]);
+              const decisionColumns = yield* repository.operation(
+                "read migrated Implementation Decision columns",
+                (sql) =>
+                  sql<{ readonly name: string }>`PRAGMA table_info(implementation_decisions)`,
+              );
+              expect(decisionColumns.map(({ name }) => name)).not.toContain("content");
+              const migrations = yield* repository.operation(
+                "read re-run migration",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM effect_sql_migrations WHERE migration_id = 16
+                  `,
+              );
+              expect(migrations).toEqual([{ name: "remove_implementation_decision_content" }]);
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("stops migration with Decision and Change facts for malformed partial rows", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(15);
+              yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, close_reason,
+                      created_at, updated_at, closed_at
+                    ) VALUES (
+                      'change-partial', ${directory}, 'refs/heads/partial',
+                      'open', NULL, '2026-07-25T18:40:00.000Z', '2026-07-25T18:40:00.000Z', NULL
+                    )
+                  `;
+              yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content, choice, rationale
+                    ) VALUES (
+                      'partial-decision', 'change-partial', '2026-07-25T18:41:00.000Z',
+                      'Legacy text', 'Partial choice', NULL
+                    )
+                  `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const error = yield* Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          ).pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+          const migrationError = Array.from(
+            Cause.defects(error.cause as Cause.Cause<unknown>),
+          )[0] as {
+            readonly cause?: unknown;
+          };
+          expect(String(migrationError.cause)).toContain("decisionId=partial-decision");
+          expect(String(migrationError.cause)).toContain("changeId=change-partial");
+          expect(String(migrationError.cause)).toContain("without inventing Choice or Rationale");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.scoped("drops empty retired Snapshot Workspace cleanup state", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* createPreNativeCleanupTable;
+      yield* removePreNativeSnapshotWorkspaceCleanupMigration;
+
+      const tables = yield* sql<{ readonly name: string }>`
+        SELECT name FROM sqlite_schema
+        WHERE type = 'table' AND name = 'pre_native_snapshot_workspace_cleanups'
+      `;
+      expect(tables).toEqual([]);
+    }).pipe(Effect.provide(nodeSqliteLayer(":memory:"))),
+  );
+
+  it.scoped("stops before deleting retained Snapshot Workspace cleanup identity", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* createPreNativeCleanupTable;
+      yield* sql.unsafe(`
+        INSERT INTO pre_native_snapshot_workspace_cleanups (
+          validation_run_id, retired_ref_name, workspace_path, expected_commit_sha
+        ) VALUES (
+          'run-1', 'refs/but-why/validation-runs/run-1/validation',
+          '/repo/.sandcastle/worktrees/run-1', 'candidate-sha'
+        )
+      `);
+
+      const error = yield* Effect.flip(removePreNativeSnapshotWorkspaceCleanupMigration);
+      expect(error).toEqual(
+        new Error(
+          "Pre-native Snapshot Workspace cleanup identity remains in Shared Repository State",
+        ),
+      );
+      const rows = yield* sql<{ readonly validationRunId: string }>`
+        SELECT validation_run_id AS validationRunId
+        FROM pre_native_snapshot_workspace_cleanups
+      `;
+      expect(rows).toEqual([{ validationRunId: "run-1" }]);
+    }).pipe(Effect.provide(nodeSqliteLayer(":memory:"))),
+  );
+
+  it.effect("reports migration failures through the typed error channel", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(15);
+              yield* sql`DROP TABLE implementation_decisions`;
+              yield* sql`CREATE VIEW implementation_decisions AS SELECT 1 AS sequence`;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const error = yield* Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                }),
+              ),
+            ),
+          ).pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+          expect(error).toMatchObject({
+            _tag: "RepositoryMigrationFailed",
+            statePath,
+          });
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+});
