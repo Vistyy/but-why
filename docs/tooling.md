@@ -28,7 +28,8 @@ Use Just recipes instead of direct package-manager commands for repository workf
 - `just check` checks Just formatting and the configured Biome formatter, lint rules, and `organizeImports` assist in one source scan without modifying files.
 - `just fix` applies Just formatting, Biome formatting, safe lint fixes, and the `organizeImports` assist without user interaction.
 - `just test <focused-path-or-selection>` runs focused tests without the shared capacity lock.
-- `just typecheck` runs the TypeScript checker.
+- `just typecheck` patches the native TypeScript checker with `@effect/tsgo`, then runs TypeScript and Effect diagnostics in one pass.
+  TypeScript and error-level Effect diagnostics block the check, while warning and suggestion Effect diagnostics remain advisory.
 - `just lint` runs Biome linting only.
 - `just format` applies Biome formatting only.
 - `just format-check` checks Just and Biome formatting only.
@@ -68,6 +69,7 @@ ast-grep enforces syntax contracts for process ownership, Effect tests, Task ide
 The custom Biome rule rejects TypeScript import type expressions because top-level type imports keep dependencies visible without prohibiting required runtime dynamic imports.
 The JSON.parse contract rejects direct trusted assertions of parsed JSON; parse into `unknown` and use the owning boundary's focused decoder or schema instead.
 Repository-authored diagnostics state the prohibited approach, the invariant reason, and the supported replacement.
+Focused fixtures in `test/effect-diagnostics/` establish that each blocking Effect diagnostic category detects its intended defect.
 
 ## Quality ownership
 

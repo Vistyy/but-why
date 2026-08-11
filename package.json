@@ -38,7 +38,7 @@
     "lint": "biome lint .",
     "ast-grep-check": "ast-grep test --skip-snapshot-tests && ast-grep scan",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "effect-tsgo patch --typescript && tsc --noEmit"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.84.0",
@@ -52,6 +52,7 @@
     "@effect/platform": "0.95.0",
     "@effect/platform-node": "0.105.0",
     "@effect/sql": "0.50.0",
+    "@effect/tsgo": "0.36.4",
     "@effect/vitest": "0.28.0",
     "@types/node": "^24.0.0",
     "@vitest/coverage-istanbul": "3.2.6",

@@ -1,8 +1,9 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");
@@ -30,10 +31,74 @@ const expectActionablePolicyDiagnostic = (output: string): void => {
   expect(output).toMatch(/use|receive|call|return|provide|follow/i);
 };
 
+type EffectDiagnostic = {
+  readonly file: string;
+  readonly name: string;
+  readonly severity: string;
+};
+
+const decodeEffectDiagnostics = (source: string): readonly EffectDiagnostic[] => {
+  const parsed: unknown = JSON.parse(source);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Effect diagnostic output must be an object");
+  }
+  const diagnostics = Reflect.get(parsed, "diagnostics");
+  if (!Array.isArray(diagnostics)) {
+    throw new Error("Effect diagnostic output must contain diagnostics");
+  }
+  return diagnostics.map((diagnostic: unknown) => {
+    if (typeof diagnostic !== "object" || diagnostic === null || Array.isArray(diagnostic)) {
+      throw new Error("Each Effect diagnostic must be an object");
+    }
+    const file = Reflect.get(diagnostic, "file");
+    const name = Reflect.get(diagnostic, "name");
+    const severity = Reflect.get(diagnostic, "severity");
+    if (typeof file !== "string" || typeof name !== "string" || typeof severity !== "string") {
+      throw new Error("Each Effect diagnostic must identify its file, name, and severity");
+    }
+    return { file, name, severity };
+  });
+};
+
 afterEach(() => {
   for (const path of temporaryPaths.splice(0)) {
     rmSync(path, { recursive: true, force: true });
   }
+});
+
+describe("Effect diagnostic sensitivity", () => {
+  test("each blocking category detects its focused defect", () => {
+    const result = run(
+      "pnpm",
+      [
+        "--dir",
+        repositoryRoot,
+        "exec",
+        "effect-tsgo",
+        "diagnostics",
+        "--project",
+        join(repositoryRoot, "test/effect-diagnostics/tsconfig.json"),
+        "--format",
+        "json",
+      ],
+      createTestWorkspace(),
+    );
+
+    expect(result.status).toBe(1);
+    const diagnostics = decodeEffectDiagnostics(result.output);
+    expect(diagnostics.every(({ severity }) => severity === "error")).toBe(true);
+    expect(diagnostics.map(({ file, name }) => [basename(file), name]).sort()).toEqual([
+      ["effect-fn-implicit-any.ts", "effectFnImplicitAny"],
+      ["floating-effect-in-vitest.ts", "floatingEffectInVitest"],
+      ["floating-effect.ts", "floatingEffect"],
+      ["invalid-declarations.ts", "classSelfMismatch"],
+      ["invalid-declarations.ts", "overriddenSchemaConstructor"],
+      ["missing-generator-marker.ts", "missingStarInYieldEffectGen"],
+      ["missing-return-yield-star.ts", "missingReturnYieldStar"],
+      ["non-object-service.ts", "nonObjectEffectServiceType"],
+      ["promise-success.ts", "promiseInEffectSuccess"],
+    ]);
+  });
 });
 
 describe("repository-authored blocking diagnostics", () => {
