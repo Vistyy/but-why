@@ -66,7 +66,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
     const stored =
       input.sessionStore === undefined
         ? undefined
-        : yield* input.sessionStore.get(input.identity.ownerId, input.identity.producer);
+        : yield* input.sessionStore.get(input.identity.owner.id, input.identity.producer);
     const compatible =
       stored !== undefined &&
       stored.fingerprint === fingerprint &&
@@ -107,7 +107,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
             : {
                 sessionStorageRoot: reviewerSessionsPath(
                   input.sessionStorageRoot,
-                  input.identity.ownerId,
+                  input.identity.owner.id,
                   input.identity.producer,
                 ),
               }),
@@ -128,7 +128,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
       continuity = "restarted";
       restartReason = "session_unusable";
       if (input.sessionStore !== undefined)
-        yield* input.sessionStore.remove(input.identity.ownerId, input.identity.producer);
+        yield* input.sessionStore.remove(input.identity.owner.id, input.identity.producer);
       result = yield* review(input.prompt);
     }
     result = yield* input.completeReview({ initialResult: result, review });
@@ -148,7 +148,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
       sessionPermissionsOk
     ) {
       yield* input.sessionStore.save({
-        ownerId: input.identity.ownerId,
+        ownerId: input.identity.owner.id,
         producer: input.identity.producer,
         fingerprint,
         sessionReference: result.sessionReference,

@@ -190,8 +190,7 @@ const runAcceptanceReviewPhaseImpl = (
       ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
     });
     const identity = {
-      ownerId: input.changeId,
-      fingerprintOwnerKey: "changeId" as const,
+      owner: { kind: "change" as const, id: input.changeId },
       producer: "acceptance" as const,
       agentProfile: input.policy.profile,
       instructions: input.policy.instructions,

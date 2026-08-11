@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
@@ -12,6 +13,7 @@ import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
+import { recordTaskReviewExecutionWithRetry } from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -19,6 +21,38 @@ import {
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
+
+it.effect("retries an idempotent Task Review execution record after an uncertain SQL failure", () =>
+  Effect.gen(function* () {
+    let attempts = 0;
+    yield* recordTaskReviewExecutionWithRetry(
+      () => {
+        attempts += 1;
+        return attempts === 1
+          ? Effect.fail(
+              new RepositorySqlOperationFailed({
+                operationName: "record Task Review execution",
+                cause: new Error("commit outcome unavailable"),
+              }),
+            )
+          : Effect.void;
+      },
+      {
+        reviewId: "review-1",
+        execution: {
+          continuity: "fresh",
+          identityFingerprint: "fingerprint",
+          durationMs: 1,
+          reviewCalls: 1,
+          invocationUsage: [null],
+          sessionReference: "session-1",
+        },
+      },
+    );
+
+    expect(attempts).toBe(2);
+  }),
+);
 
 const passingReviewer: ReviewerAgentRuntime<ReviewerOutput> = {
   review: () =>

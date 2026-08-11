@@ -12,8 +12,7 @@ import {
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const identity = (changeId: string, producer: string): ReviewerSessionIdentity => ({
-  ownerId: changeId,
-  fingerprintOwnerKey: "changeId",
+  owner: { kind: "change", id: changeId },
   producer,
   agentProfile: {
     agentProfile: "strict",

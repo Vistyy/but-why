@@ -250,7 +250,7 @@ const submitTaskReview = (
           };
           const execution = yield* executeReviewerSession<ReviewerOutput, never>({
             identity: {
-              ownerId: taskId,
+              owner: { kind: "task", id: taskId },
               producer: "task",
               agentProfile: resolvedPolicy.policy.profile,
               instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
@@ -354,19 +354,20 @@ const submitTaskReview = (
     }
 
     if (execution.evidence !== undefined) {
+      const executionInput = {
+        reviewId,
+        execution: {
+          ...execution.evidence,
+          sessionReference: execution.sessionReference ?? null,
+        },
+      };
       const recordedExecution = yield* Effect.either(
-        input.persistence.recordExecution({
-          reviewId,
-          execution: {
-            ...execution.evidence,
-            sessionReference: execution.sessionReference ?? null,
-          },
-        }),
+        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, executionInput),
       );
       if (recordedExecution._tag === "Left") {
         const failure = {
           operation: "record_task_review_execution",
-          message: repositoryStorageErrorMessage(recordedExecution.left),
+          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
         };
         yield* input.persistence.recordActiveFailure(reviewId, failure, now);
         const active = yield* input.persistence.getById(reviewId);
@@ -399,7 +400,7 @@ const submitTaskReview = (
     if (indexed._tag === "Left") {
       const failure = {
         operation: "index_task_reviewer_transcripts",
-        message: repositoryStorageErrorMessage(indexed.left),
+        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
       };
       yield* input.persistence.recordActiveFailure(reviewId, failure, now);
       const active = yield* input.persistence.getById(reviewId);
@@ -531,7 +532,7 @@ export const abandonTaskReview = (
     if (indexed._tag === "Left") {
       const failure = {
         operation: "index_task_reviewer_transcripts",
-        message: repositoryStorageErrorMessage(indexed.left),
+        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
       };
       yield* input.persistence.recordActiveFailure(review.id, failure, now);
       const current = yield* input.persistence.getById(review.id);
@@ -583,7 +584,18 @@ const proposalDiff = (
       : { before: previous.dependencyIds, after: current.dependencyIds },
 });
 
-const repositoryStorageErrorMessage = (error: RepositoryStorageError): string =>
+export const recordTaskReviewExecutionWithRetry = (
+  recordExecution: TaskReviewPersistence["recordExecution"],
+  input: Parameters<TaskReviewPersistence["recordExecution"]>[0],
+): Effect.Effect<void, RepositoryStorageError> =>
+  recordExecution(input).pipe(
+    Effect.catchTag("RepositorySqlOperationFailed", () => recordExecution(input)),
+  );
+
+const repositoryStorageErrorMessage = (
+  subject: "Task Review execution" | "Task Reviewer Transcript",
+  error: RepositoryStorageError,
+): string =>
   "operationName" in error
-    ? `Task Reviewer Transcript persistence failed during ${error.operationName}.`
-    : `Task Reviewer Transcript persistence failed: ${error._tag}.`;
+    ? `${subject} persistence failed during ${error.operationName}.`
+    : `${subject} persistence failed: ${error._tag}.`;

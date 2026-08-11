@@ -8,8 +8,9 @@ import type { AgentEnvironmentCommand } from "../agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
 
 export type ReviewerSessionIdentity = {
-  readonly ownerId: string;
-  readonly fingerprintOwnerKey?: "changeId";
+  readonly owner:
+    | { readonly kind: "change"; readonly id: string }
+    | { readonly kind: "task"; readonly id: string };
   readonly producer: string;
   readonly agentProfile: ResolvedPiAgentProfile;
   readonly instructions: string;
@@ -44,11 +45,11 @@ export type ReviewerSessionStore = {
 export type ReviewerContinuity = "fresh" | "resumed" | "restarted";
 
 export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): string => {
-  const { ownerId, fingerprintOwnerKey, ...remainder } = identity;
+  const { owner, ...remainder } = identity;
   const persistedIdentity =
-    fingerprintOwnerKey === "changeId"
-      ? { changeId: ownerId, ...remainder }
-      : { ownerId, ...remainder };
+    owner.kind === "change"
+      ? { changeId: owner.id, ...remainder }
+      : { ownerId: owner.id, ...remainder };
   return createHash("sha256").update(JSON.stringify(persistedIdentity)).digest("hex");
 };
 
