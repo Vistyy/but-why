@@ -13,7 +13,7 @@ import {
   candidateReadColumns,
   decodeCandidate,
   type StoredCandidateRow,
-} from "./sqliteCandidateValidationReadModel.js";
+} from "./sqliteCandidateStorage.js";
 import {
   decodeCandidateCaptureChange,
   type StoredCandidateCaptureChangeRow,
