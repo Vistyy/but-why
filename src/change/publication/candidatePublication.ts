@@ -26,6 +26,7 @@ import type {
   GitHubPullRequestMutationResult,
   GitHubPullRequestReadResult,
   GitHubPullRequestRequest,
+  GitHubPullRequestUpdateConfirmationResult,
   PublicationFailureEvidence,
 } from "../ownedPullRequestGateway.js";
 export type CommitSubjectResult =
@@ -769,7 +770,14 @@ const readBackUpdatedPullRequest = (
         ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
       yield* delay(100);
     }
-    const recovered = readPullRequest(dependencies.github, input.target, owned.pullRequest.number);
+    const recovered =
+      metadata === undefined
+        ? readPullRequest(dependencies.github, input.target, owned.pullRequest.number)
+        : readPullRequestUpdateConfirmation(
+            dependencies.github,
+            input.target,
+            owned.pullRequest.number,
+          );
     if (!recovered.ok) {
       return {
         ok: false,
@@ -882,6 +890,32 @@ const readPullRequest = (
   } catch {
     return { ok: false, evidence: unavailableRecoveryEvidence };
   }
+};
+
+const readPullRequestUpdateConfirmation = (
+  github: GitHubPullRequestGateway,
+  target: ChangePublicationTarget,
+  number: number,
+): GitHubPullRequestUpdateConfirmationResult => {
+  const result = readPullRequest(github, target, number);
+  if (!result.ok) return result;
+  return result.pullRequest.title === undefined || result.pullRequest.body === undefined
+    ? {
+        ok: false,
+        evidence: {
+          operation: "remote_lookup",
+          classification: "response_parse_failure",
+          reason: "malformed",
+        },
+      }
+    : {
+        ok: true,
+        pullRequest: {
+          ...result.pullRequest,
+          title: result.pullRequest.title,
+          body: result.pullRequest.body,
+        },
+      };
 };
 
 const readPullRequestList = (

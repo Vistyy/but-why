@@ -782,6 +782,54 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("reports missing recovery metadata as an unusable GitHub response", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote: GitHubPullRequest = pullRequest(branchHead);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: {
+            ...publicationGitDefaults,
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => ({
+              ok: true,
+              pullRequest: { ...remote, title: "Stale title", body: "Stale body" },
+            }),
+          },
+          delayBeforeConfirmation: () => Effect.void,
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        remote = pullRequest(next.captured.headSha);
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+          recoveryEvidence: {
+            operation: "remote_lookup",
+            classification: "response_parse_failure",
+            reason: "malformed",
+          },
+        });
+      }),
+    ),
+  );
+
   it.scoped("rejects a foreign remote head found during the recovery update", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
