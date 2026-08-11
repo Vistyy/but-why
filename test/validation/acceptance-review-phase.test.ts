@@ -433,7 +433,7 @@ const acceptancePhaseFixture = (
         changeId: "change-1",
         candidate: exactCandidate,
         acceptanceContext,
-        implementationDecisions: options.implementationDecisions,
+        implementationDecisions: options.implementationDecisions ?? [],
         ...(options.blockerHistory === undefined ? {} : { blockerHistory: options.blockerHistory }),
         policy,
         agentEnvironment: ["nix", "develop", "-c"],

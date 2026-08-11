@@ -3,7 +3,6 @@ import { Effect } from "effect";
 
 import type { ChangeRecord, ChangeState } from "../change/change.js";
 import { changeState } from "../change/change.js";
-import type { ChangeStartRecord } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,
   ImplementationBlockerHistory,
@@ -92,7 +91,12 @@ export type UnknownChangeRow = {
   readonly closedAt: unknown;
 };
 
-export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
+export type ChangeWithoutAuthorityHistory = Omit<
+  ChangeRecord,
+  "implementationDecisions" | "activeBlocker"
+>;
+
+export const decodeChangeRow = (row: UnknownChangeRow): ChangeWithoutAuthorityHistory => {
   const id = decodeStoredString(row.id, "Change ID");
   const taskId = decodeStoredNullableString(row.taskId, "Change Task ID");
   const encodedAcceptanceContext = decodeStoredNullableString(
@@ -191,24 +195,6 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
     createdAt: decodeStoredString(row.createdAt, "Change creation time"),
     updatedAt: decodeStoredString(row.updatedAt, "Change update time"),
     closedAt,
-  };
-};
-
-export const requireChangeStartRecord = (change: ChangeRecord): ChangeStartRecord => {
-  if (
-    change.baseRef === null ||
-    change.baseRemoteUrl === null ||
-    change.startingCommit === null ||
-    change.worktreePath === null
-  ) {
-    throw new Error("Stored Change Start relationship is incomplete");
-  }
-  return {
-    ...change,
-    baseRef: change.baseRef,
-    baseRemoteUrl: change.baseRemoteUrl,
-    startingCommit: change.startingCommit,
-    worktreePath: change.worktreePath,
   };
 };
 
@@ -393,7 +379,7 @@ export const decodeReviewerTranscript = (
 
 export const validateChangeRelationships = (
   sql: SqlClient.SqlClient,
-  change: ChangeRecord,
+  change: ChangeWithoutAuthorityHistory,
   operationName: string,
 ) =>
   Effect.gen(function* () {
@@ -528,7 +514,7 @@ export const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] =
 const compareStoredStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
-const decodeNullablePositiveInteger = (
+export const decodeNullablePositiveInteger = (
   value: unknown,
   storageType: unknown,
   field: string,

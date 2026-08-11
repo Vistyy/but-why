@@ -23,8 +23,7 @@ export const runShow = (
           ? support.changeNotFound()
           : success({
               change: support.changeInspectionView(detail.change),
-              ...(detail.change.implementationDecisions === undefined ||
-              detail.change.implementationDecisions.length === 0
+              ...(detail.change.implementationDecisions.length === 0
                 ? {}
                 : { implementationDecisions: detail.change.implementationDecisions }),
               currentCandidate: detail.currentCandidate,

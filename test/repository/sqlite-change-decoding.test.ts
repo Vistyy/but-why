@@ -187,7 +187,10 @@ describe("SQLite Change decoding", () => {
           }),
         );
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-        yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+        expect(yield* starts.getById("change-malformed")).toMatchObject({
+          id: "change-malformed",
+          startingCommit: "base-sha",
+        });
 
         yield* repository.operation("inject malformed publication evidence relationships", (sql) =>
           Effect.gen(function* () {
@@ -584,13 +587,47 @@ describe("SQLite Change decoding", () => {
         expect(yield* changes.submission.getChangeById(captured.changeId)).toMatchObject({
           id: captured.changeId,
         });
+        yield* repository.operation(
+          "corrupt selected submission data",
+          (sql) =>
+            sql`UPDATE changes SET acceptance_context = x'06' WHERE id = ${captured.changeId}`,
+        );
+        yield* expectPersistedDataInvalid(changes.submission.getChangeById(captured.changeId));
+        yield* repository.operation(
+          "restore selected submission data",
+          (sql) =>
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history.","resolutions":["Proceed.","Proceed again."]}' WHERE id = ${captured.changeId}`,
+        );
+        yield* repository.operation("corrupt selected terminal cleanup data", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`PRAGMA ignore_check_constraints = ON`;
+            yield* sql`UPDATE changes SET cleanup_state = 'unsupported' WHERE id = ${captured.changeId}`;
+          }),
+        );
+        yield* expectPersistedDataInvalid(cancellation.getChangeById(captured.changeId));
+        yield* expectPersistedDataInvalid(reconciliation.getChangeById(captured.changeId));
+        yield* repository.operation(
+          "restore selected terminal cleanup data",
+          (sql) =>
+            sql`UPDATE changes SET cleanup_state = 'complete' WHERE id = ${captured.changeId}`,
+        );
         expect(
           yield* changes.delivery.cancelChange({
             changeId: captured.changeId,
             reason: "Exercise reconciliation selection.",
             now: "2026-08-09T20:25:00.000Z",
           }),
-        ).toMatchObject({ ok: true });
+        ).toMatchObject({
+          ok: true,
+          changed: true,
+          change: {
+            id: captured.changeId,
+            state: "closed",
+            closeReason: "cancelled",
+            cancelReason: null,
+            cleanup: { state: "pending", blockingReason: null },
+          },
+        });
         yield* repository.operation("corrupt history outside closed projections", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE implementation_decisions SET choice = x'04'

@@ -109,7 +109,7 @@ describe("Change reconciliation discard boundary", () => {
           };
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: changes.reads.getChangeById,
+              getChangeById: changes.delivery.getChangeById,
               listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
               completeMergedChange: changes.delivery.completeMergedChange,
             },
@@ -168,7 +168,7 @@ describe("Change reconciliation discard boundary", () => {
         const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },
@@ -240,7 +240,7 @@ describe("Change reconciliation discard boundary", () => {
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },
@@ -305,7 +305,7 @@ describe("Change reconciliation discard boundary", () => {
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },

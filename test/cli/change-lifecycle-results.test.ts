@@ -21,14 +21,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   },
   prepare: { command: "prepare repository", timeoutSeconds: 17 },
   prepareFailure,
-  publication: null,
-  cleanup: { state: "pending", blockingReason: null },
   state: "open",
-  closeReason: null,
-  cancelReason: null,
-  createdAt: "2026-07-17T22:50:00.000Z",
-  updatedAt: "2026-07-17T22:50:00.000Z",
-  closedAt: null,
 });
 
 describe("Change lifecycle CLI results", () => {

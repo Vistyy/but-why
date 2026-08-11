@@ -26,7 +26,7 @@ import {
   type CandidateValidationService,
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
-import type { ChangeSubmissionPort } from "./changePorts.js";
+import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
 import {
   type OwnedPullRequestUnavailableReason,
   observedMergedChangeEvidence,
@@ -227,7 +227,11 @@ export const openChangeSubmit = (dependencies: {
       ),
 });
 
-type OpenChangeWithWorktree = ChangeRecord & { readonly worktreePath: string };
+type OpenChangeWithWorktree = SubmissionChange & {
+  readonly worktreePath: string;
+  readonly baseRef: string;
+  readonly baseRemoteUrl: string;
+};
 type SubmissionDecision =
   | { readonly proceed: true; readonly ownedPullRequestOpen: boolean }
   | { readonly proceed: false; readonly result: ChangeSubmitResult };
@@ -240,9 +244,6 @@ const submitChange = (
     const selected = yield* selectOpenChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
-    if (change.baseRef === null || change.baseRemoteUrl === null) {
-      return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
-    }
     const decision = yield* observeBeforeSubmission(dependencies, change, input.now);
     if (!decision.proceed) return decision.result;
     const completedPublication = yield* completedPublicationEvidence(
@@ -410,9 +411,13 @@ const observeBeforeSubmission = (
             } as const,
           };
         }
+        const outputChange = yield* dependencies.persistence.getChangeForOutputById(change.id);
+        if (outputChange === undefined) {
+          return { proceed: false, result: { ok: false, code: "change_not_found" } as const };
+        }
         return {
           proceed: false,
-          result: { ok: true, status: "completed", change: completed.change } as const,
+          result: { ok: true, status: "completed", change: outputChange } as const,
         };
       }
       case "mismatch":
@@ -442,7 +447,7 @@ const observeBeforeSubmission = (
   });
 
 const publicationPolicySnapshot = (
-  change: ChangeRecord,
+  change: SubmissionChange,
   policy: ResolvedCandidateValidationPolicy,
 ) => ({
   ...policy.policy,
@@ -618,7 +623,7 @@ const selectOpenChange = (
   persistence: ChangeSubmissionPort,
   changeId: string,
 ): Effect.Effect<
-  | { readonly ok: true; readonly change: ChangeRecord & { readonly worktreePath: string } }
+  | { readonly ok: true; readonly change: OpenChangeWithWorktree }
   | Extract<
       ChangeSubmitResult,
       {
@@ -631,10 +636,18 @@ const selectOpenChange = (
     const change = yield* persistence.getChangeById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
-    if (change.worktreePath === null) {
+    if (change.worktreePath === null || change.baseRef === null || change.baseRemoteUrl === null) {
       return { ok: false, code: "change_not_open" };
     }
-    return { ok: true, change: change as ChangeRecord & { readonly worktreePath: string } };
+    return {
+      ok: true,
+      change: {
+        ...change,
+        worktreePath: change.worktreePath,
+        baseRef: change.baseRef,
+        baseRemoteUrl: change.baseRemoteUrl,
+      },
+    };
   });
 
 const candidateIdentity = (candidate: CapturedCandidate) => ({
@@ -645,17 +658,17 @@ const candidateIdentity = (candidate: CapturedCandidate) => ({
 
 const detectPublicationTarget = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ChangeRecord & { readonly worktreePath: string },
+  change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
 ): PublicationTargetDetectionResult =>
   dependencies.detectTarget(
     change.worktreePath,
     candidate.branchRef.replace(/^refs\/heads\//, ""),
-    change.baseRef ?? "",
-    change.baseRemoteUrl ?? "",
+    change.baseRef,
+    change.baseRemoteUrl,
   );
 
-const publishedResult = (change: ChangeRecord, created: boolean): ChangeSubmitResult => {
+const publishedResult = (change: SubmissionChange, created: boolean): ChangeSubmitResult => {
   const publication = change.publication;
   if (publication?.pullRequest === null || publication === null) {
     throw new Error("Reconciled Change lacks owned pull request facts");

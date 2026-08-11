@@ -23,6 +23,7 @@ import {
 } from "../../src/sqlite/sqliteChangePersistence.js";
 
 type ChangeDeliveryTestPort = {
+  readonly getChangeById: ChangeReconciliationPort["getChangeById"];
   readonly listChangesForReconciliation: ChangeReconciliationPort["listChangesForReconciliation"];
   readonly completeMergedChange: ChangeReconciliationPort["completeMergedChange"];
   readonly cancelChange: ChangeCancellationPort["cancelChange"];
@@ -37,6 +38,7 @@ const openChangeDeliveryTestPort = () =>
   }).pipe(
     Effect.map(
       ({ reconciliation, cancellation, cleanup }): ChangeDeliveryTestPort => ({
+        getChangeById: reconciliation.getChangeById,
         listChangesForReconciliation: reconciliation.listChangesForReconciliation,
         completeMergedChange: reconciliation.completeMergedChange,
         cancelChange: cancellation.cancelChange,

@@ -348,7 +348,7 @@ const runReviewPhases = (
           headSha: captured.headSha,
         },
         acceptanceContext,
-        implementationDecisions: undefined,
+        implementationDecisions: [],
         policy: policy.acceptanceReview,
         ...(policy.agentEnvironment === undefined
           ? {}

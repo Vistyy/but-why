@@ -8,6 +8,7 @@ import {
   openCancellationUseCases,
 } from "../../src/change/cancelChange.js";
 import type { ChangeRecord } from "../../src/change/change.js";
+import type { CancellationChange } from "../../src/change/changePorts.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type {
   GitHubPullRequest,
@@ -705,7 +706,7 @@ const taskRecord = (state: TaskRecord["state"]): TaskRecord => ({
   dependents: [],
 });
 
-const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
+const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationChange => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
@@ -717,6 +718,17 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
   acceptanceContext: null,
   prepare: null,
   prepareFailure: null,
+  implementationDecisions: [],
+  activeBlocker: null,
+  remoteChangeBranch: {
+    owner: target.owner,
+    repo: target.repo,
+    remoteName: target.remoteName,
+    remoteUrl: "https://github.com/acme/repo.git",
+    branchName: "change-1",
+    targetBranch: target.baseBranch,
+    expectedHeadSha: "head",
+  },
   publication: {
     candidateId: "candidate-1",
     validationRunId: "run-1",
@@ -747,7 +759,7 @@ const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullReque
 
 const cancellationDependencies = (input: {
   readonly task: TaskRecord;
-  readonly change: ChangeRecord;
+  readonly change: ChangeRecord & CancellationChange;
   readonly pullRequest: GitHubPullRequest;
   readonly closePullRequest?: GitHubPullRequestMutationResult;
   readonly cleanupResult?:

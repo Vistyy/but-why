@@ -75,13 +75,13 @@ export type ChangeRecord = {
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly implementationDecisions?: readonly ImplementationDecision[];
+  readonly implementationDecisions: readonly ImplementationDecision[];
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
   readonly state: ChangeState;
-  readonly activeBlocker?: ImplementationBlocker | null;
+  readonly activeBlocker: ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
   readonly createdAt: string;

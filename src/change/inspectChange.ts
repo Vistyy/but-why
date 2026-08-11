@@ -55,7 +55,7 @@ export const queryChangeTaskProjection = (
     const change = yield* dependencies.getChangeByTaskId(taskId);
     if (change === undefined) return null;
     if (change.state === "closed") return { id: change.id };
-    if (change.activeBlocker !== null && change.activeBlocker !== undefined) {
+    if (change.activeBlocker !== null) {
       return { id: change.id, activity: "blocked" };
     }
     if ((yield* dependencies.getActiveForChange(change.id)) !== undefined) {

@@ -272,6 +272,8 @@ const closedChange = (changeId: string, commonDirectory: string): ChangeRecord =
   acceptanceContext: null,
   prepare: null,
   prepareFailure: null,
+  implementationDecisions: [],
+  activeBlocker: null,
   publication: null,
   cleanup: { state: "pending", blockingReason: null },
   state: "closed",

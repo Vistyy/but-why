@@ -778,7 +778,7 @@ const record = (
 const implementationDecisionSection = (
   decisions: CandidatePublicationChange["implementationDecisions"],
 ): string =>
-  decisions === undefined || decisions.length === 0
+  decisions.length === 0
     ? ""
     : `\n\n## Implementation Decision Log\n\n${implementationDecisionMarkdown(decisions)}`;
 

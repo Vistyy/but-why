@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../contracts/repositoryStorageError.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import {
@@ -13,6 +16,7 @@ import {
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import type {
   ChangeAuthorityPort,
+  ChangeReadPort,
   ImplementationBlockerMutationResult,
   RaiseImplementationBlockerInput,
   RecordImplementationDecisionInput,
@@ -194,6 +198,7 @@ const loadAuthorityMutation = <
   mutate: (
     authority: ChangeAuthorityPort,
     command: Input,
+    changes: ChangeReadPort,
   ) => Effect.Effect<Result, RepositoryStorageError>,
 ) =>
   loadOperation(
@@ -204,8 +209,11 @@ const loadAuthorityMutation = <
           owner: "change_submission",
           key: command.changeId,
           effect: context.provide(
-            Effect.flatMap(openSqliteChangeAuthorityPort(), (authority) =>
-              mutate(authority, command),
+            Effect.all({
+              authority: openSqliteChangeAuthorityPort(),
+              changes: openSqliteChangeReadPort(),
+            }).pipe(
+              Effect.flatMap(({ authority, changes }) => mutate(authority, command, changes)),
             ),
           ),
         })
@@ -216,16 +224,40 @@ const loadAuthorityMutation = <
         ),
   );
 
-export const loadRaiseImplementationBlocker = (input: LoadInput) =>
-  loadAuthorityMutation<RaiseImplementationBlockerInput, ImplementationBlockerMutationResult>(
+const loadBlockerMutation = <Input extends { readonly changeId: string }>(
+  input: LoadInput,
+  mutate: (
+    authority: ChangeAuthorityPort,
+    command: Input,
+  ) => ReturnType<ChangeAuthorityPort["raiseImplementationBlocker"]>,
+) =>
+  loadAuthorityMutation<Input, ImplementationBlockerMutationResult>(
     input,
-    (authority, command) => authority.raiseImplementationBlocker(command),
+    (authority, command, changes) =>
+      Effect.gen(function* () {
+        const result = yield* mutate(authority, command);
+        if (!result.ok) return result;
+        const change = yield* changes.getChangeById(command.changeId);
+        if (change === undefined) {
+          return yield* Effect.fail(
+            new RepositoryPersistedDataInvalid({
+              operationName: "construct Implementation Blocker CLI output",
+              cause: new Error("Change disappeared"),
+            }),
+          );
+        }
+        return { ...result, change };
+      }),
+  );
+
+export const loadRaiseImplementationBlocker = (input: LoadInput) =>
+  loadBlockerMutation(input, (authority, command: RaiseImplementationBlockerInput) =>
+    authority.raiseImplementationBlocker(command),
   );
 
 export const loadResolveImplementationBlocker = (input: LoadInput) =>
-  loadAuthorityMutation<ResolveImplementationBlockerInput, ImplementationBlockerMutationResult>(
-    input,
-    (authority, command) => authority.resolveImplementationBlocker(command),
+  loadBlockerMutation(input, (authority, command: ResolveImplementationBlockerInput) =>
+    authority.resolveImplementationBlocker(command),
   );
 
 export const loadRecordImplementationDecision = (input: LoadInput) =>

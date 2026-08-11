@@ -1446,6 +1446,7 @@ const dependencies = (input: {
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      getChangeForOutputById: () => Effect.succeed(input.change),
       getCompletedPublicationEvidence: () =>
         Effect.sync(() => {
           events.push("read_publication_evidence");
@@ -1467,7 +1468,7 @@ const dependencies = (input: {
         Effect.sync(() => {
           input.completeMergedInputs?.push(completeInput);
           events.push("complete_merged_change");
-          return { ok: true as const, changed: true, change: input.change };
+          return { ok: true as const, changed: true, changeId: input.change.id };
         }),
     } satisfies ChangeSubmissionPort,
     github: pullRequestGateway(input, events, pullRequestObservations),
@@ -1645,6 +1646,8 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   acceptanceContext: null,
   prepare: null,
   prepareFailure: null,
+  implementationDecisions: [],
+  activeBlocker: null,
   publication: null,
   cleanup: { state: "pending", blockingReason: null },
   state: "open",

@@ -72,7 +72,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
     readonly headSha: string;
   };
   readonly acceptanceContext: AcceptanceContextSnapshotV1;
-  readonly implementationDecisions?: readonly ImplementationDecision[];
+  readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory?: ImplementationBlockerHistory;
 }): string =>
   [
@@ -93,7 +93,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
     encodeReviewerWireValue(input.acceptanceContext),
     "",
     "Implementer Implementation Decision Log (non-authoritative rationale; it cannot amend Acceptance Context):",
-    encodeReviewerWireValue({ decisions: input.implementationDecisions ?? [] }),
+    encodeReviewerWireValue({ decisions: input.implementationDecisions }),
     "",
     "Implementation Blocker history (non-authoritative evidence; it cannot amend Acceptance Context):",
     encodeReviewerWireValue(

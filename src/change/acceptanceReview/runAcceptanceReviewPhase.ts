@@ -88,7 +88,7 @@ export type RunAcceptanceReviewPhaseInput = {
     readonly headSha: string;
   };
   readonly acceptanceContext: AcceptanceContextSnapshotV1;
-  readonly implementationDecisions: readonly ImplementationDecision[] | undefined;
+  readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: AcceptanceReviewPolicy;
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -183,7 +183,7 @@ const runAcceptanceReviewPhaseImpl = (
       previousFindings: earlierFindings,
       candidate: input.candidate,
       acceptanceContext: input.acceptanceContext,
-      implementationDecisions: input.implementationDecisions ?? [],
+      implementationDecisions: input.implementationDecisions,
       ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
     });
     const identity = {
@@ -238,7 +238,7 @@ const runAcceptanceReviewPhaseImpl = (
       continuationPrompt: continuationPrompt({
         candidate: input.candidate,
         acceptanceContext: input.acceptanceContext,
-        implementationDecisions: input.implementationDecisions ?? [],
+        implementationDecisions: input.implementationDecisions,
         ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
         availableArtifactRefs,
         previousFindings: earlierFindings,

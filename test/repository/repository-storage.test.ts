@@ -345,11 +345,11 @@ describe("repository SQL storage", () => {
 
         expect(raised).toMatchObject({
           ok: true,
-          change: {
-            state: "open",
-            activeBlocker: { content: "Wait for approved intent.", resolvedAt: null },
-          },
           blocker: { content: "Wait for approved intent.", resolvedAt: null },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: { content: "Wait for approved intent.", resolvedAt: null },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(
@@ -481,7 +481,11 @@ describe("repository SQL storage", () => {
 
         expect(raised).toMatchObject({
           ok: true,
-          change: { state: "open", activeBlocker: { resolvedAt: null } },
+          blocker: { resolvedAt: null },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: { resolvedAt: null },
         });
         expect(
           yield* changes.authority.listImplementationBlockers(started.change.id),
@@ -534,16 +538,16 @@ describe("repository SQL storage", () => {
 
         expect(resolved).toMatchObject({
           ok: true,
-          change: {
-            state: "open",
-            activeBlocker: null,
-            acceptanceContext: { resolutions: ["Use the approved approach."] },
-          },
           blocker: {
             id: raised.blocker.id,
             resolvedAt: "2026-07-17T23:06:00.000Z",
             resolution: { content: "Use the approved approach." },
           },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
+          acceptanceContext: { resolutions: ["Use the approved approach."] },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(
@@ -587,8 +591,12 @@ describe("repository SQL storage", () => {
 
         expect(resolved).toMatchObject({
           ok: true,
-          change: { state: "open", activeBlocker: null, acceptanceContext: null },
           blocker: { resolution: { content: "Continue without taskless intent." } },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
+          acceptanceContext: null,
         });
         expect(
           yield* changes.authority.listImplementationBlockers(started.change.id),
@@ -791,7 +799,11 @@ describe("repository SQL storage", () => {
         expect(completed).toMatchObject({
           ok: true,
           changed: true,
-          change: { state: "closed", closeReason: "completed" },
+          change: { state: "closed" },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "closed",
+          closeReason: "completed",
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
       }),

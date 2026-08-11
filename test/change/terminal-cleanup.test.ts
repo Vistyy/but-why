@@ -7,6 +7,7 @@ import {
   openCancellationUseCases,
 } from "../../src/change/cancelChange.js";
 import type { ChangeCleanup, ChangeRecord } from "../../src/change/change.js";
+import type { TerminalCleanupChange } from "../../src/change/changePorts.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
@@ -205,10 +206,11 @@ describe("Change-owned terminal cleanup operation", () => {
   it.effect("delegates cleanup without a Remote Change Branch for an unpublished Change", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const change = {
-        ...changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
-        publication: null,
-      };
+      const { remoteChangeBranch: _remoteChangeBranch, ...publishedChange } = changeRecord({
+        closeReason: "cancelled",
+        cleanup: pendingCleanup,
+      });
+      const change = { ...publishedChange, publication: null };
       const cleanup = openTerminalCleanup({
         ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events),
@@ -507,7 +509,7 @@ const changeRecord = (input: {
   readonly closeReason: "completed" | "cancelled" | null;
   readonly cleanup: ChangeCleanup;
   readonly state?: "open" | "closed";
-}): ChangeRecord => ({
+}): ChangeRecord & TerminalCleanupChange => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
@@ -519,6 +521,17 @@ const changeRecord = (input: {
   acceptanceContext: null,
   prepare: null,
   prepareFailure: null,
+  implementationDecisions: [],
+  activeBlocker: null,
+  remoteChangeBranch: {
+    owner: target.owner,
+    repo: target.repo,
+    remoteName: target.remoteName,
+    remoteUrl: "https://github.com/acme/repo.git",
+    branchName: "change-1",
+    targetBranch: target.baseBranch,
+    expectedHeadSha: "head",
+  },
   publication: {
     candidateId: "candidate-1",
     validationRunId: "run-1",
