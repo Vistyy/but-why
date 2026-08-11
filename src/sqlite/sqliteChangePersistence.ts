@@ -516,8 +516,8 @@ const getBaseById = (sql: SqlClient.SqlClient, changeId: string, operationName: 
 
 const getPublicationById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(getBaseById(sql, changeId, "read Change for publication"), (base) =>
-    base === undefined
-      ? Effect.succeed(undefined)
+    base === undefined || base.state === changeState.closed
+      ? Effect.succeed(base)
       : Effect.map(listDecisions(sql, base.id), (implementationDecisions) => ({
           ...base,
           implementationDecisions,
@@ -1288,8 +1288,8 @@ const mapTaskRow = (
   sql: SqlClient.SqlClient,
 ) =>
   Effect.flatMap(mapBaseRow(row, operationName, sql), (base) =>
-    base === undefined
-      ? Effect.succeed(undefined)
+    base === undefined || base.state === changeState.closed
+      ? Effect.succeed(base)
       : Effect.map(readActiveBlocker(sql, base.id, operationName), (activeBlocker) => ({
           ...base,
           activeBlocker,

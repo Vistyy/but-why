@@ -521,6 +521,26 @@ describe("SQLite Change decoding", () => {
             now: "2026-08-09T20:25:00.000Z",
           }),
         ).toMatchObject({ ok: true });
+        yield* repository.operation("corrupt history outside closed projections", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE implementation_decisions SET choice = x'04'
+                        WHERE change_id = ${captured.changeId}`;
+            yield* sql`
+              INSERT INTO implementation_blockers (id, change_id, reported_at, content)
+              VALUES ('closed-active-blocker', ${captured.changeId},
+                '2026-08-09T20:26:00.000Z', x'05')
+            `;
+          }),
+        );
+        const [closedPublication, closedTaskProjection] = yield* Effect.all([
+          Effect.either(changes.publication.getChangeById(captured.changeId)),
+          Effect.either(changes.reads.getChangeByTaskId("BY-903")),
+        ]);
+        expect(closedPublication).toMatchObject({ _tag: "Right", right: { state: "closed" } });
+        expect(closedTaskProjection).toMatchObject({
+          _tag: "Right",
+          right: { id: captured.changeId, state: "closed" },
+        });
         expect(
           yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
         ).toHaveLength(1);
