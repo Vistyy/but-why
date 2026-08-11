@@ -49,6 +49,7 @@ import {
   validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
+import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   changeReadColumns,
   decodeChangePublication,
@@ -67,7 +68,6 @@ import {
   validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
-import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 
 const makeSqliteChangeAdapter = (
   repository: Context.Tag.Service<typeof RepositorySql>,

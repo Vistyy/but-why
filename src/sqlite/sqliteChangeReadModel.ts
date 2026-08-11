@@ -1,8 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
 import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
+import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
 import type { ChangeStartRecord } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,

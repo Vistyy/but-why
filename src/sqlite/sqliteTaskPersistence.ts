@@ -30,9 +30,9 @@ import {
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
   decodeTaskSummaryRow,
-  type StoredTaskRecordRow,
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
+  type StoredTaskRecordRow,
   type StoredTaskSummaryRow,
 } from "./sqliteTaskReadModel.js";
 
