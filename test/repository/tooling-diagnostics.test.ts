@@ -165,7 +165,7 @@ describe("repository-authored tooling diagnostics", () => {
       "const result = runTestProcess(`npm`, ([`install`] as const), { cwd });",
     ],
     [
-      "package-installation-belongs-to-package-contract",
+      "test-process-helper-imports-keep-canonical-names",
       'import { runTestProcess as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
@@ -179,6 +179,7 @@ describe("repository-authored tooling diagnostics", () => {
         "test-child-processes-use-test-process-adapter",
         "process-test-helpers-belong-to-process-boundaries",
         "package-installation-belongs-to-package-contract",
+        "test-process-helper-imports-keep-canonical-names",
         "live-agent-helper-belongs-to-test-host",
       ].includes(ruleId)
         ? "test"

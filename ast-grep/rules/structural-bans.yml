@@ -163,10 +163,32 @@ files:
 ignores:
   - test/repository/package-contents.test.ts
 rule:
-  pattern: $EXECUTOR($NPM_EXECUTABLE, $$$ARGS)
+  any:
+    - pattern: spawnSync($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: execFileSync($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $CHILD_PROCESS_NAMESPACE.spawnSync($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $CHILD_PROCESS_NAMESPACE.execFileSync($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: runTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: startTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, $$$ARGS)
 constraints:
   NPM_EXECUTABLE:
     regex: '(^|[^A-Za-z])npm([^A-Za-z]|$)'
+---
+# Canonical test-process helper names keep subprocess ownership rules statically visible.
+id: test-process-helper-imports-keep-canonical-names
+language: TypeScript
+severity: error
+message: Do not alias test-process helper imports because canonical helper names keep subprocess ownership rules statically enforceable; import and call the helper by its exported name.
+files:
+  - test/**/*.ts
+rule:
+  all:
+    - kind: import_statement
+    - regex: '[\s\S]*\b(?:runTestProcess|runTestProcessOrThrow|startTestProcess)\s+as\s+[$A-Za-z_][$0-9A-Za-z_]*[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

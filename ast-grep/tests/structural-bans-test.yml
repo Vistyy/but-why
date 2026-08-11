@@ -99,9 +99,13 @@ id: package-installation-belongs-to-package-contract
 valid:
   - spawnSync("git", ["status"])
   - runTestProcess("pnpm", ["view", "but-why"], { cwd })
+  - describe("npm", () => {})
+  - join("npm", "package.json")
 invalid:
   - spawnSync("npm", ["pack"])
   - execFileSync("npm", ["pack"])
+  - childProcess.spawnSync("npm", ["pack"])
+  - childProcess.execFileSync("npm", ["pack"])
   - runTestProcess("npm", ["view", "but-why"], { cwd })
   - "runTestProcess((/* executable */ \"npm\"), [\"view\", \"but-why\"], { cwd })"
   - runTestProcess("npm", ["pack", "--json"], { cwd })
@@ -116,9 +120,14 @@ invalid:
   - startTestProcess("npm", ["install"], { cwd })
   - testProcess.runTestProcess("npm", ["install"], { cwd })
   - "runTestProcess(`npm`, [`install`], { cwd })"
-  - |
-    import { runTestProcess as execute } from "./support/testProcess.js";
-    execute("npm", ["i", "package"], { cwd });
+---
+id: test-process-helper-imports-keep-canonical-names
+valid:
+  - import { runTestProcess } from "./support/testProcess.js"
+  - import { runTestProcess as execute } from "./other.js"
+invalid:
+  - import { runTestProcess as execute } from "./support/testProcess.js"
+  - import { helper, startTestProcess as start } from "../support/testProcess.js"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:
