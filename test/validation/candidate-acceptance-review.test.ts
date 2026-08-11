@@ -31,9 +31,7 @@ import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
-  execute: async () => {
-    throw new Error("Reviewer test runtime must not execute a reviewer process.");
-  },
+  execute: () => Effect.die("Reviewer test runtime must not execute a reviewer process."),
 };
 
 const now = "2026-07-15T10:00:00.000Z";

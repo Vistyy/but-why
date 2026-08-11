@@ -8,6 +8,7 @@ import type {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { TokenUsage } from "../../contracts/tokenUsage.js";
 import {
   type ReviewerContinuity,
   type ReviewerSessionIdentity,
@@ -22,6 +23,7 @@ export type ReviewerExecutionEvidence = {
   readonly restartReason?: string;
   readonly durationMs: number;
   readonly reviewCalls: number;
+  readonly invocationUsage: readonly (TokenUsage | null)[];
 };
 
 export type ExecuteReviewerSessionInput<Output, ReviewBoundaryError> = {
@@ -83,32 +85,39 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
             ? undefined
             : "identity_mismatch";
     let reviewCalls = 0;
+    const invocationUsage: (TokenUsage | null)[] = [];
 
     const review = (prompt: string, resumeSession?: string) => {
       reviewCalls += 1;
       const reviewCall = reviewCalls;
-      return input.runtime.review({
-        reviewerExecutor: input.reviewerExecutor,
-        reviewer: input.identity.producer,
-        decodeOutput: (output) => input.decodeOutput(output, reviewCall),
-        prompt,
-        profile: input.identity.agentProfile,
-        commandCwd: input.commandCwd,
-        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-        ...(input.identity.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.identity.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : {
-              sessionStorageRoot: reviewerSessionsPath(
-                input.sessionStorageRoot,
-                input.identity.changeId,
-                input.identity.producer,
-              ),
-            }),
-        ...(resumeSession === undefined ? {} : { resumeSession }),
-      });
+      return input.runtime
+        .review({
+          reviewerExecutor: input.reviewerExecutor,
+          reviewer: input.identity.producer,
+          decodeOutput: (output) => input.decodeOutput(output, reviewCall),
+          prompt,
+          profile: input.identity.agentProfile,
+          commandCwd: input.commandCwd,
+          ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+          ...(input.identity.agentEnvironment === undefined
+            ? {}
+            : { agentEnvironment: input.identity.agentEnvironment }),
+          ...(input.sessionStorageRoot === undefined
+            ? {}
+            : {
+                sessionStorageRoot: reviewerSessionsPath(
+                  input.sessionStorageRoot,
+                  input.identity.changeId,
+                  input.identity.producer,
+                ),
+              }),
+          ...(resumeSession === undefined ? {} : { resumeSession }),
+        })
+        .pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => invocationUsage.push(...(result.invocationUsage ?? [null]))),
+          ),
+        );
     };
 
     let result = yield* review(
@@ -149,6 +158,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
         ...(restartReason === undefined ? {} : { restartReason }),
         durationMs: (yield* Clock.currentTimeMillis) - startedAt,
         reviewCalls,
+        invocationUsage,
       },
     };
   });
