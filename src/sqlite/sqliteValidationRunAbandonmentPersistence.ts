@@ -1,33 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import type { CandidateRecord } from "../change/candidate/candidate.js";
-
+import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
-
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-
-import {
-  candidateReadColumns,
-  decodeAbandonmentContext,
-  decodeCandidate,
-  decodeValidationRun,
-  type StoredAbandonmentContextRow,
-  type StoredCandidateRow,
-  type StoredValidationRunRow,
-  validateValidationRunImplementationDecisionRelationships,
-  validateValidationRunLatestResolvedBlockerRelationship,
-  validationRunReadColumns,
-} from "./sqliteCandidateValidationReadModel.js";
-import {
-  decodeImplementationBlockerHistory,
-  implementationBlockerReadColumns,
-  latestResolvedBlockerId,
-  type StoredImplementationBlockerRow,
-} from "./sqliteChangeReadModel.js";
-
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteValidationRunAbandonmentPort = () =>
   Effect.map(
@@ -39,7 +17,7 @@ export const openSqliteValidationRunAbandonmentPort = () =>
         ),
       getRunById: (validationRunId) =>
         repository.transaction("read Candidate Validation Run", (sql) =>
-          getRunById(sql, validationRunId),
+          readValidationRunById(sql, validationRunId, "decode Candidate Validation Run"),
         ),
       recordToolingFailure: (input) =>
         repository.operation("record Candidate validation Tooling Failure", (sql) =>
@@ -59,53 +37,18 @@ export const openSqliteValidationRunAbandonmentPort = () =>
     }),
   );
 
-type CandidateOwnerRow = StoredCandidateRow & { readonly storedChangeId: string | null };
-
-const decodeOwnedCandidate = (
-  row: CandidateOwnerRow,
-  expectedChangeId?: string,
-): CandidateRecord => {
-  const candidate = decodeCandidate(row);
-  const storedChangeId = row.storedChangeId;
-  if (
-    candidate.changeId !== storedChangeId ||
-    (expectedChangeId !== undefined && candidate.changeId !== expectedChangeId)
-  ) {
-    throw new Error("Candidate belongs to another or unknown Change");
-  }
-  return candidate;
+type StoredAbandonmentContextRow = {
+  readonly validationRunId: string;
+  readonly runCandidateId: string;
+  readonly changeId: string;
+  readonly storedChangeId: string;
+  readonly candidateId: string;
+  readonly submittedSha: string;
+  readonly setupValidationRunId: string | null;
+  readonly setupExpectedCommitSha: string | null;
+  readonly worktreePath: string | null;
+  readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
 };
-
-const readCandidateById = (sql: SqlClient.SqlClient, candidateId: string, operationName: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<CandidateOwnerRow>(
-      `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
-       FROM candidates AS candidate
-       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE candidate.id = ?`,
-      [candidateId],
-    );
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    return yield* decodePersisted(operationName, () => {
-      const candidate = decodeOwnedCandidate(row);
-      if (candidate.id !== candidateId) throw new Error("Candidate identity does not match lookup");
-      return candidate;
-    });
-  });
-
-const complete = (
-  sql: SqlClient.SqlClient,
-  input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
-) =>
-  Effect.zipRight(
-    sql`
-      UPDATE candidate_validation_runs
-      SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
-      WHERE id = ${input.validationRunId}
-    `,
-    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
-  ).pipe(Effect.asVoid);
 
 const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string) =>
   Effect.gen(function* () {
@@ -161,63 +104,51 @@ const abandon = (
     });
   }).pipe(Effect.asVoid);
 
-const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs WHERE id = ?`,
-      [validationRunId],
-    );
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    const decoded = yield* decodePersisted("decode Candidate Validation Run", () => {
-      const run = decodeValidationRun(row);
-      if (run.record.id !== validationRunId)
-        throw new Error("Validation Run identity does not match lookup");
-      return run;
-    });
-    const candidate = yield* readCandidateById(
-      sql,
-      decoded.record.candidateId,
-      "decode Candidate Validation Run",
-    );
-    if (candidate === undefined) {
-      return yield* invalidData(
-        "decode Candidate Validation Run",
-        "Validation Run belongs to an unknown Candidate",
-      );
-    }
-    yield* validateSelectedValidationRunAuthority(
-      sql,
-      decoded,
-      candidate.changeId,
-      "decode Candidate Validation Run",
-    );
-    return decoded.record;
-  });
-
-const validateSelectedValidationRunAuthority = (
+const complete = (
   sql: SqlClient.SqlClient,
-  run: ReturnType<typeof decodeValidationRun>,
-  changeId: string,
-  operationName: string,
+  input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
 ) =>
-  Effect.gen(function* () {
-    const latestRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
-      `SELECT ${implementationBlockerReadColumns}
-       FROM implementation_blockers
-       WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
-       ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [changeId, run.record.createdAt],
-    );
-    const latestBlockerId = yield* decodePersisted(operationName, () =>
-      latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId)),
-    );
-    yield* decodePersisted(operationName, () => {
-      validateValidationRunImplementationDecisionRelationships(run, changeId);
-      validateValidationRunLatestResolvedBlockerRelationship(run, latestBlockerId);
-    });
-  });
+  Effect.zipRight(
+    sql`
+      UPDATE candidate_validation_runs
+      SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
+      WHERE id = ${input.validationRunId}
+    `,
+    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
+  ).pipe(Effect.asVoid);
 
-const invalidData = (operationName: string, message: string) =>
-  Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+const decodeAbandonmentContext = (
+  row: StoredAbandonmentContextRow,
+  expectedValidationRunId: string,
+): CandidateValidationRunAbandonmentContext => {
+  if (row.validationRunId !== expectedValidationRunId || row.runCandidateId !== row.candidateId) {
+    throw new Error("Validation Run abandonment relationship is inconsistent");
+  }
+  if (row.changeId !== row.storedChangeId) {
+    throw new Error("Validation Run Candidate belongs to an unknown Change");
+  }
+  if (
+    row.setupValidationRunId !== null &&
+    (row.setupValidationRunId !== row.validationRunId ||
+      row.setupExpectedCommitSha !== row.submittedSha)
+  ) {
+    throw new Error("Snapshot Workspace Setup relationship is inconsistent");
+  }
+  if (row.setupValidationRunId === null && row.cleanupWorkspace !== null) {
+    throw new Error("Validation Run cleanup state has no Snapshot Workspace Setup");
+  }
+  if (
+    row.setupValidationRunId !== null &&
+    (row.worktreePath === null || row.cleanupWorkspace === null)
+  ) {
+    throw new Error("Snapshot Workspace Setup is incomplete");
+  }
+  return {
+    validationRunId: row.validationRunId,
+    changeId: row.changeId,
+    candidateId: row.candidateId,
+    submittedSha: row.submittedSha,
+    ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
+    cleanupWorkspace: row.cleanupWorkspace,
+  };
+};

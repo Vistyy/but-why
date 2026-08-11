@@ -13,13 +13,15 @@ import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidati
 import {
   candidateReadColumns,
   decodeCandidate,
-  decodeValidationRun,
   type StoredCandidateRow,
+} from "./sqliteCandidateStorage.js";
+import {
+  decodeValidationRun,
   type StoredValidationRunRow,
   validateValidationRunImplementationDecisionRelationships,
   validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
-} from "./sqliteCandidateValidationReadModel.js";
+} from "./sqliteValidationRunStorage.js";
 import {
   decodeImplementationDecisions,
   type StoredImplementationBlockerRow,
