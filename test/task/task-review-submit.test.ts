@@ -7,12 +7,12 @@ import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
-import { publicTaskId } from "../../src/task/taskId.js";
 import { taskReviewInstructions } from "../../src/task/review/taskReview.js";
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/taskReviewGit.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,

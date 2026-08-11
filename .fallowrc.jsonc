@@ -2,6 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": [
     "src/main.ts",
+    "src/cli/task/commands/review.ts",
+    "src/cli/task/commands/submit.ts",
     "extensions/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
@@ -51,7 +53,11 @@
     "zones": [
       {
         "name": "adapters",
-        "patterns": ["src/**/adapters/**", "src/sqlite/**"]
+        "patterns": [
+          "src/**/adapters/**",
+          "src/sqlite/**",
+          "src/task/review/taskReviewGit.ts"
+        ]
       },
       {
         "name": "task-composition",

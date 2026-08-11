@@ -8,11 +8,17 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
+import { cleanupExactDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspaceGit.js";
+import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/repoConfig.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/repositoryFile.js";
+import {
+  readCanonicalMainReviewBase,
+  verifyRecordedTaskReviewBase,
+} from "../review/taskReviewGit.js";
 import {
   abandonTaskReview,
   openTaskReviewUseCases,
@@ -51,7 +57,12 @@ export const withTaskReviewReadUseCases = <A, E, R>(
         use({
           abandon: (reviewId, reason, now) =>
             abandonTaskReview(
-              { mainCheckoutRoot: context.mainCheckoutRoot, persistence },
+              {
+                mainCheckoutRoot: context.mainCheckoutRoot,
+                persistence,
+                verifyReviewBase: verifyRecordedTaskReviewBase,
+                cleanupWorkspace: cleanupExactDisposableWorkspace,
+              },
               reviewId,
               reason,
               now,
@@ -111,10 +122,10 @@ export const withTaskReviewUseCases = <A, E, R>(
       error._tag === "MissingAgentProfile"
         ? error.profileName === undefined
           ? "Global Config needs a default Agent Profile for Task Review."
-          : `Global Agent Profile \"${error.profileName}\" was not found.`
+          : `Global Agent Profile "${error.profileName}" was not found.`
         : error._tag === "MissingAgentModel"
-          ? `Global Agent Profile \"${error.profileName}\" has no Pi model in runtimeConfig.`
-          : `Global Agent Profile \"${error.profileName}\" uses unsupported runtime \"${error.agentRuntime}\".`;
+          ? `Global Agent Profile "${error.profileName}" has no Pi model in runtimeConfig.`
+          : `Global Agent Profile "${error.profileName}" uses unsupported runtime "${error.agentRuntime}".`;
     return Effect.succeed({
       ok: false,
       error: { code: "task_review_config_invalid", message },
@@ -148,6 +159,10 @@ export const withTaskReviewUseCases = <A, E, R>(
             persistence,
             reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
             reviewerExecutor: piReviewerProcessExecutor,
+            readReviewBase: readCanonicalMainReviewBase,
+            verifyReviewBase: verifyRecordedTaskReviewBase,
+            runWorkspace: runDisposableExactCommitWorkspace,
+            cleanupWorkspace: cleanupExactDisposableWorkspace,
           }),
         ),
       ),

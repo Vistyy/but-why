@@ -14,9 +14,12 @@ import {
   decodeReviewerOutputContract,
   type ReviewerOutput,
 } from "../../contracts/reviewerOutput.js";
-import { cleanupExactDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspaceGit.js";
+import type {
+  ExactDisposableWorkspaceCleanupInput,
+  ExactDisposableWorkspaceCleanupResult,
+} from "../../disposableWorkspace/disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
-import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
+import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import type { PublicTaskId } from "../taskId.js";
 import {
@@ -24,7 +27,7 @@ import {
   type TaskReviewToolingFailure,
   taskReviewInstructions,
 } from "./taskReview.js";
-import { readCanonicalMainReviewBase, verifyRecordedTaskReviewBase } from "./taskReviewGit.js";
+import type { TaskReviewBase } from "./taskReviewGit.js";
 import type { AdmitTaskReviewResult, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
@@ -106,6 +109,20 @@ export const openTaskReviewUseCases = (input: {
   readonly persistence: TaskReviewPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
+  readonly readReviewBase: (
+    mainCheckoutRoot: string,
+  ) =>
+    | { readonly ok: true; readonly base: TaskReviewBase }
+    | { readonly ok: false; readonly message: string };
+  readonly verifyReviewBase: (
+    mainCheckoutRoot: string,
+    recorded: TaskReviewBase,
+  ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+  readonly runWorkspace: RunDisposableExactCommitWorkspace;
+  readonly cleanupWorkspace: (
+    mainCheckoutRoot: string,
+    cleanup: ExactDisposableWorkspaceCleanupInput,
+  ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
@@ -120,7 +137,7 @@ const submitTaskReview = (
   now: string,
 ): Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const base = readCanonicalMainReviewBase(input.mainCheckoutRoot);
+    const base = input.readReviewBase(input.mainCheckoutRoot);
     if (!base.ok)
       return { ok: false, code: "review_base_unavailable", message: base.message } as const;
     const config = input.loadRepoConfig(base.base.commit);
@@ -147,10 +164,7 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
 
-    const workspace = yield* runDisposableExactCommitWorkspace<
-      WorkspaceExecution,
-      RepositoryStorageError
-    >({
+    const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
       repoRoot: input.mainCheckoutRoot,
       workspaceId: reviewId,
       commitSha: base.base.commit,
@@ -247,7 +261,7 @@ const submitTaskReview = (
             message: workspace.toolingError.errorMessage,
           };
       if (!workspace.ok && workspace.toolingError.cleanupResult.workspace !== "removed") {
-        const cleanup = yield* cleanupExactDisposableWorkspace(input.mainCheckoutRoot, {
+        const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
           workspaceId: reviewId,
           expectedCommitSha: base.base.commit,
           recordedWorktreePath: workspacePath,
@@ -280,6 +294,14 @@ export const abandonTaskReview = (
   input: {
     readonly mainCheckoutRoot: string;
     readonly persistence: TaskReviewPersistence;
+    readonly verifyReviewBase: (
+      mainCheckoutRoot: string,
+      recorded: TaskReviewBase,
+    ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+    readonly cleanupWorkspace: (
+      mainCheckoutRoot: string,
+      cleanup: ExactDisposableWorkspaceCleanupInput,
+    ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },
   reviewId: string,
   reason: string,
@@ -289,7 +311,7 @@ export const abandonTaskReview = (
     const review = yield* input.persistence.getById(reviewId);
     if (review === undefined) return { ok: false, code: "task_review_not_found" } as const;
     if (review.state !== "running") return { ok: false, code: "task_review_not_active" } as const;
-    const base = verifyRecordedTaskReviewBase(input.mainCheckoutRoot, {
+    const base = input.verifyReviewBase(input.mainCheckoutRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
@@ -301,7 +323,7 @@ export const abandonTaskReview = (
         message: base.message,
       } as const;
     }
-    const cleanup = yield* cleanupExactDisposableWorkspace(input.mainCheckoutRoot, {
+    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
       workspaceId: review.id,
       expectedCommitSha: review.baseCommit,
       recordedWorktreePath: review.workspacePath,

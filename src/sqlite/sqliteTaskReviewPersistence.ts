@@ -261,11 +261,25 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
     });
   });
 
-const parseObject = (source: string): Record<string, unknown> => {
+type TaskReviewJsonObject = Record<string, unknown> & {
+  readonly id?: unknown;
+  readonly version?: unknown;
+  readonly title?: unknown;
+  readonly description?: unknown;
+  readonly dependencyIds?: unknown;
+  readonly state?: unknown;
+  readonly profileScope?: unknown;
+  readonly agentProfile?: unknown;
+  readonly instructions?: unknown;
+  readonly operation?: unknown;
+  readonly message?: unknown;
+};
+
+const parseObject = (source: string): TaskReviewJsonObject => {
   const value: unknown = JSON.parse(source);
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new Error("Expected object");
-  return value as Record<string, unknown>;
+  return value as TaskReviewJsonObject;
 };
 const requiredString = (value: unknown): string => {
   if (typeof value !== "string") throw new Error("Expected string");
@@ -280,9 +294,9 @@ const parseStringArray = (source: string): readonly string[] => {
 const parseProposal = (source: string): TaskReviewProposal => {
   const value = parseObject(source);
   return {
-    title: requiredString(value["title"]),
-    description: requiredString(value["description"]),
-    dependencyIds: parseStringArray(JSON.stringify(value["dependencyIds"])),
+    title: requiredString(value.title),
+    description: requiredString(value.description),
+    dependencyIds: parseStringArray(JSON.stringify(value.dependencyIds)),
   };
 };
 const parseDependencies = (source: string): readonly TaskReviewDependencyEvidence[] => {
@@ -291,27 +305,23 @@ const parseDependencies = (source: string): readonly TaskReviewDependencyEvidenc
   return value.map((entry) => {
     const item = parseObject(JSON.stringify(entry));
     return {
-      id: requiredString(item["id"]),
-      title: requiredString(item["title"]),
-      description: requiredString(item["description"]),
-      state: requiredString(item["state"]),
+      id: requiredString(item.id),
+      title: requiredString(item.title),
+      description: requiredString(item.description),
+      state: requiredString(item.state),
     };
   });
 };
 const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const value = parseObject(source);
-  if (
-    value["id"] !== "task_advisory_review" ||
-    value["version"] !== 1 ||
-    value["profileScope"] !== "global"
-  )
+  if (value.id !== "task_advisory_review" || value.version !== 1 || value.profileScope !== "global")
     throw new Error("Invalid policy");
   return {
     id: "task_advisory_review",
     version: 1,
-    agentProfile: requiredString(value["agentProfile"]),
+    agentProfile: requiredString(value.agentProfile),
     profileScope: "global",
-    instructions: requiredString(value["instructions"]),
+    instructions: requiredString(value.instructions),
   };
 };
 const parseReviewState = (value: string): TaskReviewRecord["state"] => {
@@ -331,8 +341,8 @@ const parseWorkspaceCleanup = (value: string): TaskReviewRecord["workspaceCleanu
 const parseFailure = (source: string): TaskReviewToolingFailure => {
   const value = parseObject(source);
   return {
-    operation: requiredString(value["operation"]),
-    message: requiredString(value["message"]),
+    operation: requiredString(value.operation),
+    message: requiredString(value.message),
   };
 };
 const invalid = (operationName: string, message: string) =>
