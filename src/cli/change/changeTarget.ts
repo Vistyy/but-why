@@ -6,7 +6,7 @@ import {
   repositoryStorageErrorResult,
   runtimeError,
 } from "../../cliResults.js";
-import { findCurrentWorktreeFacts } from "../../init/git.js";
+import { findCurrentRepositoryWorktreeFacts } from "../../repositoryRuntime/repositoryContext.js";
 
 type ChangeTargetResolution =
   | { readonly ok: true; readonly changeId: string }
@@ -22,7 +22,7 @@ export const resolveChangeId = (
   const loaded = loadChangeList({ cwd });
   if (!loaded.ok) return Effect.succeed({ ok: false, result: repoStateLoadError(loaded.error) });
 
-  const facts = findCurrentWorktreeFacts(cwd);
+  const facts = findCurrentRepositoryWorktreeFacts(cwd);
   if (!facts.ok) return Effect.succeed(unresolvedChangeTarget(commandName));
 
   return loaded

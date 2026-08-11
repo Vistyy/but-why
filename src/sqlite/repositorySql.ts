@@ -276,6 +276,7 @@ export const repositorySqlLayer = (
 
   const sqlite = nodeSqliteLayer(config.statePath, {
     busyTimeoutMs: config.sqliteBusyTimeoutMs ?? defaultSqliteBusyTimeoutMs,
+    allowCreate: (config.lifecycle ?? "open") === "initialize",
   }).pipe(
     Layer.catchAllCause((cause) =>
       Layer.fail(

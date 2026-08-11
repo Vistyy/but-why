@@ -105,6 +105,20 @@ describe("shared repository state", () => {
     }),
   );
 
+  it.effect("does not create state when it disappears before normal connection acquisition", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepo();
+      const statePath = sharedStatePath(root);
+      const layer = repositorySqlLayer({ statePath, commonDirectory: join(root, ".git") });
+      rmSync(statePath);
+
+      const exit = yield* Effect.exit(Effect.scoped(Effect.provide(RepositorySql, layer)));
+
+      expect(exit._tag).toBe("Failure");
+      expect(existsSync(statePath)).toBe(false);
+    }),
+  );
+
   it.effect("rejects migration gaps and unknown newer Shared Repository State schemas", () =>
     Effect.gen(function* () {
       for (const corruptLedger of [

@@ -11,9 +11,9 @@ import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/reposi
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
-import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";

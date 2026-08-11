@@ -86,13 +86,23 @@
           "src/agent/piReviewerProcessExecutor.ts",
           "src/change/changeStartGit.ts",
           "src/change/interactiveSession/herdrInteractiveSessionHost.ts",
+          "src/change/interactiveSession/localInteractiveSessionProfile.ts",
           "src/change/localChangeCleanupGit.ts",
           "src/change/candidateCapture/localGitCandidate.ts",
           "src/change/publication/localCandidatePublicationGit.ts",
+          "src/change/validation/validationWorkspaceCleanupGit.ts",
           "src/repositoryPreparation/localRepositoryPreparation.ts",
           "src/submissionEnvironment/gitFacts.ts",
           "src/submissionEnvironment/githubTarget.ts",
-          "src/submissionEnvironment/localGitHubPullRequestGateway.ts"
+          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
+          "src/submissionEnvironment/remoteChangeBase.ts",
+          "src/submissionEnvironment/repositoryFile.ts",
+          "src/disposableWorkspace/disposableWorkspaceGit.ts",
+          "src/disposableWorkspace/workspaceRuntimeAdapter.ts",
+          "src/init/git.ts",
+          "src/init/gitignore.ts",
+          "src/init/globalConfig.ts",
+          "src/init/repoConfig.ts"
         ]
       },
       {
@@ -103,7 +113,7 @@
     "rules": [
       {
         "from": "cli",
-        "allow": ["adapters", "behavior", "composition", "domain", "repository-runtime"]
+        "allow": ["behavior", "composition", "domain", "repository-runtime"]
       },
       {
         "from": "domain",
@@ -111,7 +121,7 @@
       },
       {
         "from": "repository-runtime",
-        "allow": ["storage"]
+        "allow": ["adapters", "storage"]
       },
       {
         "from": "behavior",

@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteValidationRunAbandonmentPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
+import { openSqliteValidationRunAbandonmentPort } from "../../sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "../abandonValidationRun.js";
 import { validationWorkspaceCleanupGit } from "../validation/validationWorkspaceCleanupGit.js";
 

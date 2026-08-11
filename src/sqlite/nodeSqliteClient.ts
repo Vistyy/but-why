@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 
 import * as Reactivity from "@effect/experimental/Reactivity";
 import * as SqlClient from "@effect/sql/SqlClient";
@@ -84,11 +85,15 @@ const nodeSqliteConnection = (database: DatabaseSync): NodeSqliteConnection => {
 
 export const nodeSqliteLayer = (
   filename: string,
-  options: { readonly busyTimeoutMs?: number } = {},
+  options: { readonly busyTimeoutMs?: number; readonly allowCreate?: boolean } = {},
 ): Layer.Layer<SqlClient.SqlClient> =>
   Layer.scopedContext(
     Effect.gen(function* () {
-      const database = new DatabaseSync(filename, {
+      const location =
+        options.allowCreate === false && filename !== ":memory:"
+          ? `${pathToFileURL(filename).href}?mode=rw`
+          : filename;
+      const database = new DatabaseSync(location, {
         timeout: options.busyTimeoutMs ?? busyTimeoutMs,
       });
       const scope = yield* Effect.scope;

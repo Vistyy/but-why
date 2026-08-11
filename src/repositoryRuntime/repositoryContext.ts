@@ -15,7 +15,7 @@ import {
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
-import { findGitRoot } from "../init/git.js";
+import { findCurrentWorktreeFacts, findGitRoot } from "../init/git.js";
 import { ensureGitignoreBlock } from "../init/gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "../init/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
@@ -31,6 +31,8 @@ export type LocalRepositoryPaths = {
   readonly taskContextDraftsPath: string;
   readonly gitignorePath: string;
 };
+
+export const findCurrentRepositoryWorktreeFacts = findCurrentWorktreeFacts;
 
 export type LocalRepositoryContext = {
   readonly root: string;

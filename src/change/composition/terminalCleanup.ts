@@ -2,8 +2,8 @@ import { Effect } from "effect";
 
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { openSqliteChangeReviewerTranscriptPort } from "../../sqlite/sqliteChangeReviewerTranscriptPersistence.js";
-import { openSqliteValidationArtifactLifecyclePort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteValidationArtifactLifecyclePort } from "../../sqlite/sqliteValidationArtifactLifecyclePersistence.js";
 import { localGitHubChangeCleanupRemote } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { openTerminalCleanup } from "../cleanupTerminalChange.js";
 import { cleanupChangeResourcesWithRemote } from "../localChangeCleanupGit.js";

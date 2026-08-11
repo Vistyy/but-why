@@ -5,8 +5,8 @@ import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteChangeCancellationPort } from "../../sqlite/sqliteChangeCancellationPersistence.js";
-import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";

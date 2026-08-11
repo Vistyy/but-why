@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { type Context, Effect } from "effect";
+
+import { Effect } from "effect";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
@@ -12,13 +13,7 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type {
-  ActiveValidationRunPort,
-  CandidateValidationExecutionPort,
-  ChangeValidationReadPort,
-  ValidationArtifactLifecyclePort,
-  ValidationRunAbandonmentPort,
-} from "../change/validation/changeValidationPorts.js";
+import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -26,7 +21,6 @@ import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContext
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   candidateReadColumns,
-  decodeAbandonmentContext,
   decodeActiveValidationRun,
   decodeCandidate,
   decodeToolingFailure,
@@ -35,7 +29,6 @@ import {
   decodeValidationRound,
   decodeValidationRun,
   findingReadColumns,
-  type StoredAbandonmentContextRow,
   type StoredActiveValidationRunRow,
   type StoredCandidateRow,
   type StoredToolingFailureRow,
@@ -59,198 +52,92 @@ import {
 import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
-const makeSqliteChangeValidationAdapter = (
-  repository: Context.Tag.Service<typeof RepositorySql>,
-): CandidateValidationExecutionPort &
-  ChangeValidationReadPort &
-  ActiveValidationRunPort &
-  ValidationRunAbandonmentPort &
-  ValidationArtifactLifecyclePort => ({
-  getCandidateById: (candidateId) =>
-    repository.transaction("read Candidate for validation history", (sql) =>
-      readCandidateById(sql, candidateId, "read Candidate for validation history"),
-    ),
-  getCurrentCandidateForChange: (changeId) =>
-    repository.transaction("read current Candidate", (sql) =>
-      readCurrentCandidateForChange(sql, changeId),
-    ),
-  listCandidatesForChange: (changeId) =>
-    repository.transaction("list Candidates for validation history", (sql) =>
-      readCandidatesForChange(sql, changeId, "list Candidates for validation history"),
-    ),
-  listRunIdsForChange: (changeId) =>
-    repository.transaction("list Candidate Validation Run IDs", (sql) =>
-      listRunIdsForChange(sql, changeId),
-    ),
-  startOrReuse: (input) =>
-    repository.transactionImmediate("start Candidate Validation Run", (sql) =>
-      startOrReuse(sql, input),
-    ),
-  complete: (input) =>
-    repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
-      complete(sql, input),
-    ),
-  getActiveForChange: (changeId) =>
-    repository.transaction("read Active Candidate Validation Run", (sql) =>
-      getActiveForChange(sql, changeId),
-    ),
-  getAbandonmentContext: (validationRunId) =>
-    repository.transaction("read Candidate Validation Run abandonment context", (sql) =>
-      getAbandonmentContext(sql, validationRunId),
-    ),
-  abandon: (input) =>
-    repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
-      abandon(sql, input),
-    ),
-  getRunById: (validationRunId) =>
-    repository.transaction("read Candidate Validation Run", (sql) =>
-      getRunById(sql, validationRunId),
-    ),
-  getLatestRunForCandidate: (candidateId) =>
-    repository.transaction("read latest Candidate Validation Run", (sql) =>
-      getLatestRunForCandidate(sql, candidateId),
-    ),
-  listRunsForCandidate: (candidateId) =>
-    repository.transaction("list Candidate Validation Runs", (sql) =>
-      listRunsForCandidate(sql, candidateId),
-    ),
-  recordWorkspaceSetup: (input) =>
-    repository.operation("record Candidate validation workspace setup", (sql) =>
-      Effect.asVoid(sql`
-          INSERT INTO candidate_validation_workspace_setups (
-            validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-            cleanup_worktree, cleanup_temp_ref, created_at
-          ) VALUES (
-            ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-            ${input.worktreeHead}, ${input.worktreePath ?? null},
-            ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
-          )
-          ON CONFLICT (validation_run_id) DO UPDATE SET
-            temp_ref_name = excluded.temp_ref_name,
-            submitted_sha = excluded.submitted_sha,
-            worktree_head = excluded.worktree_head,
-            worktree_path = excluded.worktree_path,
-            cleanup_worktree = excluded.cleanup_worktree,
-            cleanup_temp_ref = excluded.cleanup_temp_ref,
-            created_at = excluded.created_at
-        `),
-    ),
-  recordToolingFailure: (input) =>
-    repository.operation("record Candidate validation Tooling Failure", (sql) =>
-      Effect.asVoid(sql`
-          INSERT INTO candidate_validation_tooling_failures (
-            validation_run_id, error_kind, operation_name, error_message, created_at
-          ) VALUES (
-            ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
-            ${input.errorMessage}, ${input.now}
-          )
-        `),
-    ),
-  recordPrepareRound: (input) =>
-    repository.transactionImmediate("record Candidate validation Prepare round", (sql) =>
-      recordRound(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
-    ),
-  recordCheckRound: (input) =>
-    repository.transactionImmediate("record Candidate validation Check round", (sql) =>
-      recordRound(sql, { ...input, phase: validationPhase.checks }),
-    ),
-  recordAcceptanceRound: (input) =>
-    repository.transactionImmediate("record Candidate Acceptance Review round", (sql) =>
-      recordRound(sql, {
-        ...input,
-        phase: validationPhase.acceptanceReview,
-        producer: "acceptance",
-      }),
-    ),
-  recordSpecialistRound: (input) =>
-    repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
-      recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
-    ),
-  listRounds: (validationRunId) =>
-    repository.transaction("list Candidate validation rounds", (sql) =>
-      listRounds(sql, validationRunId),
-    ),
-  listFindings: (validationRunId) =>
-    repository.transaction("list Candidate validation Findings", (sql) =>
-      listFindings(sql, validationRunId),
-    ),
-  listPreviousCandidateReviewerFindings: (input) =>
-    repository.transaction("list previous Candidate reviewer Findings", (sql) =>
-      listPreviousCandidateReviewerFindings(sql, input),
-    ),
-  listToolingFailures: (validationRunId) =>
-    repository.transaction("list Candidate validation Tooling Failures", (sql) =>
-      listToolingFailures(sql, validationRunId),
-    ),
-  listArtifacts: (validationRunId) =>
-    repository.transaction("list Candidate validation Artifacts", (sql) =>
-      listArtifacts(sql, validationRunId),
-    ),
-});
-
 export const openSqliteCandidateValidationExecutionPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeValidationAdapter(repository);
-    return {
-      startOrReuse: adapter.startOrReuse,
-      complete: adapter.complete,
-      recordWorkspaceSetup: adapter.recordWorkspaceSetup,
-      recordToolingFailure: adapter.recordToolingFailure,
-      recordPrepareRound: adapter.recordPrepareRound,
-      recordCheckRound: adapter.recordCheckRound,
-      recordAcceptanceRound: adapter.recordAcceptanceRound,
-      recordSpecialistRound: adapter.recordSpecialistRound,
-      listRounds: adapter.listRounds,
-      listFindings: adapter.listFindings,
-      listPreviousCandidateReviewerFindings: adapter.listPreviousCandidateReviewerFindings,
-      listToolingFailures: adapter.listToolingFailures,
-      listArtifacts: adapter.listArtifacts,
-    };
-  });
-
-export const openSqliteChangeValidationReadPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeValidationAdapter(repository);
-    return {
-      getCandidateById: adapter.getCandidateById,
-      getCurrentCandidateForChange: adapter.getCurrentCandidateForChange,
-      listCandidatesForChange: adapter.listCandidatesForChange,
-      getRunById: adapter.getRunById,
-      getLatestRunForCandidate: adapter.getLatestRunForCandidate,
-      listRunsForCandidate: adapter.listRunsForCandidate,
-      listRounds: adapter.listRounds,
-      listFindings: adapter.listFindings,
-      listToolingFailures: adapter.listToolingFailures,
-      listArtifacts: adapter.listArtifacts,
-    };
-  });
-
-export const openSqliteActiveValidationRunPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeValidationAdapter(repository);
-    return {
-      getActiveForChange: adapter.getActiveForChange,
-    };
-  });
-
-export const openSqliteValidationRunAbandonmentPort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeValidationAdapter(repository);
-    return {
-      getAbandonmentContext: adapter.getAbandonmentContext,
-      getRunById: adapter.getRunById,
-      recordToolingFailure: adapter.recordToolingFailure,
-      abandon: adapter.abandon,
-    };
-  });
-
-export const openSqliteValidationArtifactLifecyclePort = () =>
-  Effect.map(RepositorySql, (repository) => {
-    const adapter = makeSqliteChangeValidationAdapter(repository);
-    return {
-      listRunIdsForChange: adapter.listRunIdsForChange,
-    };
-  });
+  Effect.map(
+    RepositorySql,
+    (repository): CandidateValidationExecutionPort => ({
+      startOrReuse: (input) =>
+        repository.transactionImmediate("start Candidate Validation Run", (sql) =>
+          startOrReuse(sql, input),
+        ),
+      complete: (input) =>
+        repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
+          complete(sql, input),
+        ),
+      recordWorkspaceSetup: (input) =>
+        repository.operation("record Candidate validation workspace setup", (sql) =>
+          Effect.asVoid(sql`
+            INSERT INTO candidate_validation_workspace_setups (
+              validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
+              cleanup_worktree, cleanup_temp_ref, created_at
+            ) VALUES (
+              ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
+              ${input.worktreeHead}, ${input.worktreePath ?? null},
+              ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
+            )
+            ON CONFLICT (validation_run_id) DO UPDATE SET
+              temp_ref_name = excluded.temp_ref_name,
+              submitted_sha = excluded.submitted_sha,
+              worktree_head = excluded.worktree_head,
+              worktree_path = excluded.worktree_path,
+              cleanup_worktree = excluded.cleanup_worktree,
+              cleanup_temp_ref = excluded.cleanup_temp_ref,
+              created_at = excluded.created_at
+          `),
+        ),
+      recordToolingFailure: (input) =>
+        repository.operation("record Candidate validation Tooling Failure", (sql) =>
+          Effect.asVoid(sql`
+            INSERT INTO candidate_validation_tooling_failures (
+              validation_run_id, error_kind, operation_name, error_message, created_at
+            ) VALUES (
+              ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
+              ${input.errorMessage}, ${input.now}
+            )
+          `),
+        ),
+      recordPrepareRound: (input) =>
+        repository.transactionImmediate("record Candidate validation Prepare round", (sql) =>
+          recordRound(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
+        ),
+      recordCheckRound: (input) =>
+        repository.transactionImmediate("record Candidate validation Check round", (sql) =>
+          recordRound(sql, { ...input, phase: validationPhase.checks }),
+        ),
+      recordAcceptanceRound: (input) =>
+        repository.transactionImmediate("record Candidate Acceptance Review round", (sql) =>
+          recordRound(sql, {
+            ...input,
+            phase: validationPhase.acceptanceReview,
+            producer: "acceptance",
+          }),
+        ),
+      recordSpecialistRound: (input) =>
+        repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
+          recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
+        ),
+      listRounds: (validationRunId) =>
+        repository.transaction("list Candidate validation rounds", (sql) =>
+          listRounds(sql, validationRunId),
+        ),
+      listFindings: (validationRunId) =>
+        repository.transaction("list Candidate validation Findings", (sql) =>
+          listFindings(sql, validationRunId),
+        ),
+      listPreviousCandidateReviewerFindings: (input) =>
+        repository.transaction("list previous Candidate reviewer Findings", (sql) =>
+          listPreviousCandidateReviewerFindings(sql, input),
+        ),
+      listToolingFailures: (validationRunId) =>
+        repository.transaction("list Candidate validation Tooling Failures", (sql) =>
+          listToolingFailures(sql, validationRunId),
+        ),
+      listArtifacts: (validationRunId) =>
+        repository.transaction("list Candidate validation Artifacts", (sql) =>
+          listArtifacts(sql, validationRunId),
+        ),
+    }),
+  );
 
 type CandidateOwnerRow = StoredCandidateRow & { readonly storedChangeId: string | null };
 
@@ -285,81 +172,6 @@ const readCandidateById = (sql: SqlClient.SqlClient, candidateId: string, operat
       if (candidate.id !== candidateId) throw new Error("Candidate identity does not match lookup");
       return candidate;
     });
-  });
-
-const readCurrentCandidateForChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<CandidateOwnerRow>(
-      `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
-       FROM candidates AS candidate
-       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE candidate.change_id = ?
-       ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1`,
-      [changeId],
-    );
-    const row = rows[0];
-    return row === undefined
-      ? undefined
-      : yield* decodePersisted("read current Candidate", () => decodeOwnedCandidate(row, changeId));
-  });
-
-const readCandidatesForChange = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  operationName: string,
-) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<CandidateOwnerRow>(
-      `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
-       FROM candidates AS candidate
-       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE candidate.change_id = ?`,
-      [changeId],
-    );
-    return yield* decodePersisted(operationName, () =>
-      rows.map((row) => decodeOwnedCandidate(row, changeId)).sort(compareCandidatesAscending),
-    );
-  });
-
-// Artifact Content cleanup needs only exact Candidate and Validation Run identities.
-// This read validates those relationships without decoding opaque historical Snapshots.
-const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{
-      readonly runId: string;
-      readonly runCandidateId: string;
-      readonly candidateId: string;
-      readonly candidateChangeId: string;
-      readonly createdAt: string;
-    }>`
-      SELECT run.id AS runId, run.candidate_id AS runCandidateId,
-        candidate.id AS candidateId, candidate.change_id AS candidateChangeId,
-        run.created_at AS createdAt
-      FROM candidates AS candidate
-      JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
-      WHERE candidate.change_id = ${changeId}
-    `;
-    return yield* decodePersisted("list Candidate Validation Run IDs", () =>
-      rows
-        .map((row) => {
-          const runId = row.runId;
-          const runCandidateId = row.runCandidateId;
-          const candidateId = row.candidateId;
-          const candidateChangeId = row.candidateChangeId;
-          if (runCandidateId !== candidateId || candidateChangeId !== changeId) {
-            throw new Error("Validation Run cleanup relationship is inconsistent");
-          }
-          return {
-            id: runId,
-            createdAt: row.createdAt,
-          };
-        })
-        .sort(
-          (left, right) =>
-            compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id),
-        )
-        .map(({ id }) => id),
-    );
   });
 
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
@@ -574,56 +386,6 @@ const getActiveForChange = (sql: SqlClient.SqlClient, changeId: string) =>
         );
   });
 
-const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredAbandonmentContextRow>`
-      SELECT run.id AS validationRunId, run.candidate_id AS runCandidateId,
-        candidate.change_id AS changeId, change_row.id AS storedChangeId,
-        candidate.id AS candidateId, candidate.head_sha AS submittedSha,
-        setup.validation_run_id AS setupValidationRunId,
-        setup.submitted_sha AS setupSubmittedSha, setup.worktree_head AS setupWorktreeHead,
-        setup.temp_ref_name AS tempRefName, setup.worktree_path AS worktreePath,
-        setup.cleanup_worktree AS cleanupWorktree, setup.cleanup_temp_ref AS cleanupTempRef
-      FROM candidate_validation_runs AS run
-      LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
-      LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      LEFT JOIN candidate_validation_workspace_setups AS setup ON setup.validation_run_id = run.id
-      WHERE run.id = ${validationRunId}
-    `;
-    const row = rows[0];
-    return row === undefined
-      ? undefined
-      : yield* decodePersisted("read Candidate Validation Run abandonment context", () =>
-          decodeAbandonmentContext(row, validationRunId),
-        );
-  });
-
-const abandon = (
-  sql: SqlClient.SqlClient,
-  input: {
-    readonly validationRunId: string;
-    readonly errorKind: string;
-    readonly operationName: string;
-    readonly errorMessage: string;
-    readonly now: string;
-  },
-) =>
-  Effect.zipRight(
-    sql`
-      INSERT INTO candidate_validation_tooling_failures (
-        validation_run_id, error_kind, operation_name, error_message, created_at
-      ) VALUES (
-        ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
-        ${input.errorMessage}, ${input.now}
-      )
-    `,
-    complete(sql, {
-      validationRunId: input.validationRunId,
-      outcome: "tooling_failed",
-      now: input.now,
-    }),
-  ).pipe(Effect.asVoid);
-
 const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredValidationRunRow>(
@@ -659,26 +421,6 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
     return decoded.record;
   });
 
-const getLatestRunForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidate_validation_runs
-      WHERE candidate_id = ${candidateId}
-      ORDER BY created_at DESC, id DESC LIMIT 1
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    const validationRunId = row.id;
-    const run = yield* getRunById(sql, validationRunId);
-    if (run === undefined || run.candidateId !== candidateId) {
-      return yield* invalidData(
-        "read latest Candidate Validation Run",
-        "Latest Validation Run belongs to another or unknown Candidate",
-      );
-    }
-    return run;
-  });
-
 const requireRun = (sql: SqlClient.SqlClient, validationRunId: string, operationName: string) =>
   Effect.flatMap(getRunById(sql, validationRunId), (run) =>
     run === undefined
@@ -702,49 +444,6 @@ const requireRunIdentity = (
       const id = row.id;
       if (id !== validationRunId) throw new Error("Validation Run identity does not match lookup");
     });
-  });
-
-const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs
-       WHERE candidate_id = ?`,
-      [candidateId],
-    );
-    if (rows.length === 0) return [];
-    const candidate = yield* readCandidateById(sql, candidateId, "decode Candidate Validation Run");
-    if (candidate === undefined) {
-      return yield* invalidData(
-        "decode Candidate Validation Run",
-        "Validation Run history belongs to an unknown Candidate",
-      );
-    }
-    const decodedRuns = yield* decodePersisted("decode Candidate Validation Run", () =>
-      rows.map((row) => {
-        const decoded = decodeValidationRun(row);
-        if (decoded.record.candidateId !== candidateId)
-          throw new Error("Validation Run belongs to another Candidate");
-        return decoded;
-      }),
-    );
-    yield* Effect.forEach(
-      decodedRuns,
-      (run) =>
-        validateSelectedValidationRunAuthority(
-          sql,
-          run,
-          candidate.changeId,
-          "decode Candidate Validation Run",
-        ),
-      { discard: true },
-    );
-    return decodedRuns
-      .map(({ record }) => record)
-      .sort(
-        (left, right) =>
-          compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id),
-      );
   });
 
 const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationCommandRoundInput) =>

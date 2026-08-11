@@ -17,6 +17,7 @@ import {
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "../changeStartGit.js";
 import { openHerdrInteractiveSessionHost } from "../interactiveSession/herdrInteractiveSessionHost.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
+import { loadLocalInteractiveSessionProfile } from "../interactiveSession/localInteractiveSessionProfile.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
@@ -125,6 +126,7 @@ export const withChangeImplement = <A, E, R>(
             store,
             input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
             input.globalConfigPath,
+            loadLocalInteractiveSessionProfile,
             changeId,
             implementerPrompt,
           ),

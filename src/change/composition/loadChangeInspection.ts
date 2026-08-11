@@ -5,12 +5,10 @@ import {
 } from "../../contracts/repositoryStorageError.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
-import {
-  openSqliteActiveValidationRunPort,
-  openSqliteChangeValidationReadPort,
-} from "../../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import type {
   ChangeAuthorityPort,
