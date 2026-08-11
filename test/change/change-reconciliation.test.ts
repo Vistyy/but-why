@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
@@ -13,7 +12,10 @@ import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistenc
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 
 const pullRequestRead = <T>(pullRequest: T) => ({ ok: true as const, pullRequest });
 

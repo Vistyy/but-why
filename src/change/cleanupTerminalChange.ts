@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
@@ -26,17 +27,17 @@ export type TerminalCleanupResult =
 
 export type ArtifactContentRemovalResult = { readonly ok: true } | { readonly ok: false };
 
-export type ArtifactLifecycleOwner = {
+export type ArtifactLifecycleOwner<R = never> = {
   readonly removeContent: (
     changeId: string,
-  ) => Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError>;
+  ) => Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError, R>;
 };
 
-export type TerminalCleanupOperation = (
+export type TerminalCleanupOperation<R = never> = (
   change: TerminalCleanupChange,
   now: string,
   discardWork?: boolean,
-) => Effect.Effect<TerminalCleanupResult, RepositoryStorageError>;
+) => Effect.Effect<TerminalCleanupResult, RepositoryStorageError, R>;
 
 export const openTerminalCleanup =
   (dependencies: {
@@ -44,8 +45,8 @@ export const openTerminalCleanup =
     readonly cleanup: ChangeCleanupOperation;
     readonly indexTranscripts: TranscriptIndexOperation;
     readonly reviewerSessionPathFor: (changeId: string) => string;
-    readonly artifactLifecycle: ArtifactLifecycleOwner;
-  }): TerminalCleanupOperation =>
+    readonly artifactLifecycle: ArtifactLifecycleOwner<FileSystem.FileSystem>;
+  }): TerminalCleanupOperation<FileSystem.FileSystem> =>
   (change, now, discardWork) =>
     cleanupTerminalChange(dependencies, change, now, discardWork);
 
@@ -54,7 +55,7 @@ const cleanupTerminalChange = (
   change: TerminalCleanupChange,
   now: string,
   discardWork: boolean | undefined,
-): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
+): Effect.Effect<TerminalCleanupResult, RepositoryStorageError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") {
       return { ok: true, change, cleanup: change.cleanup };
@@ -102,7 +103,7 @@ const cleanupTerminalChange = (
 const removeArtifactContent = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
   change: TerminalCleanupChange,
-): Effect.Effect<boolean, RepositoryStorageError> =>
+): Effect.Effect<boolean, RepositoryStorageError, FileSystem.FileSystem> =>
   Effect.map(dependencies.artifactLifecycle.removeContent(change.id), (result) => result.ok);
 
 const recordCleanup = (

@@ -3,10 +3,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import {
-  type ChangeCleanupOperation,
-  openTerminalCleanup,
-} from "../../src/change/cleanupTerminalChange.js";
+import type { ChangeCleanupOperation } from "../../src/change/cleanupTerminalChange.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
@@ -16,7 +13,10 @@ import {
 } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-08-05T12:00:00.000Z";

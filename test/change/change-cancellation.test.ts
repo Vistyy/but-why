@@ -9,7 +9,6 @@ import {
 } from "../../src/change/cancelChange.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { CancellationChange } from "../../src/change/changePorts.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestMutationResult,
@@ -21,7 +20,10 @@ import {
   createGitRepo,
   runByInProcessEffect,
 } from "../support/by-cli.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cancellation", () => {

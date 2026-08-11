@@ -8,11 +8,13 @@ import {
 } from "../../src/change/cancelChange.js";
 import type { ChangeCleanup, ChangeRecord } from "../../src/change/change.js";
 import type { TerminalCleanupChange } from "../../src/change/changePorts.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 const target = {

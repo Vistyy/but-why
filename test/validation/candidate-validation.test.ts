@@ -1,8 +1,9 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { describe, vi } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
@@ -422,7 +423,7 @@ const validateCandidate = (
   Effect.gen(function* () {
     const service = yield* CandidateValidation;
     return yield* service.validateCandidate(input);
-  }).pipe(Effect.provide(validation.layer));
+  }).pipe(Effect.provide(validation.layer.pipe(Layer.provide(NodeFileSystem.layer))));
 
 const validateAcceptanceContextCandidate = (
   validation: ReturnType<typeof candidateValidationForTest>,
@@ -431,7 +432,7 @@ const validateAcceptanceContextCandidate = (
   Effect.gen(function* () {
     const service = yield* CandidateValidation;
     return yield* service.validateAcceptanceContextCandidate(input);
-  }).pipe(Effect.provide(validation.layer));
+  }).pipe(Effect.provide(validation.layer.pipe(Layer.provide(NodeFileSystem.layer))));
 
 const reviewerPolicy = (name: string) => ({
   instructions: `${name} instructions`,

@@ -1,3 +1,4 @@
+import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
 
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
@@ -17,8 +18,8 @@ export const composeTerminalCleanup = (context: LocalRepositoryContext) =>
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     artifactLifecyclePersistence: openSqliteValidationArtifactLifecyclePort(),
   }).pipe(
-    Effect.map(({ persistence, reviewerTranscripts, artifactLifecyclePersistence }) =>
-      openTerminalCleanup({
+    Effect.map(({ persistence, reviewerTranscripts, artifactLifecyclePersistence }) => {
+      const cleanup = openTerminalCleanup({
         persistence,
         cleanup: cleanupChangeResourcesWithRemote(
           localGitHubChangeCleanupRemote({ cwd: context.root }),
@@ -30,6 +31,8 @@ export const composeTerminalCleanup = (context: LocalRepositoryContext) =>
           persistence: artifactLifecyclePersistence,
           artifactsRoot: context.paths.artifactsPath,
         }),
-      }),
-    ),
+      });
+      return (...args: Parameters<typeof cleanup>) =>
+        cleanup(...args).pipe(Effect.provide(NodeFileSystem.layer));
+    }),
   );

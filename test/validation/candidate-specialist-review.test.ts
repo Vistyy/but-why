@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
@@ -16,7 +17,7 @@ import type {
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import {
   type RunSpecialistReviewPhaseInput,
-  runSpecialistReviewPhase,
+  runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
@@ -89,6 +90,9 @@ const outputFailure = (_reviewer: string, message: string) =>
     diagnostics: [],
     message,
   });
+
+const runSpecialistReviewPhase = (input: RunSpecialistReviewPhaseInput) =>
+  runSpecialistReviewPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 type PhaseHarness = {
   readonly rounds: RecordCandidateSpecialistRoundInput[];

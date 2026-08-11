@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Clock, Effect } from "effect";
 import { runTimedCommand } from "../../command/runTimedCommand.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
@@ -13,7 +14,7 @@ import {
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
 } from "./validationToolingFailures.js";
-import { writeCommandEvidence } from "./writeCommandEvidence.js";
+import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
 export type RunCheckPhaseInput = {
   readonly validationRunId: string;
@@ -64,7 +65,11 @@ type CheckRound = {
 
 export const runCheckPhase = (
   input: RunCheckPhaseInput,
-): Effect.Effect<RunCheckPhaseResult, ValidationToolingFailure | RepositoryStorageError> =>
+): Effect.Effect<
+  RunCheckPhaseResult,
+  ValidationToolingFailure | RepositoryStorageError,
+  FileSystem.FileSystem
+> =>
   Effect.gen(function* () {
     let foundFailure = false;
 
@@ -96,7 +101,7 @@ const runSingleCheck = (
   input: RunCheckPhaseInput,
   check: SubmitCheckConfig,
   index: number,
-): Effect.Effect<CheckRound, ValidationToolingFailure> =>
+): Effect.Effect<CheckRound, ValidationToolingFailure, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const { commandResult, timedOut } = yield* runCheckCommand(
@@ -238,31 +243,29 @@ const writeCheckArtifacts = (input: {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
-}): Effect.Effect<ReturnType<typeof writeCommandEvidence>, ValidationToolingFailure> =>
-  Effect.try({
-    try: () =>
-      writeCommandEvidence({
-        validationRunId: input.validationRunId,
-        phase: validationPhase.checks,
-        producer: input.check.id,
-        commandResult: { ...input.commandResult, timedOut: input.timedOut },
-        durationMs: input.durationMs,
-        logFields: [
-          { name: "checkId", value: input.check.id },
-          { name: "command", value: input.check.command },
-          { name: "timeoutSeconds", value: input.check.timeoutSeconds },
-        ],
-        artifactsRoot: input.artifactsRoot,
-        ...(input.artifactMaxBytes === undefined
-          ? {}
-          : { artifactMaxBytes: input.artifactMaxBytes }),
-      }),
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_check_artifacts",
-        message: errorMessage(error),
-      }),
-  });
+}): Effect.Effect<ValidationCommandArtifacts, ValidationToolingFailure, FileSystem.FileSystem> =>
+  writeCommandEvidence({
+    validationRunId: input.validationRunId,
+    phase: validationPhase.checks,
+    producer: input.check.id,
+    commandResult: { ...input.commandResult, timedOut: input.timedOut },
+    durationMs: input.durationMs,
+    logFields: [
+      { name: "checkId", value: input.check.id },
+      { name: "command", value: input.check.command },
+      { name: "timeoutSeconds", value: input.check.timeoutSeconds },
+    ],
+    artifactsRoot: input.artifactsRoot,
+    ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new InfrastructureToolingFailed({
+          operationName: "record_check_artifacts",
+          message: errorMessage(error),
+        }),
+    ),
+  );
 
 const checkCompletionMarker = (checkId: string): string => `__BUTWHY_CHECK_COMPLETED_${checkId}__`;
 

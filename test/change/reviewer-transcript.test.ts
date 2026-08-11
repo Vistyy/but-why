@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import type { ChangeRecord } from "../../src/change/change.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import {
   discoverReviewerTranscripts,
   openReviewerTranscriptIndex,
@@ -14,7 +13,10 @@ import {
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const sessionFile = (producerRoot: string, relativePath: string, sessionId: string): string => {
