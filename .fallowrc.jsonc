@@ -54,8 +54,16 @@
         "patterns": ["src/**/adapters/**", "src/sqlite/**"]
       },
       {
-        "name": "composition",
-        "patterns": ["src/**/composition/**"]
+        "name": "task-composition",
+        "patterns": ["src/task/composition/**"]
+      },
+      {
+        "name": "change-composition",
+        "patterns": ["src/change/**/composition/**"]
+      },
+      {
+        "name": "repository-runtime-composition",
+        "patterns": ["src/repositorySnapshot/composition/**"]
       },
       {
         "name": "cli",
@@ -96,12 +104,28 @@
         "allow": ["change", "repository-runtime", "shared", "task"]
       },
       {
-        "from": "composition",
+        "from": "task-composition",
+        "allow": ["adapters", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "change-composition",
         "allow": ["adapters", "change", "repository-runtime", "shared", "task"]
       },
       {
+        "from": "repository-runtime-composition",
+        "allow": ["adapters", "repository-runtime", "shared"]
+      },
+      {
         "from": "cli",
-        "allow": ["change", "composition", "repository-runtime", "shared", "task"]
+        "allow": [
+          "change",
+          "change-composition",
+          "repository-runtime",
+          "repository-runtime-composition",
+          "shared",
+          "task",
+          "task-composition"
+        ]
       },
       {
         "from": "task",
@@ -124,11 +148,13 @@
         "allow": [
           "adapters",
           "change",
+          "change-composition",
           "cli",
-          "composition",
           "repository-runtime",
+          "repository-runtime-composition",
           "shared",
-          "task"
+          "task",
+          "task-composition"
         ]
       }
     ]

@@ -59,13 +59,14 @@ Targeted test selections remain unlocked.
 
 ## Structural contracts
 
-Fallow assigns every maintained TypeScript or JavaScript source file to a stable directory-pattern zone for CLI, composition, Task, Change, Repository Runtime, Adapters, shared code, or repository support.
+Fallow assigns every maintained TypeScript or JavaScript source file to a stable directory-pattern zone for CLI, owner-specific composition, Task, Change, Repository Runtime, Adapters, shared code, or repository support.
 Every zone has an explicit dependency rule.
 These rules enforce these architecture contracts:
 
 - Behavior modules use ports instead of concrete Adapters, and concrete Adapter selection stays in composition directories.
 - CLI modules do not import concrete Adapters.
-- Task behavior does not depend on Change behavior.
+- Task behavior and Task composition do not depend on Change behavior.
+- Repository Runtime composition does not depend on Task or Change behavior.
 
 Semantic domain, transaction, and supported-behavior rules remain in their owning code and tests.
 

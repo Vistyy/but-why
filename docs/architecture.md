@@ -45,7 +45,7 @@ Repository Runtime owns Local Repository resolution and the Shared Repository St
 It provides a scoped database capability instead of an Adapter registry or application container.
 Each workflow-owned SQLite persistence module implements one owner-defined port and selects only the facts required by that workflow.
 Concrete Adapters use dedicated `adapters/` directories, except SQLite Adapters whose stable boundary is `src/sqlite/`.
-Fallow classifies every maintained TypeScript or JavaScript source file as CLI, composition, Task, Change, Repository Runtime, Adapter, shared code, or repository support and applies an explicit dependency rule to every class.
+Fallow classifies every maintained TypeScript or JavaScript source file as CLI, owner-specific composition, Task, Change, Repository Runtime, Adapter, shared code, or repository support and applies an explicit dependency rule to every class.
 
 ## Change workflow
 
