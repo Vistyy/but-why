@@ -78,7 +78,12 @@ type ReassessmentEvidence = {
 };
 
 type SubmissionReassessment = {
-  readonly state: "awaiting-settle" | "running" | "complete" | "not-required";
+  readonly state:
+    | "awaiting-settle"
+    | "awaiting-restart"
+    | "running"
+    | "complete"
+    | "not-required";
   readonly taskId: string | null;
   readonly baseRef: string | null;
   readonly hasResolutions: boolean;
@@ -948,7 +953,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     const reassessment = persisted?.submissionReassessment;
     if (reassessment?.state === "complete" || reassessment?.state === "not-required") return;
-    if (reassessment?.state === "awaiting-settle" || reassessment?.state === "running") {
+    if (
+      reassessment?.state === "awaiting-settle" ||
+      reassessment?.state === "awaiting-restart" ||
+      reassessment?.state === "running"
+    ) {
       return { block: true, reason: pendingReassessmentMessage };
     }
     if (changeId === undefined) {
@@ -1264,6 +1273,25 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
+  const startSubmissionReassessment = (
+    ctx: ExtensionContext,
+    reassessment: SubmissionReassessment,
+  ): void => {
+    if (changeId === undefined || reassessment.taskId === null || reassessment.baseRef === null) {
+      return;
+    }
+    saveSubmissionReassessment({ ...reassessment, state: "running" });
+    pi.sendUserMessage(
+      submissionReassessmentMessage(
+        changeId,
+        reassessment.taskId,
+        commandPrefixFor(ctx.cwd),
+        reassessment.baseRef,
+        reassessment.hasResolutions,
+      ),
+    );
+  };
+
   pi.on("session_start", async (_event, ctx) => {
     changeId ??= findChangeId(ctx.sessionManager.getBranch());
     restoreState(ctx);
@@ -1288,7 +1316,12 @@ export default function continueChange(pi: ExtensionAPI): void {
       }
       if (persisted?.paused) {
         pauseGeneration += 1;
+        const reassessment = persisted.submissionReassessment;
         saveState({ ...persisted, paused: false, unchangedRestarts: 0 });
+        if (reassessment?.state === "awaiting-restart") {
+          startSubmissionReassessment(ctx, reassessment);
+          return;
+        }
       }
       await continueWatching(ctx, true);
     },
@@ -1314,7 +1347,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       if (reassessment?.state === "running") {
         saveSubmissionReassessment({
           ...reassessment,
-          state: "awaiting-settle",
+          state: "awaiting-restart",
           evidence: emptyReassessmentEvidence(),
         });
       }
@@ -1340,23 +1373,8 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     const reassessment = persisted?.submissionReassessment;
-    if (
-      reassessment?.state === "awaiting-settle" &&
-      reassessment.taskId !== null &&
-      reassessment.baseRef !== null
-    ) {
-      saveSubmissionReassessment({ ...reassessment, state: "running" });
-      if (changeId !== undefined) {
-        pi.sendUserMessage(
-          submissionReassessmentMessage(
-            changeId,
-            reassessment.taskId,
-            commandPrefixFor(ctx.cwd),
-            reassessment.baseRef,
-            reassessment.hasResolutions,
-          ),
-        );
-      }
+    if (reassessment?.state === "awaiting-settle") {
+      startSubmissionReassessment(ctx, reassessment);
       return;
     }
     if (reassessment?.state === "running") {
@@ -1384,6 +1402,7 @@ const isReassessmentEvidence = (value: unknown): value is ReassessmentEvidence =
 const isSubmissionReassessment = (value: unknown): value is SubmissionReassessment =>
   isRecord(value) &&
   (recordValue(value, "state") === "awaiting-settle" ||
+    recordValue(value, "state") === "awaiting-restart" ||
     recordValue(value, "state") === "running" ||
     recordValue(value, "state") === "complete" ||
     recordValue(value, "state") === "not-required") &&

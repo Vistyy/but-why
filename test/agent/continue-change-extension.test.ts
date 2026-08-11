@@ -348,7 +348,18 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-abort" }),
     ).toMatchObject({ block: true });
     await harness.runCommand("continue-change");
+    expect(harness.sent.at(-1)).toContain("required separate reassessment run");
+
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
     await harness.emit("agent_settled");
+    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
+    expect(
+      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-restart-abort" }),
+    ).toMatchObject({ block: true });
+
+    await harness.runCommand("continue-change");
     expect(harness.sent.at(-1)).toContain("required separate reassessment run");
 
     for (const [index, command] of inspectionCommands.entries()) {
