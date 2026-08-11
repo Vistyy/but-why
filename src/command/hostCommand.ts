@@ -70,13 +70,7 @@ export const executeHostCommandEffect = (
 
 const terminateProcessTree = (
   runningCommand: CommandExecutor.Process,
-): Effect.Effect<void, never> =>
-  runningCommand.isRunning.pipe(
-    Effect.flatMap((isRunning) =>
-      isRunning ? runningCommand.kill("SIGKILL").pipe(Effect.ignore) : Effect.void,
-    ),
-    Effect.catchAll(() => Effect.void),
-  );
+): Effect.Effect<void, never> => runningCommand.kill("SIGKILL").pipe(Effect.ignore);
 
 export const executeHostCommand = async (input: HostCommandInput): Promise<HostCommandResult> => {
   try {
