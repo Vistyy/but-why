@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { taskReviewInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
-import { taskReviewInstructions } from "../../src/task/review/taskReview.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 

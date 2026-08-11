@@ -60,6 +60,10 @@
         "patterns": ["src/agent/**"]
       },
       {
+        "name": "reviewer-prompts",
+        "patterns": ["src/reviewerPrompts/**"]
+      },
+      {
         "name": "task-composition",
         "patterns": ["src/task/composition/**"]
       },
@@ -114,8 +118,12 @@
         "allow": ["shared"]
       },
       {
+        "from": "reviewer-prompts",
+        "allow": ["agent", "shared"]
+      },
+      {
         "from": "task-composition",
-        "allow": ["adapters", "agent", "repository-runtime", "shared", "task"]
+        "allow": ["adapters", "agent", "repository-runtime", "reviewer-prompts", "shared", "task"]
       },
       {
         "from": "change-composition",
@@ -140,11 +148,11 @@
       },
       {
         "from": "task",
-        "allow": ["agent", "repository-runtime", "shared"]
+        "allow": ["agent", "repository-runtime", "reviewer-prompts", "shared"]
       },
       {
         "from": "change",
-        "allow": ["agent", "repository-runtime", "shared", "task"]
+        "allow": ["agent", "repository-runtime", "reviewer-prompts", "shared", "task"]
       },
       {
         "from": "repository-runtime",
@@ -164,6 +172,7 @@
           "cli",
           "repository-runtime",
           "repository-runtime-composition",
+          "reviewer-prompts",
           "shared",
           "task",
           "task-composition"

@@ -15,7 +15,7 @@ import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../../src/agent/reviewerOutput.js";
-import { buildReviewerOutputCorrectionPrompt } from "../../src/change/reviewerPrompts.js";
+import { buildReviewerOutputCorrectionPrompt } from "../../src/reviewerPrompts/reviewerPromptSupport.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(

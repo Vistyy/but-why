@@ -22,7 +22,9 @@ The source hierarchy follows these owners:
   `implementChange` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`.
   `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeLifecycle.ts` selects `adapters/herdrInteractiveSessionHost.ts` as the default and only supported host.
 - `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
-- `src/agent/` owns the project reviewer-execution contract, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
+- `src/agent/` owns the project reviewer-execution contract, the Effect-managed Pi Reviewer Adapter, reviewer output handling, and Agent Profile resolution.
+- `src/reviewerPrompts/` owns all built-in Task, Acceptance, and Specialist Reviewer prompt text and assembly.
+  Review workflows supply resolved policy and authoritative domain inputs to these prompt builders.
 - `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
 - `src/cli/` owns command Adapters, and `src/cli.ts` owns the executable entry boundary.
 - `src/cli/change/implementerPromptFile.ts` owns Implementer Prompt file input handling and `src/cli/change/implementResult.ts` owns Change Implement result rendering.
