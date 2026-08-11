@@ -82,8 +82,11 @@ rule:
             - has:
                 pattern: JSON.parse($$$ARGS)
                 stopBy: end
-        - pattern: JSON.parse($$$ARGS) satisfies $TYPE
-        - pattern: (JSON.parse($$$ARGS)) satisfies $TYPE
+        - all:
+            - pattern: $VALUE satisfies $TYPE
+            - has:
+                pattern: JSON.parse($$$ARGS)
+                stopBy: end
     - not:
         any:
           - pattern: $VALUE as unknown
@@ -160,17 +163,7 @@ files:
 ignores:
   - test/repository/package-contents.test.ts
 rule:
-  any:
-    - pattern: spawnSync("npm", $$$ARGS)
-    - pattern: execFileSync("npm", $$$ARGS)
-    - pattern: spawnSync('npm', $$$ARGS)
-    - pattern: execFileSync('npm', $$$ARGS)
-    - pattern: runTestProcess($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: startTestProcess($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, $$$ARGS)
+  pattern: $EXECUTOR($NPM_EXECUTABLE, $$$ARGS)
 constraints:
   NPM_EXECUTABLE:
     regex: '(^|[^A-Za-z])npm([^A-Za-z]|$)'

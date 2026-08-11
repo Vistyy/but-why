@@ -68,6 +68,8 @@ invalid:
   - "<any>JSON.parse(x)"
   - JSON.parse(x) satisfies unknown
   - JSON.parse(x) satisfies TrustedType
+  - JSON.parse(x)! satisfies TrustedType
+  - (JSON.parse(x) as unknown)! satisfies TrustedType
   - (JSON.parse(x)) satisfies Record<string, unknown>
   - JSON.parse(x) as unknown as TrustedType
   - JSON.parse(x) as unknown as unknown as TrustedType
@@ -114,6 +116,9 @@ invalid:
   - startTestProcess("npm", ["install"], { cwd })
   - testProcess.runTestProcess("npm", ["install"], { cwd })
   - "runTestProcess(`npm`, [`install`], { cwd })"
+  - |
+    import { runTestProcess as execute } from "./support/testProcess.js";
+    execute("npm", ["i", "package"], { cwd });
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:

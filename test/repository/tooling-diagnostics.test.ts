@@ -126,7 +126,7 @@ describe("repository-authored tooling diagnostics", () => {
     ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
     [
       "json-parse-assertions-keep-unknown",
-      "const value = JSON.parse(source) satisfies TrustedType;",
+      "const value = JSON.parse(source)! satisfies TrustedType;",
       "extensions",
     ],
     [
@@ -163,6 +163,10 @@ describe("repository-authored tooling diagnostics", () => {
     [
       "package-installation-belongs-to-package-contract",
       "const result = runTestProcess(`npm`, ([`install`] as const), { cwd });",
+    ],
+    [
+      "package-installation-belongs-to-package-contract",
+      'import { runTestProcess as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
