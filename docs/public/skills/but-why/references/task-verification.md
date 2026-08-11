@@ -15,6 +15,11 @@ Choose evidence after understanding the implementation, the boundaries on which 
 Prefer evidence that observes the relevant behavior directly, would reveal the meaningful failure, and has proportionate creation and maintenance cost.
 A broader, slower, or more durable mechanism is not inherently stronger.
 Evidence establishes only what it actually observes.
+
+When work changes an integration, run a normal operation through the changed boundary using the exact Candidate.
+Do not replace that boundary with a test double.
+Tests of components, interruption, cleanup, or failure behavior do not prove that the normal operation works.
+If no supported operation can establish this, report the integration behavior that remains unverified.
 Treat missing, malformed, unavailable, or ambiguous observations as unknown rather than success.
 
 Use this reasoning to guide judgment.
