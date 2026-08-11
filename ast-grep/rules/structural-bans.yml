@@ -29,7 +29,7 @@ rule:
 id: sandcastle-dependency-belongs-to-runtime-adapter
 language: TypeScript
 severity: error
-message: Do not import Sandcastle outside src/disposableWorkspace/workspaceRuntimeAdapter.ts because Task, Change, and Repository Runtime behavior must use project-owned execution contracts; use the disposable workspace, command-execution, or reviewer-execution contract.
+message: Do not import or re-export Sandcastle outside src/disposableWorkspace/workspaceRuntimeAdapter.ts because Task, Change, and Repository Runtime behavior must use project-owned execution contracts; use the disposable workspace, command-execution, or reviewer-execution contract.
 files:
   - src/**/*.ts
 ignores:
@@ -38,6 +38,9 @@ rule:
   any:
     - all:
         - kind: import_statement
+        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
+    - all:
+        - kind: export_statement
         - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - all:
         - kind: call_expression

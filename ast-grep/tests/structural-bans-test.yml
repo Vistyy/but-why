@@ -29,6 +29,8 @@ invalid:
   - import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
   - import * as Sandcastle from "@ai-hero/sandcastle";
   - import Sandcastle from "@ai-hero/sandcastle";
+  - export type { Sandbox } from "@ai-hero/sandcastle";
+  - export * from "@ai-hero/sandcastle";
   - import("@ai-hero/sandcastle")
   - require("@ai-hero/sandcastle")
 ---

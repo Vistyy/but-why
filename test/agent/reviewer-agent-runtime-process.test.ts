@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
@@ -12,7 +11,11 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
-import { createReviewerProcessExecutor } from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
+import {
+  createReviewerProcessExecutor,
+  type ReviewerProcessRuntimeRunner,
+  type ReviewerProcessRuntimeRunResult,
+} from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
@@ -52,10 +55,9 @@ const profile = {
   },
 };
 
-const runResult = (stdout: string) => ({
+const runResult = (stdout: string): ReviewerProcessRuntimeRunResult => ({
   iterations: [],
   stdout,
-  commits: [],
 });
 
 describe("Pi reviewer agent runtime process boundary", () => {
@@ -147,8 +149,8 @@ describe("Pi reviewer agent runtime process boundary", () => {
 
         let command = "";
         let processOutput = "";
-        const run: Pick<Sandbox, "run">["run"] = async (options) => {
-          const built = options.agent.buildPrintCommand({
+        const run: ReviewerProcessRuntimeRunner = async (options) => {
+          const built = options.buildPrintCommand({
             prompt: options.prompt ?? "",
             dangerouslySkipPermissions: true,
           });
@@ -172,10 +174,7 @@ describe("Pi reviewer agent runtime process boundary", () => {
 
         try {
           const result = yield* piReviewerAgentRuntime.review({
-            reviewerExecutor: createReviewerProcessExecutor({ run } as unknown as Pick<
-              Sandbox,
-              "run"
-            >),
+            reviewerExecutor: createReviewerProcessExecutor(run),
             reviewer: "acceptance",
             decodeOutput: decodeEmptyFindings,
             prompt: "Review the Candidate.",

@@ -1,13 +1,7 @@
 import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import {
-  type AgentProvider,
-  createSandbox,
-  pi,
-  type Sandbox,
-  type SandboxRunResult,
-} from "@ai-hero/sandcastle";
+import { type AgentProvider, createSandbox, pi } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
@@ -23,6 +17,28 @@ export type WorkspaceRuntime = {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly reviewerExecutor: ReviewerProcessExecutor;
 };
+
+export type ReviewerProcessRuntimeRunInput = {
+  readonly agentHandle: unknown;
+  readonly buildPrintCommand: (input: {
+    readonly prompt: string;
+    readonly dangerouslySkipPermissions: boolean;
+  }) => { readonly command: string };
+  readonly prompt: string;
+  readonly resumeSession?: string;
+  readonly maxIterations: number;
+  readonly name: string;
+};
+
+export type ReviewerProcessRuntimeRunResult = {
+  readonly iterations: readonly { readonly sessionId?: string }[];
+  readonly stdout: string;
+  readonly resume?: (prompt: string) => Promise<ReviewerProcessRuntimeRunResult>;
+};
+
+export type ReviewerProcessRuntimeRunner = (
+  input: ReviewerProcessRuntimeRunInput,
+) => Promise<ReviewerProcessRuntimeRunResult>;
 
 export const createWorkspaceRuntime = async (input: {
   readonly repoRoot: string;
@@ -46,12 +62,20 @@ export const createWorkspaceRuntime = async (input: {
         throw new WorkspaceCommandExecutionFailed({ message: errorMessage(error) });
       }
     },
-    reviewerExecutor: createReviewerProcessExecutor(sandbox),
+    reviewerExecutor: createReviewerProcessExecutor((review) =>
+      sandbox.run({
+        agent: review.agentHandle as AgentProvider,
+        prompt: review.prompt,
+        ...(review.resumeSession === undefined ? {} : { resumeSession: review.resumeSession }),
+        maxIterations: review.maxIterations,
+        name: review.name,
+      }),
+    ),
   };
 };
 
 export const createReviewerProcessExecutor = (
-  sandbox: Pick<Sandbox, "run">,
+  runReviewerProcess: ReviewerProcessRuntimeRunner,
 ): ReviewerProcessExecutor => ({
   execute: async (input) => {
     const execute = async (captureSessions: boolean): Promise<ReviewerProcessResult> => {
@@ -63,8 +87,9 @@ export const createReviewerProcessExecutor = (
         captureSessions,
       );
       await prepareHostPiSession(agent, input.commandCwd, input.resumeSession);
-      const result = await sandbox.run({
-        agent,
+      const result = await runReviewerProcess({
+        agentHandle: agent,
+        buildPrintCommand: (options) => agent.buildPrintCommand(options),
         prompt: input.prompt,
         ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
         maxIterations: 1,
@@ -140,7 +165,7 @@ const isolatedPiReviewerAgent = (
 
 const reviewerProcessResult = async (
   agent: AgentProvider,
-  result: SandboxRunResult,
+  result: ReviewerProcessRuntimeRunResult,
 ): Promise<ReviewerProcessResult> => {
   const metadata = await sessionMetadata(agent, result);
   return {
@@ -166,7 +191,7 @@ const reviewerProcessResult = async (
 
 const sessionMetadata = async (
   agent: AgentProvider,
-  result: SandboxRunResult,
+  result: ReviewerProcessRuntimeRunResult,
 ): Promise<{ readonly sessionReference?: string; readonly sessionFilePath?: string }> => {
   const iteration = result.iterations[result.iterations.length - 1];
   if (iteration?.sessionId === undefined || agent.sessionStorage === undefined) return {};
