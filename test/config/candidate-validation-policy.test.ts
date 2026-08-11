@@ -5,7 +5,9 @@ import { Either } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { resolveCandidateValidationPolicy } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
+import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import { decodeRepoConfig } from "../../src/contracts/repoConfig.js";
+import { readGlobalConfig } from "../../src/init/globalConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Candidate validation policy configuration", () => {
@@ -50,6 +52,7 @@ describe("Candidate validation policy configuration", () => {
         },
       },
       globalConfigPath,
+      globalConfig: globalConfigAt(globalConfigPath),
       acceptanceContextSupplied: true,
     });
 
@@ -86,6 +89,7 @@ describe("Candidate validation policy configuration", () => {
     const result = resolveCandidateValidationPolicy({
       context: { root, config: candidate.right },
       globalConfigPath,
+      globalConfig: globalConfigAt(globalConfigPath),
       acceptanceContextSupplied: false,
       repoConfig: candidate.right,
       validationRepoConfig: changeBase.right,
@@ -156,6 +160,7 @@ describe("Candidate validation policy configuration", () => {
         },
       },
       globalConfigPath,
+      globalConfig: globalConfigAt(globalConfigPath),
       acceptanceContextSupplied: true,
     });
 
@@ -179,3 +184,9 @@ describe("Candidate validation policy configuration", () => {
     });
   });
 });
+
+const globalConfigAt = (path: string): GlobalConfig => {
+  const result = readGlobalConfig(path);
+  if (!result.ok) throw result.error;
+  return result.config;
+};

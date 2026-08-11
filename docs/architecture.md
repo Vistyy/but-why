@@ -39,10 +39,10 @@ The source hierarchy follows these owners:
 CLI modules select operations and translate results.
 They do not construct storage or coordinate persistence.
 Task and Change modules own cohesive persistence ports and the operations that preserve their invariants.
-Each Task and Change behavior selects concrete Adapters and constructs its workflow in its own `composition/` directory.
+Each behavior selects concrete Adapters and constructs its workflow in its own `composition/` directory.
 Repository Runtime owns Local Repository resolution and the Shared Repository State lifecycle.
 It provides a scoped database capability instead of an Adapter registry or application container.
-The private SQLite implementation may implement several owner-defined ports without exposing a broad persistence facade.
+Each workflow-owned SQLite persistence module implements one owner-defined port and selects only the facts required by that workflow.
 
 ## Change workflow
 

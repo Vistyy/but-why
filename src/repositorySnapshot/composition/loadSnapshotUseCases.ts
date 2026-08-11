@@ -1,14 +1,14 @@
 import { Effect } from "effect";
 
-import type { ResolveLocalRepositoryError } from "../repositoryRuntime/repositoryContext.js";
-import { openRepositoryRuntime } from "../repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../sqlite/repositorySql.js";
-import { createSqliteSnapshot } from "../sqlite/sqliteSnapshot.js";
+import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
+import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { RepositorySql } from "../../sqlite/repositorySql.js";
+import { createSqliteSnapshot } from "../../sqlite/sqliteSnapshot.js";
 import {
   type SharedRepositoryStateSnapshot,
   SnapshotCreationFailed,
   type SnapshotUseCases,
-} from "./snapshot.js";
+} from "../snapshot.js";
 
 export type LoadSnapshotUseCasesError = ResolveLocalRepositoryError;
 

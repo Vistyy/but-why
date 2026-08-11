@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { ResolveLocalRepositoryError } from "../../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeReadPort } from "../../../sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeReadPort } from "../../../sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../../sqlite/sqliteChangeValidationPersistence.js";
 import {
   type CandidateValidationRunInspectionUseCases,

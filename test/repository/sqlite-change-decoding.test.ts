@@ -7,12 +7,10 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import {
-  openSqliteCandidatePublicationPort,
-  openSqliteChangeCancellationPort,
-  openSqliteChangeReconciliationPort,
-  openSqliteTerminalChangeCleanupPort,
-} from "../../src/sqlite/sqliteChangePersistence.js";
+import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
+import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
+import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
+import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";

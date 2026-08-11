@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../contracts/repositoryStorageError.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
@@ -208,11 +211,12 @@ const cancelTask = (
           : { recoveryEvidence: result.recoveryEvidence }),
       };
     }
+    if (result.task === null) return { ok: false, code: "task_not_found", taskId: input.taskId };
     return {
       ok: true,
       status: result.status,
       changed: result.changed,
-      task: result.task ?? task,
+      task: result.task,
       change: result.change,
       cleanup: result.change.cleanup,
     };
@@ -280,13 +284,12 @@ const cancelChange = (
     });
     if (!cancelled.ok) return { ...cancelled, changeId: change.id };
     const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
-    const task = yield* loadLinkedTask(dependencies, change);
     return {
       ok: true as const,
       status: "cancelled" as const,
       changed: cancelled.changed,
       change: withCleanup.change,
-      task,
+      task: cancelled.task,
     };
   });
 
@@ -296,7 +299,16 @@ const loadLinkedTask = (
 ): Effect.Effect<TaskRecord | null, RepositoryStorageError> =>
   change.taskId === null
     ? Effect.succeed(null)
-    : Effect.map(dependencies.tasks.getTaskById(change.taskId), (task) => task ?? null);
+    : Effect.flatMap(dependencies.tasks.getTaskById(change.taskId), (task) =>
+        task === undefined
+          ? Effect.fail(
+              new RepositoryPersistedDataInvalid({
+                operationName: "read linked Task for Change cancellation",
+                cause: new Error("Linked Task was not found"),
+              }),
+            )
+          : Effect.succeed(task),
+      );
 
 const completeMerged = (
   dependencies: CancellationDependencies,
@@ -327,13 +339,12 @@ const completeMerged = (
         : { ok: false as const, code: "change_already_completed" as const, changeId: change.id };
     }
     const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
-    const task = yield* loadLinkedTask(dependencies, change);
     return {
       ok: true as const,
       status: "completed" as const,
       changed: completed.changed,
       change: withCleanup.change,
-      task,
+      task: completed.task,
     };
   });
 

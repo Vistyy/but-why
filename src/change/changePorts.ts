@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
@@ -222,14 +223,22 @@ export type ChangeReconciliationPort = {
 export type ChangeCancellationPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<CancellationChange | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<CancellationChange | undefined>;
-  readonly completeMergedChange: (
-    input: CompleteMergedChangeInput,
-  ) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: CancellationChange }
+  readonly completeMergedChange: (input: CompleteMergedChangeInput) => StorageEffect<
+    | {
+        readonly ok: true;
+        readonly changed: boolean;
+        readonly change: CancellationChange;
+        readonly task: TaskRecord | null;
+      }
     | CompleteMergedFailure
   >;
   readonly cancelChange: (input: CancelChangeInput) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: CancellationChange }
+    | {
+        readonly ok: true;
+        readonly changed: boolean;
+        readonly change: CancellationChange;
+        readonly task: TaskRecord | null;
+      }
     | {
         readonly ok: false;
         readonly code: "change_not_found" | "change_already_completed";

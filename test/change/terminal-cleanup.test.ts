@@ -625,8 +625,15 @@ const cancellationDependencies = (input: {
         ok: true as const,
         changed: true,
         change: { ...input.change, state: "closed" as const, closeReason: "completed" as const },
+        task: input.change.taskId === null ? null : input.task,
       }),
-    cancelChange: () => Effect.succeed({ ok: true as const, changed: true, change: input.change }),
+    cancelChange: () =>
+      Effect.succeed({
+        ok: true as const,
+        changed: true,
+        change: input.change,
+        task: input.change.taskId === null ? null : input.task,
+      }),
     recordCleanup: () => {
       input.events.push("record-cleanup");
       return Effect.succeed({

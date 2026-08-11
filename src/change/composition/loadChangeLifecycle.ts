@@ -3,7 +3,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/localRepositoryPreparation.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
 import {

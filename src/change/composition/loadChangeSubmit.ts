@@ -5,15 +5,14 @@ import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
+import { readGlobalConfig } from "../../init/globalConfig.js";
 import { decodeRepoConfigSource, readRepoConfig } from "../../init/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
-import {
-  openSqliteCandidatePublicationPort,
-  openSqliteChangeReviewerSessionPort,
-  openSqliteChangeSubmissionPort,
-} from "../../sqlite/sqliteChangePersistence.js";
+import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/githubTarget.js";
@@ -26,7 +25,7 @@ import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
 } from "../candidateCapture/localGitCandidate.js";
-import { candidateValidationLayer } from "../candidateValidation/candidateValidationLayer.js";
+import { candidateValidationLayer } from "../candidateValidation/composition/candidateValidationLayer.js";
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidatePublicationPort,
@@ -103,15 +102,25 @@ export const loadChangeSubmit = (input: {
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: submission,
-      resolvePolicy: (acceptanceContextSupplied, repoConfig, worktreePath, validationRepoConfig) =>
-        resolveCandidateValidationPolicy({
-          context,
-          globalConfigPath: input.globalConfigPath,
-          acceptanceContextSupplied,
-          repoConfig,
-          ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
-          repoRoot: worktreePath,
-        }),
+      resolvePolicy: (
+        acceptanceContextSupplied,
+        repoConfig,
+        worktreePath,
+        validationRepoConfig,
+      ) => {
+        const globalConfig = readGlobalConfig(input.globalConfigPath);
+        return globalConfig.ok
+          ? resolveCandidateValidationPolicy({
+              context,
+              globalConfigPath: input.globalConfigPath,
+              globalConfig: globalConfig.config,
+              acceptanceContextSupplied,
+              repoConfig,
+              ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
+              repoRoot: worktreePath,
+            })
+          : globalConfig;
+      },
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence: publication,

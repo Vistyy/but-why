@@ -533,7 +533,11 @@ describe("Change cancellation", () => {
       .cancelTask({ taskId: publicTaskId(task.id), reason: "Stop", now })
       .pipe(
         Effect.map((result) => {
-          expect(result).toMatchObject({ ok: true, status: "cancelled" });
+          expect(result).toMatchObject({
+            ok: true,
+            status: "cancelled",
+            task: { state: "cancelled", cancelReason: "Stop" },
+          });
           expect(events).toEqual([
             "read-task",
             "read-change",
@@ -543,7 +547,6 @@ describe("Change cancellation", () => {
             "cleanup",
             "record-cleanup",
             "remove-reviewer-sessions",
-            "read-task",
           ]);
           expect(cleanupRemoteBranches).toEqual([
             {
@@ -604,7 +607,6 @@ describe("Change cancellation", () => {
             "cleanup",
             "record-cleanup",
             "remove-reviewer-sessions",
-            "read-task",
           ]);
           return result;
         }),
@@ -782,7 +784,12 @@ const cancellationDependencies = (input: {
       input.events.push("complete-change");
       currentChange = { ...currentChange, state: "closed", closeReason: "completed" };
       currentTask = { ...currentTask, state: "done" };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        change: currentChange,
+        task: currentChange.taskId === null ? null : currentTask,
+      });
     },
     cancelChange: (cancelInput: { readonly changeId: string; readonly reason: string }) => {
       input.events.push("cancel-change");
@@ -794,7 +801,12 @@ const cancellationDependencies = (input: {
           currentChange.taskId === null ? cancelInput.reason : currentChange.cancelReason,
       };
       currentTask = { ...currentTask, state: "cancelled", cancelReason: cancelInput.reason };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        change: currentChange,
+        task: currentChange.taskId === null ? null : currentTask,
+      });
     },
     recordCleanup: () => {
       input.events.push("record-cleanup");
