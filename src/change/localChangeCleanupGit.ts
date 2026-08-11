@@ -36,67 +36,107 @@ export const cleanupChangeResourcesWithRemote =
   (input: Parameters<typeof cleanupChangeResources>[0]): ChangeCleanupResult =>
     cleanupChangeResources(input, remote);
 
+type ChangeCleanupInput = {
+  readonly repositoryCommonDirectory: string;
+  readonly worktreePath: string | null;
+  readonly branchRef: string;
+  readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly discardWork?: boolean;
+};
+
+type CleanupStage = (
+  input: ChangeCleanupInput,
+  remote: ChangeCleanupRemote,
+) => ChangeCleanupResult | undefined;
+
 export const cleanupChangeResources = (
-  input: {
-    readonly repositoryCommonDirectory: string;
-    readonly worktreePath: string | null;
-    readonly branchRef: string;
-    readonly remoteChangeBranch?: RemoteChangeBranch;
-    readonly discardWork?: boolean;
-  },
+  input: ChangeCleanupInput,
   remote: ChangeCleanupRemote = localChangeCleanupRemote,
 ): ChangeCleanupResult => {
-  const discardWork = input.discardWork === true;
-  if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
+  const orderedStages: readonly CleanupStage[] = [
+    verifyWorktreePath,
+    inspectDirtyWorktree,
+    removeManagedWorktree,
+    removeWorktreeContainers,
+    cleanupLocalBranch,
+    cleanupRemoteChangeBranch,
+  ];
+  for (const stage of orderedStages) {
+    const result = stage(input, remote);
+    if (result !== undefined) return result;
+  }
+  return { state: "complete" };
+};
+
+const verifyWorktreePath: CleanupStage = (input) =>
+  input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)
+    ? { state: "pending", blockingReason: "worktree_path_unsafe" }
+    : undefined;
+
+const inspectDirtyWorktree: CleanupStage = (input) => {
+  if (
+    input.worktreePath === null ||
+    !existsSync(input.worktreePath) ||
+    input.discardWork === true
+  ) {
+    return undefined;
+  }
+  const status = gitAtWorktree(input.worktreePath, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=normal",
+  ]);
+  if (!status.ok) return { state: "pending", blockingReason: "worktree_status_unavailable" };
+  return status.stdout.trim().length > 0
+    ? { state: "pending", blockingReason: "worktree_has_uncommitted_changes" }
+    : undefined;
+};
+
+const removeManagedWorktree: CleanupStage = (input) => {
+  const worktreePath = input.worktreePath;
+  if (worktreePath === null) return undefined;
+  if (!isWorktreePathSafe(worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
   }
-  if (input.worktreePath !== null) {
-    if (existsSync(input.worktreePath) && !discardWork) {
-      const status = gitAtWorktree(input.worktreePath, [
-        "status",
-        "--porcelain=v1",
-        "--untracked-files=normal",
-      ]);
-      if (!status.ok) return { state: "pending", blockingReason: "worktree_status_unavailable" };
-      if (status.stdout.trim().length > 0) {
-        return { state: "pending", blockingReason: "worktree_has_uncommitted_changes" };
-      }
-    }
 
-    const registration = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
-    if (!registration.ok) {
-      return { state: "pending", blockingReason: "worktree_removal_failed" };
-    }
-    const registered = registration.stdout
-      .split("\n")
-      .some((line) => line === `worktree ${input.worktreePath}`);
-    const worktreeRemoval = git(input.repositoryCommonDirectory, [
-      "worktree",
-      "remove",
-      ...(discardWork ? ["--force"] : []),
-      "--",
-      input.worktreePath,
-    ]);
-    if (registered && !worktreeRemoval.ok) {
-      return { state: "pending", blockingReason: "worktree_removal_failed" };
-    }
-
-    const afterRemoval = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
-    if (
-      !afterRemoval.ok ||
-      existsSync(input.worktreePath) ||
-      afterRemoval.stdout.split("\n").some((line) => line === `worktree ${input.worktreePath}`)
-    ) {
-      return { state: "pending", blockingReason: "worktree_removal_failed" };
-    }
+  const registration = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
+  if (!registration.ok) return { state: "pending", blockingReason: "worktree_removal_failed" };
+  const registered = registration.stdout
+    .split("\n")
+    .some((line) => line === `worktree ${worktreePath}`);
+  const worktreeRemoval = git(input.repositoryCommonDirectory, [
+    "worktree",
+    "remove",
+    ...(input.discardWork === true ? ["--force"] : []),
+    "--",
+    worktreePath,
+  ]);
+  if (registered && !worktreeRemoval.ok) {
+    return { state: "pending", blockingReason: "worktree_removal_failed" };
   }
 
-  if (input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)) {
-    return { state: "pending", blockingReason: "worktree_container_removal_failed" };
-  }
+  const afterRemoval = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
+  return !afterRemoval.ok ||
+    existsSync(worktreePath) ||
+    afterRemoval.stdout.split("\n").some((line) => line === `worktree ${worktreePath}`)
+    ? { state: "pending", blockingReason: "worktree_removal_failed" }
+    : undefined;
+};
 
-  const branchName = branchNameForRef(input.branchRef);
-  if (branchName === undefined) return { state: "pending", blockingReason: "branch_ref_invalid" };
+const removeWorktreeContainers: CleanupStage = (input) => {
+  if (input.worktreePath === null) return undefined;
+  if (!isWorktreePathSafe(input.worktreePath)) {
+    return { state: "pending", blockingReason: "worktree_path_unsafe" };
+  }
+  return removeEmptySiblingContainers(input.worktreePath)
+    ? undefined
+    : { state: "pending", blockingReason: "worktree_container_removal_failed" };
+};
+
+const cleanupLocalBranch: CleanupStage = (input) => {
+  if (branchNameForRef(input.branchRef) === undefined) {
+    return { state: "pending", blockingReason: "branch_ref_invalid" };
+  }
   const branchHead = git(input.repositoryCommonDirectory, [
     "rev-parse",
     "--verify",
@@ -109,30 +149,35 @@ export const cleanupChangeResources = (
       "--quiet",
       input.branchRef,
     ]);
-    if (branchRef.ok || branchRef.status !== 1) {
-      return { state: "pending", blockingReason: "branch_reachability_unavailable" };
-    }
-  } else {
-    const containingRefs = git(input.repositoryCommonDirectory, [
-      "for-each-ref",
-      "--contains",
-      branchHead.stdout.trim(),
-      "--format=%(refname)",
-    ]);
-    if (!containingRefs.ok) {
-      return { state: "pending", blockingReason: "branch_reachability_unavailable" };
-    }
-    const reachableElsewhere = containingRefs.stdout
-      .split("\n")
-      .some((ref) => ref.length > 0 && ref !== input.branchRef);
-    if (!reachableElsewhere && !discardWork) {
-      return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
-    }
-    if (!git(input.repositoryCommonDirectory, ["branch", "-D", "--", branchName]).ok) {
-      return { state: "pending", blockingReason: "branch_deletion_failed" };
-    }
+    return branchRef.ok || branchRef.status !== 1
+      ? { state: "pending", blockingReason: "branch_reachability_unavailable" }
+      : undefined;
   }
-  return cleanupRemoteChangeBranch(input, remote);
+
+  const containingRefs = git(input.repositoryCommonDirectory, [
+    "for-each-ref",
+    "--contains",
+    branchHead.stdout.trim(),
+    "--format=%(refname)",
+  ]);
+  if (!containingRefs.ok) {
+    return { state: "pending", blockingReason: "branch_reachability_unavailable" };
+  }
+  const reachableElsewhere = containingRefs.stdout
+    .split("\n")
+    .some((ref) => ref.length > 0 && ref !== input.branchRef);
+  if (!reachableElsewhere && input.discardWork !== true) {
+    return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
+  }
+  return git(input.repositoryCommonDirectory, [
+    "update-ref",
+    "--no-deref",
+    "-d",
+    input.branchRef,
+    branchHead.stdout.trim(),
+  ]).ok
+    ? undefined
+    : { state: "pending", blockingReason: "branch_deletion_failed" };
 };
 
 const cleanupRemoteChangeBranch = (
