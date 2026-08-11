@@ -18,72 +18,59 @@ export type DecodedStoredTaskRecordRow = DecodedTaskSummaryRow & {
   readonly cancelReason: string | null;
 };
 
-export type UnknownTaskSummaryRow = {
-  readonly id: unknown;
-  readonly numericId: unknown;
-  readonly numericIdType: unknown;
-  readonly title: unknown;
-  readonly state: unknown;
-  readonly createdAt: unknown;
-  readonly updatedAt: unknown;
+export type StoredTaskSummaryRow = {
+  readonly id: string;
+  readonly numericId: number;
+  readonly title: string;
+  readonly state: TaskState;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
 
-export type UnknownStoredTaskRecordRow = UnknownTaskSummaryRow & {
-  readonly description: unknown;
-  readonly cancelReason: unknown;
+export type StoredTaskRecordRow = StoredTaskSummaryRow & {
+  readonly description: string;
+  readonly cancelReason: string | null;
 };
 
-export type UnknownTaskContextRow = {
-  readonly id: unknown;
-  readonly title: unknown;
-  readonly description: unknown;
+export type StoredTaskContextRow = {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
 };
 
-export type UnknownTaskDependencyFactRow = {
-  readonly id: unknown;
-  readonly numericId: unknown;
-  readonly numericIdType: unknown;
-  readonly title: unknown;
-  readonly state: unknown;
+export type StoredTaskDependencyFactRow = {
+  readonly id: string;
+  readonly numericId: number;
+  readonly title: string;
+  readonly state: TaskState;
 };
 
-export const decodeTaskSummaryRow = (row: UnknownTaskSummaryRow): DecodedTaskSummaryRow => ({
-  id: decodeStoredTaskId(row.id, "Task ID"),
-  numericId: decodeStoredSqlitePositiveInteger(row.numericId, row.numericIdType, "Task numeric ID"),
-  title: decodeStoredString(row.title, "Task title"),
-  state: decodeStoredTaskState(row.state),
-  createdAt: decodeStoredString(row.createdAt, "Task creation time"),
-  updatedAt: decodeStoredString(row.updatedAt, "Task update time"),
+export const decodeTaskSummaryRow = (row: StoredTaskSummaryRow): DecodedTaskSummaryRow => ({
+  ...row,
+  id: storedPublicTaskId(row.id),
 });
 
 export const decodeStoredTaskRecordRow = (
-  row: UnknownStoredTaskRecordRow,
+  row: StoredTaskRecordRow,
 ): DecodedStoredTaskRecordRow => ({
-  ...decodeTaskSummaryRow(row),
-  description: decodeStoredString(row.description, "Task description"),
-  cancelReason: decodeStoredNullableString(row.cancelReason, "Task cancel reason"),
+  ...row,
+  id: storedPublicTaskId(row.id),
 });
 
-export const decodeTaskContextRow = (row: UnknownTaskContextRow) => ({
-  id: decodeStoredTaskId(row.id, "Task ID"),
-  title: decodeStoredString(row.title, "Task title"),
-  description: decodeStoredString(row.description, "Task description"),
+export const decodeTaskContextRow = (row: StoredTaskContextRow) => ({
+  ...row,
+  id: storedPublicTaskId(row.id),
 });
 
 export const decodeTaskDependencyFacts = (
-  rows: readonly UnknownTaskDependencyFactRow[],
+  rows: readonly StoredTaskDependencyFactRow[],
   ownerTaskId: PublicTaskId,
-): readonly TaskDependencyFact[] => {
-  return rows.map((row) => {
-    const id = decodeStoredTaskId(row.id, "related Task ID");
+): readonly TaskDependencyFact[] =>
+  rows.map((row) => {
+    const id = storedPublicTaskId(row.id);
     if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
-    return {
-      id,
-      title: decodeStoredString(row.title, "related Task title"),
-      state: decodeStoredTaskState(row.state),
-    };
+    return { id, title: row.title, state: row.state };
   });
-};
 
 export const decodePersisted = <A>(
   operationName: string,
@@ -93,32 +80,3 @@ export const decodePersisted = <A>(
     try: decode,
     catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
-
-export const decodeStoredString = (value: unknown, _field: string): string => value as string;
-
-export const decodeStoredNullableString = (value: unknown, _field: string): string | null =>
-  value as string | null;
-
-export const decodeStoredSqlitePositiveInteger = (
-  value: unknown,
-  storageType: unknown,
-  field: string,
-): number => decodeStoredSqliteInteger(value, storageType, field, false);
-
-export const decodeStoredSqliteNonnegativeInteger = (
-  value: unknown,
-  storageType: unknown,
-  field: string,
-): number => decodeStoredSqliteInteger(value, storageType, field, true);
-
-const decodeStoredSqliteInteger = (
-  value: unknown,
-  _storageType: unknown,
-  _field: string,
-  _allowZero: boolean,
-): number => Number(value);
-
-export const decodeStoredTaskId = (value: unknown, field: string): PublicTaskId =>
-  storedPublicTaskId(decodeStoredString(value, field));
-
-export const decodeStoredTaskState = (value: unknown): TaskState => value as TaskState;

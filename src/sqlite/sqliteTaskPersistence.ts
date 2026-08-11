@@ -26,18 +26,14 @@ import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
   decodePersisted,
-  decodeStoredSqliteNonnegativeInteger,
-  decodeStoredSqlitePositiveInteger,
-  decodeStoredString,
-  decodeStoredTaskId,
   decodeStoredTaskRecordRow,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
   decodeTaskSummaryRow,
-  type UnknownStoredTaskRecordRow,
-  type UnknownTaskContextRow,
-  type UnknownTaskDependencyFactRow,
-  type UnknownTaskSummaryRow,
+  type StoredTaskRecordRow,
+  type StoredTaskContextRow,
+  type StoredTaskDependencyFactRow,
+  type StoredTaskSummaryRow,
 } from "./sqliteTaskReadModel.js";
 
 export const openSqliteTaskPersistence = (
@@ -171,9 +167,8 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   Effect.gen(function* () {
     const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
     const rows = input.state
-      ? yield* sql<UnknownTaskSummaryRow>`
-          SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-            typeof(numeric_id) AS numericIdType, title, state,
+      ? yield* sql<StoredTaskSummaryRow>`
+          SELECT id, numeric_id AS numericId, title, state,
             created_at AS createdAt, updated_at AS updatedAt
           FROM tasks
           WHERE state = ${input.state}
@@ -181,17 +176,15 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
           LIMIT ${limit}
         `
       : input.includeDone
-        ? yield* sql<UnknownTaskSummaryRow>`
-            SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-              typeof(numeric_id) AS numericIdType, title, state,
+        ? yield* sql<StoredTaskSummaryRow>`
+            SELECT id, numeric_id AS numericId, title, state,
               created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
             ORDER BY created_at ASC, numeric_id ASC
             LIMIT ${limit}
           `
-        : yield* sql<UnknownTaskSummaryRow>`
-            SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-              typeof(numeric_id) AS numericIdType, title, state,
+        : yield* sql<StoredTaskSummaryRow>`
+            SELECT id, numeric_id AS numericId, title, state,
               created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
             WHERE state IN ('new', 'todo')
@@ -206,28 +199,25 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
 const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   Effect.gen(function* () {
     const rows = input.state
-      ? yield* sql<UnknownCountRow>`
-          SELECT CAST(COUNT(*) AS TEXT) AS count, typeof(COUNT(*)) AS countType
+      ? yield* sql<StoredCountRow>`
+          SELECT COUNT(*) AS count
           FROM tasks WHERE state = ${input.state}
         `
       : input.includeDone
-        ? yield* sql<UnknownCountRow>`
-            SELECT CAST(COUNT(*) AS TEXT) AS count, typeof(COUNT(*)) AS countType FROM tasks
+        ? yield* sql<StoredCountRow>`
+            SELECT COUNT(*) AS count FROM tasks
           `
-        : yield* sql<UnknownCountRow>`
-            SELECT CAST(COUNT(*) AS TEXT) AS count, typeof(COUNT(*)) AS countType
+        : yield* sql<StoredCountRow>`
+            SELECT COUNT(*) AS count
             FROM tasks WHERE state IN ('new', 'todo')
           `;
-    return yield* decodePersisted("list Tasks", () =>
-      decodeStoredSqliteNonnegativeInteger(rows[0]?.count, rows[0]?.countType, "Task count"),
-    );
+    return rows[0]?.count ?? 0;
   });
 
 const listActionableTasks = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownTaskSummaryRow>`
-      SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-        typeof(numeric_id) AS numericIdType, title, state,
+    const rows = yield* sql<StoredTaskSummaryRow>`
+      SELECT id, numeric_id AS numericId, title, state,
         created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
       WHERE state IN ('new', 'todo')
@@ -246,9 +236,8 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownStoredTaskRecordRow>`
-      SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-        typeof(numeric_id) AS numericIdType, title, description, state,
+    const rows = yield* sql<StoredTaskRecordRow>`
+      SELECT id, numeric_id AS numericId, title, description, state,
         cancel_reason AS cancelReason, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
       WHERE id = ${taskId}
@@ -261,7 +250,7 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownTaskContextRow>`
+    const rows = yield* sql<StoredTaskContextRow>`
       SELECT id, title, description FROM tasks WHERE id = ${taskId}
     `;
     const row = rows[0];
@@ -276,9 +265,8 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownResolutionRow>`
-      SELECT CAST(implementation_blockers.sequence AS TEXT) AS sequence,
-        typeof(implementation_blockers.sequence) AS sequenceType,
+    const rows = yield* sql<StoredResolutionRow>`
+      SELECT implementation_blockers.sequence,
         implementation_blockers.id,
         implementation_blockers.resolved_at AS resolvedAt,
         implementation_blockers.resolution_id AS resolutionId,
@@ -295,9 +283,7 @@ const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
         )
       ORDER BY implementation_blockers.sequence ASC
     `;
-    return yield* decodePersisted("read Task Context", () => {
-      return rows.map((row) => decodeStoredString(row.resolutionContent, "Resolution content"));
-    });
+    return rows.map((row) => row.resolutionContent);
   });
 
 const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
@@ -424,7 +410,7 @@ const validateStoredDependency = (
   dependentExists: boolean,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: unknown }>`
+    const rows = yield* sql<{ readonly id: string }>`
       SELECT id FROM tasks WHERE id = ${prerequisiteTaskId}
     `;
     if (rows[0] === undefined) {
@@ -434,9 +420,6 @@ const validateStoredDependency = (
         taskId: prerequisiteTaskId,
       };
     }
-    yield* decodePersisted("validate Task dependencies", () =>
-      decodeStoredTaskId(rows[0]?.id, "Task ID"),
-    );
     if (!dependentExists) return undefined;
     return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
       ? { ok: false as const, code: "dependency_cycle" as const }
@@ -449,7 +432,7 @@ const dependencyPathExists = (
   targetTaskId: PublicTaskId,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly taskId: unknown }>`
+    const rows = yield* sql<{ readonly taskId: string | null }>`
       WITH RECURSIVE prerequisites(task_id) AS (
         SELECT ${fromTaskId}
         UNION
@@ -462,7 +445,10 @@ const dependencyPathExists = (
       LEFT JOIN tasks ON tasks.id = prerequisites.task_id
     `;
     const reachableTaskIds = yield* decodePersisted("validate Task dependencies", () =>
-      rows.map((row) => decodeStoredTaskId(row.taskId, "reachable Task ID")),
+      rows.map((row) => {
+        if (row.taskId === null) throw new Error("Task dependency references an unknown Task");
+        return storedPublicTaskId(row.taskId);
+      }),
     );
     return reachableTaskIds.includes(targetTaskId);
   });
@@ -490,17 +476,15 @@ const dependencyFacts = (
   Effect.gen(function* () {
     const rows =
       direction === "prerequisites"
-        ? yield* sql<UnknownTaskDependencyFactRow>`
-            SELECT tasks.id, CAST(tasks.numeric_id AS TEXT) AS numericId,
-              typeof(tasks.numeric_id) AS numericIdType, tasks.title, tasks.state
+        ? yield* sql<StoredTaskDependencyFactRow>`
+            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
             WHERE task_dependencies.dependent_task_id = ${taskId}
             ORDER BY tasks.numeric_id ASC
           `
-        : yield* sql<UnknownTaskDependencyFactRow>`
-            SELECT tasks.id, CAST(tasks.numeric_id AS TEXT) AS numericId,
-              typeof(tasks.numeric_id) AS numericIdType, tasks.title, tasks.state
+        : yield* sql<StoredTaskDependencyFactRow>`
+            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
             WHERE task_dependencies.prerequisite_task_id = ${taskId}
@@ -511,25 +495,15 @@ const dependencyFacts = (
 
 const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
-    const rows = yield* sql<UnknownMaximumNumericIdRow>`
-      SELECT CAST(MAX(numeric_id) AS TEXT) AS maximumNumericId,
-        typeof(MAX(numeric_id)) AS maximumNumericIdType
+    const rows = yield* sql<StoredMaximumNumericIdRow>`
+      SELECT MAX(numeric_id) AS maximumNumericId
       FROM tasks
     `;
-    return yield* decodePersisted("create Task", () => {
-      const row = rows[0];
-      const maximum =
-        row?.maximumNumericId === null && row.maximumNumericIdType === "null"
-          ? 0
-          : decodeStoredSqlitePositiveInteger(
-              row?.maximumNumericId,
-              row?.maximumNumericIdType,
-              "maximum Task numeric ID",
-            );
-      const next = maximum + 1;
-      if (!Number.isSafeInteger(next)) throw new Error("Next Task numeric ID must be safe");
-      return next;
-    });
+    const next = (rows[0]?.maximumNumericId ?? 0) + 1;
+    if (!Number.isSafeInteger(next)) {
+      return yield* invalidData("create Task", "Next Task numeric ID must be safe");
+    }
+    return next;
   });
 
 const rowToTaskSummary = (
@@ -575,22 +549,6 @@ const invalidData = (operationName: string, message: string) =>
     }),
   );
 
-type UnknownMaximumNumericIdRow = {
-  readonly maximumNumericId: unknown;
-  readonly maximumNumericIdType: unknown;
-};
-
-type UnknownCountRow = {
-  readonly count: unknown;
-  readonly countType: unknown;
-};
-
-type UnknownResolutionRow = {
-  readonly sequence: unknown;
-  readonly sequenceType: unknown;
-  readonly id: unknown;
-  readonly resolvedAt: unknown;
-  readonly resolutionId: unknown;
-  readonly resolutionRecordedAt: unknown;
-  readonly resolutionContent: unknown;
-};
+type StoredMaximumNumericIdRow = { readonly maximumNumericId: number | null };
+type StoredCountRow = { readonly count: number };
+type StoredResolutionRow = { readonly resolutionContent: string };

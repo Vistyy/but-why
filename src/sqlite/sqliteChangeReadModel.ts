@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
+import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
 import type { ChangeStartRecord } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,
@@ -13,13 +14,11 @@ import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTrans
 import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
-import { decodeSqliteChangePublication } from "./sqliteChangePublication.js";
 import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredSqlitePositiveInteger,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
+  decodeSqliteChangePublication,
+  type SqliteChangePublicationRow,
+} from "./sqliteChangePublication.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const changeReadColumns = [
   "id",
@@ -32,8 +31,7 @@ export const changeReadColumns = [
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
   "prepare_command AS prepareCommand",
-  "CAST(prepare_timeout_seconds AS TEXT) AS prepareTimeoutSeconds",
-  "typeof(prepare_timeout_seconds) AS prepareTimeoutSecondsType",
+  "prepare_timeout_seconds AS prepareTimeoutSeconds",
   "prepare_failure AS prepareFailure",
   "publication_candidate_id AS publicationCandidateId",
   "publication_validation_run_id AS publicationValidationRunId",
@@ -43,8 +41,7 @@ export const changeReadColumns = [
   "publication_remote_name AS publicationRemoteName",
   "publication_head_branch AS publicationHeadBranch",
   "publication_expected_head_sha AS publicationExpectedHeadSha",
-  "CAST(publication_pr_number AS TEXT) AS publicationPrNumber",
-  "typeof(publication_pr_number) AS publicationPrNumberType",
+  "publication_pr_number AS publicationPrNumber",
   "publication_pr_url AS publicationPrUrl",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
@@ -56,82 +53,61 @@ export const changeReadColumns = [
   "closed_at AS closedAt",
 ].join(", ");
 
-export type UnknownChangeRow = {
-  readonly id: unknown;
-  readonly repositoryCommonDirectory: unknown;
-  readonly branchRef: unknown;
-  readonly baseRef: unknown;
-  readonly baseRemoteUrl: unknown;
-  readonly taskId: unknown;
-  readonly startingCommit: unknown;
-  readonly worktreePath: unknown;
-  readonly acceptanceContext: unknown;
-  readonly prepareCommand: unknown;
-  readonly prepareTimeoutSeconds: unknown;
-  readonly prepareTimeoutSecondsType: unknown;
-  readonly prepareFailure: unknown;
-  readonly publicationCandidateId: unknown;
-  readonly publicationValidationRunId: unknown;
-  readonly publicationOwner: unknown;
-  readonly publicationRepo: unknown;
-  readonly publicationBaseBranch: unknown;
-  readonly publicationRemoteName: unknown;
-  readonly publicationHeadBranch: unknown;
-  readonly publicationExpectedHeadSha: unknown;
-  readonly publicationPrNumber: unknown;
-  readonly publicationPrNumberType: unknown;
-  readonly publicationPrUrl: unknown;
-  readonly cleanupState: unknown;
-  readonly cleanupBlockingReason: unknown;
-  readonly state: unknown;
-  readonly closeReason: unknown;
-  readonly cancelReason: unknown;
-  readonly createdAt: unknown;
-  readonly updatedAt: unknown;
-  readonly closedAt: unknown;
+export type StoredChangeRow = {
+  readonly id: string;
+  readonly repositoryCommonDirectory: string;
+  readonly branchRef: string;
+  readonly baseRef: string | null;
+  readonly baseRemoteUrl: string | null;
+  readonly taskId: string | null;
+  readonly startingCommit: string | null;
+  readonly worktreePath: string | null;
+  readonly acceptanceContext: string | null;
+  readonly prepareCommand: string | null;
+  readonly prepareTimeoutSeconds: number | null;
+  readonly prepareFailure: string | null;
+  readonly publicationCandidateId: string | null;
+  readonly publicationValidationRunId: string | null;
+  readonly publicationOwner: string | null;
+  readonly publicationRepo: string | null;
+  readonly publicationBaseBranch: string | null;
+  readonly publicationRemoteName: string | null;
+  readonly publicationHeadBranch: string | null;
+  readonly publicationExpectedHeadSha: string | null;
+  readonly publicationPrNumber: number | null;
+  readonly publicationPrUrl: string | null;
+  readonly cleanupState: ChangeCleanup["state"];
+  readonly cleanupBlockingReason: string | null;
+  readonly state: ChangeState;
+  readonly closeReason: ChangeRecord["closeReason"];
+  readonly cancelReason: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly closedAt: string | null;
 };
 
-export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
-  const id = decodeStoredString(row.id, "Change ID");
-  const taskId = decodeStoredNullableString(row.taskId, "Change Task ID");
-  const encodedAcceptanceContext = decodeStoredNullableString(
-    row.acceptanceContext,
-    "Change Acceptance Context",
-  );
-  const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
-  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
-  const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
-  const worktreePath = decodeStoredNullableString(row.worktreePath, "Change Managed Worktree path");
-  const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
-  const prepareTimeoutSeconds = decodeNullablePositiveInteger(
-    row.prepareTimeoutSeconds,
-    row.prepareTimeoutSecondsType,
-    "Change prepare timeout",
-  );
-  const encodedPrepareFailure = decodeStoredNullableString(
-    row.prepareFailure,
-    "Change preparation failure",
-  );
-  const state = decodeChangeState(row.state);
-  const closeReason = decodeCloseReason(row.closeReason);
-  const closedAt = decodeStoredNullableString(row.closedAt, "Change closure time");
-  const cancelReason = decodeStoredNullableString(row.cancelReason, "Change cancellation reason");
+export const decodeChangeRow = (row: StoredChangeRow): ChangeRecord => {
+  const id = row.id;
+  const taskId = row.taskId;
+  const encodedAcceptanceContext = row.acceptanceContext;
+  const baseRef = row.baseRef;
+  const baseRemoteUrl = row.baseRemoteUrl;
+  const startingCommit = row.startingCommit;
+  const worktreePath = row.worktreePath;
+  const prepareCommand = row.prepareCommand;
+  const { prepareTimeoutSeconds } = row;
+  const encodedPrepareFailure = row.prepareFailure;
+  const { state } = row;
+  const { closeReason } = row;
+  const closedAt = row.closedAt;
+  const cancelReason = row.cancelReason;
 
-  const cleanupState = decodeStoredString(
-    row.cleanupState,
-    "Change cleanup state",
-  ) as ChangeCleanup["state"];
-  const cleanupBlockingReason = decodeStoredNullableString(
-    row.cleanupBlockingReason,
-    "Change cleanup blocking reason",
-  );
+  const { cleanupState } = row;
+  const { cleanupBlockingReason } = row;
   return {
     id,
-    repositoryCommonDirectory: decodeStoredString(
-      row.repositoryCommonDirectory,
-      "Change repository common directory",
-    ),
-    branchRef: decodeStoredString(row.branchRef, "Change Repository Branch"),
+    repositoryCommonDirectory: row.repositoryCommonDirectory,
+    branchRef: row.branchRef,
     baseRef,
     baseRemoteUrl,
     taskId: taskId === null ? null : storedPublicTaskId(taskId),
@@ -154,8 +130,8 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
     state,
     closeReason,
     cancelReason,
-    createdAt: decodeStoredString(row.createdAt, "Change creation time"),
-    updatedAt: decodeStoredString(row.updatedAt, "Change update time"),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
     closedAt,
   };
 };
@@ -178,104 +154,73 @@ export const requireChangeStartRecord = (change: ChangeRecord): ChangeStartRecor
   };
 };
 
-export type UnknownImplementationDecisionRow = {
-  readonly id: unknown;
-  readonly changeId: unknown;
-  readonly sequence: unknown;
-  readonly sequenceType: unknown;
-  readonly recordedAt: unknown;
-  readonly choice: unknown;
-  readonly rationale: unknown;
+export type StoredImplementationDecisionRow = {
+  readonly id: string;
+  readonly changeId: string;
+  readonly sequence: number;
+  readonly recordedAt: string;
+  readonly choice: string;
+  readonly rationale: string;
 };
 
 export const decodeImplementationDecisions = (
-  rows: readonly UnknownImplementationDecisionRow[],
+  rows: readonly StoredImplementationDecisionRow[],
   changeId: string,
-): readonly ImplementationDecision[] => {
-  return rows
+): readonly ImplementationDecision[] =>
+  rows
     .map((row): ImplementationDecision => {
-      const id = decodeStoredString(row.id, "Implementation Decision ID");
-      const owner = decodeStoredString(row.changeId, "Implementation Decision Change ID");
-      const sequence = decodeStoredSqlitePositiveInteger(
-        row.sequence,
-        row.sequenceType,
-        "Implementation Decision sequence",
-      );
-      if (owner !== changeId) throw new Error("Implementation Decision belongs to another Change");
-      return {
-        id,
-        changeId: owner,
-        sequence,
-        recordedAt: decodeStoredString(row.recordedAt, "Implementation Decision recorded time"),
-        choice: decodeStoredString(row.choice, "Implementation Decision choice"),
-        rationale: decodeStoredString(row.rationale, "Implementation Decision rationale"),
-      };
+      if (row.changeId !== changeId) {
+        throw new Error("Implementation Decision belongs to another Change");
+      }
+      return row;
     })
     .sort((left, right) => left.sequence - right.sequence);
-};
 
 export const implementationBlockerReadColumns = `
-  CAST(sequence AS TEXT) AS sequence, typeof(sequence) AS sequenceType,
+  sequence,
   id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt,
   resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
   resolution_content AS resolutionContent
 `;
 
-export type UnknownImplementationBlockerRow = {
-  readonly sequence: unknown;
-  readonly sequenceType: unknown;
-  readonly id: unknown;
-  readonly changeId: unknown;
-  readonly reportedAt: unknown;
-  readonly content: unknown;
-  readonly resolvedAt: unknown;
-  readonly resolutionId?: unknown;
-  readonly resolutionRecordedAt?: unknown;
-  readonly resolutionContent?: unknown;
+export type StoredImplementationBlockerRow = {
+  readonly sequence: number;
+  readonly id: string;
+  readonly changeId: string;
+  readonly reportedAt: string;
+  readonly content: string;
+  readonly resolvedAt: string | null;
+  readonly resolutionId: string | null;
+  readonly resolutionRecordedAt: string | null;
+  readonly resolutionContent: string | null;
 };
 
 export const decodeImplementationBlockerHistory = (
-  rows: readonly UnknownImplementationBlockerRow[],
+  rows: readonly StoredImplementationBlockerRow[],
   changeId: string,
 ): ImplementationBlockerHistory => {
   const blockers = rows
     .map((row): ImplementationBlocker => {
-      const id = decodeStoredString(row.id, "Implementation Blocker ID");
-      const owner = decodeStoredString(row.changeId, "Implementation Blocker Change ID");
-      const sequence = decodeStoredSqlitePositiveInteger(
-        row.sequence,
-        row.sequenceType,
-        "Implementation Blocker sequence",
-      );
-      if (owner !== changeId) throw new Error("Implementation Blocker belongs to another Change");
-      const resolvedAt = decodeStoredNullableString(
-        row.resolvedAt,
-        "Implementation Blocker resolution time",
-      );
-      const resolutionId = decodeStoredNullableString(row.resolutionId ?? null, "Resolution ID");
-      const resolutionRecordedAt = decodeStoredNullableString(
-        row.resolutionRecordedAt ?? null,
-        "Resolution recorded time",
-      );
-      const resolutionContent = decodeStoredNullableString(
-        row.resolutionContent ?? null,
-        "Resolution content",
-      );
+      if (row.changeId !== changeId) {
+        throw new Error("Implementation Blocker belongs to another Change");
+      }
       return {
-        id,
-        changeId: owner,
-        sequence,
-        reportedAt: decodeStoredString(row.reportedAt, "Implementation Blocker reported time"),
-        content: decodeStoredString(row.content, "Implementation Blocker content"),
-        resolvedAt,
+        id: row.id,
+        changeId: row.changeId,
+        sequence: row.sequence,
+        reportedAt: row.reportedAt,
+        content: row.content,
+        resolvedAt: row.resolvedAt,
         resolution:
-          resolutionId === null || resolutionRecordedAt === null || resolutionContent === null
+          row.resolutionId === null ||
+          row.resolutionRecordedAt === null ||
+          row.resolutionContent === null
             ? null
             : {
-                id: resolutionId,
-                blockerId: id,
-                recordedAt: resolutionRecordedAt,
-                content: resolutionContent,
+                id: row.resolutionId,
+                blockerId: row.id,
+                recordedAt: row.resolutionRecordedAt,
+                content: row.resolutionContent,
               },
       };
     })
@@ -301,32 +246,34 @@ export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): 
         compareStoredStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
     )[0]?.id ?? null;
 
+export type StoredReviewerSessionRow = {
+  readonly changeId: string;
+  readonly producer: string;
+  readonly fingerprint: string;
+  readonly sessionReference: string;
+};
+
 export const decodeReviewerSession = (
-  row: Record<string, unknown>,
+  row: StoredReviewerSessionRow,
   changeId: string,
 ): ReviewerSessionRecord => {
-  const owner = decodeStoredString(row["changeId"], "Reviewer Session Change ID");
-  if (owner !== changeId) throw new Error("Reviewer Session belongs to another Change");
-  return {
-    changeId: owner,
-    producer: decodeStoredString(row["producer"], "Reviewer Session producer"),
-    fingerprint: decodeStoredString(row["fingerprint"], "Reviewer Session fingerprint"),
-    sessionReference: decodeStoredString(row["sessionReference"], "Reviewer Session reference"),
-  };
+  if (row.changeId !== changeId) throw new Error("Reviewer Session belongs to another Change");
+  return row;
+};
+
+export type StoredReviewerTranscriptRow = {
+  readonly changeId: string;
+  readonly producer: string;
+  readonly piSessionId: string;
+  readonly filePath: string;
 };
 
 export const decodeReviewerTranscript = (
-  row: Record<string, unknown>,
+  row: StoredReviewerTranscriptRow,
   changeId: string,
 ): ReviewerTranscript => {
-  const owner = decodeStoredString(row["changeId"], "Reviewer Transcript Change ID");
-  if (owner !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
-  return {
-    changeId: owner,
-    producer: decodeStoredString(row["producer"], "Reviewer Transcript producer"),
-    piSessionId: decodeStoredString(row["piSessionId"], "Reviewer Transcript Pi session ID"),
-    filePath: decodeStoredString(row["filePath"], "Reviewer Transcript file path"),
-  };
+  if (row.changeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
+  return row;
 };
 
 export const validateChangeRelationships = (
@@ -336,11 +283,11 @@ export const validateChangeRelationships = (
 ) =>
   Effect.gen(function* () {
     if (change.taskId !== null) {
-      const taskRows = yield* sql<Record<string, unknown>>`
+      const taskRows = yield* sql<{ readonly id: string }>`
         SELECT id FROM tasks WHERE id = ${change.taskId}
       `;
       yield* decodePersisted(operationName, () => {
-        const taskId = decodeStoredString(taskRows[0]?.["id"], "linked Task ID");
+        const taskId = taskRows[0]?.id;
         if (taskId !== change.taskId) throw new Error("Change belongs to an unknown Task");
       });
     }
@@ -362,7 +309,11 @@ export const validateChangePublicationRelationships = (
   publication === null
     ? Effect.void
     : Effect.flatMap(
-        sql<Record<string, unknown>>`
+        sql<{
+          readonly candidateChangeId: string;
+          readonly candidateHeadSha: string;
+          readonly validationRunCandidateId: string | null;
+        }>`
           SELECT candidate.change_id AS candidateChangeId, candidate.head_sha AS candidateHeadSha,
             validation_run.candidate_id AS validationRunCandidateId
           FROM candidates AS candidate
@@ -373,18 +324,8 @@ export const validateChangePublicationRelationships = (
         (rows) =>
           decodePersisted(operationName, () => {
             const row = rows[0];
-            const candidateChangeId = decodeStoredString(
-              row?.["candidateChangeId"],
-              "publication Candidate Change ID",
-            );
-            const candidateHeadSha = decodeStoredString(
-              row?.["candidateHeadSha"],
-              "publication Candidate head SHA",
-            );
-            const validationRunCandidateId = decodeStoredString(
-              row?.["validationRunCandidateId"],
-              "publication Validation Run Candidate ID",
-            );
+            if (row === undefined) throw new Error("Publication Candidate was not selected");
+            const { candidateChangeId, candidateHeadSha, validationRunCandidateId } = row;
             if (candidateChangeId !== changeId) {
               throw new Error("Publication Candidate belongs to another Change");
             }
@@ -397,69 +338,20 @@ export const validateChangePublicationRelationships = (
           }),
       );
 
-export const decodeCandidateCaptureChange = (row: Record<string, unknown>) => ({
-  id: decodeStoredString(row["id"], "Candidate capture Change ID"),
-  repositoryCommonDirectory: decodeStoredString(
-    row["repositoryCommonDirectory"],
-    "Candidate capture repository common directory",
-  ),
-  branchRef: decodeStoredString(row["branchRef"], "Candidate capture Repository Branch"),
-  baseRef: decodeStoredNullableString(row["baseRef"], "Candidate capture Change Base ref"),
-  state: decodeChangeState(row["state"]),
-});
+export type StoredCandidateCaptureChangeRow = {
+  readonly id: string;
+  readonly repositoryCommonDirectory: string;
+  readonly branchRef: string;
+  readonly baseRef: string | null;
+  readonly state: ChangeState;
+};
 
-export const decodeChangePublication = (row: Record<string, unknown>) =>
-  decodeSqliteChangePublication({
-    publicationCandidateId: decodeStoredNullableString(
-      row["publicationCandidateId"],
-      "Change publication Candidate ID",
-    ),
-    publicationValidationRunId: decodeStoredNullableString(
-      row["publicationValidationRunId"],
-      "Change publication Validation Run ID",
-    ),
-    publicationOwner: decodeStoredNullableString(row["publicationOwner"], "publication owner"),
-    publicationRepo: decodeStoredNullableString(row["publicationRepo"], "publication repository"),
-    publicationBaseBranch: decodeStoredNullableString(
-      row["publicationBaseBranch"],
-      "publication base branch",
-    ),
-    publicationRemoteName: decodeStoredNullableString(
-      row["publicationRemoteName"],
-      "publication remote name",
-    ),
-    publicationHeadBranch: decodeStoredNullableString(
-      row["publicationHeadBranch"],
-      "publication head branch",
-    ),
-    publicationExpectedHeadSha: decodeStoredNullableString(
-      row["publicationExpectedHeadSha"],
-      "publication expected head SHA",
-    ),
-    publicationPrNumber: decodeNullablePositiveInteger(
-      row["publicationPrNumber"],
-      row["publicationPrNumberType"],
-      "Change publication pull request number",
-    ),
-    publicationPrUrl: decodeStoredNullableString(
-      row["publicationPrUrl"],
-      "publication pull request URL",
-    ),
-  });
+export const decodeCandidateCaptureChange = (
+  row: StoredCandidateCaptureChangeRow,
+): CandidateCaptureChange => row;
 
-export const decodeChangeState = (value: unknown): ChangeState => value as ChangeState;
-
-export const decodeCloseReason = (value: unknown): ChangeRecord["closeReason"] =>
-  value as ChangeRecord["closeReason"];
+export const decodeChangePublication = (row: SqliteChangePublicationRow) =>
+  decodeSqliteChangePublication(row);
 
 const compareStoredStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
-
-const decodeNullablePositiveInteger = (
-  value: unknown,
-  storageType: unknown,
-  field: string,
-): number | null => {
-  if (storageType === "null" && value === null) return null;
-  return decodeStoredSqlitePositiveInteger(value, storageType, field);
-};
