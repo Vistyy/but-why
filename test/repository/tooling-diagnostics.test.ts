@@ -135,7 +135,11 @@ describe("repository-authored tooling diagnostics", () => {
       "const value = JSON.parse(source) as TrustedType;",
       "scripts",
     ],
-    ["json-parse-results-start-unknown", "const value = JSON.parse(source);", "extensions"],
+    [
+      "json-parse-results-start-unknown",
+      "const value = JSON.parse(source).known as unknown;",
+      "extensions",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",

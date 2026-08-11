@@ -76,6 +76,10 @@ invalid:
   - trusted = JSON.parse(source)
   - "const parseUnknown = (): unknown => JSON.parse(source)"
   - acceptUnknown(JSON.parse(source))
+  - JSON.parse(source).known as unknown
+  - acceptUnknown(JSON.parse(source)) as unknown
+  - (JSON.parse(source).known) as unknown
+  - (acceptUnknown(JSON.parse(source))) as unknown
 ---
 id: process-test-helpers-belong-to-process-boundaries
 valid:

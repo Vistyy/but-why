@@ -101,11 +101,21 @@ rule:
   all:
     - pattern: JSON.parse($$$ARGS)
     - not:
-        inside:
-          any:
-            - pattern: $VALUE as unknown
-            - pattern: <unknown>$VALUE
-          stopBy: end
+        any:
+          - inside:
+              any:
+                - pattern: $VALUE as unknown
+                - pattern: <unknown>$VALUE
+              stopBy: neighbor
+          - inside:
+              all:
+                - kind: parenthesized_expression
+                - inside:
+                    any:
+                      - pattern: $VALUE as unknown
+                      - pattern: <unknown>$VALUE
+                    stopBy: neighbor
+              stopBy: neighbor
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
