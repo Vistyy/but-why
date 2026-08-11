@@ -62,6 +62,7 @@
     ]
   },
   "include": [
+    ".remarkrc.mjs",
     "*.mjs",
     "extensions/**/*.ts",
     "scripts/**/*.mjs",
