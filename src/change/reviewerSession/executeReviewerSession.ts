@@ -141,12 +141,17 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
     if (!sessionPermissionsOk && restartReason === undefined) {
       restartReason = "session_permissions_unavailable";
     }
-    if (result.ok && input.sessionStore !== undefined && sessionPermissionsOk) {
+    if (
+      result.ok &&
+      result.sessionReference !== undefined &&
+      input.sessionStore !== undefined &&
+      sessionPermissionsOk
+    ) {
       yield* input.sessionStore.save({
         changeId: input.identity.changeId,
         producer: input.identity.producer,
         fingerprint,
-        sessionReference: result.sessionReference ?? "",
+        sessionReference: result.sessionReference,
       });
     }
 

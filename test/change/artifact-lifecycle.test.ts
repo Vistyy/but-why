@@ -245,7 +245,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
 
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: fixture.changes.reads.getChangeById,
+              getChangeById: fixture.changes.delivery.getChangeById,
               listChangesForReconciliation: fixture.changes.delivery.listChangesForReconciliation,
               completeMergedChange: fixture.changes.delivery.completeMergedChange,
             },

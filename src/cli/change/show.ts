@@ -2,7 +2,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeDetail } from "../../change/loadChangeInspection.js";
+import { loadChangeDetail } from "../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
@@ -23,8 +23,7 @@ export const runShow = (
           ? support.changeNotFound()
           : success({
               change: support.changeInspectionView(detail.change),
-              ...(detail.change.implementationDecisions === undefined ||
-              detail.change.implementationDecisions.length === 0
+              ...(detail.change.implementationDecisions.length === 0
                 ? {}
                 : { implementationDecisions: detail.change.implementationDecisions }),
               currentCandidate: detail.currentCandidate,

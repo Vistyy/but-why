@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
-import type { ChangeRecord } from "../../change/change.js";
 import type { ChangePrepareResult, ChangeStartResult } from "../../change/changeLifecycle.js";
+import type { ChangeStartRecord } from "../../change/changeStartStore.js";
 import { type CliResult, runtimeError, success } from "../../cliResults.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
@@ -71,7 +71,7 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
   return operationalError(result);
 };
 
-export const changeView = (change: ChangeRecord) => ({
+export const changeView = (change: ChangeStartRecord) => ({
   change: { id: change.id, taskId: change.taskId },
   branch: change.branchRef,
   baseRef: change.baseRef,
@@ -84,11 +84,11 @@ export const changeView = (change: ChangeRecord) => ({
 
 type OperationalErrorInput = {
   readonly code: string;
-  readonly change?: ChangeRecord;
+  readonly change?: ChangeStartRecord;
   readonly attachedPath?: string;
 };
 
-const cancelChangeHelp = (change: ChangeRecord | undefined): string =>
+const cancelChangeHelp = (change: ChangeStartRecord | undefined): string =>
   change === undefined
     ? "Or cancel the work with the applicable cancellation command."
     : change.taskId === null

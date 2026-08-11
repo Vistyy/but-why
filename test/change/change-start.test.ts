@@ -33,14 +33,7 @@ const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
       : { version: 1, title: "Accepted title", description: "Accepted description" },
   prepare: input.prepare ?? null,
   prepareFailure: null,
-  publication: null,
-  cleanup: { state: "pending", blockingReason: null },
   state: "open",
-  closeReason: null,
-  cancelReason: null,
-  createdAt: input.now,
-  updatedAt: input.now,
-  closedAt: null,
 });
 
 type FixtureOptions = {
@@ -73,7 +66,7 @@ const fixture = (options: FixtureOptions = {}) => {
       return Effect.succeed({ ok: true as const, change: current });
     },
     getById: (id) => Effect.succeed(current?.id === id ? current : undefined),
-    recordPrepareOutcome: (id, failure, updatedAt) => {
+    recordPrepareOutcome: (id, failure) => {
       events.push(`recordPrepareOutcome:${id}`);
       const captured = required(current, "recordPrepareOutcome requires a captured Change");
       if (captured.id !== id)
@@ -81,7 +74,6 @@ const fixture = (options: FixtureOptions = {}) => {
       current = {
         ...captured,
         prepareFailure: failure,
-        updatedAt,
       };
       return Effect.succeed(current);
     },

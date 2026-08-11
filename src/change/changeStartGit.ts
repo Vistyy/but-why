@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync }
 import { basename, dirname, join } from "node:path";
 
 import { decodeRepoConfigSource } from "../init/repoConfig.js";
-import type { RepoLocalContext } from "../init/repoContext.js";
+import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
 import { changeBranchRefForSlug } from "./changeBranch.js";
@@ -14,7 +14,7 @@ import type {
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export const resolveChangeStartGitIntent = (
-  context: RepoLocalContext,
+  context: LocalRepositoryContext,
   slug: string,
   requestedBaseBranch?: string,
 ): ResolveChangeStartGitResult => {

@@ -1,10 +1,12 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
+import { RepositoryMigrationFailed } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
@@ -86,6 +88,62 @@ describe("shared repository state", () => {
         expect(git(root, "status", "--short")).toBe(rootStatusBeforeDraft);
         expect(git(linked, "status", "--short")).toBe(linkedStatusBeforeDraft);
       }),
+  );
+
+  it.effect("does not recreate missing Shared Repository State during a normal operation", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepo();
+      rmSync(sharedStatePath(root));
+
+      const result = yield* runByInProcessEffect(root, ["task", "list"]);
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "state_store_unavailable" },
+      });
+      expect(existsSync(sharedStatePath(root))).toBe(false);
+    }),
+  );
+
+  it.effect("does not create state when it disappears before normal connection acquisition", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepo();
+      const statePath = sharedStatePath(root);
+      const layer = repositorySqlLayer({ statePath, commonDirectory: join(root, ".git") });
+      rmSync(statePath);
+
+      const exit = yield* Effect.exit(Effect.scoped(Effect.provide(RepositorySql, layer)));
+
+      expect(exit._tag).toBe("Failure");
+      expect(existsSync(statePath)).toBe(false);
+    }),
+  );
+
+  it.effect("rejects migration gaps and unknown newer Shared Repository State schemas", () =>
+    Effect.gen(function* () {
+      for (const corruptLedger of [
+        (sql: SqlClient.SqlClient) => sql`DELETE FROM effect_sql_migrations WHERE migration_id = 2`,
+        (sql: SqlClient.SqlClient) =>
+          sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (99, 'unknown')`,
+      ]) {
+        const root = yield* initializedRepo();
+        const config = {
+          statePath: sharedStatePath(root),
+          commonDirectory: join(root, ".git"),
+        };
+        yield* Effect.scoped(
+          Effect.flatMap(RepositorySql, (repository) =>
+            repository.operation("corrupt migration ledger", corruptLedger),
+          ).pipe(Effect.provide(repositorySqlLayer(config))),
+        );
+
+        const error = yield* Effect.scoped(
+          RepositorySql.pipe(Effect.provide(repositorySqlLayer(config))),
+        ).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+      }
+    }),
   );
 
   it.effect("rejects shared state that belongs to another Git common directory", () =>

@@ -1,9 +1,4 @@
-import type {
-  ChangeCleanup,
-  ChangeOwnedPullRequest,
-  ChangePublicationTarget,
-  ChangeRecord,
-} from "./change.js";
+import type { ChangeCleanup, ChangeOwnedPullRequest, ChangePublicationTarget } from "./change.js";
 import type { ObservedMergedChangeEvidence } from "./ownedPullRequestClassifier.js";
 
 export type ListChangesInput = {
@@ -55,49 +50,3 @@ export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly previousPullRequestNumber?: number;
   readonly changeBaseSha?: string;
 };
-
-export type CompleteMergedChangeResult =
-  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
-    };
-
-export type CancelChangeResult =
-  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_already_completed";
-    };
-
-export type RecordChangeCleanupResult =
-  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" };
-
-export type BeginChangePublicationResult =
-  | { readonly ok: true; readonly created: boolean; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_closed" | "publication_already_owned";
-    };
-
-export type ReplacePendingChangePublicationResult =
-  | { readonly ok: true; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
-    };
-
-export type ReleasePendingPublicationResult =
-  | { readonly ok: true; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
-    };
-
-export type RecordPublishedPullRequestResult =
-  | { readonly ok: true; readonly change: ChangeRecord }
-  | {
-      readonly ok: false;
-      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
-    };

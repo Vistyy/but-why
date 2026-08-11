@@ -4,9 +4,9 @@ import {
   type GlobalConfigValidationFailed,
   RepoConfigValidationFailed,
 } from "../../contracts/configErrors.js";
+import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
-import type { RepoLocalContext } from "../../init/repoContext.js";
+import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
@@ -31,16 +31,16 @@ export type CandidateValidationPolicyResolution =
     };
 
 export const resolveCandidateValidationPolicy = (input: {
-  readonly context: RepoLocalContext | { readonly root: string; readonly config?: RepoConfig };
+  readonly context:
+    | LocalRepositoryContext
+    | { readonly root: string; readonly config?: RepoConfig };
   readonly globalConfigPath: string;
+  readonly globalConfig: GlobalConfig;
   readonly acceptanceContextSupplied: boolean;
   readonly repoConfig?: RepoConfig;
   readonly validationRepoConfig?: RepoConfig;
   readonly repoRoot?: string;
 }): CandidateValidationPolicyResolution => {
-  const global = readGlobalConfig(input.globalConfigPath);
-  if (!global.ok) return global;
-
   const repoConfig = input.repoConfig ?? input.context.config;
   const repoRoot = input.repoRoot ?? input.context.root;
   if (repoConfig === undefined) {
@@ -58,7 +58,7 @@ export const resolveCandidateValidationPolicy = (input: {
   if (!submit.ok) return submit;
   const specialistReviews = resolveSpecialistReviewPolicies({
     repoConfig,
-    globalConfig: global.config,
+    globalConfig: input.globalConfig,
     repoRoot,
     globalConfigPath: input.globalConfigPath,
   });
@@ -82,7 +82,7 @@ export const resolveCandidateValidationPolicy = (input: {
 
   const acceptanceReview = resolveAcceptanceReviewPolicy({
     repoConfig,
-    globalConfig: global.config,
+    globalConfig: input.globalConfig,
     repoRoot,
     globalConfigPath: input.globalConfigPath,
   });

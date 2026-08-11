@@ -8,6 +8,7 @@ import {
   openCancellationUseCases,
 } from "../../src/change/cancelChange.js";
 import type { ChangeRecord } from "../../src/change/change.js";
+import type { CancellationChange } from "../../src/change/changePorts.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type {
   GitHubPullRequest,
@@ -516,7 +517,7 @@ describe("Change cancellation", () => {
 
   it.effect("closes an owned open pull request before deleting its Remote Change Branch", () => {
     const events: string[] = [];
-    const cleanupRemoteBranches: (object | undefined)[] = [];
+    const cleanupRemoteBranches: (object | null)[] = [];
     const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
@@ -532,7 +533,11 @@ describe("Change cancellation", () => {
       .cancelTask({ taskId: publicTaskId(task.id), reason: "Stop", now })
       .pipe(
         Effect.map((result) => {
-          expect(result).toMatchObject({ ok: true, status: "cancelled" });
+          expect(result).toMatchObject({
+            ok: true,
+            status: "cancelled",
+            task: { state: "cancelled", cancelReason: "Stop" },
+          });
           expect(events).toEqual([
             "read-task",
             "read-change",
@@ -542,7 +547,6 @@ describe("Change cancellation", () => {
             "cleanup",
             "record-cleanup",
             "remove-reviewer-sessions",
-            "read-task",
           ]);
           expect(cleanupRemoteBranches).toEqual([
             {
@@ -603,7 +607,6 @@ describe("Change cancellation", () => {
             "cleanup",
             "record-cleanup",
             "remove-reviewer-sessions",
-            "read-task",
           ]);
           return result;
         }),
@@ -705,7 +708,7 @@ const taskRecord = (state: TaskRecord["state"]): TaskRecord => ({
   dependents: [],
 });
 
-const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
+const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationChange => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
@@ -717,6 +720,17 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
   acceptanceContext: null,
   prepare: null,
   prepareFailure: null,
+  implementationDecisions: [],
+  activeBlocker: null,
+  remoteChangeBranch: {
+    owner: target.owner,
+    repo: target.repo,
+    remoteName: target.remoteName,
+    remoteUrl: "https://github.com/acme/repo.git",
+    branchName: "change-1",
+    targetBranch: target.baseBranch,
+    expectedHeadSha: "head",
+  },
   publication: {
     candidateId: "candidate-1",
     validationRunId: "run-1",
@@ -747,13 +761,13 @@ const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullReque
 
 const cancellationDependencies = (input: {
   readonly task: TaskRecord;
-  readonly change: ChangeRecord;
+  readonly change: ChangeRecord & CancellationChange;
   readonly pullRequest: GitHubPullRequest;
   readonly closePullRequest?: GitHubPullRequestMutationResult;
   readonly cleanupResult?:
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
-  readonly cleanupRemoteBranches?: (object | undefined)[];
+  readonly cleanupRemoteBranches?: (object | null)[];
   readonly activeValidationRunId?: string;
   readonly events: string[];
 }): CancellationDependencies & { readonly closePullRequestInputs: unknown[] } => {
@@ -770,7 +784,12 @@ const cancellationDependencies = (input: {
       input.events.push("complete-change");
       currentChange = { ...currentChange, state: "closed", closeReason: "completed" };
       currentTask = { ...currentTask, state: "done" };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        change: currentChange,
+        task: currentChange.taskId === null ? null : currentTask,
+      });
     },
     cancelChange: (cancelInput: { readonly changeId: string; readonly reason: string }) => {
       input.events.push("cancel-change");
@@ -782,7 +801,12 @@ const cancellationDependencies = (input: {
           currentChange.taskId === null ? cancelInput.reason : currentChange.cancelReason,
       };
       currentTask = { ...currentTask, state: "cancelled", cancelReason: cancelInput.reason };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        change: currentChange,
+        task: currentChange.taskId === null ? null : currentTask,
+      });
     },
     recordCleanup: () => {
       input.events.push("record-cleanup");
@@ -790,7 +814,11 @@ const cancellationDependencies = (input: {
         ...currentChange,
         cleanup: input.cleanupResult ?? { state: "complete", blockingReason: null },
       };
-      return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
+      return Effect.succeed({
+        ok: true as const,
+        changed: true,
+        cleanup: currentChange.cleanup,
+      });
     },
     removeReviewerSessions: () => {
       input.events.push("remove-reviewer-sessions");

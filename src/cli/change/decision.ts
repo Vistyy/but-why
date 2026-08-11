@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import {
   loadImplementationDecisions,
   loadRecordImplementationDecision,
-} from "../../change/loadChangeInspection.js";
+} from "../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";

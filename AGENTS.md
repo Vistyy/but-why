@@ -45,7 +45,8 @@
 - `src/change/submit/`: Change submission configuration and errors.
 - `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/contracts/`: configuration, output, and shared error contracts.
-- `src/init/`: Local Repository initialization and repository-context Adapters.
+- `src/repositoryRuntime/`: Local Repository resolution, initialization coordination, and the Shared Repository State open lifecycle.
+- `src/init/`: initialization-specific Git and Repo Config Adapters.
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
 - `src/disposableWorkspace/`: project-owned native Git Snapshot Workspace creation, identity verification, Effect command execution, interruption handling, and cleanup.

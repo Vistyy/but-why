@@ -15,11 +15,11 @@ import {
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
+import { findCurrentWorktreeFacts, findGitRoot } from "../init/git.js";
+import { readRepoConfig, writeRepoConfig } from "../init/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { findGitRoot } from "./git.js";
-import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
 
-export type RepoLocalPaths = {
+export type LocalRepositoryPaths = {
   readonly butWhyDir: string;
   readonly operationalDir: string;
   readonly configPath: string;
@@ -30,13 +30,15 @@ export type RepoLocalPaths = {
   readonly taskContextDraftsPath: string;
 };
 
-export type RepoLocalContext = {
+export const findCurrentRepositoryWorktreeFacts = findCurrentWorktreeFacts;
+
+export type LocalRepositoryContext = {
   readonly root: string;
   readonly mainCheckoutRoot: string;
   readonly commonDirectory: string;
   readonly taskPrefix: string;
   readonly config: RepoConfig;
-  readonly paths: RepoLocalPaths;
+  readonly paths: LocalRepositoryPaths;
 };
 
 export type InitRepoInput = {
@@ -92,19 +94,22 @@ export type InitRepoError =
       readonly changes: readonly RestoredTransientChangeFact[];
     };
 
-export type RepoLocalSubmissionContext = Omit<RepoLocalContext, "config" | "taskPrefix">;
+export type LocalRepositorySubmissionContext = Omit<
+  LocalRepositoryContext,
+  "config" | "taskPrefix"
+>;
 
-export type LoadRepoLocalContextResult =
+export type ResolveLocalRepositoryResult =
   | {
       readonly ok: true;
-      readonly context: RepoLocalContext;
+      readonly context: LocalRepositoryContext;
     }
   | {
       readonly ok: false;
-      readonly error: LoadRepoLocalContextError;
+      readonly error: ResolveLocalRepositoryError;
     };
 
-export type LoadRepoLocalContextError =
+export type ResolveLocalRepositoryError =
   | {
       readonly code: "not_initialized";
     }
@@ -124,7 +129,7 @@ export type LoadRepoLocalContextError =
       readonly taskPrefix: string;
     };
 
-const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths => {
+const repoLocalPaths = (root: string, commonDirectory: string): LocalRepositoryPaths => {
   const butWhyDir = join(root, ".but-why");
   const operationalDir = join(commonDirectory, "but-why");
 
@@ -144,7 +149,7 @@ type PreparedRepoInitialization = {
   readonly input: InitRepoInput;
   readonly root: string;
   readonly commonDirectory: string;
-  readonly paths: RepoLocalPaths;
+  readonly paths: LocalRepositoryPaths;
   readonly configCreated: boolean;
 };
 
@@ -228,7 +233,9 @@ const completeRepoInitialization = (
   };
 };
 
-export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRepoResult> => {
+export const initializeRepositoryRuntime = (
+  input: InitRepoInput,
+): Effect.Effect<InitRepoResult> => {
   const preparation = prepareRepoInitialization(input);
   if (!preparation.ok) return Effect.succeed(preparation.result);
 
@@ -239,6 +246,7 @@ export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRe
       repositorySqlLayer({
         statePath: prepared.paths.statePath,
         commonDirectory: prepared.commonDirectory,
+        lifecycle: "initialize",
       }),
     ),
   );
@@ -273,11 +281,11 @@ export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRe
   );
 };
 
-export const loadRepoLocalSubmissionContext = (
+export const resolveLocalRepositorySubmission = (
   cwd: string,
 ):
-  | { readonly ok: true; readonly context: RepoLocalSubmissionContext }
-  | { readonly ok: false; readonly error: LoadRepoLocalContextError } => {
+  | { readonly ok: true; readonly context: LocalRepositorySubmissionContext }
+  | { readonly ok: false; readonly error: ResolveLocalRepositoryError } => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
@@ -303,7 +311,7 @@ export const loadRepoLocalSubmissionContext = (
   };
 };
 
-export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult => {
+export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {

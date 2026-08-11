@@ -46,6 +46,7 @@ const withReconcileRepository = <A, E>(
 const sqlConfig = (fixture: ReconcileFixture): RepositorySqlConfig => ({
   commonDirectory: fixture.commonDirectory,
   statePath: fixture.statePath,
+  lifecycle: "initialize",
 });
 
 const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
@@ -108,7 +109,7 @@ describe("Change reconciliation discard boundary", () => {
           };
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: changes.reads.getChangeById,
+              getChangeById: changes.delivery.getChangeById,
               listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
               completeMergedChange: changes.delivery.completeMergedChange,
             },
@@ -145,6 +146,7 @@ describe("Change reconciliation discard boundary", () => {
               repositoryCommonDirectory: fixture.commonDirectory,
               worktreePath: first.worktreePath,
               branchRef: "refs/heads/but-why/change-a",
+              remoteChangeBranch: null,
               discardWork: true,
             },
           ]);
@@ -167,7 +169,7 @@ describe("Change reconciliation discard boundary", () => {
         const cleanupInputs: Parameters<ChangeCleanupOperation>[0][] = [];
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },
@@ -212,6 +214,7 @@ describe("Change reconciliation discard boundary", () => {
             repositoryCommonDirectory: fixture.commonDirectory,
             worktreePath: terminal.worktreePath,
             branchRef: "refs/heads/but-why/change-a",
+            remoteChangeBranch: null,
             discardWork: false,
           },
         ]);
@@ -239,7 +242,7 @@ describe("Change reconciliation discard boundary", () => {
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },
@@ -304,7 +307,7 @@ describe("Change reconciliation discard boundary", () => {
         const terminal = yield* createTerminalChange(fixture, "change-a");
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },

@@ -15,7 +15,7 @@ import {
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
-import { createSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
+import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
@@ -108,6 +108,11 @@ export class CandidateValidationExecution extends Context.Tag("CandidateValidati
   CandidateValidationExecutionPort
 >() {}
 
+export class CandidateValidationWorkspace extends Context.Tag("CandidateValidationWorkspace")<
+  CandidateValidationWorkspace,
+  CreateSnapshotWorkspace
+>() {}
+
 type CandidateReviewerExecutionValue = {
   readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly processExecutor: ReviewerProcessExecutor;
@@ -147,7 +152,13 @@ export const CandidateValidationLive = Layer.effect(
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
-    return makeCandidateValidation({ ...paths, persistence, reviewerExecution });
+    const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
+    return makeCandidateValidation({
+      ...paths,
+      persistence,
+      reviewerExecution,
+      createSnapshotWorkspace,
+    });
   }),
 );
 
@@ -156,6 +167,7 @@ const makeCandidateValidation = (dependencies: {
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
+  readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
@@ -189,7 +201,7 @@ const makeCandidateValidation = (dependencies: {
     }
     if (started.reused) return { ok: true, ...started } as const;
 
-    const workspace = yield* createSnapshotWorkspace({
+    const workspace = yield* dependencies.createSnapshotWorkspace({
       repoRoot: dependencies.localRepositoryMainCheckoutRoot,
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,

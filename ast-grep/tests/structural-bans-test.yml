@@ -89,3 +89,10 @@ valid:
   - openInteractiveSessionHost(adapter)
 invalid:
   - openHerdrInteractiveSessionHost(undefined)
+---
+id: repository-sql-layer-belongs-to-repository-runtime
+valid:
+  - runtime.provide(program)
+invalid:
+  - repositorySqlLayer(config)
+  - import { repositorySqlLayer } from "../sqlite/repositorySql.js";

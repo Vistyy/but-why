@@ -3,7 +3,7 @@
 import { Effect } from "effect";
 import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "../../change/change.js";
-import type { LoadedChangeOperationResult } from "../../change/loadChangeLifecycle.js";
+import type { LoadedChangeOperationResult } from "../../change/composition/loadChangeLifecycle.js";
 import type { RepoStateLoadError } from "../../cliResults.js";
 import {
   type CliResult,

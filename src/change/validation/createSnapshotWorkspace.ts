@@ -5,9 +5,9 @@ import type {
   DisposableWorkspaceError,
   DisposableWorkspaceOperationName,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import {
-  type RunDisposableExactCommitWorkspaceInput,
-  runDisposableExactCommitWorkspace,
+import type {
+  RunDisposableExactCommitWorkspace,
+  RunDisposableExactCommitWorkspaceInput,
 } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type {
   ActiveSnapshotWorkspace,
@@ -49,32 +49,41 @@ export type CreateSnapshotWorkspaceResult =
       readonly cleanupResult: DisposableWorkspaceCleanupResult;
     };
 
-export const createSnapshotWorkspace = (
+export type CreateSnapshotWorkspace = (
   input: CreateSnapshotWorkspaceInput,
-): Effect.Effect<CreateSnapshotWorkspaceResult, RepositoryStorageError> => {
-  let cleanupResult: DisposableWorkspaceCleanupResult = { workspace: "not_created" };
-  const observeCleanup = (result: DisposableWorkspaceCleanupResult): void => {
-    cleanupResult = result;
+) => Effect.Effect<CreateSnapshotWorkspaceResult, RepositoryStorageError>;
+
+export const makeCreateSnapshotWorkspace =
+  (runDisposableExactCommitWorkspace: RunDisposableExactCommitWorkspace): CreateSnapshotWorkspace =>
+  (input) => {
+    let cleanupResult: DisposableWorkspaceCleanupResult = { workspace: "not_created" };
+    const observeCleanup = (result: DisposableWorkspaceCleanupResult): void => {
+      cleanupResult = result;
+    };
+    const failure = (toolingFailure: ValidationToolingFailure) =>
+      toolingFailureResult(toolingFailure, cleanupResult);
+    return createSnapshotWorkspaceAdapter(
+      input,
+      observeCleanup,
+      runDisposableExactCommitWorkspace,
+    ).pipe(
+      Effect.catchTags({
+        SnapshotWorkspaceSetupFailed: failure,
+        InfrastructureToolingFailed: failure,
+        GitToolingFailed: failure,
+        ReviewerProcessToolingFailed: failure,
+        PrepareCommandExecutionToolingFailed: failure,
+        CheckCommandExecutionToolingFailed: failure,
+        ReviewerOutputContractFailed: failure,
+        TokenUsageContractFailed: failure,
+      }),
+    );
   };
-  const failure = (toolingFailure: ValidationToolingFailure) =>
-    toolingFailureResult(toolingFailure, cleanupResult);
-  return createSnapshotWorkspaceAdapter(input, observeCleanup).pipe(
-    Effect.catchTags({
-      SnapshotWorkspaceSetupFailed: failure,
-      InfrastructureToolingFailed: failure,
-      GitToolingFailed: failure,
-      ReviewerProcessToolingFailed: failure,
-      PrepareCommandExecutionToolingFailed: failure,
-      CheckCommandExecutionToolingFailed: failure,
-      ReviewerOutputContractFailed: failure,
-      TokenUsageContractFailed: failure,
-    }),
-  );
-};
 
 const createSnapshotWorkspaceAdapter = (
   input: CreateSnapshotWorkspaceInput,
   observeCleanup: (cleanupResult: DisposableWorkspaceCleanupResult) => void,
+  runDisposableExactCommitWorkspace: RunDisposableExactCommitWorkspace,
 ): Effect.Effect<
   CreateSnapshotWorkspaceResult,
   ValidationToolingFailure | RepositoryStorageError

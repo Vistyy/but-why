@@ -1,13 +1,22 @@
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { ChangeRecord } from "./change.js";
+import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
+import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
-export type ChangeStartRecord = ChangeRecord & {
+export type ChangeStartRecord = {
+  readonly id: string;
+  readonly repositoryCommonDirectory: string;
+  readonly branchRef: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
+  readonly taskId: PublicTaskId | null;
   readonly startingCommit: string;
   readonly worktreePath: string;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
+  readonly prepare: ChangePrepareDefinition | null;
+  readonly prepareFailure: ChangePrepareFailure | null;
+  readonly state: ChangeState;
 };
 
 export type CreateChangeStartInput = {

@@ -5,16 +5,19 @@ import type {
   ChangeOwnedPullRequest,
   ChangePublication,
   ChangePublicationTarget,
-  ChangeRecord,
 } from "../change.js";
 import { branchNameForRef } from "../changeBranch.js";
-import type { CandidatePublicationPort } from "../changePorts.js";
+import type {
+  CandidatePublicationChange,
+  CandidatePublicationPort,
+  PendingCandidatePublicationChange,
+  PublishedCandidatePublicationChange,
+} from "../changePorts.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import {
   classifyOwnedPullRequest,
   type OwnedPublication,
   observeOwnedPullRequest,
-  ownedPublication,
 } from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
@@ -113,7 +116,8 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
     const metadata = metadataFor(change, evidence.headSha, dependencies.git);
     if ("ok" in metadata) return metadata;
-    if (change.publication === null)
+    const publication = change.publication;
+    if (publication === null)
       return yield* create(
         dependencies,
         publicationInput,
@@ -122,12 +126,18 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
         evidence.headSha,
         metadata,
       );
-    if (change.publication.pullRequest === null)
-      return yield* recover(dependencies, publicationInput, change, headBranch, evidence.headSha);
+    if (publication.pullRequest === null)
+      return yield* recover(
+        dependencies,
+        publicationInput,
+        { ...change, publication: { ...publication, pullRequest: null } },
+        headBranch,
+        evidence.headSha,
+      );
     return yield* updateOrReuse(
       dependencies,
       publicationInput,
-      change,
+      { ...change, publication: { ...publication, pullRequest: publication.pullRequest } },
       headBranch,
       evidence.headSha,
       metadata,
@@ -137,7 +147,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
 const create = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   metadata: Metadata,
@@ -188,7 +198,7 @@ const create = (
 const createFailure = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  _change: ChangeRecord,
+  _change: CandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
@@ -253,14 +263,12 @@ const release = (
 const recover = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: PendingCandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
 ): PublicationEffect =>
   Effect.gen(function* () {
     const marker = change.publication;
-    if (marker === null || marker.pullRequest !== null)
-      return { ok: false, code: "publication_state_conflict" };
     const foundResult = readPullRequestList(dependencies.github, marker.target, marker.headBranch);
     if (!foundResult.ok) {
       return {
@@ -310,10 +318,10 @@ const recover = (
         expectedRemoteHeadSha: expectedHeadSha,
         observedRemoteHeadSha: selected.pullRequest.headSha,
       };
-    const owned = {
+    const owned: Published = {
       ...marker,
       pullRequest: { number: selected.pullRequest.number, url: selected.pullRequest.url },
-    } as Published;
+    };
     const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     return yield* executePullRequestUpdate(
@@ -332,7 +340,7 @@ const createRecoveryAttempt = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
 ): PublicationEffect =>
   Effect.gen(function* () {
     const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
@@ -464,7 +472,7 @@ const selectSingleRecoveredPullRequest = (
 const updateOrReuse = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: PublishedCandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
   metadata: Metadata,
@@ -503,12 +511,11 @@ type UpdatePreparation =
 const preparePullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: PublishedCandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
-  const owned = ownedPublication(change);
-  if (owned === undefined) throw new Error("Missing owned pull request");
+  const owned = change.publication;
   if (!ownedPublicationMatchesTarget(owned, input.target, headBranch)) {
     return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
   }
@@ -524,7 +531,7 @@ const ownedPublicationMatchesTarget = (
 const prepareOwnedPullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   expectedHeadSha: string,
 ): UpdatePreparation => {
@@ -565,7 +572,7 @@ const prepareOwnedPullRequestUpdate = (
 const prepareExactOpenUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   expectedHeadSha: string,
   remote: GitHubPullRequest,
@@ -592,7 +599,7 @@ const prepareExactOpenUpdate = (
 const executePullRequestUpdate = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
@@ -769,22 +776,23 @@ const record = (
     }),
     (recorded) => {
       if (!recorded.ok) return mapPersistenceError(recorded.code);
-      const publication = recorded.change.publication;
-      if (publication === null || publication.pullRequest === null)
-        throw new Error("Published pull request was not stored");
-      return { ok: true, created: previous === undefined, pullRequest: publication.pullRequest };
+      return {
+        ok: true,
+        created: previous === undefined,
+        pullRequest: recorded.change.publication.pullRequest,
+      };
     },
   );
 
 const implementationDecisionSection = (
-  decisions: ChangeRecord["implementationDecisions"],
+  decisions: CandidatePublicationChange["implementationDecisions"],
 ): string =>
-  decisions === undefined || decisions.length === 0
+  decisions.length === 0
     ? ""
     : `\n\n## Implementation Decision Log\n\n${implementationDecisionMarkdown(decisions)}`;
 
 const metadataFor = (
-  change: ChangeRecord,
+  change: CandidatePublicationChange,
   headSha: string,
   git: CandidatePublicationGit,
 ): Metadata | Extract<PublishCandidateResult, { readonly ok: false }> => {

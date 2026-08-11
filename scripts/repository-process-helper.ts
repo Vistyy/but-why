@@ -60,6 +60,7 @@ const openState = async (input: OpenStateInput): Promise<number> => {
             repositorySqlLayer({
               statePath: input.statePath,
               commonDirectory: input.commonDirectory,
+              lifecycle: "initialize",
               ...(input.busyTimeoutMs === undefined
                 ? {}
                 : { sqliteBusyTimeoutMs: input.busyTimeoutMs }),

@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadChangeTaskProjection } from "../../../change/loadChangeInspection.js";
+import { loadChangeTaskProjection } from "../../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
@@ -26,7 +26,7 @@ export const runListCommand = (
   const limit = parseTaskListLimit(command.limit);
   if (!limit.ok) return Effect.succeed(limit.result);
 
-  return withTasks(environment, true, (taskUseCases) =>
+  return withTasks(environment, (taskUseCases) =>
     Effect.flatMap(
       taskUseCases.listTasks({
         includeDone: command.all || command.state !== undefined,

@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
-import type { ChangeReconciliationPort } from "./changePorts.js";
+import type { ChangeCleanup, ChangeOwnedPullRequest } from "./change.js";
+import type { ChangeReconciliationPort, ReconciliationChange } from "./changePorts.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
   observedMergedChangeEvidence,
@@ -60,7 +60,7 @@ const reconcile = (
             input.repositoryCommonDirectory,
           )
         : [yield* dependencies.persistence.getChangeById(input.changeId)].filter(
-            (change): change is ChangeRecord => change !== undefined,
+            (change): change is ReconciliationChange => change !== undefined,
           );
     const reconciled = yield* Effect.forEach(changes, (change) =>
       reconcileOne(dependencies, change, input.now, discardWork),
@@ -73,7 +73,7 @@ const reconcile = (
 
 const reconcileOne = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
-  change: ChangeRecord,
+  change: ReconciliationChange,
   now: string,
   discardWork: boolean,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
@@ -124,7 +124,7 @@ const reconcileOne = (
 
 const reconcileCleanup = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
-  change: ChangeRecord,
+  change: ReconciliationChange,
   now: string,
   discardWork: boolean,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>

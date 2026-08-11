@@ -1,6 +1,6 @@
 import type { GitHubPrTarget } from "../change/validationRun/validationRun.js";
 import { type GitCommandRunner, runGitCommand } from "./gitFacts.js";
-import { parseRemoteChangeBaseRef } from "./remoteChangeBase.js";
+import { parseRemoteChangeBaseRef } from "./remoteChangeBaseRef.js";
 
 export type GitHubTargetResult =
   | {

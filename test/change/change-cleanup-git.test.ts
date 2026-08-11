@@ -24,6 +24,7 @@ describe("Change cleanup Git adapter", () => {
         ),
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(butWhyContainer)).toBe(false);
@@ -48,6 +49,7 @@ describe("Change cleanup Git adapter", () => {
         ),
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(butWhyContainer)).toBe(true);
@@ -72,6 +74,7 @@ describe("Change cleanup Git adapter", () => {
         ),
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(butWhyContainer)).toBe(false);
@@ -97,6 +100,7 @@ describe("Change cleanup Git adapter", () => {
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
@@ -127,6 +131,7 @@ describe("Change cleanup Git adapter", () => {
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(reviewerSessionPath)).toBe(true);
@@ -152,6 +157,7 @@ describe("Change cleanup Git adapter", () => {
         ),
         worktreePath: recordedWorktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "pending", blockingReason: "worktree_path_unsafe" });
     expect(existsSync(actualWorktree)).toBe(true);
@@ -200,6 +206,7 @@ process.exit(result.status ?? 1);
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       });
     } finally {
       process.env["PATH"] = previousPath;
@@ -275,6 +282,7 @@ process.exit(result.status ?? 1);
         repositoryCommonDirectory: commonDirectory,
         worktreePath: null,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "pending", blockingReason: "branch_reachability_unavailable" });
     expect(existsSync(branchPath)).toBe(true);
@@ -298,6 +306,7 @@ process.exit(result.status ?? 1);
         ),
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({
       state: "pending",
@@ -326,6 +335,7 @@ process.exit(result.status ?? 1);
         ),
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
@@ -348,6 +358,7 @@ process.exit(result.status ?? 1);
         repositoryCommonDirectory: commonDirectory,
         worktreePath: null,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(git(repository, "rev-parse", "refs/heads/main")).toBe(mainHead);
@@ -401,6 +412,7 @@ process.exit(result.status ?? 1);
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       });
     } finally {
       process.env["PATH"] = previousPath;
@@ -428,6 +440,7 @@ process.exit(result.status ?? 1);
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
         branchRef: "refs/heads/feature",
+        remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
     expect(git(repository, "worktree", "list", "--porcelain")).not.toContain(worktreePath);
@@ -456,7 +469,7 @@ process.exit(result.status ?? 1);
         pathToFileURL(join(import.meta.dirname, "../../src/change/localChangeCleanupGit.ts")).href,
       )});
 const [repositoryCommonDirectory, worktreePath, branchRef] = process.argv.slice(2);
-console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, worktreePath, branchRef })));
+console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, worktreePath, branchRef, remoteChangeBranch: null })));
 `,
     );
 
@@ -883,6 +896,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
         ),
         worktreePath,
         branchRef: "refs/heads/but-why/feature",
+        remoteChangeBranch: null,
         discardWork: true,
       }),
     ).toEqual({ state: "complete" });

@@ -1,4 +1,4 @@
-import type { ChangeOwnedPullRequest, ChangePublication, ChangeRecord } from "./change.js";
+import type { ChangeOwnedPullRequest, ChangePublication } from "./change.js";
 import type { GitHubPullRequest, GitHubPullRequestReader } from "./ownedPullRequestGateway.js";
 
 export type OwnedPullRequestRejection =
@@ -43,15 +43,16 @@ export type ObservedMergedChangeEvidence = {
   readonly expectedHeadSha: string;
 };
 
-export const ownedPublication = (change: ChangeRecord): OwnedPublication | undefined => {
+export const ownedPublication = (change: {
+  readonly publication: ChangePublication | null;
+}): OwnedPublication | undefined => {
   const publication = change.publication;
-  return publication?.pullRequest === null || publication === null
-    ? undefined
-    : (publication as OwnedPublication);
+  if (publication === null || publication.pullRequest === null) return undefined;
+  return { ...publication, pullRequest: publication.pullRequest };
 };
 
 export const observedMergedChangeEvidence = (
-  change: ChangeRecord,
+  change: { readonly publication: ChangePublication | null },
   pullRequest: GitHubPullRequest,
 ): ObservedMergedChangeEvidence | undefined => {
   const publication = ownedPublication(change);
@@ -72,7 +73,7 @@ export const observedMergedChangeEvidence = (
 
 export const observeOwnedPullRequest = (
   github: GitHubPullRequestReader,
-  change: ChangeRecord,
+  change: { readonly publication: ChangePublication | null },
 ): OwnedPullRequestClassification => {
   const publication = ownedPublication(change);
   if (publication === undefined) return { kind: "not_owned" };

@@ -3,25 +3,30 @@ import { Effect } from "effect";
 
 import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type { CreateChangeStartInput } from "../change/changeStartStore.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { TaskState } from "../task/lifecycle.js";
-import type { PublicTaskId } from "../task/taskId.js";
+import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
-import { encodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
-  changeReadColumns,
-  decodeChangeRow,
-  requireChangeStartRecord,
-  type StoredChangeRow,
-  validateChangeRelationships,
-} from "./sqliteChangeReadModel.js";
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
+import {
+  decodeSqliteChangePrepareFailure,
+  encodeSqliteChangePrepareFailure,
+} from "./sqliteChangePreparation.js";
+import {
+  decodeChangeState,
+  decodeStoredNullableString,
+  decodeStoredPositiveInteger,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 import {
   decodePersisted,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
+  decodeTaskState,
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
 } from "./sqliteTaskReadModel.js";
@@ -114,7 +119,7 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (row === undefined) return { ok: false as const, code: "task_not_found" as const };
     const task = yield* decodePersisted("prepare Task-backed Change Start", () => ({
       ...decodeTaskContextRow(row),
-      state: row.state,
+      state: decodeTaskState(row.state),
     }));
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
@@ -136,10 +141,14 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly state: TaskState }>`
+    const rows = yield* sql<{ readonly state: unknown }>`
       SELECT state FROM tasks WHERE id = ${taskId}
     `;
-    return rows[0] === undefined ? undefined : { state: rows[0].state };
+    return rows[0] === undefined
+      ? undefined
+      : yield* decodePersisted("prepare Task-backed Change Start", () => ({
+          state: decodeTaskState(rows[0]?.state),
+        }));
   });
 
 const recordPrepareOutcome = (
@@ -159,36 +168,121 @@ const recordPrepareOutcome = (
       : change;
   });
 
+const changeStartSelectionColumns = `
+  id, repository_common_directory AS repositoryCommonDirectory,
+  branch_ref AS branchRef, base_ref AS baseRef, base_remote_url AS baseRemoteUrl,
+  task_id AS taskId, starting_commit AS startingCommit, worktree_path AS worktreePath,
+  acceptance_context AS acceptanceContext, prepare_command AS prepareCommand,
+  prepare_timeout_seconds AS prepareTimeoutSeconds,
+  prepare_failure AS prepareFailure, state
+`;
+
+type StoredChangeStartRow = {
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly baseRemoteUrl: unknown;
+  readonly taskId: unknown;
+  readonly startingCommit: unknown;
+  readonly worktreePath: unknown;
+  readonly acceptanceContext: unknown;
+  readonly prepareCommand: unknown;
+  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareFailure: unknown;
+  readonly state: unknown;
+};
+
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.flatMap(
-    sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
-      taskId,
-    ]),
-    (rows) => mapRow(rows[0], sql),
+    sql.unsafe<StoredChangeStartRow>(
+      `SELECT ${changeStartSelectionColumns} FROM changes WHERE task_id = ?`,
+      [taskId],
+    ),
+    (rows) => mapRow(rows[0]),
   );
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
-      changeId,
-    ]),
-    (rows) => mapRow(rows[0], sql),
+    sql.unsafe<StoredChangeStartRow>(
+      `SELECT ${changeStartSelectionColumns} FROM changes WHERE id = ?`,
+      [changeId],
+    ),
+    (rows) => mapRow(rows[0]),
   );
 
-const mapRow = (row: StoredChangeRow | undefined, sql: SqlClient.SqlClient) =>
+const mapRow = (row: StoredChangeStartRow | undefined) =>
   row === undefined
     ? Effect.succeed(undefined)
-    : Effect.gen(function* () {
-        const change = yield* decodePersisted("read Change Start", () =>
-          requireChangeStartRecord(decodeChangeRow(row)),
-        );
-        yield* validateChangeRelationships(sql, change, "read Change Start");
-        return change;
-      });
+    : decodePersisted("read Change Start", () => decodeChangeStart(row));
+
+const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
+  const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
+  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
+  const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
+  const worktreePath = decodeStoredNullableString(row.worktreePath, "Change worktree path");
+  if (
+    baseRef === null ||
+    baseRemoteUrl === null ||
+    startingCommit === null ||
+    worktreePath === null
+  ) {
+    throw new Error("Stored Change Start relationship is incomplete");
+  }
+  const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
+  const encodedAcceptanceContext = decodeStoredNullableString(
+    row.acceptanceContext,
+    "Change Acceptance Context",
+  );
+  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
+    throw new Error("Stored Change Task relationship is incomplete");
+  }
+  const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
+  const prepareTimeoutSeconds =
+    row.prepareTimeoutSeconds === null
+      ? null
+      : decodeStoredPositiveInteger(row.prepareTimeoutSeconds, "Change prepare timeout");
+  if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
+    throw new Error("Stored Change preparation relationship is incomplete");
+  }
+  const encodedPrepareFailure = decodeStoredNullableString(
+    row.prepareFailure,
+    "Change prepare failure",
+  );
+  if (encodedPrepareFailure !== null && prepareCommand === null) {
+    throw new Error("Stored Change preparation failure relationship is incomplete");
+  }
+  return {
+    id: decodeStoredString(row.id, "Change id"),
+    repositoryCommonDirectory: decodeStoredString(
+      row.repositoryCommonDirectory,
+      "Change repository common directory",
+    ),
+    branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
+    baseRef,
+    baseRemoteUrl,
+    taskId: taskId === null ? null : storedPublicTaskId(taskId),
+    startingCommit,
+    worktreePath,
+    acceptanceContext:
+      encodedAcceptanceContext === null
+        ? null
+        : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
+    prepare:
+      prepareCommand === null || prepareTimeoutSeconds === null
+        ? null
+        : { command: prepareCommand, timeoutSeconds: prepareTimeoutSeconds },
+    prepareFailure:
+      encodedPrepareFailure === null
+        ? null
+        : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
+    state: decodeChangeState(row.state),
+  };
+};
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type StoredEligibilityTaskRow = StoredTaskContextRow & {
-  readonly state: TaskState;
+  readonly state: unknown;
 };

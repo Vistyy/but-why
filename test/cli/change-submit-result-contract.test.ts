@@ -35,6 +35,8 @@ const change: ChangeRecord = {
   prepare: null,
   prepareFailure: null,
   publication: null,
+  implementationDecisions: [],
+  activeBlocker: null,
   cleanup: { state: "complete", blockingReason: null },
   state: "closed",
   closeReason: "completed",

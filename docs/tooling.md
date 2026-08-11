@@ -61,7 +61,7 @@ Targeted test selections remain unlocked.
 
 Fallow enforces these architecture contracts:
 
-- Change workflows use ports instead of concrete Adapters or composition.
+- Behavior modules use ports instead of concrete storage or Repository Runtime Adapters, and concrete Adapter selection stays in composition directories.
 - CLI modules do not import storage.
 - Domain modules do not import Node infrastructure.
 

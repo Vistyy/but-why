@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { RepoLocalContext } from "../init/repoContext.js";
 import {
   type RepositoryPreparationEffectExecutor,
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
-import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
+import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
 import { type PublicTaskId, taskSlugForId } from "../task/taskId.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
 import type {
@@ -19,6 +18,7 @@ import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeSta
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
 import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
+import type { InteractiveSessionProfileLoader } from "./interactiveSession/localInteractiveSessionProfile.js";
 
 export type { ChangeImplementResult };
 
@@ -114,10 +114,11 @@ export const prepareChange = (
   });
 
 export const implementChange = (
-  context: RepoLocalContext,
+  repositoryPath: string,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,
+  profileLoader: InteractiveSessionProfileLoader,
   changeId: string,
   implementerPrompt: string | undefined,
 ): Effect.Effect<ChangeImplementResult, RepositoryStorageError> =>
@@ -126,10 +127,11 @@ export const implementChange = (
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     return yield* launchInteractiveImplementer({
-      context,
+      repositoryPath,
       change,
       interactiveSessionHost,
       globalConfigPath,
+      profileLoader,
       implementerPrompt,
     });
   });

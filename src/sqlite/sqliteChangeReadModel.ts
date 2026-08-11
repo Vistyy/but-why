@@ -1,8 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
-import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
-import type { ChangeStartRecord } from "../change/changeStartStore.js";
+import type { ChangeRecord } from "../change/change.js";
 import type {
   ImplementationBlocker,
   ImplementationBlockerHistory,
@@ -17,6 +16,14 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
+import {
+  decodeChangeCleanup,
+  decodeChangeLifecycle,
+  decodeChangeState,
+  decodeStoredNullableString,
+  decodeStoredPositiveInteger,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const changeReadColumns = [
@@ -53,55 +60,85 @@ export const changeReadColumns = [
 ].join(", ");
 
 export type StoredChangeRow = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly taskId: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly cleanupState: ChangeCleanup["state"];
-  readonly cleanupBlockingReason: string | null;
-  readonly state: ChangeState;
-  readonly closeReason: ChangeRecord["closeReason"];
-  readonly cancelReason: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly baseRemoteUrl: unknown;
+  readonly taskId: unknown;
+  readonly startingCommit: unknown;
+  readonly worktreePath: unknown;
+  readonly acceptanceContext: unknown;
+  readonly prepareCommand: unknown;
+  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareFailure: unknown;
+  readonly cleanupState: unknown;
+  readonly cleanupBlockingReason: unknown;
+  readonly state: unknown;
+  readonly closeReason: unknown;
+  readonly cancelReason: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
+  readonly closedAt: unknown;
 } & SqliteChangePublicationRow;
 
-export const decodeChangeRow = (row: StoredChangeRow): ChangeRecord => {
-  const id = row.id;
-  const taskId = row.taskId;
-  const encodedAcceptanceContext = row.acceptanceContext;
-  const baseRef = row.baseRef;
-  const baseRemoteUrl = row.baseRemoteUrl;
-  const startingCommit = row.startingCommit;
-  const worktreePath = row.worktreePath;
-  const prepareCommand = row.prepareCommand;
-  const { prepareTimeoutSeconds } = row;
-  const encodedPrepareFailure = row.prepareFailure;
-  const { state } = row;
-  const { closeReason } = row;
-  const closedAt = row.closedAt;
-  const cancelReason = row.cancelReason;
+export type ChangeWithoutAuthorityHistory = Omit<
+  ChangeRecord,
+  "implementationDecisions" | "activeBlocker"
+>;
 
-  const { cleanupState } = row;
-  const { cleanupBlockingReason } = row;
+export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHistory => {
+  const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
+  const encodedAcceptanceContext = decodeStoredNullableString(
+    row.acceptanceContext,
+    "Change Acceptance Context",
+  );
+  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
+    throw new Error("Stored Change Task relationship is incomplete");
+  }
+  const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
+  const prepareTimeoutSeconds =
+    row.prepareTimeoutSeconds === null
+      ? null
+      : decodeStoredPositiveInteger(row.prepareTimeoutSeconds, "Change prepare timeout");
+  if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
+    throw new Error("Stored Change preparation relationship is incomplete");
+  }
+  const encodedPrepareFailure = decodeStoredNullableString(
+    row.prepareFailure,
+    "Change prepare failure",
+  );
+  if (encodedPrepareFailure !== null && prepareCommand === null) {
+    throw new Error("Stored Change preparation failure relationship is incomplete");
+  }
+  const lifecycle = decodeChangeLifecycle(row);
+  const closedAt = decodeStoredNullableString(row.closedAt, "Change closure time");
+  if ((lifecycle.state === "open") !== (closedAt === null)) {
+    throw new Error("Stored Change closure relationship is invalid");
+  }
+  const cleanup = decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason);
+  if (
+    lifecycle.state === "open" &&
+    (cleanup.state !== "complete" || cleanup.blockingReason !== null)
+  ) {
+    throw new Error("Stored open Change cleanup relationship is invalid");
+  }
+  const cancelReason = decodeStoredNullableString(row.cancelReason, "Change cancellation reason");
+  if (cancelReason !== null && lifecycle.closeReason !== "cancelled") {
+    throw new Error("Stored Change cancellation relationship is invalid");
+  }
   return {
-    id,
-    repositoryCommonDirectory: row.repositoryCommonDirectory,
-    branchRef: row.branchRef,
-    baseRef,
-    baseRemoteUrl,
+    id: decodeStoredString(row.id, "Change id"),
+    repositoryCommonDirectory: decodeStoredString(
+      row.repositoryCommonDirectory,
+      "Change repository common directory",
+    ),
+    branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
+    baseRef: decodeStoredNullableString(row.baseRef, "Change Base ref"),
+    baseRemoteUrl: decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL"),
     taskId: taskId === null ? null : storedPublicTaskId(taskId),
-    startingCommit,
-    worktreePath,
+    startingCommit: decodeStoredNullableString(row.startingCommit, "Change starting commit"),
+    worktreePath: decodeStoredNullableString(row.worktreePath, "Change worktree path"),
     acceptanceContext:
       encodedAcceptanceContext === null
         ? null
@@ -115,31 +152,12 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeRecord => {
         ? null
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
     publication: decodeChangePublication(row),
-    cleanup: { state: cleanupState, blockingReason: cleanupBlockingReason },
-    state,
-    closeReason,
+    cleanup,
+    ...lifecycle,
     cancelReason,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: decodeStoredString(row.createdAt, "Change creation time"),
+    updatedAt: decodeStoredString(row.updatedAt, "Change update time"),
     closedAt,
-  };
-};
-
-export const requireChangeStartRecord = (change: ChangeRecord): ChangeStartRecord => {
-  if (
-    change.baseRef === null ||
-    change.baseRemoteUrl === null ||
-    change.startingCommit === null ||
-    change.worktreePath === null
-  ) {
-    throw new Error("Stored Change Start relationship is incomplete");
-  }
-  return {
-    ...change,
-    baseRef: change.baseRef,
-    baseRemoteUrl: change.baseRemoteUrl,
-    startingCommit: change.startingCommit,
-    worktreePath: change.worktreePath,
   };
 };
 
@@ -267,7 +285,7 @@ export const decodeReviewerTranscript = (
 
 export const validateChangeRelationships = (
   sql: SqlClient.SqlClient,
-  change: ChangeRecord,
+  change: ChangeWithoutAuthorityHistory,
   operationName: string,
 ) =>
   Effect.gen(function* () {
@@ -328,16 +346,25 @@ export const validateChangePublicationRelationships = (
       );
 
 export type StoredCandidateCaptureChangeRow = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly state: ChangeState;
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly state: unknown;
 };
 
 export const decodeCandidateCaptureChange = (
   row: StoredCandidateCaptureChangeRow,
-): CandidateCaptureChange => row;
+): CandidateCaptureChange => ({
+  id: decodeStoredString(row.id, "Change id"),
+  repositoryCommonDirectory: decodeStoredString(
+    row.repositoryCommonDirectory,
+    "Change repository common directory",
+  ),
+  branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
+  baseRef: decodeStoredNullableString(row.baseRef, "Change Base ref"),
+  state: decodeChangeState(row.state),
+});
 
 export const decodeChangePublication = (row: SqliteChangePublicationRow) =>
   decodeSqliteChangePublication(row);

@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isTaskPrefix } from "../../src/contracts/taskPrefix.js";
-import { initRepoLocalContext } from "../../src/init/repoContext.js";
+import { initializeRepositoryRuntime } from "../../src/repositoryRuntime/repositoryContext.js";
 import { baselineMigration } from "../../src/sqlite/migrations/0001_baseline.js";
 import { reviewerSessionsMigration } from "../../src/sqlite/migrations/0002_reviewer_sessions.js";
 import { implementationDecisionsMigration } from "../../src/sqlite/migrations/0003_implementation_decisions.js";
@@ -127,7 +127,7 @@ describe("by init edge cases", () => {
   it.effect("initializes repository state through the scoped SQL service", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* initRepoLocalContext({ cwd: root, taskPrefix: "BY" });
+      const result = yield* initializeRepositoryRuntime({ cwd: root, taskPrefix: "BY" });
 
       expect(result).toMatchObject({ ok: true, status: "initialized" });
       expect(existsSync(join(root, ".git", "but-why", "state.sqlite"))).toBe(true);

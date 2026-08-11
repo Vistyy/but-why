@@ -16,7 +16,7 @@ export const runContextDraftCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, false, (tasks) => {
+  return withTasks(environment, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(tasks.createTaskContextDraft(taskId.taskId), (draft) =>

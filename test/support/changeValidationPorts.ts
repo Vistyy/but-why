@@ -6,13 +6,11 @@ import type {
   ValidationArtifactLifecyclePort,
   ValidationRunAbandonmentPort,
 } from "../../src/change/validation/changeValidationPorts.js";
-import {
-  openSqliteActiveValidationRunPort,
-  openSqliteCandidateValidationExecutionPort,
-  openSqliteChangeValidationReadPort,
-  openSqliteValidationArtifactLifecyclePort,
-  openSqliteValidationRunAbandonmentPort,
-} from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteActiveValidationRunPort } from "../../src/sqlite/sqliteActiveValidationRunPersistence.js";
+import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteValidationArtifactLifecyclePort } from "../../src/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
+import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 
 export const openSqliteChangeValidationTestDependencies = () =>
   Effect.all({

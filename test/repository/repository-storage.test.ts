@@ -378,11 +378,11 @@ describe("repository SQL storage", () => {
 
         expect(raised).toMatchObject({
           ok: true,
-          change: {
-            state: "open",
-            activeBlocker: { content: "Wait for approved intent.", resolvedAt: null },
-          },
           blocker: { content: "Wait for approved intent.", resolvedAt: null },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: { content: "Wait for approved intent.", resolvedAt: null },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(
@@ -514,7 +514,11 @@ describe("repository SQL storage", () => {
 
         expect(raised).toMatchObject({
           ok: true,
-          change: { state: "open", activeBlocker: { resolvedAt: null } },
+          blocker: { resolvedAt: null },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: { resolvedAt: null },
         });
         expect(
           yield* changes.authority.listImplementationBlockers(started.change.id),
@@ -567,16 +571,16 @@ describe("repository SQL storage", () => {
 
         expect(resolved).toMatchObject({
           ok: true,
-          change: {
-            state: "open",
-            activeBlocker: null,
-            acceptanceContext: { resolutions: ["Use the approved approach."] },
-          },
           blocker: {
             id: raised.blocker.id,
             resolvedAt: "2026-07-17T23:06:00.000Z",
             resolution: { content: "Use the approved approach." },
           },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
+          acceptanceContext: { resolutions: ["Use the approved approach."] },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(
@@ -620,8 +624,12 @@ describe("repository SQL storage", () => {
 
         expect(resolved).toMatchObject({
           ok: true,
-          change: { state: "open", activeBlocker: null, acceptanceContext: null },
           blocker: { resolution: { content: "Continue without taskless intent." } },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
+          acceptanceContext: null,
         });
         expect(
           yield* changes.authority.listImplementationBlockers(started.change.id),
@@ -824,7 +832,11 @@ describe("repository SQL storage", () => {
         expect(completed).toMatchObject({
           ok: true,
           changed: true,
-          change: { state: "closed", closeReason: "completed" },
+          change: { state: "closed" },
+        });
+        expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
+          state: "closed",
+          closeReason: "completed",
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
       }),
@@ -2491,7 +2503,15 @@ describe("repository SQL storage", () => {
                 )
                 .pipe(Effect.flip);
               expect(transientInsert).toBeInstanceOf(RepositorySqlOperationFailed);
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2569,7 +2589,15 @@ describe("repository SQL storage", () => {
             Effect.gen(function* () {
               yield* RepositorySql;
               return null;
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           ).pipe(Effect.flip);
           expect(failure).toBeInstanceOf(RepositoryRestoredTransientState);
           if (!(failure instanceof RepositoryRestoredTransientState)) return;
@@ -2625,7 +2653,15 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -2657,7 +2693,15 @@ describe("repository SQL storage", () => {
               expect(changeColumns.map(({ name }) => name)).not.toContain(
                 "no_change_validation_run_id",
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2851,7 +2895,15 @@ describe("repository SQL storage", () => {
               expect(malformedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const current = yield* validation.reads.getRunById("run-current");
               expect(current?.policy).toEqual(currentPolicy);
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3007,7 +3059,15 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -3036,7 +3096,15 @@ describe("repository SQL storage", () => {
                   sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
               );
               expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3085,7 +3153,15 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -3137,7 +3213,15 @@ describe("repository SQL storage", () => {
                   `,
               );
               expect(indexRows).toEqual([]);
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3177,7 +3261,15 @@ describe("repository SQL storage", () => {
                   `;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -3239,7 +3331,15 @@ describe("repository SQL storage", () => {
                 { name: "reviewer_transcripts" },
                 { name: "change_cancel_reason" },
               ]);
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3434,12 +3534,26 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           const error = yield* Effect.scoped(
             RepositorySql.pipe(
-              Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
             ),
           ).pipe(Effect.flip);
 
@@ -3519,7 +3633,15 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -3554,7 +3676,15 @@ describe("repository SQL storage", () => {
                 },
               });
               expect(stored).not.toHaveProperty("readiness");
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3633,7 +3763,13 @@ describe("repository SQL storage", () => {
                   }),
                 );
               }).pipe(
-                Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+                Effect.provide(
+                  repositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
               ),
             );
 
@@ -3676,7 +3812,13 @@ describe("repository SQL storage", () => {
                   });
                 }
               }).pipe(
-                Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+                Effect.provide(
+                  repositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
               ),
             );
           }),
@@ -3740,7 +3882,15 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           yield* Effect.scoped(
@@ -3773,7 +3923,15 @@ describe("repository SQL storage", () => {
                   `,
               );
               expect(migrations).toEqual([{ name: "remove_implementation_decision_content" }]);
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -3828,12 +3986,26 @@ describe("repository SQL storage", () => {
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           const error = yield* Effect.scoped(
             RepositorySql.pipe(
-              Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
             ),
           ).pipe(Effect.flip);
 
@@ -3869,7 +4041,15 @@ describe("repository SQL storage", () => {
                 "clear repository migration ledger",
                 (sql) => sql`DELETE FROM effect_sql_migrations`,
               );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
           );
 
           const error = yield* Effect.scoped(
@@ -4003,13 +4183,21 @@ describe("repository SQL storage", () => {
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
       (directory) => {
         const statePath = join(directory, "state.sqlite");
-        const acquire = (commonDirectory: string) =>
+        const acquire = (commonDirectory: string, lifecycle?: "initialize") =>
           Effect.scoped(
-            RepositorySql.pipe(Effect.provide(repositorySqlLayer({ commonDirectory, statePath }))),
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory,
+                  statePath,
+                  ...(lifecycle === undefined ? {} : { lifecycle }),
+                }),
+              ),
+            ),
           );
 
         return Effect.gen(function* () {
-          yield* acquire(join(directory, "first"));
+          yield* acquire(join(directory, "first"), "initialize");
           const error = yield* acquire(join(directory, "second")).pipe(Effect.flip);
 
           expect(error).toBeInstanceOf(RepositoryIdentityConflict);
@@ -4063,12 +4251,16 @@ describe("repository SQL storage", () => {
           commonDirectory: directory,
           statePath: join(directory, "state.sqlite"),
         };
-        const readMigrationCount = Effect.scoped(
-          migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
+        const initializeMigrationCount = Effect.scoped(
+          migrationCount.pipe(
+            Effect.provide(repositorySqlLayer({ ...config, lifecycle: "initialize" })),
+          ),
         );
-
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(32);
+          expect(yield* initializeMigrationCount).toBe(32);
+          const readMigrationCount = Effect.scoped(
+            migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
+          );
           expect(yield* readMigrationCount).toBe(32);
         });
       },

@@ -1,12 +1,15 @@
 import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../contracts/repositoryStorageError.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
-import type { ChangeCleanup, ChangeRecord } from "./change.js";
-import type { ChangeCancellationPort } from "./changePorts.js";
+import type { ChangeCleanup } from "./change.js";
+import type { CancellationChange, ChangeCancellationPort } from "./changePorts.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
   classifyOwnedPullRequest,
@@ -51,7 +54,7 @@ export type TaskCancellationResult =
       readonly status: "cancelled" | "completed";
       readonly changed: boolean;
       readonly task: TaskRecord;
-      readonly change: ChangeRecord | null;
+      readonly change: CancellationChange | null;
       readonly cleanup: ChangeCleanup | null;
     }
   | {
@@ -77,7 +80,7 @@ export type ChangeCancellationResult =
       readonly ok: true;
       readonly status: "cancelled" | "completed";
       readonly changed: boolean;
-      readonly change: ChangeRecord;
+      readonly change: CancellationChange;
       readonly task: TaskRecord | null;
     }
   | {
@@ -163,7 +166,7 @@ const cancelChangeWithLock = (
 const cancelTask = (
   dependencies: CancellationDependencies,
   input: Parameters<CancellationUseCases["cancelTask"]>[0],
-  selected?: { readonly task: TaskRecord; readonly change: ChangeRecord | undefined },
+  selected?: { readonly task: TaskRecord; readonly change: CancellationChange | undefined },
 ): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const task = selected?.task ?? (yield* dependencies.tasks.getTaskById(input.taskId));
@@ -208,11 +211,12 @@ const cancelTask = (
           : { recoveryEvidence: result.recoveryEvidence }),
       };
     }
+    if (result.task === null) return { ok: false, code: "task_not_found", taskId: input.taskId };
     return {
       ok: true,
       status: result.status,
       changed: result.changed,
-      task: result.task ?? task,
+      task: result.task,
       change: result.change,
       cleanup: result.change.cleanup,
     };
@@ -280,27 +284,35 @@ const cancelChange = (
     });
     if (!cancelled.ok) return { ...cancelled, changeId: change.id };
     const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
-    const task = yield* loadLinkedTask(dependencies, change);
     return {
       ok: true as const,
       status: "cancelled" as const,
       changed: cancelled.changed,
       change: withCleanup.change,
-      task,
+      task: cancelled.task,
     };
   });
 
 const loadLinkedTask = (
   dependencies: CancellationDependencies,
-  change: ChangeRecord,
+  change: CancellationChange,
 ): Effect.Effect<TaskRecord | null, RepositoryStorageError> =>
   change.taskId === null
     ? Effect.succeed(null)
-    : Effect.map(dependencies.tasks.getTaskById(change.taskId), (task) => task ?? null);
+    : Effect.flatMap(dependencies.tasks.getTaskById(change.taskId), (task) =>
+        task === undefined
+          ? Effect.fail(
+              new RepositoryPersistedDataInvalid({
+                operationName: "read linked Task for Change cancellation",
+                cause: new Error("Linked Task was not found"),
+              }),
+            )
+          : Effect.succeed(task),
+      );
 
 const completeMerged = (
   dependencies: CancellationDependencies,
-  change: ChangeRecord,
+  change: CancellationChange,
   now: string,
   mergedPullRequest: GitHubPullRequest,
 ): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
@@ -327,19 +339,18 @@ const completeMerged = (
         : { ok: false as const, code: "change_already_completed" as const, changeId: change.id };
     }
     const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
-    const task = yield* loadLinkedTask(dependencies, change);
     return {
       ok: true as const,
       status: "completed" as const,
       changed: completed.changed,
       change: withCleanup.change,
-      task,
+      task: completed.task,
     };
   });
 
 const closeOwnedPullRequest = (
   dependencies: CancellationDependencies,
-  change: ChangeRecord,
+  change: CancellationChange,
 ):
   | { readonly ok: true; readonly status: "closed"; readonly pullRequest: null }
   | { readonly ok: true; readonly status: "merged"; readonly pullRequest: GitHubPullRequest }
@@ -411,14 +422,14 @@ const conflictingRecoveryEvidence = {
 
 const cleanupTerminalChange = (
   dependencies: CancellationDependencies,
-  change: ChangeRecord,
+  change: CancellationChange,
   now: string,
 ): Effect.Effect<
-  { readonly change: ChangeRecord; readonly cleanup: ChangeCleanup },
+  { readonly change: CancellationChange; readonly cleanup: ChangeCleanup },
   RepositoryStorageError
 > =>
   Effect.map(dependencies.cleanupTerminal(change, now), (result) =>
     result.ok
-      ? { change: result.change, cleanup: result.cleanup }
+      ? { change: { ...change, cleanup: result.cleanup }, cleanup: result.cleanup }
       : { change, cleanup: change.cleanup },
   );

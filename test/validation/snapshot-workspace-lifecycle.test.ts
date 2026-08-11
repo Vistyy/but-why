@@ -12,13 +12,15 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { describe } from "vitest";
 
-import { createSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
+import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
+import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const validationRunId = "run-1";
+const createSnapshotWorkspace = makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace);
 
 describe("Snapshot Workspace lifecycle", () => {
   it.scoped("creates an exact detached worktree, executes commands, and removes it", () =>

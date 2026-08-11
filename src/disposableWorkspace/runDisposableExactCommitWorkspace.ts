@@ -37,6 +37,10 @@ export type RunDisposableExactCommitWorkspaceResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly toolingError: DisposableWorkspaceError };
 
+export type RunDisposableExactCommitWorkspace = <Error>(
+  input: RunDisposableExactCommitWorkspaceInput<Error>,
+) => Effect.Effect<RunDisposableExactCommitWorkspaceResult, Error>;
+
 type SetupAttempt =
   | { readonly ok: true }
   | {

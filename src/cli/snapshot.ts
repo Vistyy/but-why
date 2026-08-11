@@ -4,7 +4,7 @@ import { Effect } from "effect";
 
 import type { CliEnvironment } from "../cli.js";
 import { type CliResult, repoStateLoadError, runtimeError, success } from "../cliResults.js";
-import { loadSnapshotUseCases } from "../repositorySnapshot/loadSnapshotUseCases.js";
+import { loadSnapshotUseCases } from "../repositorySnapshot/composition/loadSnapshotUseCases.js";
 
 export const runSnapshotCommand = (environment: CliEnvironment): Effect.Effect<CliResult> =>
   loadSnapshotUseCases(environment.cwd).pipe(

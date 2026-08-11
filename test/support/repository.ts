@@ -10,6 +10,7 @@ import { type RepositorySql, repositorySqlLayer } from "../../src/sqlite/reposit
 export const testRepositoryConfig = (root: string) => ({
   commonDirectory: join(root, ".git"),
   statePath: join(root, ".git", "but-why", "state.sqlite"),
+  lifecycle: "initialize" as const,
 });
 
 export const withTestRepository = <A, E, R>(
@@ -34,6 +35,7 @@ export const withTemporaryRepositoryState = <A, E>(
           repositorySqlLayer({
             commonDirectory: directory,
             statePath: join(directory, "state.sqlite"),
+            lifecycle: "initialize",
           }),
         ),
       ),

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { it } from "@effect/vitest";
@@ -138,8 +138,7 @@ describe("Shared Repository State Snapshots", () => {
 
       expect(result.status).toBe(1);
       expect(output.snapshotPath).toBeUndefined();
-      expect(existsSync(snapshotsPath(root))).toBe(true);
-      expect(readdirSync(snapshotsPath(root))).toEqual([]);
+      expect(existsSync(snapshotsPath(root))).toBe(false);
     }),
   );
 });

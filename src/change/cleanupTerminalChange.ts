@@ -1,13 +1,8 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import {
-  type ChangeCleanup,
-  type ChangeRecord,
-  changeState,
-  type RemoteChangeBranch,
-} from "./change.js";
-import type { TerminalChangeCleanupPort } from "./changePorts.js";
+import { type ChangeCleanup, changeState, type RemoteChangeBranch } from "./change.js";
+import type { TerminalChangeCleanupPort, TerminalCleanupChange } from "./changePorts.js";
 import type {
   TranscriptIndexOperation,
   TranscriptIndexResult,
@@ -21,12 +16,12 @@ export type ChangeCleanupOperation = (input: {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
-  readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly remoteChangeBranch: RemoteChangeBranch | null;
   readonly discardWork?: boolean;
 }) => ChangeCleanupOperationResult;
 
 export type TerminalCleanupResult =
-  | { readonly ok: true; readonly change: ChangeRecord; readonly cleanup: ChangeCleanup }
+  | { readonly ok: true; readonly change: TerminalCleanupChange; readonly cleanup: ChangeCleanup }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" };
 
 export type ArtifactContentRemovalResult = { readonly ok: true } | { readonly ok: false };
@@ -38,7 +33,7 @@ export type ArtifactLifecycleOwner = {
 };
 
 export type TerminalCleanupOperation = (
-  change: ChangeRecord,
+  change: TerminalCleanupChange,
   now: string,
   discardWork?: boolean,
 ) => Effect.Effect<TerminalCleanupResult, RepositoryStorageError>;
@@ -56,7 +51,7 @@ export const openTerminalCleanup =
 
 const cleanupTerminalChange = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: ChangeRecord,
+  change: TerminalCleanupChange,
   now: string,
   discardWork: boolean | undefined,
 ): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
@@ -74,12 +69,11 @@ const cleanupTerminalChange = (
       });
     }
 
-    const remoteChangeBranch = remoteChangeBranchFor(change);
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
-      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
+      remoteChangeBranch: change.remoteChangeBranch,
       ...(discardWork === undefined ? {} : { discardWork }),
     });
     if (result.state === "pending") {
@@ -95,21 +89,25 @@ const cleanupTerminalChange = (
       : { state: "pending", blockingReason: "artifact_content_removal_failed" };
     const recorded = yield* recordCleanup(dependencies, change, now, cleanup);
     if (!recorded.ok) return recorded;
-    if (recorded.change.cleanup.state === "complete") {
+    if (recorded.cleanup.state === "complete") {
       yield* dependencies.persistence.removeReviewerSessions(change.id);
     }
-    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
+    return {
+      ok: true,
+      change: { ...change, cleanup: recorded.cleanup },
+      cleanup: recorded.cleanup,
+    };
   });
 
 const removeArtifactContent = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: ChangeRecord,
+  change: TerminalCleanupChange,
 ): Effect.Effect<boolean, RepositoryStorageError> =>
   Effect.map(dependencies.artifactLifecycle.removeContent(change.id), (result) => result.ok);
 
 const recordCleanup = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: ChangeRecord,
+  change: TerminalCleanupChange,
   now: string,
   cleanup: ChangeCleanup,
 ): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
@@ -120,29 +118,18 @@ const recordCleanup = (
       now,
     });
     if (!recorded.ok) return { ok: false, code: recorded.code };
-    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
+    return {
+      ok: true,
+      change: { ...change, cleanup: recorded.cleanup },
+      cleanup: recorded.cleanup,
+    };
   });
 
 const indexTranscripts = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: ChangeRecord,
+  change: TerminalCleanupChange,
 ): Effect.Effect<TranscriptIndexResult, RepositoryStorageError> =>
   dependencies.indexTranscripts({
     changeId: change.id,
     reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id),
   });
-
-const remoteChangeBranchFor = (change: ChangeRecord): RemoteChangeBranch | undefined => {
-  const publication = change.publication;
-  return publication !== null && publication.pullRequest !== null
-    ? {
-        owner: publication.target.owner,
-        repo: publication.target.repo,
-        remoteName: publication.target.remoteName,
-        remoteUrl: change.baseRemoteUrl ?? "",
-        branchName: publication.headBranch,
-        targetBranch: publication.target.baseBranch,
-        expectedHeadSha: publication.expectedHeadSha,
-      }
-    : undefined;
-};

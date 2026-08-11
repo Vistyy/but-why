@@ -40,7 +40,7 @@ type ChangeCleanupInput = {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
-  readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly remoteChangeBranch: RemoteChangeBranch | null;
   readonly discardWork?: boolean;
 };
 
@@ -185,7 +185,7 @@ const cleanupRemoteChangeBranch = (
   remote: ChangeCleanupRemote,
 ): ChangeCleanupResult => {
   const branch = input.remoteChangeBranch;
-  if (branch === undefined) return { state: "complete" };
+  if (branch === null) return { state: "complete" };
   const canonicalBranchName = changeBranchNameForRef(input.branchRef);
   if (canonicalBranchName === undefined || canonicalBranchName !== branch.branchName) {
     return { state: "pending", blockingReason: "remote_branch_ownership_mismatch" };

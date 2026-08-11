@@ -1,7 +1,7 @@
 // fallow-ignore-file unused-export duplicate-export -- dynamically loaded command owner
 
 import { Effect } from "effect";
-import { loadCandidateValidationRunInspection } from "../../change/candidateValidation/loadCandidateValidationRunInspection.js";
+import { loadCandidateValidationRunInspection } from "../../change/candidateValidation/composition/loadCandidateValidationRunInspection.js";
 import type { CliResult } from "../../cliResults.js";
 import {
   repoStateLoadError,

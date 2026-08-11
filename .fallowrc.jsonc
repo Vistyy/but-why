@@ -51,6 +51,8 @@
         "patterns": [
           "src/change/candidate/candidate.ts",
           "src/change/change.ts",
+          "src/change/implementationBlocker.ts",
+          "src/change/implementationDecision.ts",
           "src/change/validationRun/cleanup.ts",
           "src/change/validationRun/acceptanceContextSnapshot.ts",
           "src/change/validationRun/toolingErrorKind.ts",
@@ -63,14 +65,15 @@
       {
         "name": "composition",
         "patterns": [
-          "src/change/candidateValidation/candidateValidationLayer.ts",
-          "src/change/candidateValidation/loadCandidateValidationRunInspection.ts",
-          "src/change/loadAbandonValidationRun.ts",
-          "src/change/loadChangeInspection.ts",
-          "src/change/loadChangeSubmit.ts",
-          "src/change/loadChangeLifecycle.ts",
-          "src/task/loadTaskUseCases.ts"
+          "src/change/**/composition/**",
+          "src/change/composition/**",
+          "src/repositorySnapshot/composition/**",
+          "src/task/composition/**"
         ]
+      },
+      {
+        "name": "repository-runtime",
+        "patterns": ["src/repositoryRuntime/**"]
       },
       {
         "name": "storage",
@@ -79,42 +82,49 @@
       {
         "name": "adapters",
         "patterns": [
+          "src/agent/piReviewerProcessExecutor.ts",
           "src/change/changeStartGit.ts",
           "src/change/interactiveSession/herdrInteractiveSessionHost.ts",
+          "src/change/interactiveSession/localInteractiveSessionProfile.ts",
           "src/change/localChangeCleanupGit.ts",
           "src/change/candidateCapture/localGitCandidate.ts",
           "src/change/publication/localCandidatePublicationGit.ts",
+          "src/change/validation/snapshotWorkspaceCleanupGit.ts",
           "src/repositoryPreparation/localRepositoryPreparation.ts",
           "src/submissionEnvironment/gitFacts.ts",
           "src/submissionEnvironment/githubTarget.ts",
-          "src/submissionEnvironment/localGitHubPullRequestGateway.ts"
+          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
+          "src/submissionEnvironment/remoteChangeBase.ts",
+          "src/submissionEnvironment/repositoryFile.ts",
+          "src/disposableWorkspace/disposableWorkspaceGit.ts",
+          "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
+          "src/init/git.ts",
+          "src/init/globalConfig.ts",
+          "src/init/repoConfig.ts"
         ]
       },
       {
-        "name": "change-workflows",
-        "patterns": [
-          "src/change/candidateValidation/inspectCandidateValidationRun.ts",
-          "src/change/changeLifecycle.ts",
-          "src/change/inspectChange.ts",
-          "src/change/reconcileChange.ts",
-          "src/change/submitChange.ts",
-          "src/change/candidateCapture/captureLocalCandidate.ts",
-          "src/change/publication/candidatePublication.ts"
-        ]
+        "name": "behavior",
+        "patterns": ["src/change/**", "src/repositorySnapshot/**", "src/task/**"]
       }
     ],
     "rules": [
       {
         "from": "cli",
-        "allow": ["adapters", "change-workflows", "composition", "domain"]
+        "allow": ["behavior", "composition", "domain", "repository-runtime"]
       },
       {
         "from": "domain",
         "allow": []
       },
       {
-        "from": "change-workflows",
-        "allow": ["domain"]
+        "from": "repository-runtime",
+        "allow": ["adapters", "storage"]
+      },
+      {
+        "from": "behavior",
+        "allow": ["domain"],
+        "allowTypeOnly": ["adapters", "repository-runtime"]
       }
     ]
   }

@@ -82,7 +82,7 @@ describe("by change reconcile", () => {
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: changes.reads.getChangeById,
+              getChangeById: changes.delivery.getChangeById,
               listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
               completeMergedChange: changes.delivery.completeMergedChange,
             },
@@ -201,7 +201,7 @@ describe("by change reconcile", () => {
           for (const pullRequest of unexpected) {
             const reconciliation = openChangeReconciliation({
               persistence: {
-                getChangeById: changes.reads.getChangeById,
+                getChangeById: changes.delivery.getChangeById,
                 listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
                 completeMergedChange: changes.delivery.completeMergedChange,
               },
@@ -297,7 +297,7 @@ describe("by change reconcile", () => {
         let mergedHead = "merged-head";
         const reconciliation = openChangeReconciliation({
           persistence: {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: changes.delivery.completeMergedChange,
           },
@@ -421,7 +421,7 @@ describe("by change reconcile", () => {
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: changes.reads.getChangeById,
+              getChangeById: changes.delivery.getChangeById,
               listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
               completeMergedChange: changes.delivery.completeMergedChange,
             },
@@ -533,7 +533,7 @@ describe("by change reconcile", () => {
           if (!recorded.ok) throw new Error(recorded.code);
           const reconciliation = openChangeReconciliation({
             persistence: {
-              getChangeById: changes.reads.getChangeById,
+              getChangeById: changes.delivery.getChangeById,
               listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
               completeMergedChange: changes.delivery.completeMergedChange,
             },
@@ -647,7 +647,7 @@ describe("by change reconcile", () => {
           let pullRequestObservations = 0;
           let capturedInput: CompleteMergedChangeInput | undefined;
           const persistence: ChangeReconciliationPort = {
-            getChangeById: changes.reads.getChangeById,
+            getChangeById: changes.delivery.getChangeById,
             listChangesForReconciliation: changes.delivery.listChangesForReconciliation,
             completeMergedChange: (input) => {
               capturedInput = input;
