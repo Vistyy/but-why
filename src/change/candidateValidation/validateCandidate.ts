@@ -194,22 +194,16 @@ const makeCandidateValidation = (dependencies: {
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,
       copyFiles: started.authority.policy.copyFiles,
-      recordWorkspaceSetup: (setup) =>
-        dependencies.persistence.recordWorkspaceSetup({
-          validationRunId: setup.validationRunId,
-          expectedCommitSha: setup.expectedCommitSha,
-          worktreePath: setup.worktreePath,
-          cleanupWorkspace: setup.cleanupResult.workspace,
-          now: input.now,
+      recordWorkspaceCleanup: (cleanupResult) =>
+        dependencies.persistence.recordWorkspaceCleanup({
+          validationRunId: started.validationRunId,
+          cleanupWorkspace: cleanupResult.workspace,
         }),
       recordInterruptedCleanupResult: (toolingError) =>
         dependencies.persistence
-          .recordWorkspaceSetup({
+          .recordWorkspaceCleanup({
             validationRunId: toolingError.validationRunId,
-            expectedCommitSha: toolingError.expectedCommitSha,
-            worktreePath: toolingError.worktreePath,
             cleanupWorkspace: toolingError.cleanupResult.workspace,
-            now: input.now,
           })
           .pipe(Effect.ignore),
       runInWorkspace: (activeWorkspace) =>
@@ -253,12 +247,9 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    yield* dependencies.persistence.recordWorkspaceSetup({
+    yield* dependencies.persistence.recordWorkspaceCleanup({
       validationRunId: started.validationRunId,
-      expectedCommitSha: workspace.setup.expectedCommitSha,
-      worktreePath: workspace.setup.worktreePath,
       cleanupWorkspace: workspace.setup.cleanupResult.workspace,
-      now: input.now,
     });
     const activeResult = workspace.activeWorkspaceResult;
     const toolingFailures =

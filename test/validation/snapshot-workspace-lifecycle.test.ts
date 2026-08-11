@@ -27,16 +27,16 @@ describe("Snapshot Workspace lifecycle", () => {
       const commitSha = git(repository, "rev-parse", "HEAD");
       writeFileSync(join(repository, ".env.test"), "LOCAL_INPUT=yes\n");
       const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
-      const setups: unknown[] = [];
+      const cleanupResults: unknown[] = [];
 
       const result = yield* createSnapshotWorkspace({
         repoRoot: repository,
         validationRunId,
         submittedSha: commitSha,
         copyFiles: [".env.test"],
-        recordWorkspaceSetup: (setup) =>
+        recordWorkspaceCleanup: (cleanupResult) =>
           Effect.sync(() => {
-            setups.push(setup);
+            cleanupResults.push(cleanupResult);
           }),
         runInWorkspace: (workspace) =>
           Effect.promise(async () => {
@@ -62,12 +62,7 @@ describe("Snapshot Workspace lifecycle", () => {
           cleanupResult: { workspace: "removed" },
         },
       });
-      expect(setups[0]).toEqual({
-        validationRunId,
-        expectedCommitSha: commitSha,
-        worktreePath,
-        cleanupResult: { workspace: "not_created" },
-      });
+      expect(cleanupResults[0]).toEqual({ workspace: "not_created" });
       expect(existsSync(worktreePath)).toBe(false);
       expect(git(repository, "for-each-ref", "--format=%(refname)", "refs/but-why")).toBe("");
     }),

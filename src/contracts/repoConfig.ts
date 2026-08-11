@@ -88,7 +88,7 @@ const repoConfigSchema = Schema.Struct({
       agentProfile: Schema.optional(agentProfileReferenceSchema),
     }),
   ),
-  validationWorkspace: Schema.optional(repoSnapshotWorkspaceConfigSchema),
+  snapshotWorkspace: Schema.optional(repoSnapshotWorkspaceConfigSchema),
 });
 
 export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;

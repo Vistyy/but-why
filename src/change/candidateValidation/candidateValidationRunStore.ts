@@ -88,12 +88,9 @@ export type RecordCandidateSpecialistRoundInput = Omit<
   readonly findings: NonNullable<RecordCandidateValidationCommandRoundInput["findings"]>;
 };
 
-export type RecordCandidateWorkspaceSetupInput = {
+export type RecordCandidateWorkspaceCleanupInput = {
   readonly validationRunId: string;
-  readonly expectedCommitSha: string;
-  readonly worktreePath: string;
-  readonly cleanupWorkspace: string;
-  readonly now: string;
+  readonly cleanupWorkspace: "removed" | "not_created" | "failed";
 };
 
 export type AbandonCandidateValidationRunInput = {

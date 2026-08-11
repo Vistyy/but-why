@@ -24,7 +24,9 @@ export type RunDisposableExactCommitWorkspaceInput<Error> = {
   readonly workspaceId: string;
   readonly commitSha: string;
   readonly copyFiles: readonly string[];
-  readonly recordWorkspaceSetup?: (setup: DisposableWorkspaceSetup) => Effect.Effect<void, Error>;
+  readonly recordWorkspaceCleanup?: (
+    cleanupResult: DisposableWorkspaceCleanupResult,
+  ) => Effect.Effect<void, Error>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: DisposableWorkspaceError,
   ) => Effect.Effect<void>;
@@ -49,13 +51,8 @@ export const runDisposableExactCommitWorkspace = <Error>(
     const worktreePath = expectedDisposableWorkspacePath(input.repoRoot, input.workspaceId);
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
 
-    if (input.recordWorkspaceSetup !== undefined) {
-      yield* input.recordWorkspaceSetup({
-        workspaceId: input.workspaceId,
-        commitSha: input.commitSha,
-        worktreePath,
-        cleanupResult: initialCleanupResult,
-      });
+    if (input.recordWorkspaceCleanup !== undefined) {
+      yield* input.recordWorkspaceCleanup(initialCleanupResult);
     }
 
     const attempt = yield* withInterruptedCleanupRecording(
@@ -188,14 +185,8 @@ const runWorkspaceScope = <Error>(
     );
     if (!copied.ok) return setupFailed("copy_allowlisted_file", copied.message);
 
-    if (input.recordWorkspaceSetup !== undefined) {
-      yield* input.recordWorkspaceSetup({
-        workspaceId: input.workspaceId,
-        commitSha: input.commitSha,
-        workspaceHead: input.commitSha,
-        worktreePath,
-        cleanupResult: yield* Ref.get(cleanupResult),
-      });
+    if (input.recordWorkspaceCleanup !== undefined) {
+      yield* input.recordWorkspaceCleanup(yield* Ref.get(cleanupResult));
     }
 
     if (input.runInWorkspace !== undefined) {

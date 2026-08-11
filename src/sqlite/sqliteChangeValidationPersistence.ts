@@ -114,22 +114,28 @@ const makeSqliteChangeValidationAdapter = (
     repository.transaction("list Candidate Validation Runs", (sql) =>
       listRunsForCandidate(sql, candidateId),
     ),
-  recordWorkspaceSetup: (input) =>
-    repository.operation("record Candidate Snapshot Workspace setup", (sql) =>
-      Effect.asVoid(sql`
-          INSERT INTO candidate_snapshot_workspaces (
-            validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
-          ) VALUES (
-            ${input.validationRunId}, ${input.expectedCommitSha}, ${input.worktreePath},
-            ${input.cleanupWorkspace}, ${input.now}
-          )
-          ON CONFLICT (validation_run_id) DO UPDATE SET
-            expected_commit_sha = excluded.expected_commit_sha,
-            workspace_path = excluded.workspace_path,
-            cleanup_workspace = excluded.cleanup_workspace,
-            created_at = excluded.created_at
-        `),
-    ),
+  recordWorkspaceCleanup: (input) =>
+    repository
+      .operation(
+        "record Candidate Snapshot Workspace cleanup",
+        (sql) =>
+          sql<{ readonly validationRunId: string }>`
+          UPDATE candidate_snapshot_workspaces
+          SET cleanup_workspace = ${input.cleanupWorkspace}
+          WHERE validation_run_id = ${input.validationRunId}
+          RETURNING validation_run_id AS validationRunId
+        `,
+      )
+      .pipe(
+        Effect.flatMap((updated) =>
+          updated.length === 1 && updated[0]?.validationRunId === input.validationRunId
+            ? Effect.void
+            : invalidData(
+                "record Candidate Snapshot Workspace cleanup",
+                "Snapshot Workspace cleanup requires its persisted Validation Run identity.",
+              ),
+        ),
+      ),
   recordToolingFailure: (input) =>
     repository.operation("record Candidate validation Tooling Failure", (sql) =>
       Effect.asVoid(sql`
@@ -189,7 +195,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
     return {
       startOrReuse: adapter.startOrReuse,
       complete: adapter.complete,
-      recordWorkspaceSetup: adapter.recordWorkspaceSetup,
+      recordWorkspaceCleanup: adapter.recordWorkspaceCleanup,
       recordToolingFailure: adapter.recordToolingFailure,
       recordPrepareRound: adapter.recordPrepareRound,
       recordCheckRound: adapter.recordCheckRound,

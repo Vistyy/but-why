@@ -36,7 +36,7 @@ A complete example is:
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
   },
-  "validationWorkspace": {
+  "snapshotWorkspace": {
     "copyFiles": [".env.test"]
   },
   "review": {
@@ -66,7 +66,7 @@ A complete example is:
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
-`validationWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
+`snapshotWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
 `review` selects Acceptance Review and Specialists.
 `reviewers` supplies Specialist instruction files.
 Each configured Specialist instruction file must positively define exactly one concern.
@@ -115,7 +115,7 @@ Any Check Finding stops reviewer phases for that Candidate.
 
 ## Copied local files
 
-`validationWorkspace.copyFiles` is optional.
+`snapshotWorkspace.copyFiles` is optional.
 When present, it must be a non-empty list of normalized paths relative to the Local Repository's main checkout.
 The Repo Config schema rejects paths that are not repo-relative or that use parent traversal.
 During Snapshot Workspace setup, each path must identify an existing regular file.

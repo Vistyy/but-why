@@ -21,8 +21,8 @@ export type CreateSnapshotWorkspaceInput = {
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
-  readonly recordWorkspaceSetup?: (
-    setup: SnapshotWorkspaceSetup,
+  readonly recordWorkspaceCleanup?: (
+    cleanupResult: SnapshotWorkspaceSetup["cleanupResult"],
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: SnapshotWorkspaceToolingError,
@@ -75,12 +75,11 @@ const createSnapshotWorkspaceAdapter = (
       workspaceId: input.validationRunId,
       commitSha: input.submittedSha,
       copyFiles: input.copyFiles,
-      ...(input.recordWorkspaceSetup === undefined
+      ...(input.recordWorkspaceCleanup === undefined
         ? {}
         : {
-            recordWorkspaceSetup: (setup: DisposableWorkspaceSetup) =>
-              input.recordWorkspaceSetup?.(validationSetup(input.validationRunId, setup)) ??
-              Effect.void,
+            recordWorkspaceCleanup: (cleanupResult) =>
+              input.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void,
           }),
       ...(input.recordInterruptedCleanupResult === undefined
         ? {}

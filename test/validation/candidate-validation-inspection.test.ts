@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -47,12 +48,9 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("abandons an interrupted Validation Run and is idempotent", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      yield* fixture.runStore.recordWorkspaceSetup({
+      yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
-        expectedCommitSha: "head-sha",
-        worktreePath: expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId),
         cleanupWorkspace: "not_created",
-        now,
       });
       const abandoned = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
@@ -88,18 +86,43 @@ describe("Candidate-owned Validation Run inspection", () => {
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       const worktreePath = expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId);
-      yield* fixture.runStore.recordWorkspaceSetup({
+      yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
-        expectedCommitSha: "head-sha",
-        worktreePath,
         cleanupWorkspace: "not_created",
-        now,
       });
 
       expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toMatchObject({
         validationRunId: fixture.validationRunId,
         worktreePath,
       });
+    }),
+  );
+
+  it.effect("rejects cleanup evidence without persisted Snapshot Workspace identity", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
+      const started = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        validationRunId: "run-without-workspace",
+        now: later,
+      });
+      if (started.reused || "blocked" in started) throw new Error("Expected a new Validation Run");
+
+      const error = yield* fixture.runStore
+        .recordWorkspaceCleanup({
+          validationRunId: started.validationRunId,
+          cleanupWorkspace: "removed",
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
     }),
   );
 
@@ -695,6 +718,10 @@ const candidateValidationFixture = () =>
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
+        validationRunId: "fixture-validation-run",
+        workspaceSetup: {
+          worktreePath: expectedSnapshotWorkspacePath(root, "fixture-validation-run"),
+        },
         now,
       }),
     );
@@ -756,9 +783,11 @@ const candidateValidationFixture = () =>
       recordToolingFailure: (
         input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
-      recordWorkspaceSetup: (
-        input: Parameters<ChangeValidationTestDependencies["execution"]["recordWorkspaceSetup"]>[0],
-      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceSetup(input)),
+      recordWorkspaceCleanup: (
+        input: Parameters<
+          ChangeValidationTestDependencies["execution"]["recordWorkspaceCleanup"]
+        >[0],
+      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceCleanup(input)),
       getAbandonmentContext: (runId: string) =>
         withPersistence((persistence) => persistence.abandonment.getAbandonmentContext(runId)),
       complete: (input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0]) =>
