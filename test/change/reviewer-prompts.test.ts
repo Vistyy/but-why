@@ -4,7 +4,7 @@ import {
   buildAcceptanceReviewerPrompt,
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
-} from "../../src/agent/reviewerPrompts.js";
+} from "../../src/change/reviewerPrompts.js";
 import { continuationPrompt } from "../../src/change/reviewerSession/reviewerSession.js";
 
 const expectOrdered = (prompt: string, values: readonly string[]): void => {

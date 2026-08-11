@@ -64,7 +64,13 @@ This section is complete when the Operator's selected Work Route and its selecte
 
 This section is complete when the authorized Tasks and Task Dependencies are recorded, unapproved, and unlinked to a Change.
 
-## Approve a Task
+## Review and approve a Task
+
+When the Operator requests an advisory Task Review before approval, run `by task submit <task-id>` for the exact New Task proposal.
+A Task Review does not approve the Task.
+If Task Submission reports an Active Task Review, inspect it with `by task review show <review-id>`.
+If its process has stopped and it cannot finish, use the reported exact abandonment command.
+Resolve every applicable Finding by updating the Task proposal before requesting another review.
 
 When the Operator explicitly requests Task Approval, inspect the selected recorded Task and run `by task approve <task-id>`.
 Treat the returned Task state as authoritative, and run `by task show <task-id>` only when required approval or Change-link state is omitted.
@@ -130,6 +136,9 @@ by task dependencies replace <task-id> --depends-on <task-id> [--depends-on <tas
 by task dependencies clear <task-id>
 by task list [--all] [--state <state>] [--limit <positive integer | all>]
 by task show <task-id>
+by task submit <task-id>
+by task review show <review-id>
+by task review abandon <review-id> --reason <reason>
 by task approve <task-id>
 by task context <task-id>
 by task context draft <task-id>

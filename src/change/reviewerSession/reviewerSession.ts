@@ -5,13 +5,13 @@ import { join } from "node:path";
 import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
-import {
-  currentCandidateReReviewInstructions,
-  previousFindingsPrompt,
-} from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
+import {
+  currentCandidateReReviewInstructions,
+  previousFindingsPrompt,
+} from "../reviewerPrompts.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 
 export type ReviewerSessionIdentity = {

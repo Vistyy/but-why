@@ -13,6 +13,8 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
+Task Submit reads Repo Config from the exact captured Review Base for Repository Preparation, copied local files, and the Agent Environment.
+Its fixed built-in reviewer policy uses the Global default Agent Profile.
 Change Submit reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, captures a Candidate, then reads the Candidate's tracked Repo Config for reviewer policy and Repo Agent Profiles.
 The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
 Global Config remains resolved from the configured user path.
@@ -89,6 +91,8 @@ Change Submit starts Checks without an empty Prepare phase.
 
 Change Start runs Repository Preparation in the new Managed Worktree.
 A failure preserves the Change and Managed Worktree, is recorded as the current preparation failure, and does not block implementation or Submission.
+Task Submit runs it before advisory reviewer execution in the exact Review Base workspace.
+A Task Review preparation failure completes as tooling failed only after exact workspace cleanup succeeds.
 Change Submit runs it before Checks in the Snapshot Workspace.
 Retry it with:
 
