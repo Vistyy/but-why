@@ -88,6 +88,51 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
   ),
 );
 
+it.scoped("rejects malformed Task states selected by Change Start", () =>
+  withTemporaryRepositoryState(({ commonDirectory }) =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const starts = yield* openSqliteChangeStartPersistence();
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "Prerequisite");
+      yield* createTask(tasks, "Dependent", ["BY-1"]);
+      yield* createTask(tasks, "Task with existing Change");
+      yield* tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow });
+      yield* tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow });
+
+      yield* repository.operation("inject malformed prerequisite Task state", (sql) =>
+        Effect.gen(function* () {
+          yield* sql`PRAGMA ignore_check_constraints = ON`;
+          yield* sql`UPDATE tasks SET state = 'unsupported' WHERE id = 'BY-1'`;
+        }),
+      );
+      yield* expectPersistedDataInvalid(starts.prepareTask(publicTaskId("BY-2")));
+      yield* repository.operation(
+        "restore prerequisite Task state",
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`,
+      );
+
+      const started = yield* starts.create({
+        id: "change-with-malformed-task-state",
+        repositoryCommonDirectory: commonDirectory,
+        branchRef: "refs/heads/but-why/change-with-malformed-task-state",
+        baseRef: "refs/remotes/origin/main",
+        baseRemoteUrl: "https://github.com/acme/repo.git",
+        startingCommit: "1111111111111111111111111111111111111111",
+        worktreePath: `${commonDirectory}/worktrees/change-with-malformed-task-state`,
+        taskId: publicTaskId("BY-3"),
+        now: secondNow,
+      });
+      if (!started.ok) throw new Error(started.code);
+      yield* repository.operation(
+        "inject malformed existing Change Task state",
+        (sql) => sql`UPDATE tasks SET state = 'unsupported' WHERE id = 'BY-3'`,
+      );
+      yield* expectPersistedDataInvalid(starts.prepareTask(publicTaskId("BY-3")));
+    }),
+  ),
+);
+
 it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

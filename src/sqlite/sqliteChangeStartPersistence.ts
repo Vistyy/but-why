@@ -6,7 +6,6 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { TaskState } from "../task/lifecycle.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -27,6 +26,7 @@ import {
   decodePersisted,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
+  decodeTaskState,
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
 } from "./sqliteTaskReadModel.js";
@@ -119,7 +119,7 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (row === undefined) return { ok: false as const, code: "task_not_found" as const };
     const task = yield* decodePersisted("prepare Task-backed Change Start", () => ({
       ...decodeTaskContextRow(row),
-      state: row.state,
+      state: decodeTaskState(row.state),
     }));
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
@@ -141,10 +141,14 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
 
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly state: TaskState }>`
+    const rows = yield* sql<{ readonly state: unknown }>`
       SELECT state FROM tasks WHERE id = ${taskId}
     `;
-    return rows[0] === undefined ? undefined : { state: rows[0].state };
+    return rows[0] === undefined
+      ? undefined
+      : yield* decodePersisted("prepare Task-backed Change Start", () => ({
+          state: decodeTaskState(rows[0]?.state),
+        }));
   });
 
 const recordPrepareOutcome = (
@@ -280,5 +284,5 @@ const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type StoredEligibilityTaskRow = StoredTaskContextRow & {
-  readonly state: TaskState;
+  readonly state: unknown;
 };
