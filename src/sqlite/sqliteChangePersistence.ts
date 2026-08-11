@@ -40,6 +40,7 @@ import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import {
   decodeValidationRun,
+  decodeValidationRunPolicy,
   type UnknownValidationRunRow,
   validateValidationRunImplementationDecisionRelationships,
   validateValidationRunLatestResolvedBlockerRelationship,
@@ -820,10 +821,15 @@ const getPassingEvidence = (
           selectedCandidate.changeBaseSha !== query.changeBaseSha)
       )
         continue;
-      const run = yield* decodePersisted(operationName, () => decodeValidationRun(row));
-      if (query?.policy !== undefined && !isDeepStrictEqual(run.record.policy, query.policy)) {
+      if (
+        query?.policy !== undefined &&
+        !isDeepStrictEqual(
+          yield* decodePersisted(operationName, () => decodeValidationRunPolicy(row).policy),
+          query.policy,
+        )
+      )
         continue;
-      }
+      const run = yield* decodePersisted(operationName, () => decodeValidationRun(row));
       yield* decodePersisted(operationName, () =>
         validateValidationRunImplementationDecisionRelationships(run, authority.id),
       );

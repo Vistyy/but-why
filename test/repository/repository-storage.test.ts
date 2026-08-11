@@ -1463,6 +1463,28 @@ describe("repository SQL storage", () => {
           });
 
           yield* repository.operation(
+            "corrupt Run authority outside a policy-mismatched query",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET implementation_decisions = '{}'
+                  WHERE id = ${first.validationRunId}`,
+          );
+          expect(
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
+              policy: {
+                checks: [{ id: "other", command: "true", timeoutSeconds: 30 }],
+                copyFiles: [],
+                specialistReviews: [],
+              },
+            }),
+          ).toBeUndefined();
+          yield* repository.operation(
+            "restore Run authority after policy-mismatched query",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET implementation_decisions = ${JSON.stringify([recordedDecision.decision])}
+                  WHERE id = ${first.validationRunId}`,
+          );
+
+          yield* repository.operation(
             "corrupt Decision outside a base-mismatched query",
             (sql) =>
               sql`UPDATE implementation_decisions SET choice = x'01' WHERE id = ${recordedDecision.decision.id}`,
