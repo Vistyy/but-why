@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { disposableWorkspaceIgnorePaths } from "../disposableWorkspace/disposableWorkspacePath.js";
 
-export const butWhyGitignoreBlock = `# But Why?\n.sandcastle/worktrees/\n.sandcastle/logs/\n.sandcastle/patches/\n.sandcastle/.env`;
+export const butWhyGitignoreBlock = `# But Why?\n${disposableWorkspaceIgnorePaths.join("\n")}`;
 
 export const ensureGitignoreBlock = (path: string): boolean => {
   const original = existsSync(path) ? readFileSync(path, "utf8") : "";
@@ -51,7 +52,4 @@ const isManagedStateLine = (line: string | undefined): boolean =>
   line === ".but-why/state.sqlite" ||
   line === ".but-why/state.sqlite-*" ||
   line === ".but-why/artifacts/" ||
-  line === ".sandcastle/worktrees/" ||
-  line === ".sandcastle/logs/" ||
-  line === ".sandcastle/patches/" ||
-  line === ".sandcastle/.env";
+  disposableWorkspaceIgnorePaths.some((path) => line === path);

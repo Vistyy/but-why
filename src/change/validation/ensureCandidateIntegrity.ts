@@ -1,14 +1,14 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 
 import { GitToolingFailed } from "./validationToolingFailures.js";
 
 export const ensureCandidateIntegrity = async (input: {
-  readonly sandbox: Pick<Sandbox, "exec">;
+  readonly commandExecutor: WorkspaceCommandExecutor;
   readonly commandCwd?: string;
   readonly expectedHeadSha: string;
   readonly allowedUntrackedFiles: readonly string[];
 }): Promise<void> => {
-  const result = await input.sandbox.exec(
+  const result = await input.commandExecutor(
     "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
     input.commandCwd === undefined ? undefined : { cwd: input.commandCwd },
   );

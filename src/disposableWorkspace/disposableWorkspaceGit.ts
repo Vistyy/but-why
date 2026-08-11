@@ -160,7 +160,7 @@ export const cleanupExactDisposableWorkspace = (
         ? "removed"
         : "failed";
 
-  // Sandcastle checks out a non-branch workspace ref as detached, so handle the exact ref before using its absence to authorize detached worktree removal.
+  // The workspace runtime checks out a non-branch workspace ref as detached, so handle the exact ref before using its absence to authorize detached worktree removal.
   const cleanedTempRef = worktree === "detached" ? cleanupTempRef() : undefined;
   const cleanedWorktree = cleanedTempRef === "failed" ? "failed" : cleanupWorktree();
   const finalTempRef = cleanedTempRef ?? cleanupTempRef();

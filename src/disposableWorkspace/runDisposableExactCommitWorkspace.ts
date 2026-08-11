@@ -1,9 +1,12 @@
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
 
-import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
-import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import { Effect, Ref, type Scope } from "effect";
+import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
+import {
+  WorkspaceCommandExecutionFailed,
+  type WorkspaceCommandExecutor,
+} from "../command/workspaceCommand.js";
 import type {
   DisposableWorkspace,
   DisposableWorkspaceCleanupResult,
@@ -18,6 +21,7 @@ import {
   removeDisposableWorktree,
 } from "./disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "./disposableWorkspacePath.js";
+import { createWorkspaceRuntime } from "./workspaceRuntimeAdapter.js";
 
 export type RunDisposableExactCommitWorkspaceInput<Error> = {
   readonly repoRoot: string;
@@ -55,15 +59,14 @@ type DisposableExactCommitWorkspaceAdapters = {
   readonly inspectExistingWorktree: (worktreePath: string) => ExistingWorktree;
   readonly removeWorktree: (repoRoot: string, worktreePath: string) => CleanupAttempt;
   readonly verifyWorktreeRemoved: (repoRoot: string, worktreePath: string) => boolean;
-  readonly createSandcastleWorktree: (input: {
+  readonly createWorkspace: (input: {
     readonly repoRoot: string;
     readonly tempRefName: string;
     readonly copyFiles: readonly string[];
-    readonly sandboxProvider: SandboxProvider;
   }) => Effect.Effect<
     | {
         readonly ok: true;
-        readonly sandbox: SandboxLike;
+        readonly workspace: WorkspaceAdapter;
         readonly worktreePath: string;
       }
     | {
@@ -72,10 +75,17 @@ type DisposableExactCommitWorkspaceAdapters = {
         readonly worktreePath?: string;
       }
   >;
-  readonly readWorktreeHead: (sandbox: SandboxLike) => Effect.Effect<CommandResult>;
+  readonly readWorktreeHead: (
+    workspace: WorkspaceAdapter,
+  ) => Effect.Effect<CommandResult, WorkspaceCommandExecutionFailed>;
 };
 
-type SandboxLike = Pick<Sandbox, "close" | "exec" | "run" | "worktreePath">;
+type WorkspaceAdapter = {
+  readonly close: () => Promise<{ readonly preservedWorktreePath?: string }>;
+  readonly commandExecutor: WorkspaceCommandExecutor;
+  readonly reviewerExecutor: ReviewerProcessExecutor;
+  readonly worktreePath: string;
+};
 
 type CommandResult = {
   readonly exitCode: number;
@@ -97,7 +107,7 @@ type ExistingWorktree =
 type WorkspaceScopeState = {
   readonly tempRefName: string;
   readonly expectedWorktreePath: string;
-  sandbox: SandboxLike | undefined;
+  workspace: WorkspaceAdapter | undefined;
   worktreePath: string | undefined;
 };
 
@@ -141,7 +151,7 @@ const runDisposableExactCommitWorkspaceWithAdapters = <Error>(
     const state: WorkspaceScopeState = {
       tempRefName,
       expectedWorktreePath,
-      sandbox: undefined,
+      workspace: undefined,
       worktreePath: undefined,
     };
 
@@ -263,7 +273,7 @@ const setupDisposableWorkspaceScope = <Error>(
       return existingWorktreeAttempt;
     }
 
-    const worktreeAttempt = yield* acquireSandcastleWorktree(input, state, adapters, cleanupResult);
+    const worktreeAttempt = yield* acquireWorkspace(input, state, adapters, cleanupResult);
 
     if (!worktreeAttempt.ok) {
       return worktreeAttempt;
@@ -273,7 +283,7 @@ const setupDisposableWorkspaceScope = <Error>(
       input,
       state,
       adapters,
-      worktreeAttempt.sandbox,
+      worktreeAttempt.workspace,
     );
 
     if (!verifiedWorkspace.ok) {
@@ -289,7 +299,8 @@ const setupDisposableWorkspaceScope = <Error>(
 
     if (input.runInWorkspace !== undefined) {
       yield* input.runInWorkspace({
-        sandbox: worktreeAttempt.sandbox,
+        commandExecutor: worktreeAttempt.workspace.commandExecutor,
+        reviewerExecutor: worktreeAttempt.workspace.reviewerExecutor,
         worktreePath: state.worktreePath ?? state.expectedWorktreePath,
       });
     }
@@ -351,14 +362,14 @@ const prepareExistingWorktree = <Error>(
     existingWorktree.branch !== state.tempRefName
   ) {
     return setupFailed(
-      "create_sandcastle_workspace",
+      "create_disposable_workspace",
       `Disposable worktree already exists for a different workspace reference: ${state.expectedWorktreePath}`,
     );
   }
 
   if (existingWorktree.head !== input.commitSha) {
     return setupFailed(
-      "create_sandcastle_workspace",
+      "create_disposable_workspace",
       `Disposable worktree already exists for a different commit: ${state.expectedWorktreePath}`,
     );
   }
@@ -372,7 +383,7 @@ const prepareExistingWorktree = <Error>(
 
   if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
     return setupFailed(
-      "create_sandcastle_workspace",
+      "create_disposable_workspace",
       `Disposable worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
       state.expectedWorktreePath,
     );
@@ -382,13 +393,13 @@ const prepareExistingWorktree = <Error>(
   return { ok: true };
 };
 
-const acquireSandcastleWorktree = <Error>(
+const acquireWorkspace = <Error>(
   input: RunDisposableExactCommitWorkspaceInput<Error>,
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
 ): Effect.Effect<
-  { readonly ok: true; readonly sandbox: SandboxLike } | WorkspaceSetupFailure,
+  { readonly ok: true; readonly workspace: WorkspaceAdapter } | WorkspaceSetupFailure,
   Error,
   Scope.Scope
 > =>
@@ -398,19 +409,18 @@ const acquireSandcastleWorktree = <Error>(
     );
 
     state.worktreePath = state.expectedWorktreePath;
-    const worktree = yield* adapters.createSandcastleWorktree({
+    const worktree = yield* adapters.createWorkspace({
       repoRoot: input.repoRoot,
       tempRefName: state.tempRefName,
       copyFiles: input.copyFiles,
-      sandboxProvider: noSandbox(),
     });
 
     if (!worktree.ok) {
       state.worktreePath = worktree.worktreePath ?? state.expectedWorktreePath;
-      return setupFailed("create_sandcastle_workspace", worktree.message, state.worktreePath);
+      return setupFailed("create_disposable_workspace", worktree.message, state.worktreePath);
     }
 
-    state.sandbox = worktree.sandbox;
+    state.workspace = worktree.workspace;
     state.worktreePath = worktree.worktreePath;
 
     if (input.recordWorkspaceSetup !== undefined) {
@@ -424,21 +434,29 @@ const acquireSandcastleWorktree = <Error>(
       });
     }
 
-    return { ok: true, sandbox: worktree.sandbox };
+    return { ok: true, workspace: worktree.workspace };
   });
 
 const verifyWorktreeHead = <Error>(
   input: RunDisposableExactCommitWorkspaceInput<Error>,
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
-  sandbox: SandboxLike,
+  workspace: WorkspaceAdapter,
 ): Effect.Effect<WorkspaceSetupAttempt> =>
   Effect.gen(function* () {
-    const headResult = yield* adapters.readWorktreeHead(sandbox);
+    const headAttempt = yield* Effect.either(adapters.readWorktreeHead(workspace));
+    if (headAttempt._tag === "Left") {
+      return setupFailed(
+        "create_disposable_workspace",
+        headAttempt.left.message,
+        state.worktreePath,
+      );
+    }
+    const headResult = headAttempt.right;
 
     if (headResult.exitCode !== 0) {
       return setupFailed(
-        "create_sandcastle_workspace",
+        "create_disposable_workspace",
         [headResult.stderr, headResult.stdout].join("\n").trim(),
         state.worktreePath,
       );
@@ -448,7 +466,7 @@ const verifyWorktreeHead = <Error>(
 
     if (worktreeHead !== input.commitSha) {
       return setupFailed(
-        "create_sandcastle_workspace",
+        "create_disposable_workspace",
         `Disposable worktree HEAD ${worktreeHead} did not match requested commit ${input.commitSha}.`,
         state.worktreePath,
       );
@@ -483,20 +501,14 @@ const productionDisposableExactCommitWorkspaceAdapters: DisposableExactCommitWor
       ? { ok: true }
       : { ok: false, message: "Disposable worktree removal failed." },
   verifyWorktreeRemoved: isDisposableWorktreeRemoved,
-  createSandcastleWorktree: (input) =>
+  createWorkspace: (input) =>
     Effect.promise(async () => {
       try {
-        const sandbox = await createSandbox({
-          cwd: input.repoRoot,
-          branch: input.tempRefName,
-          sandbox: input.sandboxProvider,
-          copyToWorktree: [...input.copyFiles],
-        });
-
+        const workspace = await createWorkspaceRuntime(input);
         return {
           ok: true,
-          sandbox,
-          worktreePath: sandbox.worktreePath,
+          workspace,
+          worktreePath: workspace.worktreePath,
         } as const;
       } catch (error) {
         return {
@@ -506,7 +518,14 @@ const productionDisposableExactCommitWorkspaceAdapters: DisposableExactCommitWor
         } as const;
       }
     }),
-  readWorktreeHead: (sandbox) => Effect.promise(() => sandbox.exec("git rev-parse HEAD")),
+  readWorktreeHead: (workspace) =>
+    Effect.tryPromise({
+      try: () => workspace.commandExecutor("git rev-parse HEAD"),
+      catch: (error) =>
+        error instanceof WorkspaceCommandExecutionFailed
+          ? error
+          : new WorkspaceCommandExecutionFailed({ message: errorMessage(error) }),
+    }),
 };
 
 const setupFailed = (
@@ -536,15 +555,15 @@ const cleanupWorktree = (
   state: WorkspaceScopeState,
   adapters: DisposableExactCommitWorkspaceAdapters,
 ): Effect.Effect<DisposableWorkspaceCleanupResult["worktree"]> => {
-  if (state.sandbox === undefined && state.worktreePath === undefined) {
+  if (state.workspace === undefined && state.worktreePath === undefined) {
     return Effect.succeed("not_created");
   }
 
   return Effect.gen(function* () {
-    if (state.sandbox !== undefined) {
-      const sandbox = state.sandbox;
+    if (state.workspace !== undefined) {
+      const workspace = state.workspace;
       const closeAttempt = yield* Effect.promise(() =>
-        closeSandboxWithTimeout(sandbox, cleanupStepTimeoutMs),
+        closeWorkspaceWithTimeout(workspace, cleanupStepTimeoutMs),
       );
 
       if (!closeAttempt.ok) return "failed";
@@ -573,16 +592,16 @@ const cleanupWorktree = (
   });
 };
 
-type SandcastleCloseResult = { readonly preservedWorktreePath?: string };
+type WorkspaceCloseResult = { readonly preservedWorktreePath?: string };
 
-type SandcastleCloseAttempt =
-  | { readonly ok: true; readonly result: SandcastleCloseResult }
+type WorkspaceCloseAttempt =
+  | { readonly ok: true; readonly result: WorkspaceCloseResult }
   | { readonly ok: false };
 
-const closeSandboxWithTimeout = (
-  sandbox: SandboxLike,
+const closeWorkspaceWithTimeout = (
+  workspace: WorkspaceAdapter,
   timeoutMs: number,
-): Promise<SandcastleCloseAttempt> =>
+): Promise<WorkspaceCloseAttempt> =>
   new Promise((resolve) => {
     let settled = false;
     const timeout = setTimeout(() => {
@@ -590,7 +609,7 @@ const closeSandboxWithTimeout = (
       resolve({ ok: false });
     }, timeoutMs);
 
-    void sandbox.close().then(
+    void workspace.close().then(
       (result) => {
         if (settled) return;
         settled = true;

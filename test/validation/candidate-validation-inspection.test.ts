@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import {
-  expectedSandcastleWorktreePath,
+  expectedValidationWorkspacePath,
   validationTempRefName,
 } from "../../src/change/validation/validationWorkspacePath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
@@ -56,7 +56,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         tempRefName,
         submittedSha: "head-sha",
         worktreeHead: "head-sha",
-        worktreePath: expectedSandcastleWorktreePath(fixture.root, tempRefName),
+        worktreePath: expectedValidationWorkspacePath(fixture.root, tempRefName),
         cleanupWorktree: "not_created",
         cleanupTempRef: "not_created",
         now,

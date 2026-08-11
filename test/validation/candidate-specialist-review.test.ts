@@ -1,14 +1,14 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
-
-import type {
-  ReviewerAgentResult,
-  ReviewerAgentRuntime,
+import {
+  type ReviewerAgentResult,
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { RecordCandidateSpecialistRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type {
   ReviewerSessionRecord,
@@ -19,11 +19,7 @@ import {
   runSpecialistReviewPhase,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
-import {
-  ReviewerOutputContractFailed,
-  SandcastleToolingFailed,
-  validationToolingFailureRecord,
-} from "../../src/change/validation/validationToolingFailures.js";
+import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -36,6 +32,12 @@ import {
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+
+const unusedReviewerExecutor: ReviewerProcessExecutor = {
+  execute: async () => {
+    throw new Error("Captured Specialist runtime must not execute a reviewer process.");
+  },
+};
 
 const now = "2026-07-15T10:00:00.000Z";
 const candidate = {
@@ -82,11 +84,10 @@ const success = (
   ...(sessionReference === undefined ? {} : { sessionReference }),
 });
 
-const outputFailure = (reviewer: string, message: string) =>
-  new ReviewerOutputContractFailed({
+const outputFailure = (_reviewer: string, message: string) =>
+  new ReviewerExecutionFailed({
+    kind: "output_contract",
     operationName: "decode_reviewer_output",
-    reviewer,
-    attempts: 2,
     diagnostics: [],
     message,
   });
@@ -116,12 +117,11 @@ const phaseHarness = (): PhaseHarness => {
         sessions.delete(`${changeId}/${producer}`);
       }),
   };
-  const sandbox: Pick<Sandbox, "exec" | "run"> = {
-    exec: async () => ({ exitCode: 0, stdout: `${candidate.headSha}\n`, stderr: "" }),
-    run: async () => {
-      throw new Error("Captured Specialist runtime must not call Sandbox.run");
-    },
-  };
+  const commandExecutor = async () => ({
+    exitCode: 0,
+    stdout: `${candidate.headSha}\n`,
+    stderr: "",
+  });
 
   return {
     rounds,
@@ -135,7 +135,8 @@ const phaseHarness = (): PhaseHarness => {
         ...(includeAcceptanceContext ? { acceptanceContext } : {}),
         agentEnvironment: ["nix", "develop", "-c"],
         runtime,
-        sandbox,
+        commandExecutor,
+        reviewerExecutor: unusedReviewerExecutor,
         artifactsRoot,
         commandCwd: artifactsRoot,
         resourceRoot: artifactsRoot,
@@ -283,8 +284,9 @@ describe("Candidate Specialist Review phase", () => {
         expect(harness.rounds[0]?.findings).toEqual([]);
 
         const failedHarness = phaseHarness();
-        const revisionFailure = new SandcastleToolingFailed({
-          operationName: "run_reviewer_agent",
+        const revisionFailure = new ReviewerExecutionFailed({
+          kind: "process_execution",
+          operationName: "run_reviewer_process",
           message: "Specialist revision failed.",
         });
         let calls = 0;
@@ -359,12 +361,12 @@ describe("Candidate Specialist Review phase", () => {
               validationRunId: "223e4567-e89b-42d3-a456-426614174000",
               candidate: { ...candidate, candidateId: "candidate-2", headSha: "3".repeat(40) },
               policies: [policy("alpha"), policy("beta")],
-              sandbox: {
-                exec: async () => ({ exitCode: 0, stdout: `${"3".repeat(40)}\n`, stderr: "" }),
-                run: async () => {
-                  throw new Error("Captured Specialist runtime must not call Sandbox.run");
-                },
-              },
+              commandExecutor: async () => ({
+                exitCode: 0,
+                stdout: `${"3".repeat(40)}\n`,
+                stderr: "",
+              }),
+              reviewerExecutor: unusedReviewerExecutor,
             },
           ),
         );
@@ -444,12 +446,12 @@ describe("Candidate Specialist Review phase", () => {
                 candidate: captured,
                 policies,
                 runtime,
-                sandbox: {
-                  exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
-                  run: async () => {
-                    throw new Error("Captured Specialist runtime must not call Sandbox.run");
-                  },
-                },
+                commandExecutor: async () => ({
+                  exitCode: 0,
+                  stdout: `${captured.headSha}\n`,
+                  stderr: "",
+                }),
+                reviewerExecutor: unusedReviewerExecutor,
                 artifactsRoot,
                 commandCwd: repo,
                 resourceRoot: repo,
@@ -595,8 +597,9 @@ describe("Candidate Specialist Review phase", () => {
   it.scoped("cannot pass after producer runtime or Artifact-recording failure", () =>
     Effect.gen(function* () {
       const runtimeHarness = phaseHarness();
-      const launchFailure = new SandcastleToolingFailed({
-        operationName: "run_reviewer_agent",
+      const launchFailure = new ReviewerExecutionFailed({
+        kind: "process_execution",
+        operationName: "run_reviewer_process",
         message: "Reviewer launch failed.",
       });
       const runtimeResult = yield* Effect.suspend(() =>
@@ -644,20 +647,15 @@ describe("Candidate Specialist Review phase", () => {
         const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const rounds: RecordCandidateSpecialistRoundInput[] = [];
-        const sandbox: Pick<Sandbox, "exec" | "run"> = {
-          exec: async (command, options) => {
-            const result = runTestProcess("bash", ["-lc", command], {
-              cwd: options?.cwd ?? repo,
-            });
-            return {
-              exitCode: result.status ?? 1,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            };
-          },
-          run: async () => {
-            throw new Error("Captured Specialist runtime must not call Sandbox.run");
-          },
+        const commandExecutor = async (command: string, options?: { readonly cwd?: string }) => {
+          const result = runTestProcess("bash", ["-lc", command], {
+            cwd: options?.cwd ?? repo,
+          });
+          return {
+            exitCode: result.status ?? 1,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          };
         };
         const integrityFailure = yield* Effect.suspend(() =>
           Effect.flip(
@@ -673,7 +671,8 @@ describe("Candidate Specialist Review phase", () => {
                     return success();
                   }),
               },
-              sandbox,
+              commandExecutor,
+              reviewerExecutor: unusedReviewerExecutor,
               artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
               commandCwd: repo,
               resourceRoot: repo,

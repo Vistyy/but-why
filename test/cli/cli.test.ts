@@ -456,6 +456,7 @@ describe("by CLI", () => {
         { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
         { migration_id: 26, name: "current_candidate_validation_admissions" },
         { migration_id: 27, name: "remove_candidate_validation_admissions" },
+        { migration_id: 28, name: "project_runtime_failure_names" },
       ]);
     }),
   );

@@ -35,7 +35,8 @@ Sandboxing should be a separate execution-provider decision rather than another 
 | Process handle | Effect scope and cleanup policy | Provides `run()`, `exec()`, and `close()` on one handle |
 
 The main integration points are `src/disposableWorkspace/runDisposableExactCommitWorkspace.ts` for workspace lifecycle, `src/change/validation/createValidationWorkspace.ts` for Change policy and evidence translation, and `src/agent/reviewerAgentRuntime.ts` for reviewer execution.
-Validation phases receive only the small `exec` and `run` portions of Sandcastle's `Sandbox` type.
+Validation phases receive project-owned command and reviewer executors.
+The private workspace runtime Adapter translates those contracts to Sandcastle.
 This narrow use means replacement does not require a Validation Gate redesign.
 
 ## What But Why does not use
@@ -183,7 +184,7 @@ Replacing Sandcastle with current behavior requires this complete set:
    The executable entry must translate supported host termination signals into Effect interruption so the Adapter can stop its supervised process group and complete scoped cleanup before exit.
 3. A Pi Reviewer Adapter resolves the model and resources, starts or resumes one Change-owned session, collects the reviewer result, performs the bounded same-session output corrections, and returns session and usage evidence.
 4. The Validation Workspace scope composes those Adapters behind one `exec`, reviewer-run, and `close` handle so existing Validation Gate phases do not learn provider details.
-5. Migration removes Sandcastle types, failure names, `.sandcastle` path assumptions, ignore rules, tests, documentation, and the package dependency after equivalent conformance tests pass.
+5. Migration removes the private Sandcastle Adapter, `.sandcastle` path assumptions, ignore rules, provider tests, documentation, and the package dependency after equivalent conformance tests pass.
 
 Sandbox isolation is not required for behavioral parity because current production uses `noSandbox()`.
 Including isolation adds one provider implementation of the Command Execution and Pi Reviewer interfaces, plus an image, workspace mounts or transfer, credentials, network policy, resource limits, process-tree termination, and environment cleanup.

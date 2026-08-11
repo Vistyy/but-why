@@ -1,5 +1,5 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
+import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
@@ -18,7 +18,7 @@ import { writeCommandEvidence } from "./writeCommandEvidence.js";
 export type RunCheckPhaseInput = {
   readonly validationRunId: string;
   readonly checks: readonly SubmitCheckConfig[];
-  readonly sandbox: Pick<Sandbox, "exec">;
+  readonly commandExecutor: WorkspaceCommandExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly commandCwd?: string;
@@ -100,7 +100,7 @@ const runSingleCheck = (
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const { commandResult, timedOut } = yield* runCheckCommand(
-      input.sandbox,
+      input.commandExecutor,
       check,
       input.commandCwd,
       input.expectedHeadSha,
@@ -177,7 +177,7 @@ const checkFinding = (
 });
 
 const runCheckCommand = (
-  sandbox: Pick<Sandbox, "exec">,
+  commandExecutor: WorkspaceCommandExecutor,
   check: SubmitCheckConfig,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
@@ -187,7 +187,7 @@ const runCheckCommand = (
     try: async () => {
       if (expectedHeadSha !== undefined) {
         await ensureCandidateIntegrity({
-          sandbox,
+          commandExecutor,
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
@@ -198,12 +198,12 @@ const runCheckCommand = (
         timeoutSeconds: check.timeoutSeconds,
         completionMarker: checkCompletionMarker(check.id),
         missingTimeoutMessage: `Could not find timeout command for check ${check.id}.`,
-        exec: (command, options) => sandbox.exec(command, options),
+        exec: (command, options) => commandExecutor(command, options),
         ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
       });
       if (expectedHeadSha !== undefined) {
         await ensureCandidateIntegrity({
-          sandbox,
+          commandExecutor,
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],

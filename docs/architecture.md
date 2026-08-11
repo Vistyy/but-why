@@ -21,7 +21,7 @@ The source hierarchy follows these owners:
   `implementChange` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`.
   `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeLifecycle.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
 - `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
-- `src/agent/` owns reviewer-agent execution Adapters and Agent Profile resolution.
+- `src/agent/` owns the project reviewer-execution contract, reviewer behavior, and Agent Profile resolution.
 - `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
 - `src/cli/` owns command Adapters, and `src/cli.ts` owns the executable entry boundary.
 - `src/cli/change/implementerPromptFile.ts` owns Implementer Prompt file input handling and `src/cli/change/implementResult.ts` owns Change Implement result rendering.
@@ -29,7 +29,8 @@ The source hierarchy follows these owners:
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
-- `src/disposableWorkspace/` owns disposable exact-commit workspace creation, identity verification, interruption cleanup registration, and cleanup.
+- `src/disposableWorkspace/` owns disposable exact-commit workspace creation, identity verification, project-owned command and reviewer execution contracts, interruption cleanup registration, and cleanup.
+  Sandcastle is private to the workspace runtime Adapter.
 - `src/sqlite/` owns SQLite persistence Adapters.
 - `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 

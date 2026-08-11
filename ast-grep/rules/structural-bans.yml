@@ -26,22 +26,22 @@ rule:
     - pattern: $RUNTIME.runFork($$$ARGS)
     - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: sandcastle-factories-belong-to-workspace
+id: sandcastle-dependency-belongs-to-runtime-adapter
 language: TypeScript
 severity: error
-message: Do not load Sandcastle workspace factories outside src/disposableWorkspace/runDisposableExactCommitWorkspace.ts because the disposable workspace Adapter owns sandbox lifecycle; use runDisposableExactCommitWorkspace.
+message: Do not import or re-export Sandcastle outside src/disposableWorkspace/workspaceRuntimeAdapter.ts because Task, Change, and Repository Runtime behavior must use project-owned execution contracts; use the disposable workspace, command-execution, or reviewer-execution contract.
 files:
   - src/**/*.ts
 ignores:
-  - src/disposableWorkspace/runDisposableExactCommitWorkspace.ts
+  - src/disposableWorkspace/workspaceRuntimeAdapter.ts
 rule:
   any:
     - all:
         - kind: import_statement
-        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
+        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+(\*\s+as\s+|[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+)[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
+        - kind: export_statement
+        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - all:
         - kind: call_expression
         - regex: '^(import|require)\(["`]@ai-hero/sandcastle([^"`]*)?["`]\)$'

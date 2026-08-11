@@ -26,7 +26,7 @@ export class GitToolingFailed extends Data.TaggedError("GitToolingFailed")<{
   readonly message: string;
 }> {}
 
-export class SandcastleToolingFailed extends Data.TaggedError("SandcastleToolingFailed")<{
+export class ReviewerProcessToolingFailed extends Data.TaggedError("ReviewerProcessToolingFailed")<{
   readonly operationName: string;
   readonly message: string;
 }> {}
@@ -65,7 +65,7 @@ export type ValidationToolingFailure =
   | ValidationWorkspaceSetupFailed
   | InfrastructureToolingFailed
   | GitToolingFailed
-  | SandcastleToolingFailed
+  | ReviewerProcessToolingFailed
   | PrepareCommandExecutionToolingFailed
   | CheckCommandExecutionToolingFailed
   | ReviewerOutputContractFailed
@@ -109,9 +109,9 @@ export const validationToolingFailureRecord = (
         operationName: failure.operationName,
         errorMessage: failure.message,
       };
-    case "SandcastleToolingFailed":
+    case "ReviewerProcessToolingFailed":
       return {
-        errorKind: "sandcastle_tooling_failed",
+        errorKind: "reviewer_process_execution_failed",
         operationName: failure.operationName,
         errorMessage: failure.message,
       };

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Fiber } from "effect";
+import { Effect, Fiber } from "effect";
 import { afterEach, describe, vi } from "vitest";
 
 import type { createValidationWorkspace as createValidationWorkspaceType } from "../../src/change/validation/createValidationWorkspace.js";
@@ -217,9 +217,9 @@ describe("Validation Workspace scoped lifecycle", () => {
       expect(result).toMatchObject({
         ok: false,
         toolingError: {
-          operationName: "create_sandcastle_workspace",
+          operationName: "create_disposable_workspace",
           errorMessage:
-            "Validation worktree already exists for a different Validation Run: " +
+            "Disposable worktree already exists for a different workspace reference: " +
             expectedWorktreePath,
           cleanupResult: {
             worktree: "not_created",
@@ -249,8 +249,8 @@ describe("Validation Workspace scoped lifecycle", () => {
       expect(result).toMatchObject({
         ok: false,
         toolingError: {
-          operationName: "create_sandcastle_workspace",
-          errorMessage: `Validation worktree already exists for a different commit: ${expectedWorktreePath}`,
+          operationName: "create_disposable_workspace",
+          errorMessage: `Disposable worktree already exists for a different commit: ${expectedWorktreePath}`,
           cleanupResult: {
             worktree: "not_created",
             tempRef: "removed",
@@ -280,8 +280,8 @@ describe("Validation Workspace scoped lifecycle", () => {
       expect(result).toMatchObject({
         ok: false,
         toolingError: {
-          operationName: "create_sandcastle_workspace",
-          errorMessage: `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}`,
+          operationName: "create_disposable_workspace",
+          errorMessage: `Disposable worktree already exists with uncommitted changes: ${expectedWorktreePath}`,
           worktreePath: expectedWorktreePath,
           cleanupResult: {
             worktree: "not_created",
@@ -373,7 +373,7 @@ describe("Validation Workspace scoped lifecycle", () => {
       expect(result).toMatchObject({
         ok: false,
         toolingError: {
-          operationName: "create_sandcastle_workspace",
+          operationName: "create_disposable_workspace",
           errorMessage: "sandcastle failed",
           cleanupResult: {
             worktree: "removed",
@@ -406,7 +406,7 @@ describe("Validation Workspace scoped lifecycle", () => {
       expect(result).toMatchObject({
         ok: false,
         toolingError: {
-          operationName: "create_sandcastle_workspace",
+          operationName: "create_disposable_workspace",
           errorMessage: "sandcastle failed",
           cleanupResult: {
             worktree: "failed",
@@ -493,8 +493,8 @@ describe("Validation Workspace scoped lifecycle", () => {
         expect(result).toMatchObject({
           ok: false,
           toolingError: {
-            operationName: "create_sandcastle_workspace",
-            errorMessage: `Validation worktree HEAD different-commit did not match submitted SHA ${input.submittedSha}.`,
+            operationName: "create_disposable_workspace",
+            errorMessage: `Disposable worktree HEAD different-commit did not match requested commit ${input.submittedSha}.`,
             cleanupResult: {
               worktree: "removed",
               tempRef: "removed",
@@ -535,7 +535,7 @@ describe("Validation Workspace scoped lifecycle", () => {
         ok: false,
         toolingError: {
           operationName: "cleanup_validation_workspace",
-          errorMessage: "Validation workspace cleanup failed after successful setup.",
+          errorMessage: "Disposable workspace cleanup failed after successful use.",
           cleanupResult: {
             worktree: "failed",
             tempRef: "removed",
@@ -553,7 +553,7 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
-  it.scoped("runs acquired-resource cleanup when the workflow defects", () =>
+  it.scoped("translates a workspace HEAD command failure and runs acquired-resource cleanup", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const createValidationWorkspace = yield* Effect.promise(() =>
@@ -562,9 +562,19 @@ describe("Validation Workspace scoped lifecycle", () => {
         }),
       );
 
-      const exit = yield* Effect.exit(createValidationWorkspace(input));
-      expect(Exit.isFailure(exit)).toBe(true);
+      const result = yield* createValidationWorkspace(input);
 
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_disposable_workspace",
+          errorMessage: "boom",
+          cleanupResult: {
+            worktree: "removed",
+            tempRef: "removed",
+          },
+        },
+      });
       expect(events).toEqual([
         "acquire:temp_ref",
         "acquire:worktree",

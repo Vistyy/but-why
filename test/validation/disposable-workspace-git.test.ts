@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { validationWorkspaceCleanupGit } from "../../src/change/validation/validationWorkspaceCleanupGit.js";
 import {
-  expectedSandcastleWorktreePath,
+  expectedValidationWorkspacePath,
   validationTempRefName,
 } from "../../src/change/validation/validationWorkspacePath.js";
 import { isDisposableWorktreeRemoved } from "../../src/disposableWorkspace/disposableWorkspaceGit.js";
@@ -31,7 +31,7 @@ describe("Disposable workspace Git cleanup verification", () => {
     const commitSha = git(repository, "rev-parse", "HEAD");
     const validationRunId = "run-1";
     const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedSandcastleWorktreePath(repository, tempRefName);
+    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
     createValidationResources(repository, tempRefName, worktreePath, commitSha);
     const cleanup = validationWorkspaceCleanupGit(repository);
     const input = {
@@ -58,9 +58,9 @@ describe("Disposable workspace Git cleanup verification", () => {
     const commitSha = git(repository, "rev-parse", "HEAD");
     const validationRunId = "selected";
     const expectedRef = validationTempRefName(validationRunId);
-    const expectedPath = expectedSandcastleWorktreePath(repository, expectedRef);
+    const expectedPath = expectedValidationWorkspacePath(repository, expectedRef);
     const unrelatedRef = validationTempRefName("unrelated");
-    const unrelatedPath = expectedSandcastleWorktreePath(repository, unrelatedRef);
+    const unrelatedPath = expectedValidationWorkspacePath(repository, unrelatedRef);
     createValidationResources(repository, expectedRef, expectedPath, commitSha);
     createValidationResources(repository, unrelatedRef, unrelatedPath, commitSha);
 
@@ -90,7 +90,7 @@ describe("Disposable workspace Git cleanup verification", () => {
     const unrelatedSha = git(repository, "rev-parse", "HEAD");
     const validationRunId = "selected";
     const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedSandcastleWorktreePath(repository, tempRefName);
+    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
     git(repository, "update-ref", tempRefName, submittedSha);
     git(repository, "worktree", "add", "--detach", worktreePath, unrelatedSha);
 
@@ -119,7 +119,7 @@ describe("Disposable workspace Git cleanup verification", () => {
     const unrelatedSha = git(repository, "rev-parse", "HEAD");
     const validationRunId = "selected";
     const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedSandcastleWorktreePath(repository, tempRefName);
+    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
     git(repository, "update-ref", tempRefName, unrelatedSha);
     git(repository, "worktree", "add", "--detach", worktreePath, submittedSha);
 

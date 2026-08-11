@@ -43,18 +43,16 @@ describe("check round Findings", () => {
             checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
             artifactsRoot: createTestWorkspace(),
             now,
-            sandbox: {
-              exec: async (command, options) => {
-                const result = runTestProcess(shPath, ["-c", command], {
-                  cwd: options?.cwd ?? workspace,
-                  env: { PATH: restrictedPath },
-                });
-                return {
-                  exitCode: result.status ?? 0,
-                  stdout: result.stdout,
-                  stderr: result.stderr,
-                };
-              },
+            commandExecutor: async (command, options) => {
+              const result = runTestProcess(shPath, ["-c", command], {
+                cwd: options?.cwd ?? workspace,
+                env: { PATH: restrictedPath },
+              });
+              return {
+                exitCode: result.status ?? 0,
+                stdout: result.stdout,
+                stderr: result.stderr,
+              };
             },
             recordCheckRound: () => Effect.void,
           }),
@@ -83,17 +81,15 @@ describe("check round Findings", () => {
         ],
         artifactsRoot: createTestWorkspace(),
         now,
-        sandbox: {
-          exec: async (command) => {
-            commands.push(command);
-            if (command === "command -v timeout >/dev/null 2>&1") {
-              return { exitCode: 0, stdout: "", stderr: "" };
-            }
+        commandExecutor: async (command) => {
+          commands.push(command);
+          if (command === "command -v timeout >/dev/null 2>&1") {
+            return { exitCode: 0, stdout: "", stderr: "" };
+          }
 
-            return command.includes("exit 1")
-              ? { exitCode: 1, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_first__:1\n" }
-              : { exitCode: 0, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n" };
-          },
+          return command.includes("exit 1")
+            ? { exitCode: 1, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_first__:1\n" }
+            : { exitCode: 0, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n" };
         },
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
@@ -122,15 +118,13 @@ describe("check round Findings", () => {
             expectedHeadSha: "abc123",
             allowedUntrackedFiles: [".validation-env"],
             now,
-            sandbox: {
-              exec: async (command) => {
-                commands.push(command);
-                return {
-                  exitCode: 0,
-                  stdout: "abc123\n M .validation-env\n",
-                  stderr: "",
-                };
-              },
+            commandExecutor: async (command) => {
+              commands.push(command);
+              return {
+                exitCode: 0,
+                stdout: "abc123\n M .validation-env\n",
+                stderr: "",
+              };
             },
             recordCheckRound: () => Effect.void,
           }),
@@ -155,14 +149,12 @@ describe("check round Findings", () => {
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
         artifactsRoot,
         now,
-        sandbox: {
-          exec: async (command) => {
-            if (command === "command -v timeout >/dev/null 2>&1") {
-              return { exitCode: 0, stdout: "", stderr: "" };
-            }
+        commandExecutor: async (command) => {
+          if (command === "command -v timeout >/dev/null 2>&1") {
+            return { exitCode: 0, stdout: "", stderr: "" };
+          }
 
-            return { exitCode: 124, stdout: "", stderr: "partial stderr" };
-          },
+          return { exitCode: 124, stdout: "", stderr: "partial stderr" };
         },
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
@@ -204,16 +196,14 @@ describe("check round Findings", () => {
         checks: [{ id: "[quality]", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: createTestWorkspace(),
         now,
-        sandbox: {
-          exec: async (command) =>
-            command === "command -v timeout >/dev/null 2>&1"
-              ? { exitCode: 0, stdout: "", stderr: "" }
-              : {
-                  exitCode: 0,
-                  stdout: "",
-                  stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
-                },
-        },
+        commandExecutor: async (command) =>
+          command === "command -v timeout >/dev/null 2>&1"
+            ? { exitCode: 0, stdout: "", stderr: "" }
+            : {
+                exitCode: 0,
+                stdout: "",
+                stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
+              },
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 

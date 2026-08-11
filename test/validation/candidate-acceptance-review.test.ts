@@ -1,19 +1,18 @@
 import { join } from "node:path";
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll, vi } from "vitest";
-
-import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
+} from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type { AcceptanceContextCandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
-import {
-  SandcastleToolingFailed,
-  validationToolingFailureRecord,
-} from "../../src/change/validation/validationToolingFailures.js";
+import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
@@ -30,6 +29,12 @@ import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+
+const unusedReviewerExecutor: ReviewerProcessExecutor = {
+  execute: async () => {
+    throw new Error("Reviewer test runtime must not execute a reviewer process.");
+  },
+};
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";
@@ -180,8 +185,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         review: () =>
           Effect.succeed({
             ok: false,
-            failure: new SandcastleToolingFailed({
-              operationName: "run_reviewer_agent",
+            failure: new ReviewerExecutionFailed({
+              kind: "process_execution",
+              operationName: "run_reviewer_process",
               message: "Reviewer launch failed.",
             }),
             sessionUsability: "unknown" as const,
@@ -196,8 +202,8 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       expect(yield* ready.validation.listFindings(result.validationRunId)).toEqual([]);
       expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
         expect.objectContaining({
-          errorKind: "sandcastle_tooling_failed",
-          operationName: "run_reviewer_agent",
+          errorKind: "reviewer_process_execution_failed",
+          operationName: "run_reviewer_process",
         }),
       ]);
       expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
@@ -232,8 +238,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       review.mockImplementationOnce(() =>
         Effect.succeed({
           ok: false,
-          failure: new SandcastleToolingFailed({
-            operationName: "run_reviewer_agent",
+          failure: new ReviewerExecutionFailed({
+            kind: "process_execution",
+            operationName: "run_reviewer_process",
             message: "Temporary reviewer failure.",
           }),
           sessionUsability: "unknown" as const,
@@ -329,12 +336,11 @@ const runReviewPhases = (
         ],
         now,
       });
-      const sandbox: Pick<Sandbox, "exec" | "run"> = {
-        exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
-        run: async () => {
-          throw new Error("Reviewer test runtime must not call Sandbox.run");
-        },
-      };
+      const commandExecutor = async () => ({
+        exitCode: 0,
+        stdout: `${captured.headSha}\n`,
+        stderr: "",
+      });
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId: started.validationRunId,
         changeId: captured.changeId,
@@ -354,7 +360,8 @@ const runReviewPhases = (
         ...(ready.reviewerSessionsRoot === undefined
           ? {}
           : { sessionStorageRoot: ready.reviewerSessionsRoot }),
-        sandbox,
+        commandExecutor,
+        reviewerExecutor: unusedReviewerExecutor,
         artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         artifactMaxBytes: maxValidationArtifactBytes,
         commandCwd: ready.repo,

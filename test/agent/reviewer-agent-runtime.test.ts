@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Sandbox, SandboxRunResult } from "@ai-hero/sandcastle";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
@@ -10,11 +9,20 @@ import {
   piReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import type {
+  ReviewerProcessExecutor,
+  ReviewerProcessResult,
+} from "../../src/agent/reviewerExecution.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
 } from "../../src/contracts/reviewerOutput.js";
+import {
+  createReviewerProcessExecutor,
+  type ReviewerProcessRuntimeRunner,
+  type ReviewerProcessRuntimeRunResult,
+} from "../../src/disposableWorkspace/workspaceRuntimeAdapter.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
@@ -30,6 +38,7 @@ const decodeEmptyFindings = (output: unknown) =>
     Effect.mapError(
       (failure) =>
         new ReviewerExecutionFailed({
+          kind: "output_contract",
           operationName: failure.operationName,
           message: failure.message,
           diagnostics: failure.diagnostics,
@@ -61,13 +70,15 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("runs a role prompt and decodes trustworthy reviewer output", () =>
     Effect.gen(function* () {
       let prompt = "";
-      const run: Pick<Sandbox, "run">["run"] = async (options) => {
-        prompt = options.prompt ?? "";
-        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      const reviewerExecutor: ReviewerProcessExecutor = {
+        execute: async (input) => {
+          prompt = input.prompt;
+          return processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+        },
       };
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor,
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Judge only approved intent for the exact Candidate.",
@@ -87,10 +98,12 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("returns output from a caller-owned decoder", () =>
     Effect.gen(function* () {
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: {
-          run: () =>
-            Promise.resolve(runResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>')),
-        } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: {
+          execute: () =>
+            Promise.resolve(
+              processResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>'),
+            ),
+        },
         reviewer: "caller",
         decodeOutput: (output) =>
           typeof output === "object" &&
@@ -100,6 +113,7 @@ describe("Pi reviewer agent runtime", () => {
             ? Effect.succeed("decoded by caller" as const)
             : Effect.fail(
                 new ReviewerExecutionFailed({
+                  kind: "output_contract",
                   operationName: "decode_reviewer_output",
                   message: "Expected a clear verdict.",
                 }),
@@ -115,9 +129,10 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("returns a neutral failure when reviewer output is missing", () =>
     Effect.gen(function* () {
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: {
-          run: () => Promise.resolve(runResult("Reviewer completed without structured output.")),
-        } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: {
+          execute: () =>
+            Promise.resolve(processResult("Reviewer completed without structured output.")),
+        },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -138,8 +153,8 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("launches reviewers with an isolated Pi resource and tool boundary", () =>
     Effect.gen(function* () {
       let command = "";
-      const run: Pick<Sandbox, "run">["run"] = async (options) => {
-        const built = options.agent.buildPrintCommand({
+      const run: ReviewerProcessRuntimeRunner = async (options) => {
+        const built = options.buildPrintCommand({
           prompt: options.prompt ?? "",
           dangerouslySkipPermissions: true,
         });
@@ -148,7 +163,7 @@ describe("Pi reviewer agent runtime", () => {
       };
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "specialist:security",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -172,8 +187,8 @@ describe("Pi reviewer agent runtime", () => {
       const workspace = "/validation-workspace-two";
       const sessionId = "123e4567-e89b-42d3-a456-426614174001";
       let command = "";
-      const run: Pick<Sandbox, "run">["run"] = async (options) => {
-        command = options.agent.buildPrintCommand({
+      const run: ReviewerProcessRuntimeRunner = async (options) => {
+        command = options.buildPrintCommand({
           prompt: options.prompt ?? "",
           dangerouslySkipPermissions: true,
         }).command;
@@ -186,7 +201,7 @@ describe("Pi reviewer agent runtime", () => {
 
       try {
         const result = yield* piReviewerAgentRuntime.review({
-          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewerExecutor: createReviewerProcessExecutor(run),
           reviewer: "acceptance",
           decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
@@ -218,7 +233,7 @@ describe("Pi reviewer agent runtime", () => {
       );
       const observedCwds: string[] = [];
       let attempts = 0;
-      const run: Pick<Sandbox, "run">["run"] = async () => {
+      const run: ReviewerProcessRuntimeRunner = async () => {
         attempts += 1;
         const header = JSON.parse(readFileSync(sessionFile, "utf8")) as { cwd: string };
         observedCwds.push(header.cwd);
@@ -231,7 +246,7 @@ describe("Pi reviewer agent runtime", () => {
 
       try {
         const result = yield* piReviewerAgentRuntime.review({
-          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewerExecutor: createReviewerProcessExecutor(run),
           reviewer: "acceptance",
           decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
@@ -261,13 +276,13 @@ describe("Pi reviewer agent runtime", () => {
       const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
       const sessionId = "123e4567-e89b-42d3-a456-426614174002";
       writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "not-json\n");
-      const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
+      const run = vi.fn<ReviewerProcessRuntimeRunner>(() =>
         Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
       );
 
       try {
         const result = yield* piReviewerAgentRuntime.review({
-          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewerExecutor: createReviewerProcessExecutor(run),
           reviewer: "acceptance",
           decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
@@ -281,7 +296,7 @@ describe("Pi reviewer agent runtime", () => {
           ok: false,
           failure: {
             _tag: "ReviewerExecutionFailed",
-            operationName: "run_reviewer_agent",
+            operationName: "run_reviewer_process",
             message: "Reviewer Session JSONL is corrupt.",
           },
           sessionUsability: "unusable",
@@ -298,13 +313,13 @@ describe("Pi reviewer agent runtime", () => {
       const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
       const sessionId = "123e4567-e89b-42d3-a456-426614174002";
       writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "null\n");
-      const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
+      const run = vi.fn<ReviewerProcessRuntimeRunner>(() =>
         Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
       );
 
       try {
         const result = yield* piReviewerAgentRuntime.review({
-          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewerExecutor: createReviewerProcessExecutor(run),
           reviewer: "acceptance",
           decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
@@ -318,7 +333,7 @@ describe("Pi reviewer agent runtime", () => {
           ok: false,
           failure: {
             _tag: "ReviewerExecutionFailed",
-            operationName: "run_reviewer_agent",
+            operationName: "run_reviewer_process",
             message: "Reviewer Session JSONL is corrupt.",
           },
           sessionUsability: "unusable",
@@ -344,7 +359,7 @@ describe("Pi reviewer agent runtime", () => {
         ].join("\n"),
       );
       let rewritten = "";
-      const run: Pick<Sandbox, "run">["run"] = async () => {
+      const run: ReviewerProcessRuntimeRunner = async () => {
         rewritten = readFileSync(sessionFile, "utf8");
         return {
           ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
@@ -354,7 +369,7 @@ describe("Pi reviewer agent runtime", () => {
 
       try {
         const result = yield* piReviewerAgentRuntime.review({
-          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewerExecutor: createReviewerProcessExecutor(run),
           reviewer: "acceptance",
           decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
@@ -379,8 +394,8 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("resolves Repo resources from the Managed Worktree root", () =>
     Effect.gen(function* () {
       let command = "";
-      const run: Pick<Sandbox, "run">["run"] = async (options) => {
-        command = options.agent.buildPrintCommand({
+      const run: ReviewerProcessRuntimeRunner = async (options) => {
+        command = options.buildPrintCommand({
           prompt: options.prompt ?? "",
           dangerouslySkipPermissions: true,
         }).command;
@@ -388,7 +403,7 @@ describe("Pi reviewer agent runtime", () => {
       };
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -418,8 +433,8 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("preserves Global Pi package URL sources", () =>
     Effect.gen(function* () {
       let command = "";
-      const run: Pick<Sandbox, "run">["run"] = async (options) => {
-        command = options.agent.buildPrintCommand({
+      const run: ReviewerProcessRuntimeRunner = async (options) => {
+        command = options.buildPrintCommand({
           prompt: options.prompt ?? "",
           dangerouslySkipPermissions: true,
         }).command;
@@ -427,7 +442,7 @@ describe("Pi reviewer agent runtime", () => {
       };
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -458,16 +473,14 @@ describe("Pi reviewer agent runtime", () => {
       let attempts = 0;
       let command = "";
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: {
-          run: async (options: Parameters<Pick<Sandbox, "run">["run"]>[0]) => {
-            attempts += 1;
-            command = options.agent.buildPrintCommand({
-              prompt: options.prompt ?? "",
-              dangerouslySkipPermissions: true,
-            }).command;
-            throw new Error("wrapper failed");
-          },
-        } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(async (options) => {
+          attempts += 1;
+          command = options.buildPrintCommand({
+            prompt: options.prompt ?? "",
+            dangerouslySkipPermissions: true,
+          }).command;
+          throw new Error("wrapper failed");
+        }),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -480,7 +493,7 @@ describe("Pi reviewer agent runtime", () => {
         attempts: 1,
         failure: {
           _tag: "ReviewerExecutionFailed",
-          operationName: "run_reviewer_agent",
+          operationName: "run_reviewer_process",
           message: "wrapper failed",
         },
         sessionUsability: "unknown",
@@ -492,17 +505,15 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
     Effect.gen(function* () {
-      const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      const corrected = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
       const resume = vi.fn(() => Promise.resolve(corrected));
-      const dangling = runResult(
+      const dangling = processResult(
         '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
         resume,
       );
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: {
-          run: () => Promise.resolve(dangling),
-        } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: { execute: () => Promise.resolve(dangling) },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -527,7 +538,7 @@ describe("Pi reviewer agent runtime", () => {
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -567,7 +578,7 @@ describe("Pi reviewer agent runtime", () => {
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -602,7 +613,7 @@ describe("Pi reviewer agent runtime", () => {
       const run = vi.fn(() => Promise.resolve(first));
 
       const result = yield* piReviewerAgentRuntime.review({
-        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewerExecutor: createReviewerProcessExecutor(run),
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -614,7 +625,7 @@ describe("Pi reviewer agent runtime", () => {
         attempts: 2,
         failure: {
           _tag: "ReviewerExecutionFailed",
-          operationName: "run_reviewer_agent",
+          operationName: "run_reviewer_process",
           message: "provider failed",
         },
         sessionUsability: "unknown",
@@ -633,9 +644,19 @@ const isolatedSessionRoot = (): { readonly fixtureRoot: string; readonly session
   return { fixtureRoot, sessionRoot };
 };
 
-const runResult = (stdout: string, resume?: SandboxRunResult["resume"]): SandboxRunResult => ({
+const runResult = (
+  stdout: string,
+  resume?: ReviewerProcessRuntimeRunResult["resume"],
+): ReviewerProcessRuntimeRunResult => ({
   iterations: [],
   stdout,
-  commits: [],
+  ...(resume === undefined ? {} : { resume }),
+});
+
+const processResult = (
+  stdout: string,
+  resume?: ReviewerProcessResult["resume"],
+): ReviewerProcessResult => ({
+  stdout,
   ...(resume === undefined ? {} : { resume }),
 });

@@ -45,7 +45,7 @@ Each profile selects its model, thinking level, and optional Pi resource allowli
 The remaining design question is whether later runtimes require a separate execution identity interface.
 
 Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
-Keep Sandcastle behind its current domain seams until evidence justifies that decision.
+Keep Sandcastle inside its private workspace runtime Adapter until evidence justifies that decision.
 
 ## How should But Why represent and review planning above individual Tasks?
 
@@ -185,7 +185,7 @@ Decide whether Sandcastle can own this behavior through a maintained supported c
 
 ## Does automatic writing need stronger isolation?
 
-Read-only validation uses Sandcastle.
+Read-only validation uses project-owned workspace and execution contracts backed by the private Sandcastle runtime Adapter.
 Before Sandcastle performs automatic writing, its container path must use a fixed image, non-root execution, restricted mounts and environment, no host credentials, no devices or Docker socket, bounded diagnostics, and complete validation before a parent-controlled push.
 
 OpenShell, Gondolin, or another provider requires an adapter and conformance tests.
