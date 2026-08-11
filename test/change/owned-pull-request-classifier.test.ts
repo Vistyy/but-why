@@ -150,7 +150,15 @@ describe("owned pull request observation", () => {
 
   it("classifies a vanished owned pull request as unavailable, never not owned", () => {
     expect(
-      observeOwnedPullRequest({ getPullRequest: () => undefined }, change(publication)),
+      observeOwnedPullRequest(
+        {
+          getPullRequest: () => ({
+            ok: false,
+            evidence: { operation: "remote_lookup", classification: "unavailable" },
+          }),
+        },
+        change(publication),
+      ),
     ).toEqual({ kind: "unavailable", reason: "pull_request_unavailable" });
   });
 
@@ -158,10 +166,12 @@ describe("owned pull request observation", () => {
     expect(
       observeOwnedPullRequest(
         {
-          getPullRequest: () => undefined,
-          getLastFailureEvidence: () => ({
-            operation: "remote_lookup",
-            classification: "response_parse_failure",
+          getPullRequest: () => ({
+            ok: false,
+            evidence: {
+              operation: "remote_lookup",
+              classification: "response_parse_failure",
+            },
           }),
         },
         change(publication),

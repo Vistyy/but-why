@@ -1,5 +1,4 @@
 import type { ChangeOwnedPullRequest, ChangePublicationTarget } from "./change.js";
-import type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type GitHubPullRequest = ChangeOwnedPullRequest & {
   readonly repository: { readonly owner: string; readonly repo: string };
@@ -50,6 +49,14 @@ export type GitHubPullRequestRequest = {
   readonly body: string;
 };
 
+export type GitHubPullRequestReadResult =
+  | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
+  | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
+
+export type GitHubPullRequestListResult =
+  | { readonly ok: true; readonly pullRequests: readonly GitHubPullRequest[] }
+  | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
+
 export type GitHubPullRequestMutationResult =
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | {
@@ -74,24 +81,27 @@ export type GitHubPullRequestCloseInput = {
   readonly number: number;
 };
 
-export type GitHubPullRequestGateway = {
-  readonly getLastFailureEvidence?: () => PublicationFailureEvidence | undefined;
-  readonly findPullRequests: (
-    target: ChangePublicationTarget,
-    headBranch: string,
-  ) => readonly GitHubPullRequest[] | undefined;
+export type GitHubPullRequestReader = {
   readonly getPullRequest: (
     target: ChangePublicationTarget,
     number: number,
-  ) => GitHubPullRequest | undefined;
-  readonly closePullRequest?: (
+  ) => GitHubPullRequestReadResult;
+};
+
+export type GitHubPullRequestCloser = GitHubPullRequestReader & {
+  readonly closePullRequest: (
     input: GitHubPullRequestCloseInput,
   ) => GitHubPullRequestMutationResult;
+};
+
+export type GitHubPullRequestGateway = GitHubPullRequestReader & {
+  readonly findPullRequests: (
+    target: ChangePublicationTarget,
+    headBranch: string,
+  ) => GitHubPullRequestListResult;
   readonly createPullRequest: (
     request: GitHubPullRequestRequest,
   ) => GitHubPullRequestMutationResult;
-  readonly readRemoteBranchHead?: ChangeCleanupRemote["readRemoteBranchHead"];
-  readonly deleteRemoteBranch?: ChangeCleanupRemote["deleteRemoteBranch"];
   readonly updatePullRequest: (
     input: GitHubPullRequestRequest & {
       readonly number: number;

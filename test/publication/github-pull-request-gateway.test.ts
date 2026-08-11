@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { localGitHubPullRequestGateway } from "../../src/submissionEnvironment/localGitHubPullRequestGateway.js";
+import {
+  localGitHubChangeCleanupRemote,
+  localGitHubPullRequestGateway,
+} from "../../src/submissionEnvironment/localGitHubPullRequestGateway.js";
 
 const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({
@@ -187,18 +190,21 @@ describe("GitHub pull request gateway", () => {
         { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
         "feature",
       ),
-    ).toEqual([
-      {
-        number: 42,
-        url: "https://api.github.com/repos/acme/widgets/pulls/42",
-        state: "open",
-        merged: false,
-        repository: { owner: "acme", repo: "widgets" },
-        baseBranch: "main",
-        headBranch: "feature",
-        headSha: "candidate-sha",
-      },
-    ]);
+    ).toEqual({
+      ok: true,
+      pullRequests: [
+        {
+          number: 42,
+          url: "https://api.github.com/repos/acme/widgets/pulls/42",
+          state: "open",
+          merged: false,
+          repository: { owner: "acme", repo: "widgets" },
+          baseBranch: "main",
+          headBranch: "feature",
+          headSha: "candidate-sha",
+        },
+      ],
+    });
   });
 
   it("reads authoritative repository and lifecycle facts for an owned pull request", () => {
@@ -216,14 +222,17 @@ describe("GitHub pull request gateway", () => {
         42,
       ),
     ).toEqual({
-      number: 42,
-      url: "https://api.github.com/repos/acme/widgets/pulls/42",
-      state: "closed",
-      merged: true,
-      repository: { owner: "acme", repo: "widgets" },
-      baseBranch: "main",
-      headBranch: "feature",
-      headSha: "candidate-sha",
+      ok: true,
+      pullRequest: {
+        number: 42,
+        url: "https://api.github.com/repos/acme/widgets/pulls/42",
+        state: "closed",
+        merged: true,
+        repository: { owner: "acme", repo: "widgets" },
+        baseBranch: "main",
+        headBranch: "feature",
+        headSha: "candidate-sha",
+      },
     });
   });
 
@@ -243,8 +252,14 @@ describe("GitHub pull request gateway", () => {
         stdout: args[1]?.includes("?") ? `[${incomplete}]` : incomplete,
       }),
     });
-    expect(readGateway.findPullRequests(target, "feature")).toBeUndefined();
-    expect(readGateway.getPullRequest(target, 42)).toBeUndefined();
+    expect(readGateway.findPullRequests(target, "feature")).toMatchObject({
+      ok: false,
+      evidence: { operation: "remote_lookup", classification: "response_parse_failure" },
+    });
+    expect(readGateway.getPullRequest(target, 42)).toMatchObject({
+      ok: false,
+      evidence: { operation: "remote_lookup", classification: "response_parse_failure" },
+    });
 
     const request = {
       owner: "acme",
@@ -283,7 +298,7 @@ describe("GitHub pull request gateway", () => {
         expectedCurrentHeadSha: "previous-candidate-sha",
       }),
     ).toMatchObject({ ok: false, code: "remote_response_unusable" });
-    expect(mutationGateway.closePullRequest?.({ target, number: 42 })).toMatchObject({
+    expect(mutationGateway.closePullRequest({ target, number: 42 })).toMatchObject({
       ok: false,
       code: "close_failed",
     });
@@ -303,7 +318,7 @@ describe("GitHub pull request gateway", () => {
     });
 
     expect(
-      gateway.closePullRequest?.({
+      gateway.closePullRequest({
         target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
         number: 42,
       }),
@@ -324,7 +339,7 @@ describe("GitHub pull request gateway", () => {
     const gateway = localGitHubPullRequestGateway({ runGh: () => ({ ok: false }) });
 
     expect(
-      gateway.closePullRequest?.({
+      gateway.closePullRequest({
         target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
         number: 42,
       }),
@@ -728,7 +743,7 @@ describe("GitHub pull request gateway", () => {
 
   it("conditionally deletes an owned exact-head Remote Change Branch through GraphQL", () => {
     const ghCalls: (readonly string[])[] = [];
-    const gateway = localGitHubPullRequestGateway({
+    const gateway = localGitHubChangeCleanupRemote({
       runGh: (args) => {
         ghCalls.push(args);
         return args.some((arg) => arg.includes("updateRefs"))
@@ -751,7 +766,7 @@ describe("GitHub pull request gateway", () => {
       targetBranch: "main",
     };
 
-    expect(gateway.readRemoteBranchHead?.(branch)).toEqual({
+    expect(gateway.readRemoteBranchHead(branch)).toEqual({
       state: "present",
       headSha: "candidate-sha",
       remoteUrl: branch.remoteUrl,
@@ -759,7 +774,7 @@ describe("GitHub pull request gateway", () => {
       refId: "ref-id",
     });
     expect(
-      gateway.deleteRemoteBranch?.({
+      gateway.deleteRemoteBranch({
         ...branch,
         expectedHeadSha: "candidate-sha",
         resolvedRemoteUrl: branch.remoteUrl,
@@ -777,7 +792,7 @@ describe("GitHub pull request gateway", () => {
     const afterOidIndex = ghCalls[1]?.indexOf(afterOid) ?? -1;
     expect(ghCalls[1]?.[afterOidIndex - 1]).toBe("-f");
     expect(
-      gateway.readRemoteBranchHead?.({
+      gateway.readRemoteBranchHead({
         ...branch,
         remoteUrl: "https://github.com/acme/other.git",
       }),
@@ -934,14 +949,14 @@ describe("GitHub pull request gateway", () => {
 
     for (const [name, deletionResponse, readResponse, expected] of cases) {
       const ghCalls: (readonly string[])[] = [];
-      const gateway = localGitHubPullRequestGateway({
+      const gateway = localGitHubChangeCleanupRemote({
         runGh: (args) => {
           ghCalls.push(args);
           return ghCalls.length === 1 ? deletionResponse : readResponse;
         },
       });
 
-      expect(gateway.deleteRemoteBranch?.(input), name).toEqual(expected);
+      expect(gateway.deleteRemoteBranch(input), name).toEqual(expected);
       expect(ghCalls).toHaveLength(2);
       expect(ghCalls.filter((args) => args.some((arg) => arg.includes("updateRefs")))).toHaveLength(
         1,
@@ -956,7 +971,7 @@ describe("GitHub pull request gateway", () => {
 
   it("protects the pull request target and default branch from remote deletion", () => {
     const ghCalls: (readonly string[])[] = [];
-    const gateway = localGitHubPullRequestGateway({
+    const gateway = localGitHubChangeCleanupRemote({
       runGh: (args) => {
         ghCalls.push(args);
         return {
@@ -976,10 +991,10 @@ describe("GitHub pull request gateway", () => {
       canonicalBranchRef: "refs/heads/but-why/default",
       targetBranch: "main",
     };
-    expect(gateway.readRemoteBranchHead?.(input)).toEqual({ state: "excluded" });
+    expect(gateway.readRemoteBranchHead(input)).toEqual({ state: "excluded" });
     expect(ghCalls).toHaveLength(1);
     expect(
-      gateway.readRemoteBranchHead?.({
+      gateway.readRemoteBranchHead({
         ...input,
         branchName: "but-why/main",
         canonicalBranchRef: "refs/heads/but-why/main",
@@ -1016,11 +1031,11 @@ describe("GitHub pull request gateway", () => {
         },
       ],
     ] as const) {
-      const gateway = localGitHubPullRequestGateway({ runGh: () => ({ ok: true, stdout }) });
-      expect(gateway.readRemoteBranchHead?.(input)).toMatchObject(expected);
+      const gateway = localGitHubChangeCleanupRemote({ runGh: () => ({ ok: true, stdout }) });
+      expect(gateway.readRemoteBranchHead(input)).toMatchObject(expected);
     }
-    const unavailable = localGitHubPullRequestGateway({ runGh: () => ({ ok: false }) });
-    expect(unavailable.readRemoteBranchHead?.(input)).toEqual({ state: "unavailable" });
+    const unavailable = localGitHubChangeCleanupRemote({ runGh: () => ({ ok: false }) });
+    expect(unavailable.readRemoteBranchHead(input)).toEqual({ state: "unavailable" });
   });
 
   it("returns normalized safe evidence for a rejected creation", () => {

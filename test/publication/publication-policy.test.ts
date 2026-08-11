@@ -126,9 +126,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           github: {
             findPullRequests: () => {
               readbacks += 1;
-              return [];
+              return pullRequestList([]);
             },
-            getPullRequest: () => undefined,
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: () => ({
               ok: false,
               code: "remote_response_unusable",
@@ -178,8 +178,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Retry publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => undefined,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: (request) => {
               createCalls += 1;
               return createCalls === 1
@@ -381,8 +381,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates.push(request);
@@ -465,10 +465,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
+            findPullRequests: () => pullRequestList([]),
             getPullRequest: () => {
               readBacks += 1;
-              return remote;
+              return pullRequestRead(remote);
             },
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
@@ -534,8 +534,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => {
               updateCalls += 1;
@@ -598,8 +598,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: pullRequest(branchHead) }),
             updatePullRequest: () => {
               updateCalls += 1;
@@ -664,10 +664,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
+            findPullRequests: () => pullRequestList([]),
             getPullRequest: () => {
               confirmationReads += 1;
-              return remote;
+              return pullRequestRead(remote);
             },
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => ({ ok: true, pullRequest: remote }),
@@ -723,8 +723,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => {
               updateCalls += 1;
@@ -773,8 +773,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => {
               updateCalls += 1;
@@ -826,8 +826,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: pullRequest(branchHead) }),
             updatePullRequest: () => {
               throw new Error("Unavailable facts must not update the pull request");
@@ -885,8 +885,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             }),
           },
           github: {
-            findPullRequests: () => remotePullRequests,
-            getPullRequest: () => remotePullRequests[0],
+            findPullRequests: () => pullRequestList(remotePullRequests),
+            getPullRequest: () => pullRequestRead(remotePullRequests[0]),
             createPullRequest: (request) => {
               createCalls += 1;
               remotePullRequests.push({
@@ -943,8 +943,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [remote],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([remote]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({
               ok: false as const,
               code: "remote_lookup_failed" as const,
@@ -987,8 +987,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => undefined,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: () => {
               creates += 1;
               return {
@@ -1045,8 +1045,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => remote,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates += 1;
@@ -1106,8 +1106,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [oldPullRequest],
-            getPullRequest: () => oldPullRequest,
+            findPullRequests: () => pullRequestList([oldPullRequest]),
+            getPullRequest: () => pullRequestRead(oldPullRequest),
             createPullRequest: () => ({
               ok: false as const,
               code: "remote_lookup_failed" as const,
@@ -1154,8 +1154,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
             },
             github: {
-              findPullRequests: () => [],
-              getPullRequest: () => pullRequest(fixture.captured.headSha),
+              findPullRequests: () => pullRequestList([]),
+              getPullRequest: () => pullRequestRead(pullRequest(fixture.captured.headSha)),
               createPullRequest: () => ({
                 ok: true as const,
                 pullRequest: pullRequest(fixture.captured.headSha),
@@ -1219,8 +1219,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => undefined,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: () => {
               createCalls += 1;
               return createCalls === 1
@@ -1284,8 +1284,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => undefined,
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: () => ({
               ok: false as const,
               code: "remote_lookup_failed" as const,
@@ -1325,8 +1325,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
           },
           github: {
-            findPullRequests: () => [pullRequest("foreign-head")],
-            getPullRequest: () => undefined,
+            findPullRequests: () => pullRequestList([pullRequest("foreign-head")]),
+            getPullRequest: () => pullRequestRead(undefined),
             createPullRequest: () => {
               creates += 1;
               return { ok: false as const, code: "remote_response_lost" as const };
@@ -1450,9 +1450,20 @@ const pullRequest = (headSha: string) => ({
   headSha,
 });
 
+const pullRequestRead = (pullRequest: GitHubPullRequest | undefined) =>
+  pullRequest === undefined
+    ? ({
+        ok: false as const,
+        evidence: { operation: "remote_lookup" as const, classification: "unavailable" as const },
+      } as const)
+    : ({ ok: true as const, pullRequest } as const);
+
+const pullRequestList = (pullRequests: readonly GitHubPullRequest[]) =>
+  ({ ok: true as const, pullRequests }) as const;
+
 const successfulCreation = (requests: unknown[]) => ({
-  findPullRequests: () => [],
-  getPullRequest: () => undefined,
+  findPullRequests: () => pullRequestList([]),
+  getPullRequest: () => pullRequestRead(undefined),
   createPullRequest: (request: GitHubPullRequestRequest) => {
     requests.push(request);
     return { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };

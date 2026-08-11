@@ -1,5 +1,5 @@
 import type { ChangeOwnedPullRequest, ChangePublication, ChangeRecord } from "./change.js";
-import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { GitHubPullRequest, GitHubPullRequestReader } from "./ownedPullRequestGateway.js";
 
 export type OwnedPullRequestRejection =
   | "number_mismatch"
@@ -71,27 +71,26 @@ export const observedMergedChangeEvidence = (
 };
 
 export const observeOwnedPullRequest = (
-  github: Pick<GitHubPullRequestGateway, "getPullRequest" | "getLastFailureEvidence">,
+  github: GitHubPullRequestReader,
   change: ChangeRecord,
 ): OwnedPullRequestClassification => {
   const publication = ownedPublication(change);
   if (publication === undefined) return { kind: "not_owned" };
-  let pullRequest: GitHubPullRequest | undefined;
   try {
-    pullRequest = github.getPullRequest(publication.target, publication.pullRequest.number);
+    const result = github.getPullRequest(publication.target, publication.pullRequest.number);
+    if (!result.ok) {
+      return {
+        kind: "unavailable",
+        reason:
+          result.evidence.classification === "response_parse_failure"
+            ? "pull_request_facts_unavailable"
+            : "pull_request_unavailable",
+      };
+    }
+    return classifyOwnedPullRequest(publication, result.pullRequest);
   } catch {
     return { kind: "unavailable", reason: "github_unavailable" };
   }
-  if (pullRequest === undefined) {
-    return {
-      kind: "unavailable",
-      reason:
-        github.getLastFailureEvidence?.()?.classification === "response_parse_failure"
-          ? "pull_request_facts_unavailable"
-          : "pull_request_unavailable",
-    };
-  }
-  return classifyOwnedPullRequest(publication, pullRequest);
 };
 
 export const classifyOwnedPullRequest = (

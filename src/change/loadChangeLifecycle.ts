@@ -12,7 +12,7 @@ import {
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import {
-  githubChangeCleanupRemote,
+  localGitHubChangeCleanupRemote,
   localGitHubPullRequestGateway,
 } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import {
@@ -208,7 +208,7 @@ export const withChangeReconciliation = <A, E, R>(
             github,
             cleanupTerminal: openTerminalCleanup({
               persistence: terminalCleanup,
-              cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              cleanup: cleanupChangeResourcesWithRemote(localGitHubChangeCleanupRemote()),
               indexTranscripts: openReviewerTranscriptIndex({ persistence: reviewerTranscripts }),
               reviewerSessionPathFor: (changeId) =>
                 reviewerSessionsChangeRoot(context.paths.operationalDir, changeId),
