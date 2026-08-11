@@ -785,36 +785,45 @@ export default function continueChange(pi: ExtensionAPI): void {
       }
     | { readonly ok: false; readonly message: string }
   > => {
-    const [changeResult, blockerResult] = await Promise.all([
-      inspectCommand(["change", "show", id], ctx.cwd),
-      inspectCommand(["change", "blocker", "list", id], ctx.cwd),
-    ]);
-    const failures = [changeResult, blockerResult].filter(
-      (result): result is Extract<RunResult, { readonly ok: false }> => !result.ok,
-    );
-    if (failures.length > 0) {
+    const changeResult = await inspectCommand(["change", "show", id], ctx.cwd);
+    if (!changeResult.ok) {
       return {
         ok: false,
-        message: failures
-          .map((failure) =>
-            failure.stdout.trim() === ""
-              ? failure.message
-              : `${failure.message}: ${failure.stdout.trim().slice(0, 500)}`,
-          )
-          .join("; "),
+        message:
+          changeResult.stdout.trim() === ""
+            ? changeResult.message
+            : `${changeResult.message}: ${changeResult.stdout.trim().slice(0, 500)}`,
       };
     }
 
     let snapshotValue: unknown;
-    let blockerValue: unknown;
     try {
       snapshotValue = JSON.parse(changeResult.stdout);
-      blockerValue = JSON.parse(blockerResult.stdout);
     } catch {
-      return { ok: false, message: "But Why inspection returned malformed JSON" };
+      return { ok: false, message: "But Why Change inspection returned malformed JSON" };
     }
     if (!isSnapshot(snapshotValue) || snapshotValue.change.taskId === undefined) {
       return { ok: false, message: "But Why inspection returned an unsupported Change state shape" };
+    }
+    if (snapshotValue.change.taskId === null) {
+      return { ok: true, taskId: null, hasResolutions: false };
+    }
+
+    const blockerResult = await inspectCommand(["change", "blocker", "list", id], ctx.cwd);
+    if (!blockerResult.ok) {
+      return {
+        ok: false,
+        message:
+          blockerResult.stdout.trim() === ""
+            ? blockerResult.message
+            : `${blockerResult.message}: ${blockerResult.stdout.trim().slice(0, 500)}`,
+      };
+    }
+    let blockerValue: unknown;
+    try {
+      blockerValue = JSON.parse(blockerResult.stdout);
+    } catch {
+      return { ok: false, message: "But Why blocker inspection returned malformed JSON" };
     }
     if (!isBlockerHistory(blockerValue)) {
       return { ok: false, message: "But Why inspection returned an unsupported blocker history shape" };

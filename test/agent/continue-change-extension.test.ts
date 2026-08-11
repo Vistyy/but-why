@@ -289,6 +289,9 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(snapshot({ change: { state: "open", closeReason: null, taskId: null } }));
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     const inspectionCallCount = harness.getExecCallCount();
+    const blockerInspectionCallCount = harness.execCalls.filter(({ args }) =>
+      args.includes("blocker"),
+    ).length;
 
     expect(
       await harness.emit("tool_call", {
@@ -307,6 +310,9 @@ describe("packaged Change Implement continuation extension", () => {
         input: { command: `just by change submit ${changeId}` },
       }),
     ).toBeUndefined();
+    expect(harness.execCalls.filter(({ args }) => args.includes("blocker"))).toHaveLength(
+      blockerInspectionCallCount,
+    );
     expect(harness.sent).toEqual([]);
   });
 
