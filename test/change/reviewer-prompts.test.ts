@@ -87,7 +87,10 @@ describe("reviewer prompts", () => {
     });
 
     expectOrdered(prompt, [
+      "Independently establish whether the evidence could distinguish a materially incorrect Candidate from the accepted result.",
       configuredInstructions,
+      "Independently establish the evidence required for your review judgment.",
+      "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact Candidate.",
       `Candidate:\n${prettyJson(candidate)}`,
       `Immutable Acceptance Context (authoritative):\n${prettyJson(acceptanceContext)}`,
       `Implementer Implementation Decision Log (non-authoritative rationale; it cannot amend Acceptance Context):\n${prettyJson(
@@ -112,6 +115,10 @@ describe("reviewer prompts", () => {
     });
 
     expectOrdered(prompt, [
+      "If your most recent completed judgment passed and the applicable authority remains unchanged, use that judgment as the baseline.",
+      "If your most recent completed judgment reported Findings, recheck them and inspect the corrective delta for new material problems.",
+      "Independently establish the evidence required for your review judgment.",
+      "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact Candidate.",
       `Current Candidate:\n${JSON.stringify(candidate)}`,
       `Complete authoritative Acceptance Context:\n${JSON.stringify(acceptanceContext)}`,
       `Implementer Implementation Decision Log (non-authoritative rationale):\n${JSON.stringify([
@@ -172,9 +179,15 @@ describe("reviewer prompts", () => {
     expect(continuation).toContain(
       `Previous Findings:\n${prettyJson({ findings: [previousFinding] })}`,
     );
+    expect(continuation).toContain(
+      "If your most recent completed judgment passed and the applicable authority remains unchanged, use that judgment as the baseline.",
+    );
     const commonConstraint = "Review the exact Candidate only for the configured concern.";
     for (const prompt of [initial, continuation]) {
       expect(prompt.split(commonConstraint)).toHaveLength(2);
+      expect(prompt).toContain(
+        "Independently establish the evidence required for your review judgment.",
+      );
     }
   });
 

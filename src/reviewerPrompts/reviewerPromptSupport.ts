@@ -3,16 +3,25 @@ import { encodeReviewerWireValue, reviewerOutputTag } from "../agent/reviewerOut
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 
 export const reviewerExecutionInstructions = [
-  "When inspection is insufficient, you may use bash and operating-system temporary space for targeted experiments, generated scripts, fixtures, and other disposable evidence.",
-  "Use passing Check Artifacts for broad validation evidence instead of rerunning the same broad repository Checks.",
+  "Independently establish the evidence required for your review judgment.",
+  "Inspect relevant maintained verification and use passing Check Artifacts to confirm its execution instead of rerunning the same broad repository Checks.",
+  "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact Candidate.",
+  "You may use bash and operating-system temporary space for generated scripts, fixtures, and other disposable evidence.",
   "You must not modify the Candidate. Candidate integrity verification by But Why is authoritative.",
 ].join("\n");
 
+export const continuedReviewerJudgmentInstructions = [
+  "Re-anchor the review to the exact current subject and supplied current authority.",
+  "If your most recent completed judgment passed and the applicable authority remains unchanged, use that judgment as the baseline.",
+  "Focus on the current subject delta and how it affects your prior conclusions instead of repeating unaffected investigation.",
+  "If your most recent completed judgment reported Findings, recheck them and inspect the corrective delta for new material problems.",
+  "Expand the review when the current delta or changed authority can invalidate an earlier conclusion.",
+  "Return every material Finding within your current reviewer responsibility.",
+].join("\n");
+
 export const currentCandidateReReviewInstructions = [
-  "Re-anchor the review to the exact current Candidate.",
+  continuedReviewerJudgmentInstructions,
   "Inspect the Candidate delta, changed files, and directly affected callers, tests, and owning modules.",
-  "Recheck the previous Findings, but do not limit the review to them.",
-  "Return every material Finding that applies to the exact current Candidate.",
   "Reuse prior repository orientation unless current evidence requires additional exploration.",
 ].join("\n");
 
