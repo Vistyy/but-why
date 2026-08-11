@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,11 +18,15 @@ describe("host interruption process boundary", () => {
     const root = mkdtempSync(join(tmpdir(), "but-why-host-interruption-"));
     const eventsPath = join(root, "events");
     const childPidPath = join(root, "child-pid");
+    const sessionsRoot = join(root, "sessions");
+    mkdirSync(sessionsRoot);
+    const sessionPath = join(sessionsRoot, "reviewer-session.jsonl");
     const executable = startTestProcess(process.execPath, ["--import", tsxLoader, helper], {
       cwd: root,
       env: {
         BUT_WHY_TEST_EVENTS_PATH: eventsPath,
         BUT_WHY_TEST_CHILD_PID_PATH: childPidPath,
+        BUT_WHY_TEST_SESSION_PATH: sessionPath,
       },
     });
     const completion = processCompletion(executable);
@@ -37,7 +41,7 @@ describe("host interruption process boundary", () => {
       expect(result.status, result.stderr).toBe(exitCode);
       expect(processIsGone(reviewerPid)).toBe(true);
       expect(readFileSync(eventsPath, "utf8").trim().split("\n")).toEqual([
-        "workspace-cleanup:child-gone",
+        "workspace-cleanup:child-gone:session-restored",
         `complete:${signal}`,
       ]);
     } finally {

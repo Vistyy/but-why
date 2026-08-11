@@ -86,64 +86,80 @@ const reviewWithPi = <Output>(
       input.resumeSession === undefined || input.sessionStorageRoot === undefined
         ? undefined
         : snapshotSessionRoot(input.sessionStorageRoot);
+    let sessionSnapshotSettled = false;
     const restoreSession = () => {
+      if (sessionSnapshotSettled) return;
       if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
       cleanupSessionSnapshot(sessionSnapshot);
+      sessionSnapshotSettled = true;
     };
-    const processInput: ReviewerProcessInput = {
-      reviewer: input.reviewer,
-      prompt: input.prompt,
-      profile: input.profile,
-      commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
-      resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
-      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
-      ...(input.sessionStorageRoot === undefined
-        ? {}
-        : { sessionStorageRoot: input.sessionStorageRoot }),
-      ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
-    };
-    const initial = yield* Effect.either(runReviewerProcess(input.reviewerExecutor, processInput));
-    if (initial._tag === "Left") {
-      restoreSession();
-      return reviewerProcessFailure(initial.left, 1, "", [null]);
-    }
-    let current = initial.right;
-    const invocationUsage: (TokenUsage | null)[] = [current.invocationUsage ?? null];
-    let validation = yield* Effect.either(validateRunResult(input, current));
-    if (validation._tag === "Right") {
+    const retainSession = () => {
+      if (sessionSnapshotSettled) return;
       cleanupSessionSnapshot(sessionSnapshot);
-      return successfulResult(validation.right, current, 1, invocationUsage);
-    }
-
-    let attempts = 1;
-    while (validation._tag === "Left" && attempts < 3) {
-      const failure = validation.left;
-      if (current.resume === undefined && current.resumeEffect === undefined) {
-        restoreSession();
-        return failedOutputResult(failure, current, attempts, invocationUsage);
-      }
-      attempts += 1;
-      const corrected = yield* Effect.either(
-        resumeReviewerProcess(current, failure.correctionPrompt ?? failure.message),
+      sessionSnapshotSettled = true;
+    };
+    const review = Effect.gen(function* () {
+      const processInput: ReviewerProcessInput = {
+        reviewer: input.reviewer,
+        prompt: input.prompt,
+        profile: input.profile,
+        commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
+        resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
+        ...(input.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: input.agentEnvironment }),
+        ...(input.sessionStorageRoot === undefined
+          ? {}
+          : { sessionStorageRoot: input.sessionStorageRoot }),
+        ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+      };
+      const initial = yield* Effect.either(
+        runReviewerProcess(input.reviewerExecutor, processInput),
       );
-      if (corrected._tag === "Left") {
+      if (initial._tag === "Left") {
         restoreSession();
-        return reviewerProcessFailure(corrected.left, attempts, current.stdout, [
-          ...invocationUsage,
-          null,
-        ]);
+        return reviewerProcessFailure(initial.left, 1, "", [null]);
       }
-      current = corrected.right;
-      invocationUsage.push(current.invocationUsage ?? null);
-      validation = yield* Effect.either(validateRunResult(input, current));
-    }
+      let current = initial.right;
+      const invocationUsage: (TokenUsage | null)[] = [current.invocationUsage ?? null];
+      let validation = yield* Effect.either(validateRunResult(input, current));
+      if (validation._tag === "Right") {
+        retainSession();
+        return successfulResult(validation.right, current, 1, invocationUsage);
+      }
 
-    if (validation._tag === "Right") {
-      cleanupSessionSnapshot(sessionSnapshot);
-      return successfulResult(validation.right, current, attempts, invocationUsage);
-    }
-    restoreSession();
-    return failedOutputResult(validation.left, current, attempts, invocationUsage);
+      let attempts = 1;
+      while (validation._tag === "Left" && attempts < 3) {
+        const failure = validation.left;
+        if (current.resume === undefined && current.resumeEffect === undefined) {
+          restoreSession();
+          return failedOutputResult(failure, current, attempts, invocationUsage);
+        }
+        attempts += 1;
+        const corrected = yield* Effect.either(
+          resumeReviewerProcess(current, failure.correctionPrompt ?? failure.message),
+        );
+        if (corrected._tag === "Left") {
+          restoreSession();
+          return reviewerProcessFailure(corrected.left, attempts, current.stdout, [
+            ...invocationUsage,
+            null,
+          ]);
+        }
+        current = corrected.right;
+        invocationUsage.push(current.invocationUsage ?? null);
+        validation = yield* Effect.either(validateRunResult(input, current));
+      }
+
+      if (validation._tag === "Right") {
+        retainSession();
+        return successfulResult(validation.right, current, attempts, invocationUsage);
+      }
+      restoreSession();
+      return failedOutputResult(validation.left, current, attempts, invocationUsage);
+    });
+
+    return yield* review.pipe(Effect.ensuring(Effect.sync(restoreSession)));
   });
 
 export const piReviewerAgentRuntime = {
