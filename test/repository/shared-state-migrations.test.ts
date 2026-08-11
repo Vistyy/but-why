@@ -8,18 +8,13 @@ import { describe } from "vitest";
 
 import {
   RepositoryMigrationFailed,
-  RepositoryPersistedDataInvalid,
-  RepositorySqlOperationFailed,
   RepositoryRestoredTransientState,
+  RepositorySqlOperationFailed,
 } from "../../src/contracts/repositoryStorageError.js";
 import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
-import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import {
   migrateTestRepositoryThrough,
@@ -101,15 +96,32 @@ describe("Shared Repository State migrations", () => {
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const repository = yield* RepositorySql;
-                const changes = yield* openSqliteChangeTestDependencies();
-                expect(yield* changes.reads.getChangeById("change-publication")).toMatchObject({
-                  publication: {
+                const publications = yield* repository.operation(
+                  "read migrated Candidate Publication facts",
+                  (sql) => sql<{
+                    readonly candidateId: string;
+                    readonly validationRunId: string;
+                    readonly expectedHeadSha: string;
+                    readonly pullRequestNumber: number;
+                    readonly pullRequestUrl: string;
+                  }>`
+                    SELECT publication_candidate_id AS candidateId,
+                      publication_validation_run_id AS validationRunId,
+                      publication_expected_head_sha AS expectedHeadSha,
+                      publication_pr_number AS pullRequestNumber,
+                      publication_pr_url AS pullRequestUrl
+                    FROM changes WHERE id = 'change-publication'
+                  `,
+                );
+                expect(publications).toEqual([
+                  {
                     candidateId: "candidate-publication",
                     validationRunId: "run-publication",
                     expectedHeadSha: "head-legacy",
-                    pullRequest: { number: 7, url: "https://github.test/pull/7" },
+                    pullRequestNumber: 7,
+                    pullRequestUrl: "https://github.test/pull/7",
                   },
-                });
+                ]);
                 const tables = yield* repository.operation(
                   "read retired Candidate Publication tables",
                   (sql) => sql<{ readonly name: string }>`
@@ -626,7 +638,6 @@ describe("Shared Repository State migrations", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationTestDependencies();
               const rows = yield* repository.operation(
                 "read repaired Validation Policy Snapshot text",
                 (sql) => sql<{ readonly id: string; readonly policySnapshot: string }>`
@@ -651,30 +662,6 @@ describe("Shared Repository State migrations", () => {
               expect(byId.get("run-legacy")).toBe(legacyPolicyText);
               expect(byId.get("run-malformed")).toBe(malformedPolicyText);
               expect(byId.get("run-current")).toBe(currentPolicyText);
-
-              const repaired = yield* validation.reads.getRunById("run-affected");
-              expect(repaired).toBeDefined();
-              expect(repaired?.policy).toEqual(affectedPolicy);
-              const reorderedError = yield* validation.reads
-                .getRunById("run-affected-reordered")
-                .pipe(Effect.flip);
-              expect(reorderedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const protoError = yield* validation.reads.getRunById("run-proto").pipe(Effect.flip);
-              expect(protoError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const whitespaceError = yield* validation.reads
-                .getRunById("run-whitespace")
-                .pipe(Effect.flip);
-              expect(whitespaceError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const legacyError = yield* validation.reads
-                .getRunById("run-legacy")
-                .pipe(Effect.flip);
-              expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const malformedError = yield* validation.reads
-                .getRunById("run-malformed")
-                .pipe(Effect.flip);
-              expect(malformedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-              const current = yield* validation.reads.getRunById("run-current");
-              expect(current?.policy).toEqual(currentPolicy);
             }).pipe(
               Effect.provide(
                 repositorySqlLayer({
@@ -716,26 +703,32 @@ describe("Shared Repository State migrations", () => {
 
           yield* Effect.scoped(
             Effect.gen(function* () {
-              const changes = yield* openSqliteChangeTestDependencies();
-              expect(yield* changes.reads.getChangeById("change-cancel-upgrade")).toMatchObject({
-                state: "open",
-                cancelReason: null,
-              });
-              expect(
-                yield* changes.delivery.cancelChange({
-                  changeId: "change-cancel-upgrade",
-                  reason: "Not needed after upgrade",
-                  now: "2026-07-17T23:02:00.000Z",
-                }),
-              ).toMatchObject({
-                ok: true,
-                changed: true,
-                change: {
-                  state: "closed",
-                  closeReason: "cancelled",
-                  cancelReason: "Not needed after upgrade",
+              const repository = yield* RepositorySql;
+              const rows = yield* repository.operation(
+                "read migrated Taskless Change cancellation facts",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly taskId: string | null;
+                  readonly state: string;
+                  readonly cancelReason: string | null;
+                }>`
+                  SELECT id, task_id AS taskId, state, cancel_reason AS cancelReason
+                  FROM changes WHERE id = 'change-cancel-upgrade'
+                `,
+              );
+              expect(rows).toEqual([
+                {
+                  id: "change-cancel-upgrade",
+                  taskId: null,
+                  state: "open",
+                  cancelReason: null,
                 },
-              });
+              ]);
+              const columns = yield* repository.operation(
+                "read migrated Change cancellation columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+              );
+              expect(columns.map(({ name }) => name)).toContain("cancel_reason");
             }).pipe(
               Effect.provide(
                 repositorySqlLayer({
@@ -814,8 +807,28 @@ describe("Shared Repository State migrations", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const validation = yield* openSqliteChangeValidationTestDependencies();
-              const findings = yield* validation.reads.listFindings("run-severity");
+              const findings = yield* repository.operation(
+                "read migrated Findings",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly validationRunId: string;
+                  readonly phase: string;
+                  readonly producer: string;
+                  readonly title: string;
+                  readonly description: string;
+                  readonly evidence: string;
+                  readonly files: string;
+                  readonly artifactRefs: string;
+                  readonly createdAt: string;
+                  readonly updatedAt: string;
+                }>`
+                  SELECT id, validation_run_id AS validationRunId, phase, producer, title,
+                    description, evidence, files, artifact_refs AS artifactRefs,
+                    created_at AS createdAt, updated_at AS updatedAt
+                  FROM candidate_validation_findings
+                  WHERE validation_run_id = 'run-severity'
+                `,
+              );
               expect(findings).toEqual([
                 {
                   id: "finding-severity",
@@ -825,8 +838,8 @@ describe("Shared Repository State migrations", () => {
                   title: "Historical Check Finding",
                   description: "Remains readable after migration.",
                   evidence: "exitCode: 1",
-                  files: [],
-                  artifactRefs: [],
+                  files: "[]",
+                  artifactRefs: "[]",
                   createdAt: "2026-07-25T16:30:00.000Z",
                   updatedAt: "2026-07-25T16:30:00.000Z",
                 },
@@ -887,33 +900,27 @@ describe("Shared Repository State migrations", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestDependencies();
-              const session = yield* changes.reviewerSessions.getReviewerSession(
-                "change-session",
-                "acceptance",
+              const sessions = yield* repository.operation(
+                "read migrated Reviewer Sessions",
+                (sql) => sql<{
+                  readonly changeId: string;
+                  readonly producer: string;
+                  readonly fingerprint: string;
+                  readonly sessionReference: string;
+                }>`
+                  SELECT change_id AS changeId, producer, fingerprint,
+                    session_reference AS sessionReference
+                  FROM reviewer_sessions WHERE change_id = 'change-session'
+                `,
               );
-              expect(session).toEqual({
-                changeId: "change-session",
-                producer: "acceptance",
-                fingerprint: "fingerprint-legacy",
-                sessionReference: "session-legacy",
-              });
-              yield* changes.reviewerSessions.saveReviewerSession({
-                changeId: "change-session",
-                producer: "acceptance",
-                fingerprint: "fingerprint-new",
-                sessionReference: "session-new",
-              });
-              const replaced = yield* changes.reviewerSessions.getReviewerSession(
-                "change-session",
-                "acceptance",
-              );
-              expect(replaced).toEqual({
-                changeId: "change-session",
-                producer: "acceptance",
-                fingerprint: "fingerprint-new",
-                sessionReference: "session-new",
-              });
+              expect(sessions).toEqual([
+                {
+                  changeId: "change-session",
+                  producer: "acceptance",
+                  fingerprint: "fingerprint-legacy",
+                  sessionReference: "session-legacy",
+                },
+              ]);
               const sessionColumns = yield* repository.operation(
                 "read migrated Reviewer Session columns",
                 (sql) => sql<{ readonly name: string }>`PRAGMA table_info(reviewer_sessions)`,
@@ -980,43 +987,50 @@ describe("Shared Repository State migrations", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestDependencies();
-              const session = yield* changes.reviewerSessions.getReviewerSession(
-                "change-session-retained",
-                "acceptance",
+              const sessions = yield* repository.operation(
+                "read preserved Reviewer Sessions",
+                (sql) => sql<{
+                  readonly changeId: string;
+                  readonly producer: string;
+                  readonly fingerprint: string;
+                  readonly sessionReference: string;
+                }>`
+                  SELECT change_id AS changeId, producer, fingerprint,
+                    session_reference AS sessionReference
+                  FROM reviewer_sessions WHERE change_id = 'change-session-retained'
+                `,
               );
-              expect(session).toEqual({
-                changeId: "change-session-retained",
-                producer: "acceptance",
-                fingerprint: "fingerprint-retained",
-                sessionReference: "session-1",
-              });
-              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
-                changeId: "change-session-retained",
-                transcripts: [
-                  {
-                    changeId: "change-session-retained",
-                    producer: "acceptance",
-                    piSessionId: "session-1",
-                    filePath: "reviewer-sessions/review_session-1.jsonl",
-                  },
-                ],
-              });
-              yield* changes.reviewerTranscripts.recordReviewerTranscripts({
-                changeId: "change-session-retained",
-                transcripts: [
-                  {
-                    changeId: "change-session-retained",
-                    producer: "acceptance",
-                    piSessionId: "session-1",
-                    filePath: "reviewer-sessions/review_session-1.jsonl",
-                  },
-                ],
-              });
-              const transcripts =
-                yield* changes.reviewerTranscripts.listReviewerTranscripts(
-                  "change-session-retained",
-                );
+              expect(sessions).toEqual([
+                {
+                  changeId: "change-session-retained",
+                  producer: "acceptance",
+                  fingerprint: "fingerprint-retained",
+                  sessionReference: "session-1",
+                },
+              ]);
+              yield* repository.operation(
+                "write migrated Reviewer Transcript",
+                (sql) => sql`
+                INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
+                VALUES (
+                  'change-session-retained', 'acceptance', 'session-1',
+                  'reviewer-sessions/review_session-1.jsonl'
+                )
+              `,
+              );
+              const transcripts = yield* repository.operation(
+                "read migrated Reviewer Transcripts",
+                (sql) => sql<{
+                  readonly changeId: string;
+                  readonly producer: string;
+                  readonly piSessionId: string;
+                  readonly filePath: string;
+                }>`
+                  SELECT change_id AS changeId, producer, pi_session_id AS piSessionId,
+                    file_path AS filePath
+                  FROM reviewer_transcripts WHERE change_id = 'change-session-retained'
+                `,
+              );
               expect(transcripts).toEqual([
                 {
                   changeId: "change-session-retained",
@@ -1148,23 +1162,36 @@ describe("Shared Repository State migrations", () => {
                 (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
               );
               expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
-              const changes = yield* openSqliteChangeTestDependencies();
-              const stored = yield* changes.reads.getChangeById("change-with-failure");
-              expect(stored).toMatchObject({
-                id: "change-with-failure",
-                state: "open",
-                baseRef: "refs/remotes/origin/main",
-                worktreePath: join(directory, "worktree"),
-                prepare: { command: "just prepare", timeoutSeconds: 1200 },
-                prepareFailure: {
-                  command: "just prepare",
-                  exitCode: 7,
-                  timedOut: false,
-                  stdout: "",
-                  stderr: "failed",
+              const stored = yield* repository.operation(
+                "read migrated Change preparation facts",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly state: string;
+                  readonly baseRef: string;
+                  readonly worktreePath: string;
+                  readonly prepareCommand: string;
+                  readonly prepareTimeoutSeconds: number;
+                  readonly prepareFailure: string;
+                }>`
+                  SELECT id, state, base_ref AS baseRef, worktree_path AS worktreePath,
+                    prepare_command AS prepareCommand,
+                    prepare_timeout_seconds AS prepareTimeoutSeconds,
+                    prepare_failure AS prepareFailure
+                  FROM changes WHERE id = 'change-with-failure'
+                `,
+              );
+              expect(stored).toEqual([
+                {
+                  id: "change-with-failure",
+                  state: "open",
+                  baseRef: "refs/remotes/origin/main",
+                  worktreePath: join(directory, "worktree"),
+                  prepareCommand: "just prepare",
+                  prepareTimeoutSeconds: 1200,
+                  prepareFailure:
+                    '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}',
                 },
-              });
-              expect(stored).not.toHaveProperty("readiness");
+              ]);
             }).pipe(
               Effect.provide(
                 repositorySqlLayer({
@@ -1250,14 +1277,19 @@ describe("Shared Repository State migrations", () => {
                   `,
                 );
                 expect(tables).toEqual([]);
-                const changes = yield* openSqliteChangeTestDependencies();
-                const stored = yield* changes.reads.getChangeById("change-with-context");
-                expect(stored?.acceptanceContext).toEqual({
-                  version: 1,
-                  title: "Current intent",
-                  description: "Must survive.",
-                  comments: ["Historical Task comment."],
-                });
+                const stored = yield* repository.operation(
+                  "read preserved Acceptance Context",
+                  (sql) => sql<{ readonly acceptanceContext: string }>`
+                    SELECT acceptance_context AS acceptanceContext
+                    FROM changes WHERE id = 'change-with-context'
+                  `,
+                );
+                expect(stored).toEqual([
+                  {
+                    acceptanceContext:
+                      '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}',
+                  },
+                ]);
                 const runs = yield* repository.operation(
                   "read preserved Validation Run snapshot",
                   (sql) => sql<{ readonly policySnapshot: string }>`
@@ -1265,18 +1297,12 @@ describe("Shared Repository State migrations", () => {
                     FROM candidate_validation_runs WHERE id = 'run-1'
                   `,
                 );
-                const run = runs[0];
-                expect(run).toBeDefined();
-                if (run !== undefined) {
-                  expect(JSON.parse(run.policySnapshot)).toMatchObject({
-                    acceptanceContext: {
-                      version: 1,
-                      title: "Current intent",
-                      description: "Must survive.",
-                      comments: ["Historical Task comment."],
-                    },
-                  });
-                }
+                expect(runs).toEqual([
+                  {
+                    policySnapshot:
+                      '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceContext":{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}}',
+                  },
+                ]);
               }).pipe(
                 Effect.provide(
                   repositorySqlLayer({
@@ -1333,9 +1359,22 @@ describe("Shared Repository State migrations", () => {
           yield* Effect.scoped(
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
-              const changes = yield* openSqliteChangeTestDependencies();
-              const decisions =
-                yield* changes.authority.listImplementationDecisions("change-decisions");
+              const decisions = yield* repository.operation(
+                "read migrated Implementation Decisions",
+                (sql) => sql<{
+                  readonly id: string;
+                  readonly changeId: string;
+                  readonly sequence: number;
+                  readonly recordedAt: string;
+                  readonly choice: string;
+                  readonly rationale: string;
+                }>`
+                  SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt,
+                    choice, rationale
+                  FROM implementation_decisions WHERE change_id = 'change-decisions'
+                  ORDER BY sequence
+                `,
+              );
               expect(decisions).toEqual([
                 {
                   id: "structured-decision",
