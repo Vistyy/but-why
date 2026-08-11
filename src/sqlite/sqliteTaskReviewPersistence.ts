@@ -429,10 +429,10 @@ const parseInvocationUsage = (source: string): readonly (TokenUsage | null)[] =>
       throw new Error("Expected invocation usage object");
     }
     const usage = entry as Record<string, unknown>;
-    const inputTokens = requiredTokenCount(usage['inputTokens']);
-    const cachedInputTokens = requiredTokenCount(usage['cachedInputTokens']);
-    const outputTokens = requiredTokenCount(usage['outputTokens']);
-    const totalTokens = requiredTokenCount(usage['totalTokens']);
+    const inputTokens = requiredTokenCount(usage["inputTokens"]);
+    const cachedInputTokens = requiredTokenCount(usage["cachedInputTokens"]);
+    const outputTokens = requiredTokenCount(usage["outputTokens"]);
+    const totalTokens = requiredTokenCount(usage["totalTokens"]);
     return { inputTokens, cachedInputTokens, outputTokens, totalTokens };
   });
 };

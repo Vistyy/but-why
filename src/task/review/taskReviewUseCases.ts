@@ -462,6 +462,33 @@ export const abandonTaskReview = (
     const review = yield* input.persistence.getById(reviewId);
     if (review === undefined) return { ok: false, code: "task_review_not_found" } as const;
     if (review.state !== "running") return { ok: false, code: "task_review_not_active" } as const;
+    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
+      ref: review.baseRef,
+      commit: review.baseCommit,
+    });
+    if (!base.ok) {
+      return {
+        ok: false,
+        code: "task_review_cleanup_failed",
+        review,
+        message: base.message,
+      } as const;
+    }
+    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
+      workspaceId: review.id,
+      expectedCommitSha: review.baseCommit,
+      recordedWorktreePath: review.workspacePath,
+    });
+    yield* input.persistence.recordCleanup(review.id, cleanup.workspace, now);
+    if (cleanup.workspace !== "removed") {
+      const current = yield* input.persistence.getById(review.id);
+      return {
+        ok: false,
+        code: "task_review_cleanup_failed",
+        review: current ?? review,
+        message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
+      } as const;
+    }
     const transcriptDiscovery = discoverObservedReviewerTranscripts(
       reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
       review.taskId,
@@ -499,33 +526,6 @@ export const abandonTaskReview = (
         code: "task_review_cleanup_failed",
         review: current ?? review,
         message: failure.message,
-      } as const;
-    }
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
-      ref: review.baseRef,
-      commit: review.baseCommit,
-    });
-    if (!base.ok) {
-      return {
-        ok: false,
-        code: "task_review_cleanup_failed",
-        review,
-        message: base.message,
-      } as const;
-    }
-    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: review.id,
-      expectedCommitSha: review.baseCommit,
-      recordedWorktreePath: review.workspacePath,
-    });
-    yield* input.persistence.recordCleanup(review.id, cleanup.workspace, now);
-    if (cleanup.workspace !== "removed") {
-      const current = yield* input.persistence.getById(review.id);
-      return {
-        ok: false,
-        code: "task_review_cleanup_failed",
-        review: current ?? review,
-        message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
       } as const;
     }
     const abandoned = yield* input.persistence.abandon(review.id, reason, now);

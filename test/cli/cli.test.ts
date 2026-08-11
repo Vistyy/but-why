@@ -29,7 +29,6 @@ const expectedCommandPaths = [
   "task review show",
   "task review abandon",
   "task-review show",
-  "task-review abandon",
   "task approve",
   "task context",
   "task context draft",

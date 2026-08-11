@@ -11,6 +11,7 @@ import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
 import { runListCommand } from "../../src/cli/task/commands/list.js";
 import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
+import { taskReviewView } from "../../src/cli/task/commands/taskReviewView.js";
 import { dashboard } from "../../src/cli/task/dashboard.js";
 import type { TaskCommandEnvironment } from "../../src/cli/task/taskCliSupport.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
@@ -96,6 +97,30 @@ const environment = (
 });
 
 describe("Task command Adapters", () => {
+  it("renders only valid Task Review recovery actions", () => {
+    const running = taskReviewRecord({ state: "running", outcome: null });
+
+    expect(taskReviewView(running).recovery.nextActions).toEqual([
+      "Run `by task-review show review-1` to inspect recovery.",
+    ]);
+    expect(
+      taskReviewView(running, false, {
+        verified: false,
+        message: "The workspace identity is not proven.",
+      }).recovery.nextActions,
+    ).toEqual(["Resolve the reported Task Review identity problem."]);
+    expect(
+      taskReviewView(running, false, {
+        verified: true,
+        workspace: { state: "absent" },
+      }).recovery.nextActions,
+    ).toEqual([
+      "Stop the Task Review process before abandonment.",
+      'Run `by task review abandon review-1 --reason "..."` after the process stops.',
+    ]);
+    expect(taskReviewView(taskReviewRecord()).recovery.nextActions).toEqual([]);
+  });
+
   it.effect("parses representative Task Create options and renders the mutation result", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();

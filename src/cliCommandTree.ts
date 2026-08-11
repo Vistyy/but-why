@@ -290,7 +290,7 @@ let taskReviewTopCommand: AnyCommand;
 taskReviewTopCommand = group(
   "task-review",
   "Inspect and recover Task Reviews.",
-  [taskReviewShowCommand, taskReviewAbandonCommand],
+  [taskReviewShowCommand],
   {},
   () => generatedCommandUsage(taskReviewTopCommand),
 );

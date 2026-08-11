@@ -28,13 +28,7 @@ export const taskReviewView = (
   recovery: {
     workspaceCleanup: review.workspaceCleanup,
     failedOperation: review.toolingFailure?.operation ?? null,
-    nextActions:
-      review.state === "running"
-        ? [
-            "Stop the Task Review process before abandonment.",
-            `Run \`by task-review abandon ${review.id} --reason "..."\` after the process stops.`,
-          ]
-        : [],
+    nextActions: taskReviewRecoveryActions(review, identity),
   },
   sessions: review.sessions,
   transcripts: review.transcripts,
@@ -42,6 +36,20 @@ export const taskReviewView = (
   createdAt: review.createdAt,
   updatedAt: review.updatedAt,
 });
+
+const taskReviewRecoveryActions = (
+  review: TaskReviewRecord,
+  identity: TaskReviewIdentityInspection | undefined,
+): readonly string[] => {
+  if (review.state !== "running") return [];
+  if (identity === undefined)
+    return [`Run \`by task-review show ${review.id}\` to inspect recovery.`];
+  if (!identity.verified) return ["Resolve the reported Task Review identity problem."];
+  return [
+    "Stop the Task Review process before abandonment.",
+    `Run \`by task review abandon ${review.id} --reason "..."\` after the process stops.`,
+  ];
+};
 
 const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) =>
   policy.version === 1
