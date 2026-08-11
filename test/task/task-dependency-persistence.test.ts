@@ -125,7 +125,9 @@ it.scoped("continues to reject direct Task dependency edits for terminal Tasks",
         yield* repository.operation(
           "set terminal Task fixture state",
           (sql) => sql`
-            UPDATE tasks SET state = ${state}, updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-2")}
+            UPDATE tasks SET state = ${state},
+              cancel_reason = ${state === "cancelled" ? "Cancelled fixture" : null},
+              updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-2")}
           `,
         );
         expect(

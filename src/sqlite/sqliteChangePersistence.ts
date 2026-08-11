@@ -860,15 +860,13 @@ const getPassingEvidence = (
 
     const acceptanceContextRows = yield* sql<{
       readonly id: unknown;
-      readonly taskId: unknown;
       readonly acceptanceContext: unknown;
-    }>`SELECT id, task_id AS taskId, acceptance_context AS acceptanceContext
+    }>`SELECT id, acceptance_context AS acceptanceContext
        FROM changes WHERE id = ${authority.id}`;
     const expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
       const authorityRow = acceptanceContextRows[0];
       const id = decodeStoredString(authorityRow?.id, "Change ID");
       if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-      const taskId = decodeStoredNullableString(authorityRow?.taskId, "Change Task ID");
       const encoded = decodeStoredNullableString(
         authorityRow?.acceptanceContext,
         "Change Acceptance Context",

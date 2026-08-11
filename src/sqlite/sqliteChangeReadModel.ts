@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import type { ChangeRecord, ChangeState } from "../change/change.js";
+import type { ChangeCleanup, ChangeRecord, ChangeState } from "../change/change.js";
 import { changeState } from "../change/change.js";
 import type { ChangeStartRecord } from "../change/changeStartStore.js";
 import type {
@@ -121,7 +121,10 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
     throw new Error("Stored Change cancellation reason is inconsistent with lifecycle");
   }
 
-  const cleanupState = decodeStoredString(row.cleanupState, "Change cleanup state");
+  const cleanupState = decodeStoredString(
+    row.cleanupState,
+    "Change cleanup state",
+  ) as ChangeCleanup["state"];
   const cleanupBlockingReason = decodeStoredNullableString(
     row.cleanupBlockingReason,
     "Change cleanup blocking reason",
