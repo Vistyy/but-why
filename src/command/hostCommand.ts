@@ -41,7 +41,13 @@ const runCommand = (
       const baseCommand = Command.make(input.command, ...(input.args ?? []));
       const command =
         input.cwd === undefined ? baseCommand : Command.workingDirectory(baseCommand, input.cwd);
-      const runningCommand = yield* Command.start(command);
+      const runningCommand = yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const process = yield* Command.start(command);
+          yield* Effect.addFinalizer(() => terminateProcessTree(process));
+          return process;
+        }),
+      );
       const [exitCode, stdout, stderr] = yield* Effect.all(
         [
           runningCommand.exitCode,
@@ -61,6 +67,10 @@ export const executeHostCommandEffect = (
   runCommand(input, executorLayer).pipe(
     Effect.mapError((error) => new HostCommandError(commandErrorMessage(input, error), error)),
   );
+
+const terminateProcessTree = (
+  runningCommand: CommandExecutor.Process,
+): Effect.Effect<void, never> => runningCommand.kill("SIGKILL").pipe(Effect.ignore);
 
 export const executeHostCommand = async (input: HostCommandInput): Promise<HostCommandResult> => {
   try {

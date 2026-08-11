@@ -29,7 +29,7 @@ describe("host command Adapter", () => {
     );
   });
 
-  effectIt.effect("interrupts a command and its ordinary descendant", () =>
+  effectIt.effect("interrupts a command and a descendant that ignores SIGTERM", () =>
     Effect.gen(function* () {
       const directory = mkdtempSync(join(tmpdir(), "but-why-host-command-"));
       const pidFile = join(directory, "pid");
@@ -37,7 +37,10 @@ describe("host command Adapter", () => {
         const fiber = yield* Effect.fork(
           executeHostCommandEffect({
             command: "sh",
-            args: ["-c", `sleep 30 & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`],
+            args: [
+              "-c",
+              `sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`,
+            ],
           }),
         );
         yield* Effect.promise(() => waitForFile(pidFile));
@@ -45,6 +48,36 @@ describe("host command Adapter", () => {
         yield* Fiber.interrupt(fiber);
         yield* Effect.promise(() => waitForProcessExit(Number(readFileSync(pidFile, "utf8"))));
         expect(processIsGone(Number(readFileSync(pidFile, "utf8")))).toBe(true);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  effectIt.effect("interrupts descendants after the command root exits", () =>
+    Effect.gen(function* () {
+      const directory = mkdtempSync(join(tmpdir(), "but-why-host-command-"));
+      const rootPidFile = join(directory, "root-pid");
+      const childPidFile = join(directory, "child-pid");
+      try {
+        const fiber = yield* Effect.fork(
+          executeHostCommandEffect({
+            command: "sh",
+            args: [
+              "-c",
+              `printf '%s' "$$" > '${rootPidFile}'; sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${childPidFile}'`,
+            ],
+          }),
+        );
+        yield* Effect.promise(() => waitForFile(childPidFile));
+        const rootPid = Number(readFileSync(rootPidFile, "utf8"));
+        const childPid = Number(readFileSync(childPidFile, "utf8"));
+        yield* Effect.promise(() => waitForProcessExit(rootPid));
+        expect(processIsGone(rootPid)).toBe(true);
+        expect(processIsGone(childPid)).toBe(false);
+        yield* Fiber.interrupt(fiber);
+        yield* Effect.promise(() => waitForProcessExit(childPid));
+        expect(processIsGone(childPid)).toBe(true);
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }

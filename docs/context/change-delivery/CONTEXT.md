@@ -148,6 +148,12 @@ The Reviewer Agent Runtime classification after a failed resumed review.
 `unusable` means the stored Reviewer Session is proven unable to continue, while `unknown` means the failure does not establish that the stored session is unusable and the session remains preserved.
 _Avoid_: Provider error message, automatic retry status
 
+**Reviewer Invocation Usage**:
+The token usage evidence for one reviewer process invocation.
+A measured invocation records its input, cached input, output, and total token counts, while unavailable usage is recorded as `null` and is not treated as zero.
+A resumed Reviewer Session produces new Reviewer Invocation Usage for each invocation instead of repeating cumulative session usage.
+_Avoid_: Reviewer Session total, inferred zero usage, cumulative resumed-session usage
+
 **Producer**:
 The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
 A Producer identifies the source that creates an Artifact or Finding.

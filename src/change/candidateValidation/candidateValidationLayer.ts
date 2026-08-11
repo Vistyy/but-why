@@ -1,4 +1,5 @@
 import { Layer } from "effect";
+import { piReviewerProcessExecutor } from "../../agent/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -7,7 +8,7 @@ import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import {
-  CandidateReviewerAgentRuntime,
+  CandidateReviewerExecution,
   type CandidateValidation,
   CandidateValidationExecution,
   CandidateValidationLive,
@@ -38,10 +39,10 @@ export const candidateValidationLayer = (input: {
               }),
         }),
         Layer.succeed(CandidateValidationExecution, input.persistence),
-        Layer.succeed(
-          CandidateReviewerAgentRuntime,
-          input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
-        ),
+        Layer.succeed(CandidateReviewerExecution, {
+          runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
+          processExecutor: piReviewerProcessExecutor,
+        }),
       ),
     ),
   );

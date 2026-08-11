@@ -2,7 +2,6 @@ import { lstatSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect, Ref, type Scope } from "effect";
-import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
 import {
   WorkspaceCommandExecutionFailed,
   type WorkspaceCommandExecutor,
@@ -83,7 +82,6 @@ type DisposableExactCommitWorkspaceAdapters = {
 type WorkspaceAdapter = {
   readonly close: () => Promise<{ readonly preservedWorktreePath?: string }>;
   readonly commandExecutor: WorkspaceCommandExecutor;
-  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly worktreePath: string;
 };
 
@@ -300,7 +298,6 @@ const setupDisposableWorkspaceScope = <Error>(
     if (input.runInWorkspace !== undefined) {
       yield* input.runInWorkspace({
         commandExecutor: worktreeAttempt.workspace.commandExecutor,
-        reviewerExecutor: worktreeAttempt.workspace.reviewerExecutor,
         worktreePath: state.worktreePath ?? state.expectedWorktreePath,
       });
     }

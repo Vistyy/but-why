@@ -2,9 +2,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { Effect } from "effect";
-
 import { mapRuntimeError, runCli } from "./cli.js";
+import { hostInterruptionExitCode, runWithHostInterruption } from "./command/hostInterruption.js";
 import { serializeOutput } from "./output/serialize.js";
 
 const executablePath =
@@ -14,7 +13,7 @@ const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
 
-Effect.runPromise(
+void runWithHostInterruption(
   runCli(args, {
     executablePath,
     cwd: process.cwd(),
@@ -23,13 +22,10 @@ Effect.runPromise(
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
     writeStderr: (message) => process.stderr.write(message),
   }),
-)
-  .then((result) => {
+  (completion) => {
+    const result = completion.ok ? completion.value : mapRuntimeError();
     process.stdout.write(serializeOutput(result.stdout));
-    process.exitCode = result.exitCode;
-  })
-  .catch(() => {
-    const result = mapRuntimeError();
-    process.stdout.write(serializeOutput(result.stdout));
-    process.exitCode = result.exitCode;
-  });
+    process.exitCode = hostInterruptionExitCode(completion.signal, result.exitCode);
+  },
+  process,
+);

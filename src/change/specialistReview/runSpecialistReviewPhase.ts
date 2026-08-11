@@ -70,6 +70,7 @@ const translateRuntimeResult = <Output>(
     sessionUsability: result.sessionUsability,
     attempts: result.attempts,
     stdout: result.stdout,
+    ...(result.invocationUsage === undefined ? {} : { invocationUsage: result.invocationUsage }),
     ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
     ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
   };

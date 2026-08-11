@@ -64,7 +64,7 @@ Fallow enforces these architecture contracts:
 - CLI modules do not import storage.
 - Domain modules do not import Node infrastructure.
 
-ast-grep enforces syntax contracts for process ownership, Effect tests, the private Sandcastle runtime Adapter, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, Validation Workspace tests, and JSON.parse trusted assertions.
+ast-grep enforces syntax contracts for process ownership, Effect tests, the private Sandcastle Validation Workspace Adapter, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, Validation Workspace tests, and JSON.parse trusted assertions.
 The custom Biome rule rejects TypeScript import type expressions because top-level type imports keep dependencies visible without prohibiting required runtime dynamic imports.
 The JSON.parse contract rejects direct trusted assertions of parsed JSON; parse into `unknown` and use the owning boundary's focused decoder or schema instead.
 Repository-authored diagnostics state the prohibited approach, the invariant reason, and the supported replacement.
