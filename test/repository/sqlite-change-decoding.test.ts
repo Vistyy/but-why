@@ -448,6 +448,9 @@ describe("SQLite Change decoding", () => {
           }),
         );
         expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
+        ).toBeUndefined();
+        expect(
           yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,
             choice: "Record only the new Decision",

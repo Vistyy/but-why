@@ -744,7 +744,6 @@ const getPassingEvidence = (
       };
     });
     if (authority === undefined) return undefined;
-    const implementationDecisions = yield* listDecisions(sql, authority.id);
     const candidatePredicate =
       query?.candidateId === undefined || !allowHistoricalCandidate
         ? `candidate.id = (
@@ -773,6 +772,8 @@ const getPassingEvidence = (
        ORDER BY run.created_at DESC, run.id DESC`,
       parameters,
     );
+    if (rows.length === 0) return undefined;
+    const implementationDecisions = yield* listDecisions(sql, authority.id);
     const blockerHistory = yield* readBlockers(sql, authority.id, operationName);
     const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
