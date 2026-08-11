@@ -8,7 +8,12 @@ import continueChange from "../../extensions/continue-change.js";
 const changeId = "de32d32a-ecd8-46b4-b2d8-5a08d2128869";
 
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
-  change: { state: "open", closeReason: null, taskId: "BY-236" },
+  change: {
+    state: "open",
+    closeReason: null,
+    taskId: "BY-236",
+    baseRef: "refs/remotes/origin/main",
+  },
   currentCandidate: null,
   currentValidationRun: null,
   findingCount: 0,
@@ -209,7 +214,10 @@ describe("packaged Change Implement continuation extension", () => {
     expect(reassessment).toContain("task context BY-236");
     expect(reassessment).toContain("complete current Acceptance Context");
     expect(reassessment).toContain("complete committed implementation");
-    expect(reassessment).toContain("complete Candidate diff against the current Change Base");
+    expect(reassessment).toContain(
+      "complete committed Candidate diff against the current Change Base",
+    );
+    expect(reassessment).toContain("git diff refs/remotes/origin/main...HEAD");
     expect(reassessment).toContain("Correct and commit each material discrepancy");
     expect(reassessment).toContain("Run focused verification for any corrections");
     expect(reassessment).toContain("Do not run configured blocking Checks or reviews");
@@ -220,10 +228,44 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("tool_call", { ...submit, toolCallId: "submit-during-reassessment" }),
     ).toMatchObject({ block: true });
 
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "stop" }],
+    });
+    expect(harness.sent).toHaveLength(2);
+    expect(harness.sent[1]).toContain("cannot complete from confirmation alone");
+    expect(harness.sendOptions[1]).toEqual({ deliverAs: "followUp" });
+
+    await harness.emit("agent_settled");
+    expect(
+      await harness.emit("tool_call", { ...submit, toolCallId: "still-pending" }),
+    ).toMatchObject({ block: true });
+
+    const inspectionToolCallId = "reassessment-inspection";
+    const inspectionCommand = [
+      `just by change show ${changeId}`,
+      "just by task context BY-236",
+      "git status --short",
+      "git diff refs/remotes/origin/main...HEAD",
+    ].join(" && ");
+    await harness.emit("tool_call", {
+      type: "tool_call",
+      toolCallId: inspectionToolCallId,
+      toolName: "bash",
+      input: { command: inspectionCommand },
+    });
+    await harness.emit("tool_result", {
+      type: "tool_result",
+      toolCallId: inspectionToolCallId,
+      toolName: "bash",
+      input: { command: inspectionCommand },
+      content: [{ type: "text", text: "inspection complete" }],
+      isError: false,
+      details: undefined,
+    });
     await harness.emit("agent_settled");
 
-    expect(harness.sent).toHaveLength(2);
-    expect(harness.sent[1]).toContain("Resume implementation of Change");
+    expect(harness.sent).toHaveLength(3);
+    expect(harness.sent[2]).toContain("Resume implementation of Change");
     expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-3" })).toBeUndefined();
     expect(
       await harness.emit("tool_call", {
@@ -245,7 +287,14 @@ describe("packaged Change Implement continuation extension", () => {
       submissionReassessment: {
         state: "complete",
         taskId: "BY-236",
+        baseRef: "refs/remotes/origin/main",
         hasResolutions: false,
+        evidence: {
+          change: true,
+          acceptanceContext: true,
+          worktreeStatus: true,
+          candidateDiff: true,
+        },
       },
     });
     await harness.emit("session_start", { type: "session_start", reason: "resume" });

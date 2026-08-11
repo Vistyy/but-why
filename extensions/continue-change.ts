@@ -3,6 +3,7 @@ import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  isBashToolResult,
   isToolCallEventType,
   type ExtensionAPI,
   type ExtensionContext,
@@ -37,6 +38,7 @@ export type ChangeInspectionSnapshot = {
     readonly state: ChangeState;
     readonly closeReason: ChangeCloseReason | null;
     readonly taskId?: string | null;
+    readonly baseRef?: string;
   };
   readonly currentCandidate: CurrentCandidate | null;
   readonly currentValidationRun: CurrentValidationRun | null;
@@ -67,10 +69,19 @@ export type RetryState = {
   readonly unchangedRestarts: number;
 };
 
+type ReassessmentEvidence = {
+  readonly change: boolean;
+  readonly acceptanceContext: boolean;
+  readonly worktreeStatus: boolean;
+  readonly candidateDiff: boolean;
+};
+
 type SubmissionReassessment = {
   readonly state: "awaiting-settle" | "running" | "complete" | "not-required";
   readonly taskId: string | null;
+  readonly baseRef: string | null;
   readonly hasResolutions: boolean;
+  readonly evidence: ReassessmentEvidence;
 };
 
 type PersistedContinuationState = RetryState & {
@@ -393,22 +404,76 @@ const pendingReassessmentMessage =
 const inspectionFailureMessage = (message: string): string =>
   `But Why blocked Change Submission because it could not classify reassessment eligibility from trusted Change inspection: ${message}`;
 
+const emptyReassessmentEvidence = (): ReassessmentEvidence => ({
+  change: false,
+  acceptanceContext: false,
+  worktreeStatus: false,
+  candidateDiff: false,
+});
+
+const reassessmentEvidenceComplete = (evidence: ReassessmentEvidence): boolean =>
+  evidence.change &&
+  evidence.acceptanceContext &&
+  evidence.worktreeStatus &&
+  evidence.candidateDiff;
+
+const commandReassessmentEvidence = (
+  command: string,
+  changeId: string,
+  taskId: string,
+  baseRef: string,
+): ReassessmentEvidence => {
+  const visible = visibleShellText(command);
+  const prefixes = ["just by", "pnpx but-why", "npx -y but-why"];
+  return {
+    change: prefixes.some((prefix) => visible.includes(`${prefix} change show ${changeId}`)),
+    acceptanceContext: prefixes.some((prefix) =>
+      visible.includes(`${prefix} task context ${taskId}`),
+    ),
+    worktreeStatus: /(?:^|[\n;|&(){}]\s*)git\s+status(?:\s|$)/u.test(visible),
+    candidateDiff: visible.includes(`git diff ${baseRef}...HEAD`),
+  };
+};
+
+const incompleteReassessmentMessage = (
+  reassessment: SubmissionReassessment,
+  changeId: string,
+  commandPrefix: ButWhyCommandPrefix,
+): string => {
+  const commands = [
+    ...(reassessment.evidence.change
+      ? []
+      : [butWhyCommand(commandPrefix, "change", "show", changeId)]),
+    ...(reassessment.evidence.acceptanceContext || reassessment.taskId === null
+      ? []
+      : [butWhyCommand(commandPrefix, "task", "context", reassessment.taskId)]),
+    ...(reassessment.evidence.worktreeStatus ? [] : ["git status --short"]),
+    ...(reassessment.evidence.candidateDiff || reassessment.baseRef === null
+      ? []
+      : [`git diff ${reassessment.baseRef}...HEAD`]),
+  ];
+  return `The reassessment cannot complete from confirmation alone. Continue the same reassessment run and successfully execute the missing required inspections: ${commands.map((command) => `\`${command}\``).join(", ")}. Then complete the comparison, corrections, commits, and focused verification required by the reassessment instructions.`;
+};
+
 const submissionReassessmentMessage = (
   changeId: string,
   taskId: string,
   commandPrefix: ButWhyCommandPrefix,
+  baseRef: string,
   hasResolutions: boolean,
 ): string =>
   [
     `But Why started the required separate reassessment run for Change ${changeId}.`,
     "Do not call Change Submit during this run.",
     `Inspect the Change with \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and read the complete current Acceptance Context with \`${butWhyCommand(commandPrefix, "task", "context", taskId)}\`.`,
+    "Inspect the Managed Worktree status with `git status --short`.",
+    `Inspect the complete committed Candidate diff against the current Change Base with \`git diff ${baseRef}...HEAD\`.`,
     ...(hasResolutions
       ? [
           `Inspection shows approved Implementation Blocker Resolutions. Read them with \`${butWhyCommand(commandPrefix, "change", "blocker", "list", changeId)}\` and include them in the current Acceptance Context.`,
         ]
       : []),
-    "Inspect the Managed Worktree status and compare the complete committed implementation and complete Candidate diff against the current Change Base with every accepted outcome, criterion, constraint, and verification requirement.",
+    "Compare the complete committed implementation with every accepted outcome, criterion, constraint, and verification requirement.",
     "Correct and commit each material discrepancy.",
     "Run focused verification for any corrections.",
     "Do not run configured blocking Checks or reviews, a repository-wide quality command, or an unfiltered test or coverage workload.",
@@ -509,6 +574,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
+  const pendingReassessmentEvidence = new Map<string, ReassessmentEvidence>();
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
@@ -781,6 +847,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     | {
         readonly ok: true;
         readonly taskId: string | null;
+        readonly baseRef: string | null;
         readonly hasResolutions: boolean;
       }
     | { readonly ok: false; readonly message: string }
@@ -806,7 +873,10 @@ export default function continueChange(pi: ExtensionAPI): void {
       return { ok: false, message: "But Why inspection returned an unsupported Change state shape" };
     }
     if (snapshotValue.change.taskId === null) {
-      return { ok: true, taskId: null, hasResolutions: false };
+      return { ok: true, taskId: null, baseRef: null, hasResolutions: false };
+    }
+    if (snapshotValue.change.baseRef === undefined) {
+      return { ok: false, message: "But Why inspection omitted the Change Base reference" };
     }
 
     const blockerResult = await inspectCommand(["change", "blocker", "list", id], ctx.cwd);
@@ -831,6 +901,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     return {
       ok: true,
       taskId: snapshotValue.change.taskId,
+      baseRef: snapshotValue.change.baseRef,
       hasResolutions: blockerValue.resolutions.length > 0,
     };
   };
@@ -848,9 +919,24 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   pi.on("tool_call", async (event, ctx) => {
-    if (!isToolCallEventType("bash", event) || !containsVisibleChangeSubmit(event.input.command)) {
-      return;
+    if (!isToolCallEventType("bash", event)) return;
+    const runningReassessment = persisted?.submissionReassessment;
+    if (
+      runningReassessment?.state === "running" &&
+      runningReassessment.taskId !== null &&
+      runningReassessment.baseRef !== null
+    ) {
+      const evidence = commandReassessmentEvidence(
+        event.input.command,
+        changeId ?? "",
+        runningReassessment.taskId,
+        runningReassessment.baseRef,
+      );
+      if (Object.values(evidence).some(Boolean)) {
+        pendingReassessmentEvidence.set(event.toolCallId, evidence);
+      }
     }
+    if (!containsVisibleChangeSubmit(event.input.command)) return;
     const reassessment = persisted?.submissionReassessment;
     if (reassessment?.state === "complete" || reassessment?.state === "not-required") return;
     if (reassessment?.state === "awaiting-settle" || reassessment?.state === "running") {
@@ -871,16 +957,39 @@ export default function continueChange(pi: ExtensionAPI): void {
       saveSubmissionReassessment({
         state: "not-required",
         taskId: null,
+        baseRef: null,
         hasResolutions: false,
+        evidence: emptyReassessmentEvidence(),
       });
       return;
     }
     saveSubmissionReassessment({
       state: "awaiting-settle",
       taskId: eligibility.taskId,
+      baseRef: eligibility.baseRef,
       hasResolutions: eligibility.hasResolutions,
+      evidence: emptyReassessmentEvidence(),
     });
     return { block: true, reason: interruptedSubmissionMessage };
+  });
+
+  pi.on("tool_result", (event) => {
+    if (!isBashToolResult(event)) return;
+    const observed = pendingReassessmentEvidence.get(event.toolCallId);
+    pendingReassessmentEvidence.delete(event.toolCallId);
+    if (observed === undefined || event.isError) return;
+    const reassessment = persisted?.submissionReassessment;
+    if (reassessment?.state !== "running") return;
+    saveSubmissionReassessment({
+      ...reassessment,
+      evidence: {
+        change: reassessment.evidence.change || observed.change,
+        acceptanceContext:
+          reassessment.evidence.acceptanceContext || observed.acceptanceContext,
+        worktreeStatus: reassessment.evidence.worktreeStatus || observed.worktreeStatus,
+        candidateDiff: reassessment.evidence.candidateDiff || observed.candidateDiff,
+      },
+    });
   });
 
   const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
@@ -1190,12 +1299,28 @@ export default function continueChange(pi: ExtensionAPI): void {
       changeId !== undefined
     ) {
       pause(ctx);
+      return;
+    }
+    const reassessment = persisted?.submissionReassessment;
+    if (
+      reassessment?.state === "running" &&
+      !reassessmentEvidenceComplete(reassessment.evidence) &&
+      changeId !== undefined
+    ) {
+      pi.sendUserMessage(
+        incompleteReassessmentMessage(reassessment, changeId, commandPrefixFor(ctx.cwd)),
+        { deliverAs: "followUp" },
+      );
     }
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
     const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state === "awaiting-settle" && reassessment.taskId !== null) {
+    if (
+      reassessment?.state === "awaiting-settle" &&
+      reassessment.taskId !== null &&
+      reassessment.baseRef !== null
+    ) {
       saveSubmissionReassessment({ ...reassessment, state: "running" });
       if (changeId !== undefined) {
         pi.sendUserMessage(
@@ -1203,6 +1328,7 @@ export default function continueChange(pi: ExtensionAPI): void {
             changeId,
             reassessment.taskId,
             commandPrefixFor(ctx.cwd),
+            reassessment.baseRef,
             reassessment.hasResolutions,
           ),
         );
@@ -1210,6 +1336,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     if (reassessment?.state === "running") {
+      if (!reassessmentEvidenceComplete(reassessment.evidence)) return;
       saveSubmissionReassessment({ ...reassessment, state: "complete" });
     }
     await continueWatching(ctx, false);
@@ -1222,6 +1349,13 @@ const isNonNegativeInteger = (value: unknown): value is number =>
 const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
   value === undefined || value === null || typeof value === "string";
 
+const isReassessmentEvidence = (value: unknown): value is ReassessmentEvidence =>
+  isRecord(value) &&
+  typeof recordValue(value, "change") === "boolean" &&
+  typeof recordValue(value, "acceptanceContext") === "boolean" &&
+  typeof recordValue(value, "worktreeStatus") === "boolean" &&
+  typeof recordValue(value, "candidateDiff") === "boolean";
+
 const isSubmissionReassessment = (value: unknown): value is SubmissionReassessment =>
   isRecord(value) &&
   (recordValue(value, "state") === "awaiting-settle" ||
@@ -1229,7 +1363,9 @@ const isSubmissionReassessment = (value: unknown): value is SubmissionReassessme
     recordValue(value, "state") === "complete" ||
     recordValue(value, "state") === "not-required") &&
   (recordValue(value, "taskId") === null || typeof recordValue(value, "taskId") === "string") &&
-  typeof recordValue(value, "hasResolutions") === "boolean";
+  (recordValue(value, "baseRef") === null || typeof recordValue(value, "baseRef") === "string") &&
+  typeof recordValue(value, "hasResolutions") === "boolean" &&
+  isReassessmentEvidence(recordValue(value, "evidence"));
 
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
