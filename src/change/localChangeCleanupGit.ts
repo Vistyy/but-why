@@ -123,10 +123,15 @@ const removeManagedWorktree: CleanupStage = (input) => {
     : undefined;
 };
 
-const removeWorktreeContainers: CleanupStage = (input) =>
-  input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)
-    ? { state: "pending", blockingReason: "worktree_container_removal_failed" }
-    : undefined;
+const removeWorktreeContainers: CleanupStage = (input) => {
+  if (input.worktreePath === null) return undefined;
+  if (!isWorktreePathSafe(input.worktreePath)) {
+    return { state: "pending", blockingReason: "worktree_path_unsafe" };
+  }
+  return removeEmptySiblingContainers(input.worktreePath)
+    ? undefined
+    : { state: "pending", blockingReason: "worktree_container_removal_failed" };
+};
 
 const cleanupLocalBranch: CleanupStage = (input) => {
   if (branchNameForRef(input.branchRef) === undefined) {
@@ -166,6 +171,7 @@ const cleanupLocalBranch: CleanupStage = (input) => {
   }
   return git(input.repositoryCommonDirectory, [
     "update-ref",
+    "--no-deref",
     "-d",
     input.branchRef,
     branchHead.stdout.trim(),

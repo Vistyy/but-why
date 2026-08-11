@@ -158,6 +158,56 @@ describe("Change cleanup Git adapter", () => {
     expect(existsSync(siblingRoot)).toBe(true);
   });
 
+  it("reverifies container path safety after Managed Worktree removal", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const siblingRoot = join(dirname(repository), `${basename(repository)}-worktrees`);
+    const worktreePath = join(siblingRoot, "but-why", "feature");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    const externalTarget = createTestWorkspace();
+    const externalContainer = join(externalTarget, "but-why");
+    mkdirSync(externalContainer);
+    const realGit = runTestProcessOrThrow("sh", ["-c", "command -v git"], { cwd: repository });
+    const commandDirectory = createTestWorkspace();
+    const gitWrapper = join(commandDirectory, "git");
+    writeFileSync(
+      gitWrapper,
+      `#!/usr/bin/env node
+import { rmSync, symlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+const args = process.argv.slice(2);
+const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: "inherit" });
+if (result.status === 0 && args.includes("worktree") && args.includes("remove")) {
+  rmSync(${JSON.stringify(siblingRoot)}, { recursive: true, force: true });
+  symlinkSync(${JSON.stringify(externalTarget)}, ${JSON.stringify(siblingRoot)}, "dir");
+}
+process.exit(result.status ?? 1);
+`,
+    );
+    chmodSync(gitWrapper, 0o755);
+    const previousPath = process.env["PATH"];
+
+    let result: ReturnType<typeof cleanupChangeResources>;
+    try {
+      process.env["PATH"] = `${commandDirectory}:${previousPath ?? ""}`;
+      result = cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath,
+        branchRef: "refs/heads/feature",
+      });
+    } finally {
+      process.env["PATH"] = previousPath;
+    }
+
+    expect(result).toEqual({ state: "pending", blockingReason: "worktree_path_unsafe" });
+    expect(existsSync(externalContainer)).toBe(true);
+  });
+
   it("suppresses later mutations after dirty-work inspection blocks cleanup", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "feature-worktree");
@@ -278,6 +328,28 @@ describe("Change cleanup Git adapter", () => {
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
+  });
+
+  it("deletes a symbolic local Repository Branch without dereferencing its target", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const mainHead = git(repository, "rev-parse", "refs/heads/main");
+    git(repository, "symbolic-ref", "refs/heads/feature", "refs/heads/main");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath: null,
+        branchRef: "refs/heads/feature",
+      }),
+    ).toEqual({ state: "complete" });
+    expect(git(repository, "rev-parse", "refs/heads/main")).toBe(mainHead);
+    expect(existsSync(join(commonDirectory, "refs", "heads", "feature"))).toBe(false);
   });
 
   it("preserves a local Repository Branch that moves after reachability verification", () => {
