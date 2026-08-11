@@ -572,10 +572,11 @@ const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
       if (cleanupState === "complete" && cleanupBlockingReason !== null) {
         throw new Error("Stored completed Change cleanup has a blocking reason");
       }
-      return {
-        ...decodeSelectedChangeState(row, changeId),
-        cleanup: { state: cleanupState, blockingReason: cleanupBlockingReason },
+      const cleanup: ChangeCleanup = {
+        state: cleanupState,
+        blockingReason: cleanupBlockingReason,
       };
+      return { ...decodeSelectedChangeState(row, changeId), cleanup };
     });
   });
 
