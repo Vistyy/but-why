@@ -1,11 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
@@ -27,7 +27,10 @@ import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
+import {
+  noOpTerminalCleanupDependencies,
+  openTerminalCleanup,
+} from "../support/terminalCleanup.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -35,6 +38,16 @@ import {
 } from "../support/testWorkspace.js";
 
 const now = "2026-08-05T10:00:00.000Z";
+
+const openArtifactLifecycleForTest = (
+  dependencies: Parameters<typeof openArtifactLifecycle>[0],
+) => {
+  const lifecycle = openArtifactLifecycle(dependencies);
+  return {
+    removeContent: (changeId: string) =>
+      lifecycle.removeContent(changeId).pipe(Effect.provide(NodeFileSystem.layer)),
+  };
+};
 
 const policy = {
   prepare: { command: "true", timeoutSeconds: 10 },
@@ -112,7 +125,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
               removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => ({ state: "complete", blockingReason: null }),
-            artifactLifecycle: openArtifactLifecycle({
+            artifactLifecycle: openArtifactLifecycleForTest({
               persistence: fixture.validation.artifacts,
               artifactsRoot: fixture.artifactsRoot,
             }),
@@ -257,7 +270,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
                 removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete" }),
-              artifactLifecycle: openArtifactLifecycle({
+              artifactLifecycle: openArtifactLifecycleForTest({
                 persistence: fixture.validation.artifacts,
                 artifactsRoot: fixture.artifactsRoot,
               }),
@@ -340,7 +353,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
   it.effect("treats already-removed Artifact Content as success on retry", () =>
     withArtifactLifecycleFixture((fixture) =>
       Effect.gen(function* () {
-        const lifecycle = openArtifactLifecycle({
+        const lifecycle = openArtifactLifecycleForTest({
           persistence: fixture.validation.artifacts,
           artifactsRoot: fixture.artifactsRoot,
         });
@@ -360,7 +373,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
     () =>
       withArtifactLifecycleFixture((fixture) =>
         Effect.gen(function* () {
-          const lifecycle = openArtifactLifecycle({
+          const lifecycle = openArtifactLifecycleForTest({
             persistence: fixture.validation.artifacts,
             artifactsRoot: fixture.artifactsRoot,
           });
@@ -392,7 +405,7 @@ describe("Artifact Content removal safety", () => {
       const keptPath = join(outside, "keep.txt");
       writeFileSync(keptPath, "preserve this file\n");
 
-      const lifecycle = openArtifactLifecycle({
+      const lifecycle = openArtifactLifecycleForTest({
         persistence: {
           listRunIdsForChange: () => Effect.succeed(["../outside"]),
         },

@@ -1,15 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option } from "effect";
 import { describe } from "vitest";
 import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
-import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
+import { runCheckPhase as runCheckPhaseWithFileSystem } from "../../src/change/validation/runCheckRound.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
+
+const runCheckPhase = (input: Parameters<typeof runCheckPhaseWithFileSystem>[0]) =>
+  runCheckPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 describe("check round Findings", () => {
   it.effect(

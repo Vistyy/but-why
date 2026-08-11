@@ -1,16 +1,23 @@
-import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import * as FileSystem from "@effect/platform/FileSystem";
+import { Effect } from "effect";
 
 export const readValidationArtifactContent = (
   artifactsRoot: string,
   artifactPath: string,
-): Buffer | undefined => {
-  try {
-    return readFileSync(safeArtifactPath(artifactsRoot, artifactPath));
-  } catch {
-    return undefined;
-  }
-};
+): Effect.Effect<Buffer | undefined, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Effect.option(
+      Effect.try(() => safeArtifactPath(artifactsRoot, artifactPath)),
+    );
+    if (path._tag === "None") return undefined;
+
+    return yield* fileSystem.readFile(path.value).pipe(
+      Effect.map((content) => Buffer.from(content)),
+      Effect.orElseSucceed(() => undefined),
+    );
+  });
 
 const safeArtifactPath = (artifactsRoot: string, artifactPath: string): string => {
   const root = resolve(artifactsRoot);
