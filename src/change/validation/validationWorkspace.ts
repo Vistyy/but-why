@@ -1,4 +1,3 @@
-import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SpecialistReviewerContinuityEvidence } from "../specialistReview/runSpecialistReviewPhase.js";
@@ -13,7 +12,6 @@ export type ValidationWorkspaceCleanupResult = {
 
 export type ActiveValidationWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;
-  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly worktreePath: string;
 };
 

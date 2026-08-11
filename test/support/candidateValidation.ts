@@ -1,11 +1,12 @@
 import { Effect, Layer } from "effect";
 
+import { piReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import {
-  CandidateReviewerAgentRuntime,
+  CandidateReviewerExecution,
   CandidateValidationExecution,
   CandidateValidationLive,
   CandidateValidationPaths,
@@ -46,10 +47,10 @@ export const candidateValidationForTest = (input: {
           ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
         }),
         persistenceLayer,
-        Layer.succeed(
-          CandidateReviewerAgentRuntime,
-          input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
-        ),
+        Layer.succeed(CandidateReviewerExecution, {
+          runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
+          processExecutor: piReviewerProcessExecutor,
+        }),
       ),
     ),
   );

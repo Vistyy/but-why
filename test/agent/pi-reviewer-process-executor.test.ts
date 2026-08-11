@@ -193,6 +193,53 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
+  it.effect("classifies a confirmed missing resumed session as unusable", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-missing-reviewer-session-"));
+      try {
+        const result = yield* Effect.either(
+          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).effect({
+            ...input,
+            sessionStorageRoot: root,
+            resumeSession: "missing-session",
+          }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: { sessionUsability: "unusable" },
+        });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("preserves session storage inspection failures as unknown", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-invalid-reviewer-session-root-"));
+      const storageFile = join(root, "not-a-directory");
+      writeFileSync(storageFile, "not a session directory");
+      try {
+        const result = yield* Effect.either(
+          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).effect({
+            ...input,
+            sessionStorageRoot: storageFile,
+            resumeSession: "stored-session",
+          }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            message: expect.stringContaining("is not a directory"),
+            sessionUsability: "unknown",
+          },
+        });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.scoped("waits for reviewer process-tree termination when interrupted", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-interrupt-"));

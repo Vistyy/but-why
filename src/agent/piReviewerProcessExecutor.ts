@@ -291,37 +291,53 @@ const objectValue = (value: unknown): Record<string, unknown> | undefined =>
     : undefined;
 
 const findSessionFile = (root: string, sessionId: string): string | undefined => {
+  let rootStat: ReturnType<typeof statSync>;
   try {
-    if (!statSync(root).isDirectory()) return undefined;
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
-      const path = join(root, entry.name);
-      if (entry.isDirectory()) {
-        const nested = findSessionFile(path, sessionId);
-        if (nested !== undefined) return nested;
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith(".jsonl") &&
-        (entry.name.includes(sessionId) || hasSessionHeader(path, sessionId))
-      ) {
-        return path;
-      }
+    rootStat = statSync(root);
+  } catch (error) {
+    if (nodeErrorCode(error) === "ENOENT") return undefined;
+    throw error;
+  }
+  if (!rootStat.isDirectory()) {
+    throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
+  }
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      const nested = findSessionFile(path, sessionId);
+      if (nested !== undefined) return nested;
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".jsonl") &&
+      (entry.name.includes(sessionId) || hasSessionHeader(path, sessionId))
+    ) {
+      return path;
     }
-  } catch {
-    return undefined;
   }
   return undefined;
 };
 
 const hasSessionHeader = (path: string, sessionId: string): boolean => {
+  let firstLine: string | undefined;
   try {
-    const firstLine = readFileSync(path, "utf8").split("\n", 1)[0];
-    if (firstLine === undefined) return false;
+    firstLine = readFileSync(path, "utf8").split("\n", 1)[0];
+  } catch (error) {
+    if (nodeErrorCode(error) === "ENOENT") return false;
+    throw error;
+  }
+  if (firstLine === undefined) return false;
+  try {
     const header = parseObject(firstLine, "Reviewer Session JSONL is corrupt.");
     return header["type"] === "session" && header["id"] === sessionId;
   } catch {
     return false;
   }
 };
+
+const nodeErrorCode = (error: unknown): string | undefined =>
+  typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
 
 const reviewerProcessExecutionFailed = (error: unknown): ReviewerProcessExecutionFailed => {
   const message = error instanceof Error ? error.message : String(error);

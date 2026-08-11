@@ -1,4 +1,3 @@
-import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
 import type { WorkspaceCommandExecutor } from "../command/workspaceCommand.js";
 
 export type DisposableWorkspaceCleanupState = "not_created" | "removed" | "failed";
@@ -10,7 +9,6 @@ export type DisposableWorkspaceCleanupResult = {
 
 export type DisposableWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;
-  readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly worktreePath: string;
 };
 

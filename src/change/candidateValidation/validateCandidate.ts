@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -110,9 +111,14 @@ export class CandidateValidationExecution extends Context.Tag("CandidateValidati
   CandidateValidationExecutionPort
 >() {}
 
-export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewerAgentRuntime")<
-  CandidateReviewerAgentRuntime,
-  ReviewerAgentRuntime<ReviewerOutput>
+type CandidateReviewerExecutionValue = {
+  readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly processExecutor: ReviewerProcessExecutor;
+};
+
+export class CandidateReviewerExecution extends Context.Tag("CandidateReviewerExecution")<
+  CandidateReviewerExecution,
+  CandidateReviewerExecutionValue
 >() {}
 
 export type CandidateValidationService = {
@@ -143,8 +149,8 @@ export const CandidateValidationLive = Layer.effect(
   Effect.gen(function* () {
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
-    const reviewerAgentRuntime = yield* CandidateReviewerAgentRuntime;
-    return makeCandidateValidation({ ...paths, persistence, reviewerAgentRuntime });
+    const reviewerExecution = yield* CandidateReviewerExecution;
+    return makeCandidateValidation({ ...paths, persistence, reviewerExecution });
   }),
 );
 
@@ -152,7 +158,7 @@ const makeCandidateValidation = (dependencies: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
-  readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
@@ -321,7 +327,7 @@ const runCandidatePhases = (
   dependencies: {
     readonly artifactsRoot: string;
     readonly persistence: CandidateValidationExecutionPort;
-    readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
+    readonly reviewerExecution: CandidateReviewerExecutionValue;
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
   },
@@ -414,8 +420,8 @@ const runCandidatePhases = (
                 policy: acceptanceReview,
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-                runtime: dependencies.reviewerAgentRuntime,
-                reviewerExecutor: activeWorkspace.reviewerExecutor,
+                runtime: dependencies.reviewerExecution.runtime,
+                reviewerExecutor: dependencies.reviewerExecution.processExecutor,
                 commandExecutor: activeWorkspace.commandExecutor,
                 artifactsRoot: dependencies.artifactsRoot,
                 artifactMaxBytes: maxValidationArtifactBytes,
@@ -439,8 +445,8 @@ const runCandidatePhases = (
           ...(acceptanceContext === undefined ? {} : { acceptanceContext }),
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-          runtime: dependencies.reviewerAgentRuntime,
-          reviewerExecutor: activeWorkspace.reviewerExecutor,
+          runtime: dependencies.reviewerExecution.runtime,
+          reviewerExecutor: dependencies.reviewerExecution.processExecutor,
           commandExecutor: activeWorkspace.commandExecutor,
           artifactsRoot: dependencies.artifactsRoot,
           artifactMaxBytes: maxValidationArtifactBytes,
