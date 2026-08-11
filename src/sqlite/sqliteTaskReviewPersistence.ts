@@ -126,7 +126,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
               created_at AS createdAt, updated_at AS updatedAt
             FROM task_reviews WHERE task_id = ${taskId}
-            ORDER BY created_at DESC LIMIT 1
+            ORDER BY sequence DESC LIMIT 1
           `;
           const row = rows[0];
           return row === undefined ? undefined : yield* decodeReview(sql, row);

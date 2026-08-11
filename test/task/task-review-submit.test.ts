@@ -84,6 +84,50 @@ it.effect("rejects a missing required default Agent Profile before Task Review a
   }),
 );
 
+it.effect("rejects missing Agent Profile resources before Task Review admission", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: {
+          review: {
+            agentRuntime: "pi",
+            runtimeConfig: {
+              model: "provider/model",
+              extensions: ["./missing-extension.ts"],
+            },
+          },
+        },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Review me",
+      "--file",
+      proposalPath,
+    ]);
+
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+    });
+    expect(submitted.status).toBe(1);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: { code: "task_review_config_invalid", message: expect.stringContaining("missing") },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({ task: { review: null } });
+  }),
+);
+
 it.effect("inspects and abandons only one exact Active Task Review workspace", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
@@ -138,7 +182,12 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
     const shown = yield* runByInProcessEffect(root, ["task", "review", "show", reviewId]);
     expect(shown.status).toBe(0);
     expect(JSON.parse(shown.stdout)).toMatchObject({
-      review: { id: reviewId, state: "running", workspace: { path: workspacePath } },
+      review: {
+        id: reviewId,
+        state: "running",
+        workspace: { path: workspacePath },
+        identity: { verified: true, workspace: { state: "matching" } },
+      },
     });
     const abandoned = yield* runByInProcessEffect(root, [
       "task",
@@ -153,6 +202,50 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
       review: { state: "complete", outcome: "tooling_failed", workspace: { cleanup: "removed" } },
     });
     expect(existsSync(workspacePath)).toBe(false);
+
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Second review",
+      "--file",
+      proposalPath,
+    ]);
+    const mismatchedReviewId = "22222222-2222-4222-8222-222222222222";
+    yield* Effect.scoped(
+      loaded.runtime.provide(
+        openSqliteTaskReviewPersistence().pipe(
+          Effect.flatMap((reviews) =>
+            reviews.admit({
+              reviewId: mismatchedReviewId,
+              taskId: publicTaskId("BY-2"),
+              policy: {
+                id: "task_advisory_review",
+                version: 1,
+                agentProfile: "review",
+                profileScope: "global",
+                instructions: taskReviewInstructions,
+              },
+              baseRef: "refs/heads/not-main",
+              baseCommit: commit,
+              workspacePath: expectedDisposableWorkspacePath(root, mismatchedReviewId),
+              now: "2026-08-11T12:05:00.000Z",
+            }),
+          ),
+        ),
+      ),
+    );
+    const mismatched = yield* runByInProcessEffect(root, [
+      "task",
+      "review",
+      "show",
+      mismatchedReviewId,
+    ]);
+    expect(mismatched.status).toBe(0);
+    expect(JSON.parse(mismatched.stdout)).toMatchObject({
+      review: { id: mismatchedReviewId, identity: { verified: false } },
+      help: [expect.stringContaining("identity problem")],
+    });
   }),
 );
 

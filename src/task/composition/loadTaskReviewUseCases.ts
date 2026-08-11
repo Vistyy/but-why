@@ -2,13 +2,17 @@ import { dirname } from "node:path";
 import { Effect } from "effect";
 import { resolveAgentProfile } from "../../agent/agentProfiles.js";
 import { piReviewerProcessExecutor } from "../../agent/piReviewerProcessExecutor.js";
+import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
-import { cleanupExactDisposableWorkspace } from "../../disposableWorkspace/disposableWorkspaceGit.js";
+import {
+  cleanupExactDisposableWorkspace,
+  inspectDisposableWorktree,
+} from "../../disposableWorkspace/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/repoConfig.js";
@@ -21,6 +25,7 @@ import {
 } from "../review/taskReviewGit.js";
 import {
   abandonTaskReview,
+  inspectTaskReviewIdentity,
   openTaskReviewUseCases,
   type TaskReviewReadUseCases,
   type TaskReviewUseCases,
@@ -70,6 +75,15 @@ export const withTaskReviewReadUseCases = <A, E, R>(
           getById: persistence.getById,
           getLatestForTask: persistence.getLatestForTask,
           proposalIsCurrent: persistence.proposalIsCurrent,
+          inspectIdentity: (review) =>
+            inspectTaskReviewIdentity(
+              {
+                mainCheckoutRoot: context.mainCheckoutRoot,
+                verifyReviewBase: verifyRecordedTaskReviewBase,
+                inspectWorkspace: inspectDisposableWorktree,
+              },
+              review,
+            ),
         }),
       ),
       Effect.map((value) => ({ ok: true as const, value })),
@@ -132,6 +146,13 @@ export const withTaskReviewUseCases = <A, E, R>(
     });
   }
   const context = loaded.runtime.context;
+  const resources = validatePiAgentProfileResources(profile.resolved, context.mainCheckoutRoot);
+  if (!resources.ok) {
+    return Effect.succeed({
+      ok: false,
+      error: { code: "task_review_config_invalid", message: resources.error.message },
+    });
+  }
   return loaded.runtime.provide(
     openSqliteTaskReviewPersistence().pipe(
       Effect.flatMap((persistence) =>
@@ -163,6 +184,7 @@ export const withTaskReviewUseCases = <A, E, R>(
             verifyReviewBase: verifyRecordedTaskReviewBase,
             runWorkspace: runDisposableExactCommitWorkspace,
             cleanupWorkspace: cleanupExactDisposableWorkspace,
+            inspectWorkspace: inspectDisposableWorktree,
           }),
         ),
       ),

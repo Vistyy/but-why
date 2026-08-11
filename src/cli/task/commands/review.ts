@@ -18,14 +18,21 @@ export const runTaskReviewCommand = (
         const review = yield* reviews.getById(command.reviewId);
         if (review === undefined) return reviewNotFound(command.reviewId);
         const proposalCurrent = yield* reviews.proposalIsCurrent(review);
+        const identity = yield* reviews.inspectIdentity(review);
         return success({
-          review: taskReviewView(review, proposalCurrent),
+          review: taskReviewView(review, proposalCurrent, identity),
           ...(review.state === "running"
-            ? {
-                help: [
-                  `Stop the Task Review process, then run \`by task review abandon ${review.id} --reason "..."\` if it cannot finish.`,
-                ],
-              }
+            ? identity.verified
+              ? {
+                  help: [
+                    `Stop the Task Review process, then run \`by task review abandon ${review.id} --reason "..."\` if it cannot finish.`,
+                  ],
+                }
+              : {
+                  help: [
+                    "Resolve the reported Task Review identity problem before attempting abandonment.",
+                  ],
+                }
             : {}),
         });
       });

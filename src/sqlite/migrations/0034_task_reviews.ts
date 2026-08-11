@@ -4,7 +4,8 @@ import { Effect } from "effect";
 const statements = [
   `
     CREATE TABLE task_reviews (
-      id TEXT PRIMARY KEY,
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
       task_id TEXT NOT NULL,
       proposal_snapshot TEXT NOT NULL,
       dependency_evidence TEXT NOT NULL,
@@ -24,7 +25,7 @@ const statements = [
     )
   `,
   "CREATE UNIQUE INDEX task_reviews_one_active_per_task_idx ON task_reviews (task_id) WHERE state = 'running'",
-  "CREATE INDEX task_reviews_task_created_idx ON task_reviews (task_id, created_at DESC)",
+  "CREATE INDEX task_reviews_task_sequence_idx ON task_reviews (task_id, sequence DESC)",
   `
     CREATE TABLE task_review_findings (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,

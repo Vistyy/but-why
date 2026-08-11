@@ -65,6 +65,41 @@ it.scoped(
     ),
 );
 
+it.scoped("selects the latest Review deterministically when creation times match", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-first",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-first",
+        now,
+      });
+      yield* reviews.recordCleanup("review-first", "removed", now);
+      yield* reviews.complete({ reviewId: "review-first", findings: [], now });
+      yield* reviews.admit({
+        reviewId: "review-second",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "b".repeat(40),
+        workspacePath: "/tmp/review-second",
+        now,
+      });
+
+      expect(yield* reviews.getLatestForTask(publicTaskId("BY-1"))).toMatchObject({
+        id: "review-second",
+        state: "running",
+      });
+    }),
+  ),
+);
+
 it.scoped("finalizes a concurrently changed proposal as tooling failed and retains Findings", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

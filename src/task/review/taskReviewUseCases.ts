@@ -15,6 +15,7 @@ import {
   type ReviewerOutput,
 } from "../../contracts/reviewerOutput.js";
 import type {
+  DisposableWorktreeInspection,
   ExactDisposableWorkspaceCleanupInput,
   ExactDisposableWorkspaceCleanupResult,
 } from "../../disposableWorkspace/disposableWorkspaceGit.js";
@@ -52,6 +53,13 @@ export type TaskReviewAbandonResult =
       readonly message: string;
     };
 
+export type TaskReviewIdentityInspection =
+  | {
+      readonly verified: true;
+      readonly workspace: Extract<DisposableWorktreeInspection, { state: "absent" | "matching" }>;
+    }
+  | { readonly verified: false; readonly message: string };
+
 export type TaskReviewReadUseCases = {
   readonly abandon: (
     reviewId: string,
@@ -67,6 +75,9 @@ export type TaskReviewReadUseCases = {
   readonly proposalIsCurrent: (
     review: TaskReviewRecord,
   ) => Effect.Effect<boolean, RepositoryStorageError>;
+  readonly inspectIdentity: (
+    review: TaskReviewRecord,
+  ) => Effect.Effect<TaskReviewIdentityInspection>;
 };
 
 export type TaskReviewUseCases = TaskReviewReadUseCases & {
@@ -123,12 +134,19 @@ export const openTaskReviewUseCases = (input: {
     mainCheckoutRoot: string,
     cleanup: ExactDisposableWorkspaceCleanupInput,
   ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
+  readonly inspectWorkspace: (
+    mainCheckoutRoot: string,
+    workspaceId: string,
+    expectedCommitSha: string,
+    worktreePath: string,
+  ) => Effect.Effect<DisposableWorktreeInspection>;
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
   proposalIsCurrent: input.persistence.proposalIsCurrent,
+  inspectIdentity: (review) => inspectTaskReviewIdentity(input, review),
 });
 
 const submitTaskReview = (
@@ -288,6 +306,39 @@ const submitTaskReview = (
       return { ok: false, code: "task_review_recovery_required", review: active } as const;
     }
     return { ok: true, review: completed.review } as const;
+  });
+
+export const inspectTaskReviewIdentity = (
+  input: {
+    readonly mainCheckoutRoot: string;
+    readonly verifyReviewBase: (
+      mainCheckoutRoot: string,
+      recorded: TaskReviewBase,
+    ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+    readonly inspectWorkspace: (
+      mainCheckoutRoot: string,
+      workspaceId: string,
+      expectedCommitSha: string,
+      worktreePath: string,
+    ) => Effect.Effect<DisposableWorktreeInspection>;
+  },
+  review: TaskReviewRecord,
+): Effect.Effect<TaskReviewIdentityInspection> =>
+  Effect.gen(function* () {
+    const base = input.verifyReviewBase(input.mainCheckoutRoot, {
+      ref: review.baseRef,
+      commit: review.baseCommit,
+    });
+    if (!base.ok) return { verified: false, message: base.message } as const;
+    const workspace = yield* input.inspectWorkspace(
+      input.mainCheckoutRoot,
+      review.id,
+      review.baseCommit,
+      review.workspacePath,
+    );
+    return workspace.state === "unproven"
+      ? ({ verified: false, message: workspace.message } as const)
+      : ({ verified: true, workspace } as const);
   });
 
 export const abandonTaskReview = (
