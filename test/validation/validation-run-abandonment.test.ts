@@ -12,9 +12,7 @@ import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const validationRunId = "run-1";
 const changeId = "change-1";
-const worktreePath =
-  "/linked-main/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation";
-const preNativeRefName = "refs/but-why/validation-runs/run-1/validation";
+const worktreePath = "/linked-main-worktrees/but-why/validation-runs/run-1";
 
 const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
@@ -33,7 +31,6 @@ const abandonmentContext: CandidateValidationRunAbandonmentContext = {
   candidateId: runningRun.candidateId,
   submittedSha: "head-sha",
   worktreePath,
-  preNativeRefName,
   cleanupWorkspace: "not_created",
 };
 
@@ -64,7 +61,7 @@ describe("Validation Run abandonment cleanup seam", () => {
           cleanup: (input) =>
             Effect.sync(() => {
               calls.push(
-                `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedWorktreePath}:${input.preNativeRefName}`,
+                `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedWorktreePath}`,
               );
               return { workspace: "removed" as const };
             }),
@@ -76,10 +73,7 @@ describe("Validation Run abandonment cleanup seam", () => {
       });
 
       expect(abandoned).toEqual({ ok: true, status: "abandoned", validationRunId });
-      expect(calls).toEqual([
-        `cleanup:${validationRunId}:head-sha:${worktreePath}:${preNativeRefName}`,
-        "abandon",
-      ]);
+      expect(calls).toEqual([`cleanup:${validationRunId}:head-sha:${worktreePath}`, "abandon"]);
     }),
   );
 

@@ -6,6 +6,5 @@ export type SnapshotWorkspaceCleanup = {
     readonly validationRunId: string;
     readonly submittedSha: string;
     readonly recordedWorktreePath?: string;
-    readonly preNativeRefName?: string;
   }) => Effect.Effect<SnapshotWorkspaceCleanupResult & { readonly errorMessage?: string }>;
 };
