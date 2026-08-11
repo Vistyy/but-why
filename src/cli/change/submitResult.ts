@@ -301,8 +301,15 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
   ) {
     return remoteChangeBaseError(result, "Submit");
   }
+  if (result.code === "reconciliation_rejected") {
+    return runtimeError({
+      code: result.code,
+      message: "Change Submit could not validate or publish the current Candidate.",
+      details: { change: result.change },
+      help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
+    });
+  }
   if (
-    result.code === "reconciliation_rejected" ||
     result.code === "github_target_not_found" ||
     result.code === "github_tooling_error" ||
     result.code === "change_closed" ||
@@ -331,7 +338,6 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
     return runtimeError({
       code: result.code,
       message: "Change Submit could not validate or publish the current Candidate.",
-      ...(result.code === "reconciliation_rejected" ? { details: { change: result.change } } : {}),
       help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
     });
   }
