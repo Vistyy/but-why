@@ -230,6 +230,7 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
     created_at TEXT NOT NULL,
     PRIMARY KEY (validation_run_id, phase, producer, round_number),
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id),
+    UNIQUE (validation_run_id, phase, producer),
     CHECK ((phase = 'prepare' AND producer = 'prepare') OR
            (phase = 'acceptance_review' AND producer = 'acceptance') OR
            phase IN ('checks', 'specialist_review'))
@@ -252,7 +253,8 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
     artifact_refs TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id),
+    FOREIGN KEY (validation_run_id, phase, producer)
+      REFERENCES candidate_validation_rounds(validation_run_id, phase, producer),
     CHECK ((phase = 'prepare' AND producer = 'prepare') OR
            (phase = 'acceptance_review' AND producer = 'acceptance') OR
            phase IN ('checks', 'specialist_review'))
@@ -277,7 +279,8 @@ export const enforceStableStorageConstraintsMigration = Effect.gen(function* () 
     ),
     truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0, 1)),
     created_at TEXT NOT NULL,
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id),
+    FOREIGN KEY (validation_run_id, phase, producer)
+      REFERENCES candidate_validation_rounds(validation_run_id, phase, producer),
     CHECK ((phase = 'prepare' AND producer = 'prepare') OR
            (phase = 'acceptance_review' AND producer = 'acceptance') OR
            phase IN ('checks', 'specialist_review')),

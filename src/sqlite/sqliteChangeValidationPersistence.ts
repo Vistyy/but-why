@@ -999,7 +999,6 @@ const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
         assertRunOwner(decodeValidationRound(row), validationRunId),
       );
       validateRoundPolicyRelationships(rounds, new Map([[run.id, run]]));
-      validateArtifactRoundRelationships(artifacts, rounds);
     });
     return artifacts;
   });
@@ -1035,7 +1034,6 @@ const validateRoundPolicyRelationships = (
   rounds: readonly CandidateValidationRound[],
   runs: ReadonlyMap<string, CandidateValidationRunRecord>,
 ): void => {
-  const roundKeys = new Set<string>();
   for (const round of rounds) {
     const run = runs.get(round.validationRunId);
     if (run === undefined) throw new Error("Validation round belongs to an unknown Run");
@@ -1046,9 +1044,6 @@ const validateRoundPolicyRelationships = (
     if (round.roundNumber !== expectedRoundNumber) {
       throw new Error("Validation round ordering does not match its Run policy");
     }
-    const key = `${round.validationRunId}\u0000${round.phase}\u0000${round.producer}`;
-    if (roundKeys.has(key)) throw new Error("Validation round relationship is duplicated");
-    roundKeys.add(key);
   }
 };
 
@@ -1121,23 +1116,6 @@ const compareArtifacts = (
   compareStrings(left.producer, right.producer) ||
   artifactPathOrder(left.path) - artifactPathOrder(right.path) ||
   compareStrings(left.ref, right.ref);
-
-const validateArtifactRoundRelationships = (
-  artifacts: readonly CandidateValidationArtifact[],
-  rounds: readonly CandidateValidationRound[],
-): void => {
-  for (const artifact of artifacts) {
-    const relatedRounds = rounds.filter(
-      (round) =>
-        round.validationRunId === artifact.validationRunId &&
-        round.phase === artifact.phase &&
-        round.producer === artifact.producer,
-    );
-    if (relatedRounds.length !== 1) {
-      throw new Error("Artifact does not belong to exactly one Validation round");
-    }
-  }
-};
 
 const compareCandidatesAscending = (left: CandidateRecord, right: CandidateRecord): number =>
   compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id);

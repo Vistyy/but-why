@@ -347,21 +347,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
         );
 
         yield* repository.operation(
-          "detach Artifact from its Validation round",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET phase = 'checks', producer = 'retired-check' WHERE ref = 'artifact-malformed'`,
-        );
-        expect(
-          yield* validation.reads.listArtifacts(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "restore Artifact round relationship",
-          (sql) =>
-            sql`UPDATE candidate_validation_artifacts SET phase = 'acceptance_review', producer = 'acceptance' WHERE ref = 'artifact-malformed'`,
-        );
-
-        yield* repository.operation(
-          "install Finding without a related round",
+          "attach Finding to a passed Check round",
           (sql) =>
             sql`UPDATE candidate_validation_findings SET phase = 'checks', producer = 'types' WHERE id = 'finding-malformed'`,
         );
@@ -443,20 +429,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
           "restore Check round order",
           (sql) =>
             sql`UPDATE candidate_validation_rounds SET round_number = 1 WHERE validation_run_id = ${started.validationRunId} AND phase = 'checks'`,
-        );
-
-        yield* repository.operation(
-          "install duplicate Acceptance Review round",
-          (sql) =>
-            sql`INSERT INTO candidate_validation_rounds (validation_run_id, phase, producer, round_number, status, created_at) VALUES (${started.validationRunId}, 'acceptance_review', 'acceptance', 2, 'failed', ${now})`,
-        );
-        expect(
-          yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        yield* repository.operation(
-          "remove duplicate Acceptance Review round",
-          (sql) =>
-            sql`DELETE FROM candidate_validation_rounds WHERE validation_run_id = ${started.validationRunId} AND phase = 'acceptance_review' AND round_number = 2`,
         );
       }),
     ),

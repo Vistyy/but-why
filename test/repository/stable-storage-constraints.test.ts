@@ -98,6 +98,48 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           `);
         }),
       );
+      yield* repository.operation("install a Validation producer round", (sql) =>
+        sql.unsafe(`
+          INSERT INTO candidate_validation_rounds (
+            validation_run_id, phase, producer, round_number, status, created_at
+          ) VALUES ('run-reuse-1', 'checks', 'quality', 1, 'failed', 'now')
+        `),
+      );
+      yield* expectSqlRejection(
+        repository.operation("reject a duplicate Validation producer round", (sql) =>
+          sql.unsafe(`
+            INSERT INTO candidate_validation_rounds (
+              validation_run_id, phase, producer, round_number, status, created_at
+            ) VALUES ('run-reuse-1', 'checks', 'quality', 2, 'failed', 'now')
+          `),
+        ),
+      );
+      yield* expectSqlRejection(
+        repository.operation("reject a Finding without its Validation producer round", (sql) =>
+          sql.unsafe(`
+            INSERT INTO candidate_validation_findings (
+              id, validation_run_id, phase, producer, title, description, evidence,
+              files, artifact_refs, created_at, updated_at
+            ) VALUES (
+              'finding-without-round', 'run-reuse-1', 'checks', 'missing', 'Title',
+              'Description', 'Evidence', '[]', '[]', 'now', 'now'
+            )
+          `),
+        ),
+      );
+      yield* expectSqlRejection(
+        repository.operation("reject an Artifact without its Validation producer round", (sql) =>
+          sql.unsafe(`
+            INSERT INTO candidate_validation_artifacts (
+              ref, validation_run_id, phase, producer, path, original_bytes,
+              stored_bytes, truncated, created_at
+            ) VALUES (
+              'artifact:without-round', 'run-reuse-1', 'checks', 'missing',
+              '/tmp/logs.txt', 1, 1, 0, 'now'
+            )
+          `),
+        ),
+      );
       yield* expectSqlRejection(
         repository.operation("reject duplicate passed Validation Run reuse facts", (sql) =>
           sql.unsafe(`
