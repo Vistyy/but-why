@@ -8,7 +8,6 @@ import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageEr
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
-import { completeMergedChange, readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import {
   decodeChangeLifecycle,
@@ -16,11 +15,7 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
-import {
-  decodeTerminalChange,
-  type StoredTerminalChangeRow,
-  terminalChangeSelectionColumns,
-} from "./sqliteTerminalChangeStorage.js";
+import { completeMergedChange, readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";
 import {
   type DecodedStoredTaskRecordRow,
   decodePersisted,
@@ -29,6 +24,11 @@ import {
   type StoredTaskDependencyFactRow,
   type StoredTaskRecordRow,
 } from "./sqliteTaskReadModel.js";
+import {
+  decodeTerminalChange,
+  type StoredTerminalChangeRow,
+  terminalChangeSelectionColumns,
+} from "./sqliteTerminalChangeStorage.js";
 
 export const openSqliteChangeCancellationPort = () =>
   Effect.map(

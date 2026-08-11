@@ -6,7 +6,6 @@ import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePor
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   changeReadColumns,
@@ -26,6 +25,7 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
+import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 

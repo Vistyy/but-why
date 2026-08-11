@@ -3,8 +3,10 @@ import { Effect } from "effect";
 
 import type { ChangeReconciliationPort } from "../change/changePorts.js";
 import { RepositorySql } from "./repositorySql.js";
-import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
+import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
+import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,
   readTerminalChange,
@@ -12,8 +14,6 @@ import {
   type StoredTerminalChangeRow,
   terminalChangeSelectionColumns,
 } from "./sqliteTerminalChangeStorage.js";
-import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeReconciliationPort = () =>
   Effect.map(
