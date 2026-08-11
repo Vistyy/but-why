@@ -92,6 +92,34 @@ rule:
           - pattern: $VALUE as unknown
           - pattern: <unknown>$VALUE
 ---
+# A variable that receives parsed JSON must expose its unknown runtime shape.
+id: json-parse-variable-bindings-keep-unknown
+language: TypeScript
+severity: error
+message: Do not bind JSON.parse output to an inferred or trusted variable type because parsed JSON has an unknown runtime shape; annotate the variable as unknown and use the owning boundary's focused decoder or schema.
+files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+  - src/**/*.ts
+ignores:
+  - src/output/structuredValue.ts
+rule:
+  any:
+    - pattern:
+        context: const $NAME = JSON.parse($$$ARGS)
+        selector: variable_declarator
+        strictness: relaxed
+    - all:
+        - pattern:
+            context: "const $NAME: $TYPE = JSON.parse($$$ARGS)"
+            selector: variable_declarator
+            strictness: relaxed
+        - not:
+            pattern:
+              context: "const $NAME: unknown = JSON.parse($$$ARGS)"
+              selector: variable_declarator
+              strictness: relaxed
+---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript
@@ -164,6 +192,7 @@ ignores:
   - test/repository/package-contents.test.ts
 rule:
   any:
+    - pattern: Reflect.apply($EXECUTOR, $RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
     - pattern: $EXECUTOR.call($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
     - pattern: $EXECUTOR.call?.($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
     - pattern: $EXECUTOR.apply($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
@@ -207,6 +236,21 @@ rule:
     - all:
         - kind: export_statement
         - regex: '[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
+    - pattern:
+        context: const $ALIAS = runTestProcess
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern:
+        context: const $ALIAS = runTestProcessOrThrow
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern:
+        context: const $ALIAS = startTestProcess
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern: $ALIAS = runTestProcess
+    - pattern: $ALIAS = runTestProcessOrThrow
+    - pattern: $ALIAS = startTestProcess
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

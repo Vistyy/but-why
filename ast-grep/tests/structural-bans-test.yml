@@ -77,6 +77,15 @@ invalid:
   - "<TrustedType><unknown>JSON.parse(x)"
   - JSON.parse(JSON.stringify(value)) as StructuredValue
 ---
+id: json-parse-variable-bindings-keep-unknown
+valid:
+  - "const value: unknown = JSON.parse(source)"
+  - "let value: unknown = JSON.parse(source)"
+invalid:
+  - const value = JSON.parse(source)
+  - const value = JSON.parse(source); const trusted = value as TrustedType
+  - "const value: TrustedType = JSON.parse(source)"
+---
 id: process-test-helpers-belong-to-process-boundaries
 valid:
   - runByInProcessEffect(root, ["task", "list"])
@@ -127,6 +136,7 @@ invalid:
   - runTestProcess.apply(undefined, ["npm", ["install"], { cwd }])
   - runTestProcess.bind(undefined, "npm")(["install"], { cwd })
   - runTestProcess["call"](undefined, "npm", ["install"], { cwd })
+  - Reflect.apply(runTestProcess, undefined, ["npm", ["install"], { cwd }])
 ---
 id: test-process-helper-imports-keep-canonical-names
 valid:
@@ -140,6 +150,9 @@ invalid:
   - import { "runTestProcess" as execute } from "./support/testProcess.js"
   - export { runTestProcess } from "./support/testProcess.js"
   - export { runTestProcess as execute } from "./support/testProcess.js"
+  - const execute = runTestProcess
+  - let execute = runTestProcessOrThrow
+  - execute = startTestProcess
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:

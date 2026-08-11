@@ -139,6 +139,11 @@ describe("repository-authored tooling diagnostics", () => {
       "const value = JSON.parse(source) as unknown as unknown as TrustedType;",
       "scripts",
     ],
+    [
+      "json-parse-variable-bindings-keep-unknown",
+      "const value: TrustedType = JSON.parse(source);",
+      "scripts",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",
@@ -173,6 +178,10 @@ describe("repository-authored tooling diagnostics", () => {
       'const result = runTestProcess.apply(undefined, ["npm", ["install"], { cwd }]);',
     ],
     [
+      "package-installation-belongs-to-package-contract",
+      'const result = Reflect.apply(runTestProcess, undefined, ["npm", ["install"], { cwd }]);',
+    ],
+    [
       "test-process-helper-imports-keep-canonical-names",
       'import { "runTestProcess" as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
     ],
@@ -180,6 +189,7 @@ describe("repository-authored tooling diagnostics", () => {
       "test-process-helper-imports-keep-canonical-names",
       'export { runTestProcess as execute } from "../support/testProcess.js";',
     ],
+    ["test-process-helper-imports-keep-canonical-names", "const execute = runTestProcess;"],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
