@@ -239,6 +239,46 @@ it.scoped("records the exact non-approval reason when Task state changes during 
   ),
 );
 
+it.scoped("returns the exact abandonment reason to a stale Task Submission completion", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-abandoned",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-abandoned",
+        now,
+      });
+      yield* reviews.recordCleanup("review-abandoned", "removed", later);
+      yield* reviews.abandon("review-abandoned", "Reviewer process stopped", later);
+
+      const staleCompletion = yield* reviews.complete({
+        reviewId: "review-abandoned",
+        findings: [],
+        now: later,
+      });
+
+      expect(staleCompletion).toMatchObject({
+        ok: true,
+        outcome: "tooling_failed",
+        review: {
+          outcome: "tooling_failed",
+          toolingFailure: {
+            operation: "task_review_abandoned",
+            message: "Reviewer process stopped",
+          },
+        },
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
+    }),
+  ),
+);
+
 it.scoped("finalizes a concurrently changed proposal as tooling failed and retains Findings", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

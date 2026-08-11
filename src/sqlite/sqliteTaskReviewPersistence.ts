@@ -168,7 +168,13 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      return { ok: false as const, code: "task_review_not_active" as const };
+      if (current.outcome !== "tooling_failed") {
+        return { ok: false as const, code: "task_review_not_active" as const };
+      }
+      const completed = completedTaskReviewResult(current);
+      if (completed === undefined)
+        return yield* invalid("complete Task Review", "Completion facts are inconsistent");
+      return completed;
     }
     if (current.workspaceCleanup !== "removed") {
       return { ok: false as const, code: "task_review_not_active" as const };
