@@ -39,7 +39,7 @@ export const nativeSnapshotWorkspacesMigration = Effect.gen(function* () {
   yield* sql.unsafe(`
     UPDATE candidate_validation_tooling_failures
     SET operation_name = 'create_snapshot_workspace'
-    WHERE operation_name = 'create_validation_workspace'
+    WHERE operation_name IN ('create_temp_ref', 'create_disposable_workspace')
   `);
   yield* sql.unsafe(`
     UPDATE candidate_validation_tooling_failures

@@ -39,7 +39,8 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
     yield* sql.unsafe(`
       INSERT INTO candidate_validation_tooling_failures (error_kind, operation_name)
       VALUES
-        ('validation_workspace_setup_failed', 'create_validation_workspace'),
+        ('validation_workspace_setup_failed', 'create_temp_ref'),
+        ('validation_workspace_setup_failed', 'create_disposable_workspace'),
         ('validation_workspace_setup_failed', 'cleanup_validation_workspace')
     `);
 
@@ -83,6 +84,10 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
       FROM candidate_validation_tooling_failures
     `;
     expect(failures).toEqual([
+      {
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "create_snapshot_workspace",
+      },
       {
         errorKind: "snapshot_workspace_setup_failed",
         operationName: "create_snapshot_workspace",

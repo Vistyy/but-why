@@ -361,7 +361,7 @@ export const createToolingFailureFixture = (
             validation_run_id, error_kind, operation_name, error_message, created_at
           ) VALUES (
             ${validationRunId}, 'snapshot_workspace_setup_failed',
-            'cleanup_validation_worktree', 'Could not remove worktree.', ${createdAt}
+            'cleanup_snapshot_workspace', 'Could not remove worktree.', ${createdAt}
           )
         `,
       );

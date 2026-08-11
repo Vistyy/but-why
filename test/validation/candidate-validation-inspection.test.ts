@@ -297,7 +297,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.recordToolingFailure({
         validationRunId: fixture.validationRunId,
         errorKind: "snapshot_workspace_setup_failed",
-        operationName: "cleanup_validation_worktree",
+        operationName: "cleanup_snapshot_workspace",
         errorMessage: "Could not remove worktree.",
         now: later,
       });
@@ -397,7 +397,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             sequence: 1,
             validationRunId: fixture.validationRunId,
             errorKind: "snapshot_workspace_setup_failed",
-            operationName: "cleanup_validation_worktree",
+            operationName: "cleanup_snapshot_workspace",
             errorMessage: "Could not remove worktree.",
             createdAt: later,
           },
