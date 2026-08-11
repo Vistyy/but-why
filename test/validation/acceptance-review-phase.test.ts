@@ -408,9 +408,7 @@ type FixtureOptions = {
 };
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
-  execute: async () => {
-    throw new Error("Captured Reviewer Agent Runtime must not execute a reviewer process.");
-  },
+  execute: () => Effect.die("Captured Reviewer Agent Runtime must not execute a reviewer process."),
 };
 
 const acceptancePhaseFixture = (

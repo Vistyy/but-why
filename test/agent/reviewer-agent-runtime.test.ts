@@ -10,6 +10,7 @@ import type {
   ReviewerProcessExecutor,
   ReviewerProcessResult,
 } from "../../src/agent/reviewerExecution.js";
+import { ReviewerProcessExecutionFailed } from "../../src/agent/reviewerExecution.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import {
   decodeReviewerOutputContract,
@@ -63,9 +64,11 @@ describe("Pi reviewer agent runtime", () => {
     Effect.gen(function* () {
       let prompt = "";
       const reviewerExecutor: ReviewerProcessExecutor = {
-        execute: async (input) => {
+        execute: (input) => {
           prompt = input.prompt;
-          return processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+          return Effect.succeed(
+            processResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          );
         },
       };
 
@@ -93,9 +96,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         reviewerExecutor: {
           execute: () =>
-            Promise.resolve(
-              processResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>'),
-            ),
+            Effect.succeed(processResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>')),
         },
         reviewer: "caller",
         decodeOutput: (output) =>
@@ -124,7 +125,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         reviewerExecutor: {
           execute: () =>
-            Promise.resolve(processResult("Reviewer completed without structured output.")),
+            Effect.succeed(processResult("Reviewer completed without structured output.")),
         },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
@@ -146,14 +147,14 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
     Effect.gen(function* () {
       const corrected = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      const resume = vi.fn(() => Promise.resolve(corrected));
+      const resume = vi.fn(() => Effect.succeed(corrected));
       const dangling = processResult(
         '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
         resume,
       );
 
       const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: { execute: () => Promise.resolve(dangling) },
+        reviewerExecutor: { execute: () => Effect.succeed(dangling) },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
@@ -168,14 +169,14 @@ describe("Pi reviewer agent runtime", () => {
   it.effect("accepts a corrected report on the third attempt", () =>
     Effect.gen(function* () {
       const third = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      const resumeSecond = vi.fn(() => Promise.resolve(third));
+      const resumeSecond = vi.fn(() => Effect.succeed(third));
       const second = processResult(
         '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
         resumeSecond,
       );
-      const resumeFirst = vi.fn(() => Promise.resolve(second));
+      const resumeFirst = vi.fn(() => Effect.succeed(second));
       const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Promise.resolve(first));
+      const run = vi.fn(() => Effect.succeed(first));
 
       const result = yield* piReviewerAgentRuntime.review({
         reviewerExecutor: { execute: run },
@@ -204,19 +205,19 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("fails after three invalid outputs without a fourth invocation", () =>
     Effect.gen(function* () {
-      const resumeThird = vi.fn(() => Promise.resolve(processResult("must not run")));
+      const resumeThird = vi.fn(() => Effect.succeed(processResult("must not run")));
       const third = processResult(
         '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
         resumeThird,
       );
-      const resumeSecond = vi.fn(() => Promise.resolve(third));
+      const resumeSecond = vi.fn(() => Effect.succeed(third));
       const second = processResult(
         '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
         resumeSecond,
       );
-      const resumeFirst = vi.fn(() => Promise.resolve(second));
+      const resumeFirst = vi.fn(() => Effect.succeed(second));
       const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Promise.resolve(first));
+      const run = vi.fn(() => Effect.succeed(first));
 
       const result = yield* piReviewerAgentRuntime.review({
         reviewerExecutor: { execute: run },
@@ -249,9 +250,16 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("stops after a failed output correction invocation", () =>
     Effect.gen(function* () {
-      const resumeFirst = vi.fn(() => Promise.reject(new Error("provider failed")));
+      const resumeFirst = vi.fn(() =>
+        Effect.fail(
+          new ReviewerProcessExecutionFailed({
+            message: "provider failed",
+            sessionUsability: "unknown",
+          }),
+        ),
+      );
       const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Promise.resolve(first));
+      const run = vi.fn(() => Effect.succeed(first));
 
       const result = yield* piReviewerAgentRuntime.review({
         reviewerExecutor: { execute: run },

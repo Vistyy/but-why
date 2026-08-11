@@ -131,7 +131,7 @@ const reviewWithPi = <Output>(
       let attempts = 1;
       while (validation._tag === "Left" && attempts < 3) {
         const failure = validation.left;
-        if (current.resume === undefined && current.resumeEffect === undefined) {
+        if (current.resume === undefined) {
           restoreSession();
           return failedOutputResult(failure, current, attempts, invocationUsage);
         }
@@ -204,32 +204,21 @@ const runReviewerProcess = (
   executor: ReviewerProcessExecutor,
   input: ReviewerProcessInput,
 ): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
-  translateProcessFailure(
-    executor.effect === undefined
-      ? Effect.tryPromise({
-          try: () => executor.execute(input),
-          catch: (error) => reviewerProcessExecutionFailed(error),
-        })
-      : executor.effect(input),
-  );
+  translateProcessFailure(executor.execute(input));
 
 const resumeReviewerProcess = (
   result: ReviewerProcessResult,
   prompt: string,
-): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> => {
-  const resumed =
-    result.resumeEffect !== undefined
-      ? result.resumeEffect(prompt)
-      : Effect.tryPromise({
-          try: () => {
-            if (result.resume === undefined)
-              throw new Error("Reviewer continuation is unavailable.");
-            return result.resume(prompt);
-          },
-          catch: (error) => reviewerProcessExecutionFailed(error),
-        });
-  return translateProcessFailure(resumed);
-};
+): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
+  translateProcessFailure(
+    result.resume?.(prompt) ??
+      Effect.fail(
+        new ReviewerProcessExecutionFailed({
+          message: "Reviewer continuation is unavailable.",
+          sessionUsability: "unknown",
+        }),
+      ),
+  );
 
 const translateProcessFailure = (
   effect: Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>,
@@ -245,14 +234,6 @@ const translateProcessFailure = (
         }),
     ),
   );
-
-const reviewerProcessExecutionFailed = (error: unknown): ReviewerProcessExecutionFailed =>
-  error instanceof ReviewerProcessExecutionFailed
-    ? error
-    : new ReviewerProcessExecutionFailed({
-        message: errorMessage(error),
-        sessionUsability: "unknown",
-      });
 
 const reviewerProcessFailure = (
   failure: ReviewerExecutionFailed,
@@ -295,6 +276,3 @@ const processMetadata = (
   ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
   ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
 });
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);

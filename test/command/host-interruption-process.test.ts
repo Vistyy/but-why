@@ -7,7 +7,7 @@ import { observeUntil } from "../support/observe.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const helper = join(repositoryRoot, "scripts/host-interruption-process-helper.ts");
+const helper = join(repositoryRoot, "test/support/host-interruption-process-helper.ts");
 const tsxLoader = join(repositoryRoot, "node_modules/tsx/dist/loader.mjs");
 
 describe("host interruption process boundary", () => {

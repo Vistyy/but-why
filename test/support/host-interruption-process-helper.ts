@@ -2,17 +2,17 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { Effect } from "effect";
 
-import { piReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
+import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type {
   ReviewerProcessExecutor,
   ReviewerProcessInput,
   ReviewerProcessResult,
-} from "../src/agent/reviewerExecution.js";
-import { executeHostCommandEffect } from "../src/command/hostCommand.js";
+} from "../../src/agent/reviewerExecution.js";
+import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
 import {
   hostInterruptionExitCode,
   runWithHostInterruption,
-} from "../src/command/hostInterruption.js";
+} from "../../src/command/hostInterruption.js";
 
 // biome-ignore lint/complexity/useLiteralKeys: Test helper process environment.
 const eventsPath = process.env["BUT_WHY_TEST_EVENTS_PATH"];
@@ -56,8 +56,7 @@ const reviewerEffect = (
   );
 
 const reviewerExecutor: ReviewerProcessExecutor = {
-  execute: (input) => Effect.runPromise(reviewerEffect(input)),
-  effect: reviewerEffect,
+  execute: reviewerEffect,
 };
 
 const program = Effect.scoped(

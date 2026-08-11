@@ -48,7 +48,7 @@ describe("Pi reviewer process executor", () => {
         });
       });
 
-      const result = yield* executor.effect({
+      const result = yield* executor.execute({
         ...input,
         agentEnvironment: ["nix", "develop", "-c"],
       });
@@ -115,12 +115,12 @@ describe("Pi reviewer process executor", () => {
       });
 
       try {
-        const result = yield* executor.effect({ ...input, sessionStorageRoot: sessions });
+        const result = yield* executor.execute({ ...input, sessionStorageRoot: sessions });
         expect(result).toMatchObject({
           sessionReference: sessionId,
           sessionFilePath: sessionFile,
         });
-        expect(result.resumeEffect).toBeTypeOf("function");
+        expect(result.resume).toBeTypeOf("function");
         expect(readFileSync(sessionFile, "utf8")).toContain(sessionId);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -157,13 +157,13 @@ describe("Pi reviewer process executor", () => {
       });
 
       try {
-        const first = yield* executor.effect({
+        const first = yield* executor.execute({
           ...input,
           sessionStorageRoot: sessions,
           resumeSession: sessionId,
         });
-        if (first.resumeEffect === undefined) throw new Error("Expected reviewer continuation.");
-        const second = yield* first.resumeEffect("Correct the output.");
+        if (first.resume === undefined) throw new Error("Expected reviewer continuation.");
+        const second = yield* first.resume("Correct the output.");
 
         expect(first.invocationUsage).toMatchObject({ inputTokens: 11, totalTokens: 13 });
         expect(second.invocationUsage).toMatchObject({
@@ -188,7 +188,7 @@ describe("Pi reviewer process executor", () => {
         }),
       );
 
-      const result = yield* executor.effect(input);
+      const result = yield* executor.execute(input);
       expect(result.invocationUsage).toBeNull();
     }),
   );
@@ -198,7 +198,7 @@ describe("Pi reviewer process executor", () => {
       const root = mkdtempSync(join(tmpdir(), "but-why-missing-reviewer-session-"));
       try {
         const result = yield* Effect.either(
-          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).effect({
+          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).execute({
             ...input,
             sessionStorageRoot: root,
             resumeSession: "missing-session",
@@ -221,7 +221,7 @@ describe("Pi reviewer process executor", () => {
       writeFileSync(storageFile, "not a session directory");
       try {
         const result = yield* Effect.either(
-          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).effect({
+          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).execute({
             ...input,
             sessionStorageRoot: storageFile,
             resumeSession: "stored-session",
@@ -251,7 +251,7 @@ describe("Pi reviewer process executor", () => {
         }),
       );
       try {
-        const fiber = yield* Effect.fork(executor.effect?.(input) ?? Effect.void);
+        const fiber = yield* Effect.fork(executor.execute(input));
         yield* Effect.promise(() => waitForFile(pidFile));
         const childPid = Number(readFileSync(pidFile, "utf8"));
         yield* Fiber.interrupt(fiber);

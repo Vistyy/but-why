@@ -16,8 +16,7 @@ export type ReviewerProcessResult = {
   readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
-  readonly resume?: (prompt: string) => Promise<ReviewerProcessResult>;
-  readonly resumeEffect?: (
+  readonly resume?: (
     prompt: string,
   ) => Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>;
 };
@@ -34,14 +33,7 @@ export type ReviewerProcessInput = {
 };
 
 export type ReviewerProcessExecutor = {
-  readonly execute: (input: ReviewerProcessInput) => Promise<ReviewerProcessResult>;
-  readonly effect?: (
-    input: ReviewerProcessInput,
-  ) => Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>;
-};
-
-export type ReviewerProcessEffectExecutor = ReviewerProcessExecutor & {
-  readonly effect: (
+  readonly execute: (
     input: ReviewerProcessInput,
   ) => Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>;
 };

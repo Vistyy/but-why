@@ -32,12 +32,19 @@ But Why does not edit consumer tool configuration automatically.
 After v1, move Validation Workspaces outside the consumer repository and remove Sandcastle's control of their placement.
 Before implementation, select the external location and define naming, Git registration, cleanup, recovery, and repository-relocation behavior.
 
+## How should agent monetary cost be measured?
+
+Reviewer invocations record token usage when Pi reports it and preserve unavailable usage as `null`.
+But Why does not yet record an authoritative monetary cost.
+Future design must decide whether provider estimates or billing records are sufficient and whether automatic work needs user-defined spending limits.
+
 ## How should agent execution identities work?
 
 V1 resolves Pi Agent Profiles from explicit Repo or Global references.
 Each profile selects its model, thinking level, and optional Pi resource allowlists.
-The remaining design question is whether later runtimes require a separate execution identity interface.
-The current Pi Reviewer Adapter is project-owned and another runtime must satisfy the reviewer-execution contract without changing Agent Profile identity.
+The Reviewer Agent Runtime accepts a swappable Reviewer Process Executor, so another Adapter can provide the current Pi process contract.
+The input profile and Reviewer Session behavior remain Pi-shaped, so an arbitrary Codex or Claude harness is not a process-executor-only substitution.
+The remaining design question is whether a later harness requires a separate execution identity and session interface.
 
 ## How should But Why represent and review planning above individual Tasks?
 

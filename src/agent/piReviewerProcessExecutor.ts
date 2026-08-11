@@ -11,7 +11,7 @@ import type { TokenUsage } from "../contracts/tokenUsage.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
 import { piResourceArgs } from "./piRuntime.js";
 import type {
-  ReviewerProcessEffectExecutor,
+  ReviewerProcessExecutor,
   ReviewerProcessInput,
   ReviewerProcessResult,
 } from "./reviewerExecution.js";
@@ -85,17 +85,6 @@ const executePiReviewerProcess = (
       : {
           ...result,
           resume: (prompt) =>
-            Effect.runPromise(
-              executePiReviewerProcess(
-                {
-                  ...input,
-                  prompt,
-                  resumeSession: sessionReference,
-                },
-                executeCommand,
-              ),
-            ),
-          resumeEffect: (prompt) =>
             executePiReviewerProcess(
               {
                 ...input,
@@ -109,9 +98,8 @@ const executePiReviewerProcess = (
 
 export const createPiReviewerProcessExecutor = (
   executeCommand: PiCommandExecutor = executeHostCommandEffect,
-): ReviewerProcessEffectExecutor => ({
-  execute: (input) => Effect.runPromise(executePiReviewerProcess(input, executeCommand)),
-  effect: (input) => executePiReviewerProcess(input, executeCommand),
+): ReviewerProcessExecutor => ({
+  execute: (input) => executePiReviewerProcess(input, executeCommand),
 });
 
 export const piReviewerProcessExecutor = createPiReviewerProcessExecutor();
