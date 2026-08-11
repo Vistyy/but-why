@@ -66,16 +66,6 @@ export type StoredChangeRow = {
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;
-  readonly publicationCandidateId: string | null;
-  readonly publicationValidationRunId: string | null;
-  readonly publicationOwner: string | null;
-  readonly publicationRepo: string | null;
-  readonly publicationBaseBranch: string | null;
-  readonly publicationRemoteName: string | null;
-  readonly publicationHeadBranch: string | null;
-  readonly publicationExpectedHeadSha: string | null;
-  readonly publicationPrNumber: number | null;
-  readonly publicationPrUrl: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
   readonly state: ChangeState;
@@ -84,7 +74,7 @@ export type StoredChangeRow = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly closedAt: string | null;
-};
+} & SqliteChangePublicationRow;
 
 export const decodeChangeRow = (row: StoredChangeRow): ChangeRecord => {
   const id = row.id;

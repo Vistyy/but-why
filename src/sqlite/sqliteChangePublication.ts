@@ -1,17 +1,35 @@
 import type { ChangePublication } from "../change/change.js";
 
-export type SqliteChangePublicationRow = {
-  readonly publicationCandidateId: string | null;
-  readonly publicationValidationRunId: string | null;
-  readonly publicationOwner: string | null;
-  readonly publicationRepo: string | null;
-  readonly publicationBaseBranch: string | null;
-  readonly publicationRemoteName: string | null;
-  readonly publicationHeadBranch: string | null;
-  readonly publicationExpectedHeadSha: string | null;
-  readonly publicationPrNumber: number | null;
-  readonly publicationPrUrl: string | null;
+type EmptySqliteChangePublicationRow = {
+  readonly publicationCandidateId: null;
+  readonly publicationValidationRunId: null;
+  readonly publicationOwner: null;
+  readonly publicationRepo: null;
+  readonly publicationBaseBranch: null;
+  readonly publicationRemoteName: null;
+  readonly publicationHeadBranch: null;
+  readonly publicationExpectedHeadSha: null;
+  readonly publicationPrNumber: null;
+  readonly publicationPrUrl: null;
 };
+
+type PresentSqliteChangePublicationRow = {
+  readonly publicationCandidateId: string;
+  readonly publicationValidationRunId: string;
+  readonly publicationOwner: string;
+  readonly publicationRepo: string;
+  readonly publicationBaseBranch: string;
+  readonly publicationRemoteName: string;
+  readonly publicationHeadBranch: string;
+  readonly publicationExpectedHeadSha: string;
+} & (
+  | { readonly publicationPrNumber: null; readonly publicationPrUrl: null }
+  | { readonly publicationPrNumber: number; readonly publicationPrUrl: string }
+);
+
+export type SqliteChangePublicationRow =
+  | EmptySqliteChangePublicationRow
+  | PresentSqliteChangePublicationRow;
 
 export const decodeSqliteChangePublication = (
   row: SqliteChangePublicationRow,
@@ -19,18 +37,18 @@ export const decodeSqliteChangePublication = (
   if (row.publicationCandidateId === null) return null;
   return {
     candidateId: row.publicationCandidateId,
-    validationRunId: row.publicationValidationRunId as string,
+    validationRunId: row.publicationValidationRunId,
     target: {
-      owner: row.publicationOwner as string,
-      repo: row.publicationRepo as string,
-      baseBranch: row.publicationBaseBranch as string,
-      remoteName: row.publicationRemoteName as string,
+      owner: row.publicationOwner,
+      repo: row.publicationRepo,
+      baseBranch: row.publicationBaseBranch,
+      remoteName: row.publicationRemoteName,
     },
-    headBranch: row.publicationHeadBranch as string,
-    expectedHeadSha: row.publicationExpectedHeadSha as string,
+    headBranch: row.publicationHeadBranch,
+    expectedHeadSha: row.publicationExpectedHeadSha,
     pullRequest:
       row.publicationPrNumber === null
         ? null
-        : { number: row.publicationPrNumber, url: row.publicationPrUrl as string },
+        : { number: row.publicationPrNumber, url: row.publicationPrUrl },
   };
 };
