@@ -6,6 +6,7 @@ import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
+import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
@@ -13,7 +14,12 @@ import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
-import { recordTaskReviewExecutionWithRetry } from "../../src/task/review/taskReviewUseCases.js";
+import type { TaskReviewExecution, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
+import {
+  openTaskReviewUseCases,
+  recordTaskReviewExecutionWithRetry,
+} from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -21,6 +27,7 @@ import {
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 it.effect("retries an idempotent Task Review execution record after an uncertain SQL failure", () =>
   Effect.gen(function* () {
@@ -51,6 +58,144 @@ it.effect("retries an idempotent Task Review execution record after an uncertain
     );
 
     expect(attempts).toBe(2);
+  }),
+);
+
+it.effect("retains exact execution evidence when Task Review submit cannot record it", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const profile = {
+      agentProfile: "review",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const },
+    };
+    const policy = {
+      id: "task_advisory_review" as const,
+      version: 2 as const,
+      profile,
+      builtInInstructions: taskReviewBuiltInInstructions,
+      guidance: null,
+    };
+    let active: TaskReviewRecord | undefined;
+    let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
+    const executionAttempts: TaskReviewExecution[] = [];
+    const persistence: TaskReviewPersistence = {
+      admit: (input) => {
+        const proposal = { title: "Review me", description: "Exact proposal", dependencyIds: [] };
+        active = {
+          id: input.reviewId,
+          taskId,
+          proposal,
+          dependencyEvidence: [],
+          policy,
+          baseRef: input.baseRef,
+          baseCommit: input.baseCommit,
+          workspacePath: input.workspacePath,
+          state: "running",
+          outcome: null,
+          workspaceCleanup: "not_created",
+          toolingFailure: null,
+          abandonReason: null,
+          findings: [],
+          sessions: [],
+          transcripts: [],
+          createdAt: input.now,
+          updatedAt: input.now,
+        };
+        return Effect.succeed({
+          ok: true as const,
+          review: active,
+          proposal,
+          dependencyEvidence: [],
+        });
+      },
+      recordCleanup: (_reviewId, cleanup, now) =>
+        Effect.sync(() => {
+          if (active !== undefined)
+            active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
+        }),
+      complete: () =>
+        Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
+      abandon: () =>
+        Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
+      getById: () => Effect.succeed(active),
+      getLatestForTask: () => Effect.succeed(active),
+      listForTask: () => Effect.succeed(active === undefined ? [] : [active]),
+      getReviewerSession: () => Effect.succeed(session),
+      saveReviewerSession: (record) =>
+        Effect.sync(() => {
+          session = record;
+        }),
+      removeReviewerSession: () =>
+        Effect.sync(() => {
+          session = undefined;
+        }),
+      recordExecution: (input) => {
+        executionAttempts.push(input.execution);
+        return Effect.fail(
+          new RepositorySqlOperationFailed({
+            operationName: "record Task Review execution",
+            cause: new Error("commit outcome unavailable"),
+          }),
+        );
+      },
+      recordTranscripts: () => Effect.void,
+      recordActiveFailure: (_reviewId, failure, now) =>
+        Effect.sync(() => {
+          if (active !== undefined) active = { ...active, toolingFailure: failure, updatedAt: now };
+        }),
+      proposalIsCurrent: () => Effect.succeed(true),
+    };
+    const runWorkspace: RunDisposableExactCommitWorkspace = (input) =>
+      Effect.gen(function* () {
+        const workspaceResult =
+          input.runInWorkspace === undefined
+            ? undefined
+            : yield* input.runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: createTestWorkspace(),
+              });
+        if (input.recordWorkspaceCleanup !== undefined) {
+          yield* input.recordWorkspaceCleanup({ workspace: "removed" });
+        }
+        return { ok: true as const, ...(workspaceResult === undefined ? {} : { workspaceResult }) };
+      });
+    const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+      review: () =>
+        Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+          sessionReference: "session-1",
+        }),
+    };
+    const reviews = openTaskReviewUseCases({
+      mainCheckoutRoot: createTestWorkspace(),
+      loadRepoConfig: () => ({ ok: true, config: { taskPrefix: "BY" } }),
+      resolvePolicy: () => ({ ok: true, policy: { profile, snapshot: policy } }),
+      persistence,
+      reviewerSessionStorageRoot: createTestWorkspace(),
+      reviewerRuntime: reviewer,
+      reviewerExecutor: { execute: () => Effect.die("Reviewer Runtime must not use executor") },
+      readReviewBase: () =>
+        Effect.succeed({ ok: true, base: { ref: "refs/heads/main", commit: "a".repeat(40) } }),
+      verifyReviewBase: () => Effect.succeed({ ok: true }),
+      runWorkspace,
+      cleanupWorkspace: () => Effect.succeed({ workspace: "removed" }),
+      inspectWorkspace: () => Effect.succeed({ state: "absent" }),
+    });
+
+    const result = yield* reviews.submit(taskId, "2026-08-11T12:00:00.000Z");
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: { toolingFailure: { operation: "record_task_review_execution" } },
+    });
+    expect(executionAttempts).toHaveLength(2);
+    if (result.ok || result.code !== "task_review_recovery_required") return;
+    expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
   }),
 );
 
