@@ -414,15 +414,38 @@ const updatePullRequest = (
       ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
     };
   }
-  const destination = resolvePushDestination(runGit, request);
-  if (!destination.ok) return destination.failure;
-  const pushed = pushExpectedHead(runGit, request, destination.url);
-  if (!pushed.ok)
-    return {
-      ok: false,
-      code: "push_failed",
-      evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
-    };
+  let pushRequired = true;
+  if (request.allowExistingRemoteHead) {
+    const remoteHead = initialRemoteHeadState(runGh, request);
+    if (remoteHead.kind === "unknown")
+      return {
+        ok: false,
+        code: "remote_lookup_failed",
+        ...(remoteHead.evidence === undefined ? {} : { evidence: remoteHead.evidence }),
+      };
+    if (remoteHead.kind !== "present" || remoteHead.sha === undefined)
+      return { ok: false, code: "remote_head_mismatch" };
+    if (remoteHead.sha === request.expectedHeadSha) {
+      pushRequired = false;
+    } else if (remoteHead.sha !== request.expectedCurrentHeadSha) {
+      return {
+        ok: false,
+        code: "remote_head_mismatch",
+        observedRemoteHeadSha: remoteHead.sha,
+      };
+    }
+  }
+  if (pushRequired) {
+    const destination = resolvePushDestination(runGit, request);
+    if (!destination.ok) return destination.failure;
+    const pushed = pushExpectedHead(runGit, request, destination.url);
+    if (!pushed.ok)
+      return {
+        ok: false,
+        code: "push_failed",
+        evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
+      };
+  }
   const result = runGh([
     "api",
     "--method",

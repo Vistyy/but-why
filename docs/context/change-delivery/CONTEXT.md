@@ -68,6 +68,8 @@ _Avoid_: Latest historical Candidate, dirty workspace
 The act of placing one exact Candidate and its passed Validation Run as the head of a Change's owned pull request.
 New or revised publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
 Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
+When an open owned pull request already identifies a revised exact current validated Candidate, publication reconfirms the Remote Change Branch, skips a duplicate push, reapplies the open state and complete current metadata, and confirms the result.
+A Remote Change Branch at the previously published head is updated with the exact force-with-lease safeguard, while any other remote head remains rejected.
 Current publication facts record the exact Candidate, Validation Run, target, head branch, expected head commit, and owned pull request.
 A completed publication remains ready when its persisted Candidate, persisted Validation Run, exact owned pull request, local Repository Branch head, and current durable Change authority still match.
 Later Change Base or configuration changes do not alter that completed evidence.

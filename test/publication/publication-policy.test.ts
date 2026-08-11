@@ -709,12 +709,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("records a later Candidate already present on the owned pull request", () =>
+  it.scoped("reapplies pull request metadata for a later Candidate already on the remote", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
-        let remote = pullRequest(branchHead);
-        let updateCalls = 0;
+        let remote: GitHubPullRequest = pullRequest(branchHead);
+        const updates: unknown[] = [];
+        const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes.publication,
           git: {
@@ -726,10 +727,130 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             findPullRequests: () => pullRequestList([]),
             getPullRequest: () => pullRequestRead(remote),
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
-            updatePullRequest: () => {
-              updateCalls += 1;
-              throw new Error("An already published Candidate must not be pushed again");
+            updatePullRequest: (request) => {
+              updates.push(request);
+              const staleMetadata = { ...remote, title: "Stale title", body: "Stale body" };
+              remote = { ...remote, title: request.title, body: request.body };
+              return { ok: true, pullRequest: staleMetadata };
             },
+          },
+          delayBeforeConfirmation: (milliseconds) =>
+            Effect.sync(() => {
+              confirmationDelays.push(milliseconds);
+            }),
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        yield* fixture.changes.authority.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          choice: "Recover the revised publication",
+          rationale: "Reapply the complete current metadata.",
+          now: "2026-07-22T10:04:00.000Z",
+        });
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        remote = pullRequest(next.captured.headSha);
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
+        expect(updates).toEqual([
+          expect.objectContaining({
+            number: 42,
+            expectedCurrentHeadSha: fixture.captured.headSha,
+            expectedHeadSha: next.captured.headSha,
+            allowExistingRemoteHead: true,
+            title: "Publication",
+            body: expect.stringContaining("Reapply the complete current metadata."),
+          }),
+        ]);
+        expect(confirmationDelays).toEqual([100]);
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
+            publication: {
+              candidateId: next.captured.candidateId,
+              validationRunId: next.validationRunId,
+              expectedHeadSha: next.captured.headSha,
+            },
+          },
+        );
+      }),
+    ),
+  );
+
+  it.scoped("reports missing recovery metadata as an unusable GitHub response", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote: GitHubPullRequest = pullRequest(branchHead);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: {
+            ...publicationGitDefaults,
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => ({
+              ok: true,
+              pullRequest: { ...remote, title: "Stale title", body: "Stale body" },
+            }),
+          },
+          delayBeforeConfirmation: () => Effect.void,
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        remote = pullRequest(next.captured.headSha);
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+          recoveryEvidence: {
+            operation: "remote_lookup",
+            classification: "response_parse_failure",
+            reason: "malformed",
+          },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rejects a foreign remote head found during the recovery update", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote = pullRequest(branchHead);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: {
+            ...publicationGitDefaults,
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(remote),
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => ({
+              ok: false,
+              code: "remote_head_mismatch",
+              observedRemoteHeadSha: "foreign-head",
+            }),
           },
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
@@ -744,14 +865,17 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             validationRunId: next.validationRunId,
             now: "2026-07-22T10:05:00.000Z",
           }),
-        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
-        expect(updateCalls).toBe(0);
+        ).toEqual({
+          ok: false,
+          code: "publication_remote_mismatch",
+          expectedRemoteHeadSha: next.captured.headSha,
+          observedRemoteHeadSha: "foreign-head",
+        });
         expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
           {
             publication: {
-              candidateId: next.captured.candidateId,
-              validationRunId: next.validationRunId,
-              expectedHeadSha: next.captured.headSha,
+              candidateId: fixture.captured.candidateId,
+              expectedHeadSha: fixture.captured.headSha,
             },
           },
         );
