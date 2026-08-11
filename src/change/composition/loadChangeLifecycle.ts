@@ -121,7 +121,7 @@ export const withChangeImplement = <A, E, R>(
       Effect.flatMap((store) =>
         use((changeId, implementerPrompt) =>
           implementChange(
-            context,
+            context.mainCheckoutRoot,
             store,
             input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
             input.globalConfigPath,

@@ -5,7 +5,6 @@ import {
   type RepositoryPreparationEffectExecutor,
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
-import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
 import { type PublicTaskId, taskSlugForId } from "../task/taskId.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
@@ -114,7 +113,7 @@ export const prepareChange = (
   });
 
 export const implementChange = (
-  context: LocalRepositoryContext,
+  repositoryPath: string,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,
@@ -126,7 +125,7 @@ export const implementChange = (
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     return yield* launchInteractiveImplementer({
-      context,
+      repositoryPath,
       change,
       interactiveSessionHost,
       globalConfigPath,

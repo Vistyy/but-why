@@ -5,7 +5,6 @@ import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import { readRepoConfig } from "../../init/repoConfig.js";
-import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { taskSlugForId } from "../../task/taskId.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 import {
@@ -38,14 +37,15 @@ export type ChangeImplementResult =
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
 export const launchInteractiveImplementer = (input: {
-  readonly context: LocalRepositoryContext;
+  readonly repositoryPath: string;
   readonly change: ChangeStartRecord;
   readonly interactiveSessionHost: InteractiveSessionHost;
   readonly globalConfigPath: string;
   readonly implementerPrompt: string | undefined;
 }): Effect.Effect<ChangeImplementResult, never> =>
   Effect.gen(function* () {
-    const { context, change, interactiveSessionHost, globalConfigPath, implementerPrompt } = input;
+    const { repositoryPath, change, interactiveSessionHost, globalConfigPath, implementerPrompt } =
+      input;
     const managedRepoConfig = readRepoConfig(join(change.worktreePath, ".but-why", "config.json"));
     if (!managedRepoConfig.ok) {
       return {
@@ -102,7 +102,7 @@ export const launchInteractiveImplementer = (input: {
             changeId: change.id,
             hostSessionName: hostSessionNameForChange(change),
             agentSessionName: agentSessionNameForChange(change),
-            repositoryPath: context.mainCheckoutRoot,
+            repositoryPath,
             worktreePath: change.worktreePath,
             systemPromptPaths: buildImplementerSystemPromptPaths(),
             initialPrompt: buildImplementerInitialPrompt({

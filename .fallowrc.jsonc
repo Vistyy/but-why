@@ -108,7 +108,7 @@
     "rules": [
       {
         "from": "cli",
-        "allow": ["adapters", "change-workflows", "composition", "domain"]
+        "allow": ["adapters", "change-workflows", "composition", "domain", "repository-runtime"]
       },
       {
         "from": "domain",
