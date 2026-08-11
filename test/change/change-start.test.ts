@@ -9,6 +9,7 @@ import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
+import { ValidationCommandExecutionFailed } from "../../src/change/validation/runValidationCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
 
@@ -228,7 +229,10 @@ describe("Change Start orchestration", () => {
     () =>
       Effect.gen(function* () {
         const responses: Array<
-          Effect.Effect<{ exitCode: number; stdout: string; stderr: string }, unknown>
+          Effect.Effect<
+            { exitCode: number; stdout: string; stderr: string },
+            ValidationCommandExecutionFailed
+          >
         > = [
           Effect.succeed({
             exitCode: 7,
@@ -236,7 +240,7 @@ describe("Change Start orchestration", () => {
             stderr: "failed\n__BUTWHY_PREPARE_COMPLETED_prepare__:7\n",
           }),
           Effect.succeed({ exitCode: 0, stdout: "", stderr: "timed out" }),
-          Effect.fail(new Error("executor unavailable")),
+          Effect.fail(new ValidationCommandExecutionFailed({ message: "executor unavailable" })),
           Effect.succeed({
             exitCode: 0,
             stdout: "",

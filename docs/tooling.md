@@ -28,7 +28,7 @@ Use Just recipes instead of direct package-manager commands for repository workf
 - `just check` checks Just formatting and the configured Biome formatter, lint rules, and `organizeImports` assist in one source scan without modifying files.
 - `just fix` applies Just formatting, Biome formatting, safe lint fixes, and the `organizeImports` assist without user interaction.
 - `just test <focused-path-or-selection>` runs focused tests without the shared capacity lock.
-- `just typecheck` runs the TypeScript checker.
+- `just typecheck` runs the TypeScript checker and the configured scoped Effect diagnostics.
 - `just lint` runs Biome linting only.
 - `just format` applies Biome formatting only.
 - `just format-check` checks Just and Biome formatting only.

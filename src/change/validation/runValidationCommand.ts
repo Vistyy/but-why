@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 
 export type ValidationCommandResultData = {
   readonly exitCode: number;
@@ -11,10 +11,16 @@ export type ValidationCommandExecutor = (
   options?: { readonly cwd?: string },
 ) => Promise<ValidationCommandResultData>;
 
+export class ValidationCommandExecutionFailed extends Data.TaggedError(
+  "ValidationCommandExecutionFailed",
+)<{
+  readonly message: string;
+}> {}
+
 export type ValidationCommandEffectExecutor = (
   command: string,
   options?: { readonly cwd?: string },
-) => Effect.Effect<ValidationCommandResultData, unknown>;
+) => Effect.Effect<ValidationCommandResultData, ValidationCommandExecutionFailed>;
 
 export type ValidationCommandResult = {
   readonly exitCode: number;
@@ -32,11 +38,15 @@ export const runValidationCommandEffect = (input: {
   readonly missingTimeoutMessage: string;
   readonly exec: ValidationCommandEffectExecutor;
   readonly cwd?: string;
-}): Effect.Effect<ValidationCommandResult, unknown> =>
+}): Effect.Effect<ValidationCommandResult, ValidationCommandExecutionFailed> =>
   Effect.gen(function* () {
     const options = input.cwd === undefined ? undefined : { cwd: input.cwd };
     const available = yield* input.exec("command -v timeout >/dev/null 2>&1", options);
-    if (available.exitCode !== 0) return yield* Effect.fail(new Error(input.missingTimeoutMessage));
+    if (available.exitCode !== 0) {
+      return yield* Effect.fail(
+        new ValidationCommandExecutionFailed({ message: input.missingTimeoutMessage }),
+      );
+    }
 
     const result = yield* input.exec(
       timeoutWrappedCommand(input.command, input.timeoutSeconds, input.completionMarker),

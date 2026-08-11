@@ -5,6 +5,29 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2024"],
     "types": ["node"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "anyUnknownInErrorContext": "off"
+        },
+        "overrides": [
+          {
+            "include": [
+              "src/command/hostCommand.ts",
+              "src/change/validation/runValidationCommand.ts",
+              "src/repositoryPreparation/**/*.ts",
+              "src/agent/piReviewerProcessExecutor.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "anyUnknownInErrorContext": "error"
+              }
+            }
+          }
+        ]
+      }
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

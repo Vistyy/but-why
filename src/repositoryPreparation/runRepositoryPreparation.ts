@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import {
   runValidationCommand,
   runValidationCommandEffect,
@@ -10,6 +10,12 @@ export type RepositoryPreparationExecutor = ValidationCommandExecutor;
 export type RepositoryPreparationEffectExecutor = RepositoryPreparationExecutor & {
   readonly effect: ValidationCommandEffectExecutor;
 };
+
+export class RepositoryPreparationExecutionFailed extends Data.TaggedError(
+  "RepositoryPreparationExecutionFailed",
+)<{
+  readonly message: string;
+}> {}
 
 export type RepositoryPreparationResult = {
   readonly command: string;
@@ -23,7 +29,7 @@ export const runRepositoryPreparationEffect = (input: {
   readonly prepare: { readonly command: string; readonly timeoutSeconds: number };
   readonly exec: RepositoryPreparationEffectExecutor;
   readonly cwd?: string;
-}): Effect.Effect<RepositoryPreparationResult, unknown> =>
+}): Effect.Effect<RepositoryPreparationResult, RepositoryPreparationExecutionFailed> =>
   runValidationCommandEffect({
     command: input.prepare.command,
     timeoutSeconds: input.prepare.timeoutSeconds,
@@ -31,7 +37,12 @@ export const runRepositoryPreparationEffect = (input: {
     missingTimeoutMessage: "Could not find timeout command for prepare.",
     exec: input.exec.effect,
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-  }).pipe(Effect.map((result) => ({ command: input.prepare.command, ...result })));
+  }).pipe(
+    Effect.map((result) => ({ command: input.prepare.command, ...result })),
+    Effect.mapError(
+      (error) => new RepositoryPreparationExecutionFailed({ message: error.message }),
+    ),
+  );
 
 export const runRepositoryPreparation = async (input: {
   readonly prepare: { readonly command: string; readonly timeoutSeconds: number };

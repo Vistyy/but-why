@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { ValidationCommandExecutionFailed } from "../change/validation/runValidationCommand.js";
 import { executeHostCommand, executeHostCommandEffect } from "../command/hostCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "./runRepositoryPreparation.js";
 
@@ -12,6 +14,10 @@ export const executeLocalRepositoryPreparation: RepositoryPreparationEffectExecu
     executeHostCommand(commandInput(command, options?.cwd)),
   {
     effect: (command: string, options?: { readonly cwd?: string }) =>
-      executeHostCommandEffect(commandInput(command, options?.cwd)),
+      executeHostCommandEffect(commandInput(command, options?.cwd)).pipe(
+        Effect.mapError(
+          (error) => new ValidationCommandExecutionFailed({ message: error.message }),
+        ),
+      ),
   },
 );
