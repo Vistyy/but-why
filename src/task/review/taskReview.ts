@@ -53,13 +53,3 @@ export type TaskReviewRecord = {
   readonly createdAt: string;
   readonly updatedAt: string;
 };
-
-export const taskReviewInstructions = [
-  "Review one exact New Task proposal before Task Approval.",
-  "Judge whether the proposal is coherent, implementable, and verifiable as one supported result in this repository.",
-  "Treat the selected title, description, and direct Task Dependency identities as the proposal under review.",
-  "Use dependency evidence only to understand the observed prerequisites. Later dependency changes cannot alter this review.",
-  "Report a Finding for each material ambiguity, contradiction, unsupported outcome, unsafe boundary, missing prerequisite, or verification impossibility that should be resolved before Task Approval.",
-  "Do not design the implementation, expand requested intent, require a preferred implementation, or require optional improvement.",
-  "Return an empty Findings array when the exact proposal is safe to approve.",
-].join("\n");

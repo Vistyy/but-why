@@ -15,22 +15,22 @@ import {
 } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import {
+  buildAcceptanceContinuationPrompt,
+  buildAcceptanceReviewerPrompt,
+} from "../../reviewerPrompts/acceptanceReviewerPrompt.js";
+import {
+  buildReviewerOutputCorrectionPrompt,
+  reviewerFindingHistory,
+} from "../../reviewerPrompts/reviewerPromptSupport.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import {
-  buildAcceptanceReviewerPrompt,
-  buildReviewerOutputCorrectionPrompt,
-  reviewerFindingHistory,
-} from "../reviewerPrompts.js";
-import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,
 } from "../reviewerSession/executeReviewerSession.js";
-import {
-  continuationPrompt,
-  type ReviewerSessionStore,
-} from "../reviewerSession/reviewerSession.js";
+import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
@@ -238,7 +238,7 @@ const runAcceptanceReviewPhaseImpl = (
           ),
         ),
       prompt,
-      continuationPrompt: continuationPrompt({
+      continuationPrompt: buildAcceptanceContinuationPrompt({
         candidate: input.candidate,
         acceptanceContext: input.acceptanceContext,
         implementationDecisions: input.implementationDecisions,

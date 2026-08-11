@@ -4,7 +4,7 @@ import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/ag
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js";
-import { defaultAcceptanceInstructions } from "../reviewerPrompts.js";
+import { defaultAcceptanceInstructions } from "../../reviewerPrompts/acceptanceReviewerPrompt.js";
 import {
   InvalidReviewerConfig,
   type SubmitRejectionError,

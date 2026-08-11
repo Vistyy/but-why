@@ -8,7 +8,6 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import { decodeReviewerOutputContract, type ReviewerOutput } from "../../agent/reviewerOutput.js";
-import { reviewerOutputTag } from "../../agent/reviewerOutputWire.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -19,14 +18,13 @@ import type {
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
-import type { PublicTaskId } from "../taskId.js";
 import {
-  type TaskReviewBase,
-  type TaskReviewRecord,
-  type TaskReviewToolingFailure,
+  buildTaskReviewerPrompt,
   taskReviewInstructions,
-} from "./taskReview.js";
-import type { AdmitTaskReviewResult, TaskReviewPersistence } from "./taskReviewPersistence.js";
+} from "../../reviewerPrompts/taskReviewerPrompt.js";
+import type { PublicTaskId } from "../taskId.js";
+import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
+import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
   | { readonly ok: true; readonly review: TaskReviewRecord }
@@ -241,7 +239,7 @@ const submitTaskReview = (
                       ),
                 ),
               ),
-            prompt: reviewPrompt(admitted),
+            prompt: buildTaskReviewerPrompt(admitted),
             profile: input.profile,
             commandCwd: active.worktreePath,
             resourceRoot: active.worktreePath,
@@ -383,19 +381,3 @@ export const abandonTaskReview = (
     const abandoned = yield* input.persistence.abandon(review.id, reason, now);
     return abandoned.ok ? { ok: true, review: abandoned.review } : abandoned;
   });
-
-const reviewPrompt = (admitted: Extract<AdmitTaskReviewResult, { ok: true }>): string =>
-  [
-    taskReviewInstructions,
-    "",
-    "Exact Task proposal:",
-    JSON.stringify(admitted.proposal),
-    "",
-    "Captured direct Task Dependency evidence:",
-    JSON.stringify({ dependencies: admitted.dependencyEvidence }),
-    "",
-    "Inspect the repository at the exact Review Base before deciding.",
-    "Return exactly one JSON object inside this XML tag:",
-    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must include title, description, evidence, files, and artifactRefs. artifactRefs must be empty.",
-  ].join("\n");

@@ -6,13 +6,6 @@ import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
-import type { ImplementationDecision } from "../implementationDecision.js";
-import {
-  currentCandidateReReviewInstructions,
-  previousFindingsPrompt,
-} from "../reviewerPrompts.js";
-import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 
 export type ReviewerSessionIdentity = {
   readonly changeId: string;
@@ -71,32 +64,3 @@ export const reviewerSessionsProducerRoot = (
 
 export const reviewerSessionsChangeRoot = (sessionStorageRoot: string, changeId: string): string =>
   join(sessionStorageRoot, changeId);
-
-export const continuationPrompt = (input: {
-  readonly candidate: {
-    readonly candidateId: string;
-    readonly changeBaseSha: string;
-    readonly headSha: string;
-  };
-  readonly acceptanceContext: AcceptanceContextSnapshotV1;
-  readonly implementationDecisions: readonly ImplementationDecision[];
-  readonly blockerHistory?: ImplementationBlockerHistory;
-  readonly availableArtifactRefs: readonly string[];
-  readonly previousFindings: readonly unknown[];
-}): string =>
-  [
-    "Continue the Acceptance Reviewer Session.",
-    currentCandidateReReviewInstructions,
-    "Current Candidate:",
-    JSON.stringify(input.candidate),
-    "Complete authoritative Acceptance Context:",
-    JSON.stringify(input.acceptanceContext),
-    "Implementer Implementation Decision Log (non-authoritative rationale):",
-    JSON.stringify(input.implementationDecisions),
-    "Implementation Blocker history (non-authoritative evidence):",
-    JSON.stringify(input.blockerHistory ?? { blockers: [], resolutions: [], active: null }),
-    "Available Check and Validation evidence:",
-    JSON.stringify(input.availableArtifactRefs),
-    previousFindingsPrompt(input.previousFindings),
-    "Return only the required reviewer output.",
-  ].join("\n");

@@ -15,14 +15,16 @@ import {
 } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   buildReviewerOutputCorrectionPrompt,
   buildReviewerRevisionPrompt,
+  reviewerFindingHistory,
+} from "../../reviewerPrompts/reviewerPromptSupport.js";
+import {
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
-  reviewerFindingHistory,
-} from "../reviewerPrompts.js";
+} from "../../reviewerPrompts/specialistReviewerPrompt.js";
+import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,

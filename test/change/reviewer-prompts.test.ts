@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAcceptanceContinuationPrompt,
   buildAcceptanceReviewerPrompt,
+} from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
+import {
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
-} from "../../src/change/reviewerPrompts.js";
-import { continuationPrompt } from "../../src/change/reviewerSession/reviewerSession.js";
+} from "../../src/reviewerPrompts/specialistReviewerPrompt.js";
+import { buildTaskReviewerPrompt } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 
 const expectOrdered = (prompt: string, values: readonly string[]): void => {
   let previousIndex = -1;
@@ -43,6 +46,29 @@ const previousFinding = {
 };
 
 describe("reviewer prompts", () => {
+  it("composes a Task Reviewer prompt from the exact proposal and dependency evidence", () => {
+    const proposal = {
+      title: "Supplied Task title",
+      description: "Supplied Task description",
+      dependencyIds: ["BY-1"],
+    };
+    const dependencyEvidence = [
+      {
+        id: "BY-1",
+        title: "Supplied dependency title",
+        description: "Supplied dependency description",
+        state: "done",
+      },
+    ];
+    const prompt = buildTaskReviewerPrompt({ proposal, dependencyEvidence });
+
+    expectOrdered(prompt, [
+      `Exact Task proposal:\n${JSON.stringify(proposal)}`,
+      `Captured direct Task Dependency evidence:\n${JSON.stringify({ dependencies: dependencyEvidence })}`,
+      "Inspect the repository at the exact Review Base before deciding.",
+    ]);
+  });
+
   it("composes an Acceptance Reviewer prompt from the exact authority and review inputs", () => {
     const candidate = {
       candidateId: "supplied-candidate-id",
@@ -77,7 +103,7 @@ describe("reviewer prompts", () => {
       changeBaseSha: "continued-base-sha",
       headSha: "continued-head-sha",
     };
-    const prompt = continuationPrompt({
+    const prompt = buildAcceptanceContinuationPrompt({
       candidate,
       acceptanceContext,
       implementationDecisions: [implementationDecision],
@@ -146,6 +172,10 @@ describe("reviewer prompts", () => {
     expect(continuation).toContain(
       `Previous Findings:\n${prettyJson({ findings: [previousFinding] })}`,
     );
+    const commonConstraint = "Review the exact Candidate only for the configured concern.";
+    for (const prompt of [initial, continuation]) {
+      expect(prompt.split(commonConstraint)).toHaveLength(2);
+    }
   });
 
   it("omits the optional Specialist Acceptance Context section when none is supplied", () => {
