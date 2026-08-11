@@ -816,13 +816,9 @@ const getPassingEvidence = (
       return encoded === null ? null : decodeSqliteAcceptanceContextSnapshot(encoded);
     });
     const implementationDecisions = yield* listDecisions(sql, authority.id);
-    const currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
-      sql,
-      authority.id,
-      operationName,
-    );
     const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
     const expectedAcceptanceContext = acceptanceContext ?? undefined;
+    let currentLatestResolvedBlockerId: string | null | undefined;
     let current: PassingPublicationEvidence | undefined;
     for (const row of rows) {
       const evidence = yield* decodePersisted(operationName, (): PassingPublicationEvidence => {
@@ -854,6 +850,13 @@ const getPassingEvidence = (
           !isDeepStrictEqual(evidence.run.record.policy, query.policy))
       )
         continue;
+      if (currentLatestResolvedBlockerId === undefined) {
+        currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
+          sql,
+          authority.id,
+          operationName,
+        );
+      }
       const latestResolvedBlockerIdAtRun = yield* readLatestResolvedBlockerId(
         sql,
         authority.id,
