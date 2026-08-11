@@ -83,11 +83,10 @@ _fallow-static-check:
 _fallow-coverage-check:
     pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --report-only
 
-# Report advisory code-health and duplication findings.
+# Report actionable advisory code-health, duplication, and Effect findings.
 health:
     just coverage
-    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --report-only
-    pnpm exec fallow dupes --no-production --no-cache
+    node scripts/run-health-report.mjs coverage/coverage-final.json
 
 # Lint the codebase.
 lint:
