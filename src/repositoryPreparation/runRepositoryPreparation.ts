@@ -11,7 +11,7 @@ export type RepositoryPreparationEffectExecutor = RepositoryPreparationExecutor 
   readonly effect: ValidationCommandEffectExecutor;
 };
 
-export class RepositoryPreparationExecutionFailed extends Data.TaggedError(
+class RepositoryPreparationExecutionFailed extends Data.TaggedError(
   "RepositoryPreparationExecutionFailed",
 )<{
   readonly message: string;
