@@ -240,6 +240,9 @@ export type UnknownAbandonmentContextRow = {
   readonly setupExpectedCommitSha: unknown;
   readonly worktreePath: unknown;
   readonly cleanupWorkspace: unknown;
+  readonly preNativeRefName: unknown;
+  readonly preNativeWorkspacePath: unknown;
+  readonly preNativeExpectedCommitSha: unknown;
 };
 
 export const decodeAbandonmentContext = (
@@ -283,12 +286,37 @@ export const decodeAbandonmentContext = (
   if (setupValidationRunId !== null && (worktreePath === null || cleanupWorkspace === null)) {
     throw new Error("Snapshot Workspace Setup is incomplete");
   }
+  const preNativeRefName = decodeStoredNullableString(
+    row.preNativeRefName,
+    "pre-native Snapshot Workspace ref name",
+  );
+  const preNativeWorkspacePath = decodeStoredNullableString(
+    row.preNativeWorkspacePath,
+    "pre-native Snapshot Workspace path",
+  );
+  const preNativeExpectedCommitSha = decodeStoredNullableString(
+    row.preNativeExpectedCommitSha,
+    "pre-native Snapshot Workspace expected commit SHA",
+  );
+  const preNativeIdentityParts = [
+    preNativeRefName,
+    preNativeWorkspacePath,
+    preNativeExpectedCommitSha,
+  ].filter((value) => value !== null).length;
+  if (
+    (preNativeIdentityParts !== 0 && preNativeIdentityParts !== 3) ||
+    (preNativeRefName !== null &&
+      (preNativeWorkspacePath !== worktreePath || preNativeExpectedCommitSha !== submittedSha))
+  ) {
+    throw new Error("Pre-native Snapshot Workspace cleanup identity is inconsistent");
+  }
   return {
     validationRunId,
     changeId,
     candidateId,
     submittedSha,
     ...(worktreePath === null ? {} : { worktreePath }),
+    ...(preNativeRefName === null ? {} : { preNativeRefName }),
     cleanupWorkspace,
   };
 };

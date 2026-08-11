@@ -120,6 +120,7 @@ export type CandidateValidationRunAbandonmentContext = {
   readonly candidateId: string;
   readonly submittedSha: string;
   readonly worktreePath?: string;
+  readonly preNativeRefName?: string;
   readonly cleanupWorkspace: "removed" | "not_created" | "failed" | null;
 };
 

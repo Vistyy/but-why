@@ -29,6 +29,7 @@ import { currentCandidateValidationAdmissionsMigration as currentCandidateValida
 import { removeCandidateValidationAdmissionsMigration as removeCandidateValidationAdmissions } from "./migrations/0027_remove_candidate_validation_admissions.js";
 import { projectRuntimeFailureNamesMigration as projectRuntimeFailureNames } from "./migrations/0028_project_runtime_failure_names.js";
 import { nativeSnapshotWorkspacesMigration as nativeSnapshotWorkspaces } from "./migrations/0029_native_snapshot_workspaces.js";
+import { preNativeSnapshotWorkspaceCleanupMigration as preNativeSnapshotWorkspaceCleanup } from "./migrations/0030_pre_native_snapshot_workspace_cleanup.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -60,6 +61,7 @@ const migrations = {
   "0027_remove_candidate_validation_admissions": removeCandidateValidationAdmissions,
   "0028_project_runtime_failure_names": projectRuntimeFailureNames,
   "0029_native_snapshot_workspaces": nativeSnapshotWorkspaces,
+  "0030_pre_native_snapshot_workspace_cleanup": preNativeSnapshotWorkspaceCleanup,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

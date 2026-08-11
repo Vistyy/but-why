@@ -94,6 +94,9 @@ const abandonWhileLocked = (
       validationRunId: command.validationRunId,
       submittedSha: context.submittedSha,
       ...(context.worktreePath === undefined ? {} : { recordedWorktreePath: context.worktreePath }),
+      ...(context.preNativeRefName === undefined
+        ? {}
+        : { preNativeRefName: context.preNativeRefName }),
     });
     const cleanup = { workspace: cleanupAttempt.workspace } as const;
     if (cleanup.workspace === "failed") {

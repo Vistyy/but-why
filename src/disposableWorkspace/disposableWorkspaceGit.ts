@@ -7,6 +7,7 @@ import type { DisposableWorkspaceCleanupResult } from "./disposableWorkspace.js"
 import {
   disposableWorkspaceRoot,
   expectedDisposableWorkspacePath,
+  isDisposableWorkspaceId,
   isExpectedDisposableWorkspacePath,
 } from "./disposableWorkspacePath.js";
 
@@ -201,6 +202,124 @@ export const cleanupExactDisposableWorkspace = (
     );
   });
 
+export const cleanupPreNativeDisposableWorkspace = (
+  mainCheckoutRoot: string,
+  input: {
+    readonly workspaceId: string;
+    readonly expectedCommitSha: string;
+    readonly recordedRefName: string;
+    readonly recordedWorktreePath?: string;
+  },
+): Effect.Effect<ExactDisposableWorkspaceCleanupResult> =>
+  Effect.gen(function* () {
+    if (!isDisposableWorkspaceId(input.workspaceId)) {
+      return cleanupFailed("Pre-native Snapshot Workspace identity is unsafe.");
+    }
+    const expectedRefName = `refs/but-why/validation-runs/${input.workspaceId}/validation`;
+    const expectedWorktreePath = join(
+      mainCheckoutRoot,
+      ".sandcastle",
+      "worktrees",
+      expectedRefName.replaceAll("/", "-"),
+    );
+    if (
+      input.recordedRefName !== expectedRefName ||
+      input.recordedWorktreePath === undefined ||
+      resolve(input.recordedWorktreePath) !== resolve(expectedWorktreePath)
+    ) {
+      return cleanupFailed("Recorded pre-native Snapshot Workspace identity does not match.");
+    }
+    const safeContainers = inspectExactDirectories([
+      join(mainCheckoutRoot, ".sandcastle"),
+      join(mainCheckoutRoot, ".sandcastle", "worktrees"),
+    ]);
+    if (!safeContainers.ok) return cleanupFailed(safeContainers.message);
+
+    const records = yield* readWorktreeRecords(mainCheckoutRoot);
+    if (!records.ok) return cleanupFailed(records.message);
+    const matches = records.records.filter(
+      (record) => resolve(record.path) === resolve(expectedWorktreePath),
+    );
+    if (matches.length > 1) return cleanupFailed("Pre-native worktree registration is not unique.");
+    const record = matches[0];
+    if (
+      record !== undefined &&
+      (record.head !== input.expectedCommitSha ||
+        (record.branch !== expectedRefName && !record.detached) ||
+        !isSafeWorktreeDirectory(expectedWorktreePath))
+    ) {
+      return cleanupFailed("Live pre-native Snapshot Workspace identity does not match.");
+    }
+    if (record === undefined && pathExists(expectedWorktreePath)) {
+      return cleanupFailed("Pre-native workspace path exists without a Git registration.");
+    }
+    if (record !== undefined) {
+      const liveHead = yield* git(expectedWorktreePath, ["rev-parse", "HEAD"]);
+      if (!liveHead.ok || liveHead.stdout.trim() !== input.expectedCommitSha) {
+        return cleanupFailed("Live pre-native Snapshot Workspace HEAD does not match.");
+      }
+    }
+
+    const refs = yield* git(mainCheckoutRoot, [
+      "for-each-ref",
+      "--format=%(refname) %(objectname)",
+      "--",
+      expectedRefName,
+    ]);
+    if (!refs.ok) return cleanupFailed(refs.message);
+    const refLines = refs.stdout.trim().split("\n").filter(Boolean);
+    if (
+      refLines.length > 1 ||
+      (refLines.length === 1 && refLines[0] !== `${expectedRefName} ${input.expectedCommitSha}`)
+    ) {
+      return cleanupFailed("Live pre-native Snapshot Workspace ref does not match.");
+    }
+
+    if (record !== undefined) {
+      yield* git(mainCheckoutRoot, ["worktree", "remove", "--force", "--", expectedWorktreePath]);
+    }
+    if (refLines.length === 1) {
+      yield* git(mainCheckoutRoot, ["update-ref", "-d", expectedRefName, input.expectedCommitSha]);
+    }
+
+    const remainingRecords = yield* readWorktreeRecords(mainCheckoutRoot);
+    if (!remainingRecords.ok) return cleanupFailed(remainingRecords.message);
+    const refAfter = yield* git(mainCheckoutRoot, [
+      "for-each-ref",
+      "--format=%(refname)",
+      "--",
+      expectedRefName,
+    ]);
+    if (
+      pathExists(expectedWorktreePath) ||
+      remainingRecords.records.some(
+        (remaining) => resolve(remaining.path) === resolve(expectedWorktreePath),
+      ) ||
+      !refAfter.ok ||
+      refAfter.stdout.trim() !== ""
+    ) {
+      return cleanupFailed("Exact pre-native Snapshot Workspace cleanup did not complete.");
+    }
+    return { workspace: "removed" } as const;
+  });
+
+const inspectExactDirectories = (
+  paths: readonly string[],
+): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
+  try {
+    for (const path of paths) {
+      if (!pathExists(path)) continue;
+      const entry = lstatSync(path);
+      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+        return { ok: false, message: `Workspace container identity is unsafe: ${path}` };
+      }
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+};
+
 const inspectSafeWorkspaceContainers = (
   mainCheckoutRoot: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
@@ -231,6 +350,7 @@ const cleanupFailed = (errorMessage: string): ExactDisposableWorkspaceCleanupRes
 type WorktreeRecord = {
   readonly path: string;
   readonly head?: string;
+  readonly branch?: string;
   readonly detached: boolean;
 };
 
@@ -254,11 +374,13 @@ const parseWorktreeRecords = (porcelain: string): readonly WorktreeRecord[] =>
       const lines = entry.split("\n");
       const path = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
       const head = lines.find((line) => line.startsWith("HEAD "))?.slice("HEAD ".length);
+      const branch = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
       return path === undefined
         ? undefined
         : {
             path,
             ...(head === undefined ? {} : { head }),
+            ...(branch === undefined ? {} : { branch }),
             detached: lines.includes("detached"),
           };
     })

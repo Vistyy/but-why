@@ -13,20 +13,19 @@ export const expectedDisposableWorkspacePath = (
   workspaceId: string,
 ): string => join(disposableWorkspaceRoot(mainCheckoutRoot), workspaceId);
 
+export const isDisposableWorkspaceId = (workspaceId: string): boolean =>
+  workspaceId.length > 0 &&
+  workspaceId !== "." &&
+  workspaceId !== ".." &&
+  !workspaceId.includes("/") &&
+  !workspaceId.includes("\\");
+
 export const isExpectedDisposableWorkspacePath = (
   mainCheckoutRoot: string,
   workspaceId: string,
   worktreePath: string,
 ): boolean => {
-  if (
-    workspaceId.length === 0 ||
-    workspaceId === "." ||
-    workspaceId === ".." ||
-    workspaceId.includes("/") ||
-    workspaceId.includes("\\")
-  ) {
-    return false;
-  }
+  if (!isDisposableWorkspaceId(workspaceId)) return false;
   const root = resolve(disposableWorkspaceRoot(mainCheckoutRoot));
   const expected = resolve(expectedDisposableWorkspacePath(mainCheckoutRoot, workspaceId));
   return resolve(worktreePath) === expected && resolve(dirname(expected)) === root;

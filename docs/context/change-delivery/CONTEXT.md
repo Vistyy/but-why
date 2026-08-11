@@ -280,6 +280,8 @@ Each Snapshot Workspace uses the Local Repository's sibling But Why worktree roo
 Cleanup requires that persisted identity, a safe But Why-owned path, the exact Local Repository worktree registration, and the exact live HEAD.
 A later Validation Run uses a different Snapshot Workspace.
 Recovery may reuse only the same Validation Run's matching clean Snapshot Workspace.
+An active Validation Run migrated from the pre-native implementation retains cleanup-only identity until explicit abandonment removes its exact resources.
+New Snapshot Workspaces do not use that identity.
 Snapshot Workspaces provide no security isolation.
 _Avoid_: Managed Worktree, Task Worktree, Interactive Session
 

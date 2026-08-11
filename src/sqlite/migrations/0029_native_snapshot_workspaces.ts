@@ -4,6 +4,25 @@ import { Effect } from "effect";
 export const nativeSnapshotWorkspacesMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(`
+    CREATE TABLE pre_native_snapshot_workspace_cleanups (
+      validation_run_id TEXT PRIMARY KEY,
+      retired_ref_name TEXT NOT NULL,
+      workspace_path TEXT NOT NULL,
+      expected_commit_sha TEXT NOT NULL,
+      FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+    )
+  `);
+  yield* sql.unsafe(`
+    INSERT INTO pre_native_snapshot_workspace_cleanups (
+      validation_run_id, retired_ref_name, workspace_path, expected_commit_sha
+    )
+    SELECT setup.validation_run_id, setup.temp_ref_name, setup.worktree_path, setup.submitted_sha
+    FROM candidate_validation_workspace_setups AS setup
+    INNER JOIN active_validation_runs AS active
+      ON active.validation_run_id = setup.validation_run_id
+    WHERE setup.worktree_path IS NOT NULL
+  `);
+  yield* sql.unsafe(`
     ALTER TABLE candidate_validation_workspace_setups
     RENAME COLUMN submitted_sha TO expected_commit_sha
   `);

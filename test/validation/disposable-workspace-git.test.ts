@@ -31,6 +31,64 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     }),
   );
 
+  it.effect("removes exact pre-native resources retained for abandonment", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const validationRunId = "run-1";
+      const refName = `refs/but-why/validation-runs/${validationRunId}/validation`;
+      const worktreePath = join(
+        repository,
+        ".sandcastle",
+        "worktrees",
+        refName.replaceAll("/", "-"),
+      );
+      mkdirSync(dirname(worktreePath), { recursive: true });
+      git(repository, "update-ref", refName, commitSha);
+      git(repository, "worktree", "add", "--", worktreePath, refName);
+
+      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
+        validationRunId,
+        submittedSha: commitSha,
+        recordedWorktreePath: worktreePath,
+        preNativeRefName: refName,
+      });
+
+      expect(result).toEqual({ workspace: "removed" });
+      expect(existsSync(worktreePath)).toBe(false);
+      expect(git(repository, "for-each-ref", "--format=%(refname)", refName)).toBe("");
+    }),
+  );
+
+  it.effect("leaves pre-native resources untouched when persisted identity mismatches", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const validationRunId = "selected";
+      const refName = `refs/but-why/validation-runs/${validationRunId}/validation`;
+      const worktreePath = join(
+        repository,
+        ".sandcastle",
+        "worktrees",
+        refName.replaceAll("/", "-"),
+      );
+      mkdirSync(dirname(worktreePath), { recursive: true });
+      git(repository, "update-ref", refName, commitSha);
+      git(repository, "worktree", "add", "--", worktreePath, refName);
+
+      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
+        validationRunId,
+        submittedSha: commitSha,
+        recordedWorktreePath: worktreePath,
+        preNativeRefName: "refs/but-why/validation-runs/unrelated/validation",
+      });
+
+      expect(result).toMatchObject({ workspace: "failed" });
+      expect(existsSync(worktreePath)).toBe(true);
+      expect(git(repository, "show-ref", "--verify", refName)).toBe(`${commitSha} ${refName}`);
+    }),
+  );
+
   it.effect("leaves resources untouched when persisted identity mismatches", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();

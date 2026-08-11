@@ -9,6 +9,15 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* sql.unsafe(`
+      CREATE TABLE candidate_validation_runs (id TEXT PRIMARY KEY)
+    `);
+    yield* sql.unsafe(`
+      CREATE TABLE active_validation_runs (
+        change_id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL UNIQUE
+      )
+    `);
+    yield* sql.unsafe(`
       CREATE TABLE candidate_validation_workspace_setups (
         validation_run_id TEXT PRIMARY KEY,
         temp_ref_name TEXT NOT NULL,
@@ -33,8 +42,15 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
       ) VALUES (
         'run-1', 'refs/but-why/validation-runs/run-1/validation', 'candidate-sha',
         'candidate-sha', 'not_created', 'not_created', '2026-08-11T10:00:00.000Z',
-        '/tmp/repository-worktrees/but-why/validation-runs/run-1'
+        '/tmp/repository/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation'
       )
+    `);
+    yield* sql.unsafe(`
+      INSERT INTO candidate_validation_runs (id) VALUES ('run-1')
+    `);
+    yield* sql.unsafe(`
+      INSERT INTO active_validation_runs (change_id, validation_run_id)
+      VALUES ('change-1', 'run-1')
     `);
     yield* sql.unsafe(`
       INSERT INTO candidate_validation_tooling_failures (error_kind, operation_name)
@@ -72,8 +88,28 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
       {
         validationRunId: "run-1",
         expectedCommitSha: "candidate-sha",
-        workspacePath: "/tmp/repository-worktrees/but-why/validation-runs/run-1",
+        workspacePath:
+          "/tmp/repository/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation",
         cleanupWorkspace: "not_created",
+      },
+    ]);
+    const preNative = yield* sql<{
+      readonly validationRunId: string;
+      readonly retiredRefName: string;
+      readonly workspacePath: string;
+      readonly expectedCommitSha: string;
+    }>`
+      SELECT validation_run_id AS validationRunId, retired_ref_name AS retiredRefName,
+        workspace_path AS workspacePath, expected_commit_sha AS expectedCommitSha
+      FROM pre_native_snapshot_workspace_cleanups
+    `;
+    expect(preNative).toEqual([
+      {
+        validationRunId: "run-1",
+        retiredRefName: "refs/but-why/validation-runs/run-1/validation",
+        workspacePath:
+          "/tmp/repository/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation",
+        expectedCommitSha: "candidate-sha",
       },
     ]);
     const failures = yield* sql<{
