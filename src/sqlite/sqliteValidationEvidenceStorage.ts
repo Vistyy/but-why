@@ -9,7 +9,7 @@ import type {
   CandidateValidationToolingFailure,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
-import { validationPhase, type ValidationPhase } from "../change/validationRun/validationRun.js";
+import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";

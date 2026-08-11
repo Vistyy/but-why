@@ -14,8 +14,18 @@ import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { compareCandidatesAscending, readCandidateById } from "./sqliteCandidateStorage.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
+import {
+  decodeImplementationBlockerHistory,
+  decodeImplementationDecisions,
+  implementationBlockerReadColumns,
+  latestResolvedBlockerId,
+  type StoredImplementationBlockerRow,
+  type StoredImplementationDecisionRow,
+} from "./sqliteChangeReadModel.js";
+import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   assertRunOwner,
   decodeValidationFinding,
@@ -38,16 +48,6 @@ import {
   validateValidationRunAuthorityRelationships,
   validationRunReadColumns,
 } from "./sqliteValidationRunStorage.js";
-import {
-  decodeImplementationBlockerHistory,
-  decodeImplementationDecisions,
-  implementationBlockerReadColumns,
-  latestResolvedBlockerId,
-  type StoredImplementationBlockerRow,
-  type StoredImplementationDecisionRow,
-} from "./sqliteChangeReadModel.js";
-import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidateValidationExecutionPort = () =>
   Effect.map(

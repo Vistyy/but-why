@@ -4,8 +4,8 @@ export const acceptanceContextSnapshotSchema = Schema.Struct({
   version: Schema.Literal(1),
   title: Schema.String,
   description: Schema.String,
-  comments: Schema.optional(Schema.Array(Schema.String)),
-  resolutions: Schema.optional(Schema.Array(Schema.String)),
+  comments: Schema.optionalWith(Schema.Array(Schema.String), { exact: true }),
+  resolutions: Schema.optionalWith(Schema.Array(Schema.String), { exact: true }),
 });
 
 export type AcceptanceContextSnapshotV1 = Schema.Schema.Type<
