@@ -1,10 +1,8 @@
 import { Data, Effect } from "effect";
-import {
-  runValidationCommandEffect,
-  type ValidationCommandEffectExecutor,
-} from "../change/validation/runValidationCommand.js";
+import { runTimedCommand } from "../command/runTimedCommand.js";
+import type { WorkspaceCommandExecutor } from "../command/workspaceCommand.js";
 
-export type RepositoryPreparationEffectExecutor = ValidationCommandEffectExecutor;
+export type RepositoryPreparationEffectExecutor = WorkspaceCommandExecutor;
 
 class RepositoryPreparationExecutionFailed extends Data.TaggedError(
   "RepositoryPreparationExecutionFailed",
@@ -25,7 +23,7 @@ export const runRepositoryPreparationEffect = (input: {
   readonly exec: RepositoryPreparationEffectExecutor;
   readonly cwd?: string;
 }): Effect.Effect<RepositoryPreparationResult, RepositoryPreparationExecutionFailed> =>
-  runValidationCommandEffect({
+  runTimedCommand({
     command: input.prepare.command,
     timeoutSeconds: input.prepare.timeoutSeconds,
     completionMarker: "__BUTWHY_PREPARE_COMPLETED_prepare__",

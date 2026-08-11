@@ -6,7 +6,6 @@ import type { RecordCandidateValidationPrepareRoundInput } from "../candidateVal
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
-import { ValidationCommandExecutionFailed } from "./runValidationCommand.js";
 import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import {
   GitToolingFailed,
@@ -132,12 +131,7 @@ const runPrepareCommand = (
     }
     const result = yield* runRepositoryPreparationEffect({
       prepare,
-      exec: (command, options) =>
-        commandExecutor(command, options).pipe(
-          Effect.mapError(
-            (error) => new ValidationCommandExecutionFailed({ message: error.message }),
-          ),
-        ),
+      exec: commandExecutor,
       ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
     });
     if (expectedHeadSha !== undefined) {

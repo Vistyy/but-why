@@ -1,23 +1,21 @@
 import { Data, Effect } from "effect";
 
-export type ValidationCommandResultData = {
+export type TimedCommandResultData = {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
 };
 
-export class ValidationCommandExecutionFailed extends Data.TaggedError(
-  "ValidationCommandExecutionFailed",
-)<{
+class TimeoutCommandUnavailable extends Data.TaggedError("TimeoutCommandUnavailable")<{
   readonly message: string;
 }> {}
 
-export type ValidationCommandEffectExecutor = (
+export type TimedCommandExecutor<Error> = (
   command: string,
   options?: { readonly cwd?: string },
-) => Effect.Effect<ValidationCommandResultData, ValidationCommandExecutionFailed>;
+) => Effect.Effect<TimedCommandResultData, Error>;
 
-export type ValidationCommandResult = {
+export type TimedCommandResult = {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
@@ -26,21 +24,19 @@ export type ValidationCommandResult = {
 
 const timeoutExitCode = 124;
 
-export const runValidationCommandEffect = (input: {
+export const runTimedCommand = <Error>(input: {
   readonly command: string;
   readonly timeoutSeconds: number;
   readonly completionMarker: string;
   readonly missingTimeoutMessage: string;
-  readonly exec: ValidationCommandEffectExecutor;
+  readonly exec: TimedCommandExecutor<Error>;
   readonly cwd?: string;
-}): Effect.Effect<ValidationCommandResult, ValidationCommandExecutionFailed> =>
+}): Effect.Effect<TimedCommandResult, Error | TimeoutCommandUnavailable> =>
   Effect.gen(function* () {
     const options = input.cwd === undefined ? undefined : { cwd: input.cwd };
     const available = yield* input.exec("command -v timeout >/dev/null 2>&1", options);
     if (available.exitCode !== 0) {
-      return yield* Effect.fail(
-        new ValidationCommandExecutionFailed({ message: input.missingTimeoutMessage }),
-      );
+      return yield* new TimeoutCommandUnavailable({ message: input.missingTimeoutMessage });
     }
 
     const result = yield* input.exec(
