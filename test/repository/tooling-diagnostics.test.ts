@@ -8,6 +8,7 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");
 const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
+const biomeConfigPath = join(repositoryRoot, "biome.json");
 const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
 const healthReportScriptPath = join(repositoryRoot, "scripts/run-health-report.mjs");
 const temporaryPaths: string[] = [];
@@ -134,6 +135,11 @@ describe("repository-authored tooling diagnostics", () => {
       "const value = JSON.parse(source) as TrustedType;",
       "scripts",
     ],
+    [
+      "json-parse-results-start-unknown",
+      "const value = JSON.parse(source).known as unknown;",
+      "extensions",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",
@@ -188,6 +194,38 @@ describe("repository-authored tooling diagnostics", () => {
 
     expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
+  });
+
+  test("Biome rejects fixed-literal computed access in production source", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-biome-literal-key-"));
+    temporaryPaths.push(fixtureRoot);
+    mkdirSync(join(fixtureRoot, "src"));
+    mkdirSync(join(fixtureRoot, "biome-plugins"));
+    copyFileSync(biomeConfigPath, join(fixtureRoot, "biome.json"));
+    copyFileSync(biomePluginPath, join(fixtureRoot, "biome-plugins/no-inline-import-types.grit"));
+    writeFileSync(
+      join(fixtureRoot, "src/diagnostic-fixture.ts"),
+      'export const value = decoded["known"];\n',
+    );
+
+    const result = run(
+      "pnpm",
+      [
+        "--dir",
+        repositoryRoot,
+        "exec",
+        "biome",
+        "lint",
+        "--config-path",
+        join(fixtureRoot, "biome.json"),
+        join(fixtureRoot, "src"),
+      ],
+      fixtureRoot,
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("diagnostic-fixture.ts");
+    expect(result.output).toContain("lint/complexity/useLiteralKeys");
   });
 
   test("Biome rejects import type expressions without rejecting dynamic imports", () => {
