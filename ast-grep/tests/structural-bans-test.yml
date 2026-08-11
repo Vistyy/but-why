@@ -85,6 +85,7 @@ invalid:
   - const value = JSON.parse(source)
   - const value = JSON.parse(source); const trusted = value as TrustedType
   - "const value: TrustedType = JSON.parse(source)"
+  - trusted = JSON.parse(source)
 ---
 id: process-test-helpers-belong-to-process-boundaries
 valid:
@@ -153,6 +154,8 @@ invalid:
   - const execute = runTestProcess
   - let execute = runTestProcessOrThrow
   - execute = startTestProcess
+  - const execute = runTestProcess.bind(undefined)
+  - "const execute: typeof runTestProcess = (...args) => runTestProcess(...args)"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:

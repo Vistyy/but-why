@@ -144,6 +144,11 @@ describe("repository-authored tooling diagnostics", () => {
       "const value: TrustedType = JSON.parse(source);",
       "scripts",
     ],
+    [
+      "json-parse-variable-bindings-keep-unknown",
+      "let value: TrustedType; value = JSON.parse(source);",
+      "extensions",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",
@@ -190,6 +195,10 @@ describe("repository-authored tooling diagnostics", () => {
       'export { runTestProcess as execute } from "../support/testProcess.js";',
     ],
     ["test-process-helper-imports-keep-canonical-names", "const execute = runTestProcess;"],
+    [
+      "test-process-helper-imports-keep-canonical-names",
+      "const execute = runTestProcess.bind(undefined);",
+    ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));

@@ -103,8 +103,11 @@ files:
   - src/**/*.ts
 ignores:
   - src/output/structuredValue.ts
+  # This immutable Effect SQL migration validates its assigned unknown value before canonicalizing the historical artifact.
+  - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
 rule:
   any:
+    - pattern: $TARGET = JSON.parse($$$ARGS)
     - pattern:
         context: const $NAME = JSON.parse($$$ARGS)
         selector: variable_declarator
@@ -251,6 +254,24 @@ rule:
     - pattern: $ALIAS = runTestProcess
     - pattern: $ALIAS = runTestProcessOrThrow
     - pattern: $ALIAS = startTestProcess
+    - pattern:
+        context: const $ALIAS = runTestProcess.bind($$$ARGS)
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern:
+        context: const $ALIAS = runTestProcessOrThrow.bind($$$ARGS)
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern:
+        context: const $ALIAS = startTestProcess.bind($$$ARGS)
+        selector: variable_declarator
+        strictness: relaxed
+    - pattern: const $ALIAS = (...$$$PARAMS) => runTestProcess(...$$$PARAMS)
+    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => runTestProcess(...$$$PARAMS)"
+    - pattern: const $ALIAS = (...$$$PARAMS) => runTestProcessOrThrow(...$$$PARAMS)
+    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => runTestProcessOrThrow(...$$$PARAMS)"
+    - pattern: const $ALIAS = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)
+    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)"
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host
