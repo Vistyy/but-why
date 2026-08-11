@@ -29,7 +29,21 @@ export const submitRecovery = (
   retryCommand: `by change submit ${changeId}`,
 });
 
-export const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult => {
+type DistributedChangeSubmitResult<Result = ChangeSubmitResult> =
+  Result extends ChangeSubmitResult
+    ? Result extends { readonly ok: true; readonly status: infer Status extends string }
+      ? Status extends string
+        ? Omit<Result, "status"> & { readonly status: Status }
+        : never
+      : Result extends { readonly ok: false; readonly code: infer Code extends string }
+        ? Code extends string
+          ? Omit<Result, "code"> & { readonly code: Code }
+          : never
+        : never
+    : never;
+
+export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliResult => {
+  const result = submit as DistributedChangeSubmitResult;
   if (result.ok) {
     if (result.status === "nothing_to_submit") {
       return success({
@@ -43,20 +57,24 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
     }
     if (result.status === "completed")
       return success({ status: result.status, change: result.change });
-    return success({
-      changeId: result.changeId,
-      candidateId: result.candidateId,
-      validationRunId: result.validationRunId,
-      status: result.status,
-      created: result.created,
-      pullRequest: result.pullRequest,
-      ...(result.reviewerEvidence === undefined
-        ? {}
-        : { reviewerEvidence: result.reviewerEvidence }),
-      ...(result.specialistReviewerEvidence === undefined
-        ? {}
-        : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
-    });
+    if (result.status === "published") {
+      return success({
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        status: result.status,
+        created: result.created,
+        pullRequest: result.pullRequest,
+        ...(result.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: result.reviewerEvidence }),
+        ...(result.specialistReviewerEvidence === undefined
+          ? {}
+          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
+      });
+    }
+    const exhaustiveResult: never = result;
+    return exhaustiveResult;
   }
   if (result.code === "submission_in_progress") {
     return runtimeError({
@@ -283,10 +301,40 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
   ) {
     return remoteChangeBaseError(result, "Submit");
   }
-  return runtimeError({
-    code: result.code,
-    message: "Change Submit could not validate or publish the current Candidate.",
-    ...(result.code === "reconciliation_rejected" ? { details: { change: result.change } } : {}),
-    help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
-  });
+  if (
+    result.code === "reconciliation_rejected" ||
+    result.code === "github_target_not_found" ||
+    result.code === "github_tooling_error" ||
+    result.code === "change_closed" ||
+    result.code === "candidate_not_found" ||
+    result.code === "candidate_does_not_belong_to_change" ||
+    result.code === "validation_evidence_invalid" ||
+    result.code === "branch_binding_invalid" ||
+    result.code === "task_metadata_missing" ||
+    result.code === "commit_history_unavailable" ||
+    result.code === "publication_state_conflict" ||
+    result.code === "detached_head" ||
+    result.code === "unborn_branch" ||
+    result.code === "conflicting_branch_facts" ||
+    result.code === "change_from_different_repository" ||
+    result.code === "change_rebind_not_authorized" ||
+    result.code === "rebind_requires_change_id" ||
+    result.code === "destination_branch_has_history" ||
+    result.code === "invalid_base_ref" ||
+    result.code === "base_ref_conflict" ||
+    result.code === "missing_remote_default" ||
+    result.code === "ambiguous_remote_default" ||
+    result.code === "local_base_unavailable" ||
+    result.code === "capture_conflict" ||
+    result.code === "git_tooling_error"
+  ) {
+    return runtimeError({
+      code: result.code,
+      message: "Change Submit could not validate or publish the current Candidate.",
+      ...(result.code === "reconciliation_rejected" ? { details: { change: result.change } } : {}),
+      help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
+    });
+  }
+  const exhaustiveResult: never = result;
+  return exhaustiveResult;
 };
