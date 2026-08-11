@@ -421,18 +421,23 @@ const requiredString = (value: unknown): string => {
   return value;
 };
 const parseInvocationUsage = (source: string): readonly (TokenUsage | null)[] => {
-  const value: unknown = JSON.parse(source);
+  const value: unknown = JSON.parse(source) as unknown;
   if (!Array.isArray(value)) throw new Error("Expected invocation usage array");
   return value.map((entry) => {
     if (entry === null) return null;
     if (typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error("Expected invocation usage object");
     }
-    const usage = entry as Record<string, unknown>;
-    const inputTokens = requiredTokenCount(usage["inputTokens"]);
-    const cachedInputTokens = requiredTokenCount(usage["cachedInputTokens"]);
-    const outputTokens = requiredTokenCount(usage["outputTokens"]);
-    const totalTokens = requiredTokenCount(usage["totalTokens"]);
+    const {
+      inputTokens: inputTokenValue,
+      cachedInputTokens: cachedInputTokenValue,
+      outputTokens: outputTokenValue,
+      totalTokens: totalTokenValue,
+    } = entry as Record<string, unknown>;
+    const inputTokens = requiredTokenCount(inputTokenValue);
+    const cachedInputTokens = requiredTokenCount(cachedInputTokenValue);
+    const outputTokens = requiredTokenCount(outputTokenValue);
+    const totalTokens = requiredTokenCount(totalTokenValue);
     return { inputTokens, cachedInputTokens, outputTokens, totalTokens };
   });
 };
