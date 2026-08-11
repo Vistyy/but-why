@@ -64,9 +64,15 @@ export type CandidateValidationExecutionPort = {
 
 export type ChangeValidationReadPort = {
   readonly getCandidateById: (candidateId: string) => StorageEffect<CandidateRecord | undefined>;
+  readonly getCurrentCandidateForChange: (
+    changeId: string,
+  ) => StorageEffect<CandidateRecord | undefined>;
   readonly listCandidatesForChange: (changeId: string) => StorageEffect<readonly CandidateRecord[]>;
   readonly getRunById: (
     validationRunId: string,
+  ) => StorageEffect<CandidateValidationRunRecord | undefined>;
+  readonly getLatestRunForCandidate: (
+    candidateId: string,
   ) => StorageEffect<CandidateValidationRunRecord | undefined>;
   readonly listRunsForCandidate: (
     candidateId: string,
