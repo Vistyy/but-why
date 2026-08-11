@@ -230,7 +230,7 @@ A Repo Config definition takes precedence for a Specialist with the same name.
 Each Agent Profile reference resolves only within its declared scope.
 A `repo` reference must be defined in Repo Config, and a `global` reference must be defined in Global Config.
 Global review settings may reference a Repo Config profile when that repository supplies the matching definition.
-Reviewer and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Acceptance Review and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Global Config may define reusable profiles and role selections:
 
@@ -281,13 +281,13 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Reviewer and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Acceptance Review and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists.
 An empty array disables that resource type.
 An omitted field preserves normal Pi behavior.
-Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
+Acceptance Review and Specialist Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
 Global relative paths resolve from the Global Config directory.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
 

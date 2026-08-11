@@ -164,6 +164,64 @@ it.effect("rejects missing Review Base guidance before Task Review admission", (
   }),
 );
 
+it.effect("rejects a Review Base directory as guidance before Task Review admission", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    mkdirSync(join(root, ".but-why", "reviewers", "task"), { recursive: true });
+    writeFileSync(join(root, ".but-why", "reviewers", "task", "guidance.md"), "Guidance\n");
+    writeFileSync(
+      join(root, ".but-why", "config.json"),
+      JSON.stringify({
+        taskPrefix: "BY",
+        review: { task: { instructionsFile: ".but-why/reviewers/task" } },
+      }),
+    );
+    expect(
+      runTestProcess(
+        "git",
+        ["add", ".but-why/config.json", ".but-why/reviewers/task/guidance.md"],
+        { cwd: root },
+      ).status,
+    ).toBe(0);
+    expect(
+      runTestProcess("git", ["commit", "-m", "Configure directory guidance"], { cwd: root })
+        .status,
+    ).toBe(0);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: {
+          review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+        },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Review me",
+      "--file",
+      proposalPath,
+    ]);
+
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+    });
+    expect(submitted.status).toBe(1);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: { code: "task_review_config_invalid" },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({ task: { review: null } });
+  }),
+);
+
 it.effect("rejects missing Agent Profile resources before Task Review admission", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
