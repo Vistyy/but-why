@@ -1463,6 +1463,22 @@ describe("repository SQL storage", () => {
           });
 
           yield* repository.operation(
+            "corrupt Decision outside a base-mismatched query",
+            (sql) =>
+              sql`UPDATE implementation_decisions SET choice = x'01' WHERE id = ${recordedDecision.decision.id}`,
+          );
+          expect(
+            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
+              changeBaseSha: "other-base",
+            }),
+          ).toBeUndefined();
+          yield* repository.operation(
+            "restore Decision after base-mismatched query",
+            (sql) =>
+              sql`UPDATE implementation_decisions SET choice = 'Choose the passing path' WHERE id = ${recordedDecision.decision.id}`,
+          );
+
+          yield* repository.operation(
             "install duplicate-representation Validation Run evidence",
             (sql) =>
               sql`

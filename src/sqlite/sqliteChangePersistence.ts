@@ -800,54 +800,63 @@ const getPassingEvidence = (
       parameters,
     );
     if (rows.length === 0) return undefined;
-    const acceptanceContextRows = yield* sql<{
-      readonly id: unknown;
-      readonly acceptanceContext: unknown;
-    }>`SELECT id, acceptance_context AS acceptanceContext
-       FROM changes WHERE id = ${authority.id}`;
-    const acceptanceContext = yield* decodePersisted(operationName, () => {
-      const row = acceptanceContextRows[0];
-      const id = decodeStoredString(row?.id, "Change ID");
-      if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-      const encoded = decodeStoredNullableString(
-        row?.acceptanceContext,
-        "Change Acceptance Context",
-      );
-      return encoded === null ? null : decodeSqliteAcceptanceContextSnapshot(encoded);
-    });
-    const implementationDecisions = yield* listDecisions(sql, authority.id);
-    const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
-    const expectedAcceptanceContext = acceptanceContext ?? undefined;
+    let authorityHistoryLoaded = false;
+    let expectedDecisionsSnapshot = "";
+    let expectedAcceptanceContext: unknown;
     let currentLatestResolvedBlockerId: string | null | undefined;
     let current: PassingPublicationEvidence | undefined;
     for (const row of rows) {
-      const evidence = yield* decodePersisted(operationName, (): PassingPublicationEvidence => {
-        const decoded = {
-          publicationCandidateId: decodeStoredString(
-            row.publicationCandidateId,
-            "evidence Candidate ID",
-          ),
-          changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
-          headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
-          run: decodeValidationRun(row),
-        };
-        return decoded;
-      });
-      yield* decodePersisted(operationName, () =>
-        validateValidationRunImplementationDecisionRelationships(evidence.run, authority.id),
-      );
+      const selectedCandidate = yield* decodePersisted(operationName, () => ({
+        publicationCandidateId: decodeStoredString(
+          row.publicationCandidateId,
+          "evidence Candidate ID",
+        ),
+        changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
+      }));
       if (
-        evidence.run.record.candidateId !== evidence.publicationCandidateId ||
-        evidence.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot ||
-        !isDeepStrictEqual(
-          evidence.run.record.policy.acceptanceContext,
-          expectedAcceptanceContext,
-        ) ||
         (query?.candidateId !== undefined &&
-          evidence.publicationCandidateId !== query.candidateId) ||
-        (query?.changeBaseSha !== undefined && evidence.changeBaseSha !== query.changeBaseSha) ||
-        (query?.policy !== undefined &&
-          !isDeepStrictEqual(evidence.run.record.policy, query.policy))
+          selectedCandidate.publicationCandidateId !== query.candidateId) ||
+        (query?.changeBaseSha !== undefined &&
+          selectedCandidate.changeBaseSha !== query.changeBaseSha)
+      )
+        continue;
+      const run = yield* decodePersisted(operationName, () => decodeValidationRun(row));
+      if (query?.policy !== undefined && !isDeepStrictEqual(run.record.policy, query.policy)) {
+        continue;
+      }
+      yield* decodePersisted(operationName, () =>
+        validateValidationRunImplementationDecisionRelationships(run, authority.id),
+      );
+      if (run.record.candidateId !== selectedCandidate.publicationCandidateId) continue;
+      const evidence: PassingPublicationEvidence = {
+        ...selectedCandidate,
+        headSha: yield* decodePersisted(operationName, () =>
+          decodeStoredString(row.headSha, "Candidate head SHA"),
+        ),
+        run,
+      };
+      if (!authorityHistoryLoaded) {
+        const acceptanceContextRows = yield* sql<{
+          readonly id: unknown;
+          readonly acceptanceContext: unknown;
+        }>`SELECT id, acceptance_context AS acceptanceContext
+           FROM changes WHERE id = ${authority.id}`;
+        expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
+          const authorityRow = acceptanceContextRows[0];
+          const id = decodeStoredString(authorityRow?.id, "Change ID");
+          if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
+          const encoded = decodeStoredNullableString(
+            authorityRow?.acceptanceContext,
+            "Change Acceptance Context",
+          );
+          return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
+        });
+        expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
+        authorityHistoryLoaded = true;
+      }
+      if (
+        evidence.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot ||
+        !isDeepStrictEqual(evidence.run.record.policy.acceptanceContext, expectedAcceptanceContext)
       )
         continue;
       if (currentLatestResolvedBlockerId === undefined) {
