@@ -1309,6 +1309,14 @@ export default function continueChange(pi: ExtensionAPI): void {
       ) &&
       changeId !== undefined
     ) {
+      const reassessment = persisted?.submissionReassessment;
+      if (reassessment?.state === "running") {
+        saveSubmissionReassessment({
+          ...reassessment,
+          state: "awaiting-settle",
+          evidence: emptyReassessmentEvidence(),
+        });
+      }
       pause(ctx);
       return;
     }
@@ -1326,6 +1334,10 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
+    if (persisted?.paused) {
+      await continueWatching(ctx, false);
+      return;
+    }
     const reassessment = persisted?.submissionReassessment;
     if (
       reassessment?.state === "awaiting-settle" &&

@@ -280,6 +280,82 @@ describe("packaged Change Implement continuation extension", () => {
     ).toBeUndefined();
   });
 
+  it("keeps an aborted reassessment pending until a replacement run settles", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    const submit = {
+      type: "tool_call",
+      toolCallId: "submit-1",
+      toolName: "bash",
+      input: { command: `just by change submit ${changeId}` },
+    };
+    await harness.emit("tool_call", submit);
+    await harness.emit("agent_settled");
+
+    const inspectionCommands = [
+      `just by change show ${changeId}`,
+      "just by task context BY-236",
+      "git status --short",
+      "git diff refs/remotes/origin/main...HEAD",
+    ];
+    for (const [index, command] of inspectionCommands.entries()) {
+      const toolCallId = `aborted-inspection-${index}`;
+      await harness.emit("tool_call", {
+        type: "tool_call",
+        toolCallId,
+        toolName: "bash",
+        input: { command },
+      });
+      await harness.emit("tool_result", {
+        type: "tool_result",
+        toolCallId,
+        toolName: "bash",
+        input: { command },
+        content: [{ type: "text", text: "inspection complete" }],
+        isError: false,
+        details: undefined,
+      });
+    }
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
+    });
+    await harness.emit("agent_settled");
+
+    expect(
+      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-abort" }),
+    ).toMatchObject({ block: true });
+    await harness.runCommand("continue-change");
+    await harness.emit("agent_settled");
+    expect(harness.sent.at(-1)).toContain("required separate reassessment run");
+
+    for (const [index, command] of inspectionCommands.entries()) {
+      const toolCallId = `replacement-inspection-${index}`;
+      await harness.emit("tool_call", {
+        type: "tool_call",
+        toolCallId,
+        toolName: "bash",
+        input: { command },
+      });
+      await harness.emit("tool_result", {
+        type: "tool_result",
+        toolCallId,
+        toolName: "bash",
+        input: { command },
+        content: [{ type: "text", text: "inspection complete" }],
+        isError: false,
+        details: undefined,
+      });
+    }
+    await harness.emit("agent_end", {
+      messages: [{ role: "assistant", content: [], stopReason: "stop" }],
+    });
+    await harness.emit("agent_settled");
+
+    expect(
+      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-replacement" }),
+    ).toBeUndefined();
+  });
+
   it("does not repeat a completed reassessment after the extension restores session state", async () => {
     const harness = createHarness(sourceCwd, {
       changeId,
