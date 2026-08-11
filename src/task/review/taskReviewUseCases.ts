@@ -112,13 +112,14 @@ export const openTaskReviewUseCases = (input: {
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
     mainCheckoutRoot: string,
-  ) =>
+  ) => Effect.Effect<
     | { readonly ok: true; readonly base: TaskReviewBase }
-    | { readonly ok: false; readonly message: string };
+    | { readonly ok: false; readonly message: string }
+  >;
   readonly verifyReviewBase: (
     mainCheckoutRoot: string,
     recorded: TaskReviewBase,
-  ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+  ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
   readonly runWorkspace: RunDisposableExactCommitWorkspace;
   readonly cleanupWorkspace: (
     mainCheckoutRoot: string,
@@ -145,7 +146,7 @@ const submitTaskReview = (
   now: string,
 ): Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const base = input.readReviewBase(input.mainCheckoutRoot);
+    const base = yield* input.readReviewBase(input.mainCheckoutRoot);
     if (!base.ok)
       return { ok: false, code: "review_base_unavailable", message: base.message } as const;
     const config = input.loadRepoConfig(base.base.commit);
@@ -304,7 +305,7 @@ export const inspectTaskReviewIdentity = (
     readonly verifyReviewBase: (
       mainCheckoutRoot: string,
       recorded: TaskReviewBase,
-    ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+    ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly inspectWorkspace: (
       mainCheckoutRoot: string,
       workspaceId: string,
@@ -315,7 +316,7 @@ export const inspectTaskReviewIdentity = (
   review: TaskReviewRecord,
 ): Effect.Effect<TaskReviewIdentityInspection> =>
   Effect.gen(function* () {
-    const base = input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
@@ -338,7 +339,7 @@ export const abandonTaskReview = (
     readonly verifyReviewBase: (
       mainCheckoutRoot: string,
       recorded: TaskReviewBase,
-    ) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+    ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly cleanupWorkspace: (
       mainCheckoutRoot: string,
       cleanup: ExactDisposableWorkspaceCleanupInput,
@@ -352,7 +353,7 @@ export const abandonTaskReview = (
     const review = yield* input.persistence.getById(reviewId);
     if (review === undefined) return { ok: false, code: "task_review_not_found" } as const;
     if (review.state !== "running") return { ok: false, code: "task_review_not_active" } as const;
-    const base = input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
