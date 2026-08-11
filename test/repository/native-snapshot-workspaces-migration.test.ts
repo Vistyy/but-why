@@ -3,9 +3,11 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { nativeSnapshotWorkspacesMigration } from "../../src/sqlite/migrations/0029_native_snapshot_workspaces.js";
+import { preNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0030_pre_native_snapshot_workspace_cleanup.js";
+import { backfillPreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0031_backfill_pre_native_snapshot_workspace_cleanup.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 
-it.scoped("preserves exact cleanup identity while removing temporary-ref state", () =>
+it.scoped("backfills exact cleanup identity after the original native migration", () =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* sql.unsafe(`
@@ -62,6 +64,25 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
 
     yield* nativeSnapshotWorkspacesMigration;
 
+    yield* sql.unsafe(`
+      INSERT INTO candidate_validation_runs (id) VALUES ('run-2')
+    `);
+    yield* sql.unsafe(`
+      INSERT INTO active_validation_runs (change_id, validation_run_id)
+      VALUES ('change-2', 'run-2')
+    `);
+    yield* sql.unsafe(`
+      INSERT INTO candidate_snapshot_workspaces (
+        validation_run_id, expected_commit_sha, cleanup_workspace, created_at, workspace_path
+      ) VALUES (
+        'run-2', 'native-sha', 'not_created', '2026-08-11T10:05:00.000Z',
+        '/tmp/repository-worktrees/but-why/validation-runs/run-2'
+      )
+    `);
+
+    yield* preNativeSnapshotWorkspaceCleanupMigration;
+    yield* backfillPreNativeSnapshotWorkspaceCleanupMigration;
+
     const columns = yield* sql<{ readonly name: string }>`
       PRAGMA table_info(candidate_snapshot_workspaces)
     `;
@@ -83,6 +104,7 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
         workspace_path AS workspacePath,
         cleanup_workspace AS cleanupWorkspace
       FROM candidate_snapshot_workspaces
+      ORDER BY validation_run_id
     `;
     expect(workspaces).toEqual([
       {
@@ -90,6 +112,12 @@ it.scoped("preserves exact cleanup identity while removing temporary-ref state",
         expectedCommitSha: "candidate-sha",
         workspacePath:
           "/tmp/repository/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation",
+        cleanupWorkspace: "not_created",
+      },
+      {
+        validationRunId: "run-2",
+        expectedCommitSha: "native-sha",
+        workspacePath: "/tmp/repository-worktrees/but-why/validation-runs/run-2",
         cleanupWorkspace: "not_created",
       },
     ]);
