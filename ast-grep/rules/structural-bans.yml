@@ -107,6 +107,15 @@ ignores:
   - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
 rule:
   any:
+    - pattern: return JSON.parse($$$ARGS)
+    - pattern:
+        context: "const $FUNCTION = ($$$PARAMS): $TYPE => JSON.parse($$$ARGS)"
+        selector: arrow_function
+        strictness: relaxed
+    - pattern:
+        context: const $FUNCTION = ($$$PARAMS) => JSON.parse($$$ARGS)
+        selector: arrow_function
+        strictness: relaxed
     - pattern: $TARGET = JSON.parse($$$ARGS)
     - pattern:
         context: const $NAME = JSON.parse($$$ARGS)
@@ -272,6 +281,25 @@ rule:
     - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => runTestProcessOrThrow(...$$$PARAMS)"
     - pattern: const $ALIAS = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)
     - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)"
+---
+# Parameterized executable forwarding can hide npm from the package ownership rule.
+id: test-process-wrapper-commands-stay-static
+language: TypeScript
+severity: error
+message: Do not forward an unconstrained executable parameter to a test-process helper because the wrapper can hide npm from static package ownership checks; use a statically constrained executable expression or call the helper directly.
+files:
+  - test/**/*.ts
+rule:
+  any:
+    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => runTestProcess($COMMAND, $$$ARGS)"
+    - pattern: const $ALIAS = ($$$PARAMS) => runTestProcess($COMMAND, $$$ARGS)
+    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => runTestProcessOrThrow($COMMAND, $$$ARGS)"
+    - pattern: const $ALIAS = ($$$PARAMS) => runTestProcessOrThrow($COMMAND, $$$ARGS)
+    - pattern: "const $ALIAS = ($$$PARAMS): $TYPE => startTestProcess($COMMAND, $$$ARGS)"
+    - pattern: const $ALIAS = ($$$PARAMS) => startTestProcess($COMMAND, $$$ARGS)
+constraints:
+  COMMAND:
+    kind: identifier
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

@@ -86,6 +86,8 @@ invalid:
   - const value = JSON.parse(source); const trusted = value as TrustedType
   - "const value: TrustedType = JSON.parse(source)"
   - trusted = JSON.parse(source)
+  - "const parseTrusted = (): TrustedType => JSON.parse(source)"
+  - "function parseTrusted(): TrustedType { return JSON.parse(source); }"
 ---
 id: process-test-helpers-belong-to-process-boundaries
 valid:
@@ -156,6 +158,13 @@ invalid:
   - execute = startTestProcess
   - const execute = runTestProcess.bind(undefined)
   - "const execute: typeof runTestProcess = (...args) => runTestProcess(...args)"
+---
+id: test-process-wrapper-commands-stay-static
+valid:
+  - "const git = (args: readonly string[], cwd: string): unknown => runTestProcess(\"git\", args, { cwd })"
+  - "const node = (args: readonly string[], cwd: string): unknown => runTestProcess(process.execPath, args, { cwd })"
+invalid:
+  - "const execute = (command: string, args: readonly string[], cwd: string): unknown => runTestProcess(command, args, { cwd })"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:

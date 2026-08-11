@@ -18,12 +18,15 @@ type CommandResult = {
 };
 
 const run = (
-  command: string,
+  command: "bash" | "node" | "pnpm",
   args: string[],
   cwd: string,
   env?: NodeJS.ProcessEnv,
 ): CommandResult => {
-  const result = runTestProcess(command, args, { cwd, ...(env === undefined ? {} : { env }) });
+  const result = runTestProcess(command === "node" ? process.execPath : command, args, {
+    cwd,
+    ...(env === undefined ? {} : { env }),
+  });
   return {
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
@@ -149,6 +152,11 @@ describe("repository-authored tooling diagnostics", () => {
       "let value: TrustedType; value = JSON.parse(source);",
       "extensions",
     ],
+    [
+      "json-parse-variable-bindings-keep-unknown",
+      "const parseTrusted = (): TrustedType => JSON.parse(source);",
+      "scripts",
+    ],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
     [
       "package-installation-belongs-to-package-contract",
@@ -199,6 +207,10 @@ describe("repository-authored tooling diagnostics", () => {
       "test-process-helper-imports-keep-canonical-names",
       "const execute = runTestProcess.bind(undefined);",
     ],
+    [
+      "test-process-wrapper-commands-stay-static",
+      "const execute = (command: string, args: readonly string[], cwd: string): unknown => runTestProcess(command, args, { cwd });",
+    ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
@@ -211,6 +223,7 @@ describe("repository-authored tooling diagnostics", () => {
         "process-test-helpers-belong-to-process-boundaries",
         "package-installation-belongs-to-package-contract",
         "test-process-helper-imports-keep-canonical-names",
+        "test-process-wrapper-commands-stay-static",
         "live-agent-helper-belongs-to-test-host",
       ].includes(ruleId)
         ? "test"
@@ -319,7 +332,7 @@ esac
     );
     chmodSync(pnpm, 0o755);
 
-    const result = run(process.execPath, [healthReportScriptPath, "coverage.json"], fixtureRoot, {
+    const result = run("node", [healthReportScriptPath, "coverage.json"], fixtureRoot, {
       // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
       PATH: `${fixtureRoot}:${process.env["PATH"] ?? ""}`,
     });
