@@ -17,7 +17,6 @@ import {
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { findGitRoot } from "./git.js";
-import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
 
 export type RepoLocalPaths = {
@@ -214,7 +213,6 @@ const completeRepoInitialization = (
   }
 
   if (reviewersRepair.created) created.push(".but-why/reviewers/");
-  if (ensureGitignoreBlock(prepared.paths.gitignorePath)) updated.push(".gitignore");
 
   const status = prepared.configCreated
     ? "initialized"

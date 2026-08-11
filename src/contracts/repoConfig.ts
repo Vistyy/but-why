@@ -55,7 +55,7 @@ const repoCheckConfigSchema = Schema.Struct({
   timeoutSeconds: Schema.optional(timeoutSecondsSchema),
 });
 
-const repoValidationWorkspaceConfigSchema = Schema.Struct({
+const repoSnapshotWorkspaceConfigSchema = Schema.Struct({
   copyFiles: Schema.NonEmptyArray(repoRelativePathSchema),
 });
 
@@ -88,7 +88,7 @@ const repoConfigSchema = Schema.Struct({
       agentProfile: Schema.optional(agentProfileReferenceSchema),
     }),
   ),
-  validationWorkspace: Schema.optional(repoValidationWorkspaceConfigSchema),
+  validationWorkspace: Schema.optional(repoSnapshotWorkspaceConfigSchema),
 });
 
 export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;

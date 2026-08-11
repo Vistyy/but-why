@@ -1,144 +1,101 @@
-import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-import { validationWorkspaceCleanupGit } from "../../src/change/validation/validationWorkspaceCleanupGit.js";
-import {
-  expectedValidationWorkspacePath,
-  validationTempRefName,
-} from "../../src/change/validation/validationWorkspacePath.js";
-import { isDisposableWorktreeRemoved } from "../../src/disposableWorkspace/disposableWorkspaceGit.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { describe } from "vitest";
+
+import { snapshotWorkspaceCleanupGit } from "../../src/change/validation/snapshotWorkspaceCleanupGit.js";
+import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-describe("Disposable workspace Git cleanup verification", () => {
-  it("requires both filesystem absence and exact Git registration absence", () => {
-    const repository = initializedRepository();
-    const worktreePath = join(repository, "validation-worktree");
-
-    git(repository, "worktree", "add", "--detach", worktreePath, "main");
-    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(false);
-
-    rmSync(worktreePath, { recursive: true, force: true });
-    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(false);
-
-    git(repository, "worktree", "remove", "--force", worktreePath);
-    expect(isDisposableWorktreeRemoved(repository, worktreePath)).toBe(true);
-  });
-
-  it("removes one exact temporary ref and worktree idempotently", () => {
-    const repository = initializedRepository();
-    const commitSha = git(repository, "rev-parse", "HEAD");
-    const validationRunId = "run-1";
-    const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
-    createValidationResources(repository, tempRefName, worktreePath, commitSha);
-    const cleanup = validationWorkspaceCleanupGit(repository);
-    const input = {
-      validationRunId,
-      submittedSha: commitSha,
-      recordedTempRefName: tempRefName,
-      recordedWorktreePath: worktreePath,
-    };
-
-    expect(cleanup.cleanup(input)).toEqual({
-      worktree: "removed",
-      tempRef: "removed",
-    });
-    expect(cleanup.cleanup(input)).toEqual({
-      worktree: "removed",
-      tempRef: "removed",
-    });
-    expect(existsSync(worktreePath)).toBe(false);
-    expect(refExists(repository, tempRefName)).toBe(false);
-  });
-
-  it("leaves real Git resources untouched when the recorded targets mismatch", () => {
-    const repository = initializedRepository();
-    const commitSha = git(repository, "rev-parse", "HEAD");
-    const validationRunId = "selected";
-    const expectedRef = validationTempRefName(validationRunId);
-    const expectedPath = expectedValidationWorkspacePath(repository, expectedRef);
-    const unrelatedRef = validationTempRefName("unrelated");
-    const unrelatedPath = expectedValidationWorkspacePath(repository, unrelatedRef);
-    createValidationResources(repository, expectedRef, expectedPath, commitSha);
-    createValidationResources(repository, unrelatedRef, unrelatedPath, commitSha);
-
-    expect(
-      validationWorkspaceCleanupGit(repository).cleanup({
+describe("Snapshot Workspace Git cleanup verification", () => {
+  it.effect("removes one exact detached worktree idempotently", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const validationRunId = "run-1";
+      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      createSnapshotWorkspace(repository, worktreePath, commitSha);
+      const cleanup = snapshotWorkspaceCleanupGit(repository);
+      const input = {
         validationRunId,
         submittedSha: commitSha,
-        recordedTempRefName: unrelatedRef,
+        recordedWorktreePath: worktreePath,
+      };
+
+      expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
+      expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
+      expect(existsSync(worktreePath)).toBe(false);
+    }),
+  );
+
+  it.effect("leaves resources untouched when persisted identity mismatches", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const selectedPath = expectedSnapshotWorkspacePath(repository, "selected");
+      const unrelatedPath = expectedSnapshotWorkspacePath(repository, "unrelated");
+      createSnapshotWorkspace(repository, selectedPath, commitSha);
+      createSnapshotWorkspace(repository, unrelatedPath, commitSha);
+
+      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
+        validationRunId: "selected",
+        submittedSha: commitSha,
         recordedWorktreePath: unrelatedPath,
-      }),
-    ).toEqual({
-      worktree: "failed",
-      tempRef: "failed",
-      errorMessage:
-        "Recorded Validation Workspace identity does not match its selected Validation Run.",
-    });
-    expect(existsSync(expectedPath)).toBe(true);
-    expect(existsSync(unrelatedPath)).toBe(true);
-    expect(refExists(repository, expectedRef)).toBe(true);
-    expect(refExists(repository, unrelatedRef)).toBe(true);
-  });
+      });
 
-  it("leaves a worktree with an unrelated HEAD untouched when the live temporary ref matches", () => {
-    const repository = initializedRepository();
-    const submittedSha = git(repository, "rev-parse", "HEAD");
-    git(repository, "commit", "--allow-empty", "-m", "Unrelated worktree target");
-    const unrelatedSha = git(repository, "rev-parse", "HEAD");
-    const validationRunId = "selected";
-    const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
-    git(repository, "update-ref", tempRefName, submittedSha);
-    git(repository, "worktree", "add", "--detach", worktreePath, unrelatedSha);
+      expect(result).toEqual({
+        workspace: "failed",
+        errorMessage:
+          "Recorded Snapshot Workspace identity does not match its selected Validation Run.",
+      });
+      expect(existsSync(selectedPath)).toBe(true);
+      expect(existsSync(unrelatedPath)).toBe(true);
+    }),
+  );
 
-    expect(
-      validationWorkspaceCleanupGit(repository).cleanup({
-        validationRunId,
-        submittedSha,
-        recordedTempRefName: tempRefName,
+  it.effect("rejects a Validation Run identity that escapes the owned namespace", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const commitSha = git(repository, "rev-parse", "HEAD");
+      const escapedPath = expectedSnapshotWorkspacePath(repository, "../outside");
+      createSnapshotWorkspace(repository, escapedPath, commitSha);
+
+      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
+        validationRunId: "../outside",
+        submittedSha: commitSha,
+        recordedWorktreePath: escapedPath,
+      });
+
+      expect(result).toMatchObject({ workspace: "failed" });
+      expect(existsSync(escapedPath)).toBe(true);
+    }),
+  );
+
+  it.effect("leaves a registered worktree with an unrelated HEAD untouched", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const submittedSha = git(repository, "rev-parse", "HEAD");
+      writeFileSync(join(repository, "tracked"), "successor\n");
+      git(repository, "add", "tracked");
+      git(repository, "commit", "-m", "Successor");
+      const unrelatedSha = git(repository, "rev-parse", "HEAD");
+      const worktreePath = expectedSnapshotWorkspacePath(repository, "selected");
+      createSnapshotWorkspace(repository, worktreePath, unrelatedSha);
+
+      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
+        validationRunId: "selected",
+        submittedSha: submittedSha,
         recordedWorktreePath: worktreePath,
-      }),
-    ).toEqual({
-      worktree: "failed",
-      tempRef: "failed",
-      errorMessage:
-        "Live Validation Workspace identity does not match its selected Validation Run.",
-    });
-    expect(existsSync(worktreePath)).toBe(true);
-    expect(git(worktreePath, "rev-parse", "HEAD")).toBe(unrelatedSha);
-    expect(git(repository, "rev-parse", tempRefName)).toBe(submittedSha);
-  });
+      });
 
-  it("leaves a detached worktree untouched when the live temporary ref mismatches", () => {
-    const repository = initializedRepository();
-    const submittedSha = git(repository, "rev-parse", "HEAD");
-    git(repository, "commit", "--allow-empty", "-m", "Unrelated ref target");
-    const unrelatedSha = git(repository, "rev-parse", "HEAD");
-    const validationRunId = "selected";
-    const tempRefName = validationTempRefName(validationRunId);
-    const worktreePath = expectedValidationWorkspacePath(repository, tempRefName);
-    git(repository, "update-ref", tempRefName, unrelatedSha);
-    git(repository, "worktree", "add", "--detach", worktreePath, submittedSha);
-
-    expect(
-      validationWorkspaceCleanupGit(repository).cleanup({
-        validationRunId,
-        submittedSha,
-        recordedTempRefName: tempRefName,
-        recordedWorktreePath: worktreePath,
-      }),
-    ).toEqual({
-      worktree: "failed",
-      tempRef: "failed",
-      errorMessage:
-        "Live Validation Workspace identity does not match its selected Validation Run.",
-    });
-    expect(existsSync(worktreePath)).toBe(true);
-    expect(git(repository, "rev-parse", tempRefName)).toBe(unrelatedSha);
-  });
+      expect(result).toMatchObject({ workspace: "failed" });
+      expect(existsSync(worktreePath)).toBe(true);
+      expect(git(worktreePath, "rev-parse", "HEAD")).toBe(unrelatedSha);
+    }),
+  );
 });
 
 const initializedRepository = (): string => {
@@ -146,23 +103,20 @@ const initializedRepository = (): string => {
   git(repository, "init", "-q");
   git(repository, "config", "user.name", "But Why Test");
   git(repository, "config", "user.email", "but-why@example.test");
-  git(repository, "commit", "--allow-empty", "-m", "Initialize repository");
-  git(repository, "branch", "-M", "main");
+  writeFileSync(join(repository, "tracked"), "candidate\n");
+  git(repository, "add", "tracked");
+  git(repository, "commit", "-m", "Initialize repository");
   return repository;
 };
 
-const createValidationResources = (
+const createSnapshotWorkspace = (
   repository: string,
-  tempRefName: string,
   worktreePath: string,
   commitSha: string,
 ): void => {
-  git(repository, "update-ref", tempRefName, commitSha);
-  git(repository, "worktree", "add", worktreePath, tempRefName);
+  mkdirSync(dirname(worktreePath), { recursive: true });
+  git(repository, "worktree", "add", "--detach", "--", worktreePath, commitSha);
 };
-
-const refExists = (repository: string, tempRefName: string): boolean =>
-  runTestProcess("git", ["show-ref", "--verify", tempRefName], { cwd: repository }).status === 0;
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });

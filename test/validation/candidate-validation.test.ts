@@ -248,7 +248,7 @@ describe("Candidate validation", () => {
           Effect.gen(function* () {
             const repository = yield* RepositorySql;
             return yield* repository.operation(
-              "inspect validation workspaces",
+              "inspect Snapshot Workspaces",
               (sql) =>
                 sql<{
                   readonly validationRunId: string;
@@ -256,9 +256,9 @@ describe("Candidate validation", () => {
                   readonly worktreePath: string;
                 }>`
                 SELECT validation_run_id AS validationRunId,
-                  submitted_sha AS submittedSha,
-                  worktree_path AS worktreePath
-                FROM candidate_validation_workspace_setups
+                  expected_commit_sha AS submittedSha,
+                  workspace_path AS worktreePath
+                FROM candidate_snapshot_workspaces
                 ORDER BY created_at ASC, validation_run_id ASC
               `,
             );

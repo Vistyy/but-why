@@ -17,8 +17,7 @@
       "!dist",
       "!build",
       "!coverage",
-      "!spikes",
-      "!.sandcastle"
+      "!spikes"
     ]
   },
   "formatter": {

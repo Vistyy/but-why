@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ValidationRunAbandonmentPort } from "./validation/changeValidationPorts.js";
-import type { ValidationWorkspaceCleanup } from "./validation/validationWorkspaceCleanup.js";
+import type { SnapshotWorkspaceCleanup } from "./validation/snapshotWorkspaceCleanup.js";
 
 export type AbandonValidationRunResult =
   | {
@@ -15,7 +15,7 @@ export type AbandonValidationRunResult =
       readonly status: "not_found" | "cleanup_failed";
       readonly validationRunId: string;
       readonly changeId?: string;
-      readonly cleanup: { readonly worktree: string; readonly tempRef: string };
+      readonly cleanup: { readonly workspace: string };
     }
   | {
       readonly ok: false;
@@ -35,19 +35,12 @@ export type AbandonValidationRun = {
 export const openAbandonValidationRun = (input: {
   readonly persistence: ValidationRunAbandonmentPort;
   readonly executionLock: ExecutionLock;
-  readonly workspaceCleanup: ValidationWorkspaceCleanup;
+  readonly workspaceCleanup: SnapshotWorkspaceCleanup;
 }): AbandonValidationRun => ({
   abandon: (command) =>
     Effect.gen(function* () {
       const context = yield* input.persistence.getAbandonmentContext(command.validationRunId);
-      if (context === undefined) {
-        return {
-          ok: false,
-          status: "not_found",
-          validationRunId: command.validationRunId,
-          cleanup: { worktree: "not_created", tempRef: "not_created" },
-        } as const;
-      }
+      if (context === undefined) return notFound(command.validationRunId);
       return yield* input.executionLock
         .withLock({
           owner: "change_submission",
@@ -80,29 +73,15 @@ export const openAbandonValidationRun = (input: {
 const abandonWhileLocked = (
   input: {
     readonly persistence: ValidationRunAbandonmentPort;
-    readonly workspaceCleanup: ValidationWorkspaceCleanup;
+    readonly workspaceCleanup: SnapshotWorkspaceCleanup;
   },
   command: { readonly validationRunId: string; readonly reason: string; readonly now: string },
 ): Effect.Effect<AbandonValidationRunResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const context = yield* input.persistence.getAbandonmentContext(command.validationRunId);
-    if (context === undefined) {
-      return {
-        ok: false,
-        status: "not_found",
-        validationRunId: command.validationRunId,
-        cleanup: { worktree: "not_created", tempRef: "not_created" },
-      } as const;
-    }
+    if (context === undefined) return notFound(command.validationRunId);
     const run = yield* input.persistence.getRunById(command.validationRunId);
-    if (run === undefined) {
-      return {
-        ok: false,
-        status: "not_found",
-        validationRunId: command.validationRunId,
-        cleanup: { worktree: "not_created", tempRef: "not_created" },
-      } as const;
-    }
+    if (run === undefined) return notFound(command.validationRunId);
     if (run.state === "complete") {
       return {
         ok: true,
@@ -111,22 +90,18 @@ const abandonWhileLocked = (
       } as const;
     }
 
-    const cleanupAttempt = input.workspaceCleanup.cleanup({
+    const cleanupAttempt = yield* input.workspaceCleanup.cleanup({
       validationRunId: command.validationRunId,
       submittedSha: context.submittedSha,
-      ...(context.tempRefName === undefined ? {} : { recordedTempRefName: context.tempRefName }),
       ...(context.worktreePath === undefined ? {} : { recordedWorktreePath: context.worktreePath }),
     });
-    const cleanup = {
-      worktree: cleanupAttempt.worktree,
-      tempRef: cleanupAttempt.tempRef,
-    } as const;
-    if (cleanup.worktree === "failed" || cleanup.tempRef === "failed") {
+    const cleanup = { workspace: cleanupAttempt.workspace } as const;
+    if (cleanup.workspace === "failed") {
       yield* input.persistence.recordToolingFailure({
         validationRunId: command.validationRunId,
         errorKind: "infrastructure_tooling_failed",
         operationName: "abandon_validation_run_cleanup",
-        errorMessage: `${command.reason} Cleanup worktree=${cleanup.worktree}; temporary ref=${cleanup.tempRef}.${cleanupAttempt.errorMessage === undefined ? "" : ` ${cleanupAttempt.errorMessage}`}`,
+        errorMessage: `${command.reason} Cleanup workspace=${cleanup.workspace}.${cleanupAttempt.errorMessage === undefined ? "" : ` ${cleanupAttempt.errorMessage}`}`,
         now: command.now,
       });
       return {
@@ -147,3 +122,10 @@ const abandonWhileLocked = (
     });
     return { ok: true, status: "abandoned", validationRunId: command.validationRunId } as const;
   });
+
+const notFound = (validationRunId: string): AbandonValidationRunResult => ({
+  ok: false,
+  status: "not_found",
+  validationRunId,
+  cleanup: { workspace: "not_created" },
+});

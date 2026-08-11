@@ -6,7 +6,7 @@ status: accepted
 
 But Why uses a fixed read-only Validation Gate instead of a generic pipeline language.
 Repositories configure Checks and reviewers inside the fixed phases, but they do not define arbitrary phases or step types.
-But Why owns command and reviewer execution contracts, while Sandcastle remains private to disposable Validation Workspace creation and cleanup.
+But Why owns command and reviewer execution contracts and uses project-owned native Git for disposable Snapshot Workspace creation and cleanup.
 
 ## Considered Options
 
@@ -16,8 +16,8 @@ But Why owns command and reviewer execution contracts, while Sandcastle remains 
 
 ## Consequences
 
-But Why owns Validation Runs, phases, Findings, Artifacts, Reviewer Sessions, temporary Git refs, execution diagnostics, and interruption behavior.
+But Why owns Validation Runs, phases, Findings, Artifacts, Reviewer Sessions, Snapshot Workspaces, execution diagnostics, and interruption behavior.
 A Pi Reviewer Adapter launches each reviewer invocation through Effect command execution and preserves bounded same-session output correction.
-Reviewer Sessions belong to one Change and persist independently from disposable Validation Workspaces so successor Candidates can reuse repository orientation.
-Host interruption terminates the reviewer process tree before Validation Workspace cleanup begins.
-Sandcastle remains a private implementation detail of disposable Validation Workspace creation and cleanup and provides no reviewer behavior.
+Reviewer Sessions belong to one Change and persist independently from disposable Snapshot Workspaces so successor Candidates can reuse repository orientation.
+Host interruption terminates the reviewer process tree before Snapshot Workspace cleanup begins.
+Snapshot Workspace creation and cleanup use project-owned native Git and provide no reviewer behavior or security isolation.

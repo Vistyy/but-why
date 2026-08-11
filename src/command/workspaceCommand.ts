@@ -14,5 +14,5 @@ export class WorkspaceCommandExecutionFailed extends Data.TaggedError(
 
 export type WorkspaceCommandExecutor = (
   command: string,
-  options?: { readonly cwd?: string },
+  options?: { readonly cwd?: string; readonly signal?: AbortSignal },
 ) => Promise<WorkspaceCommandResult>;

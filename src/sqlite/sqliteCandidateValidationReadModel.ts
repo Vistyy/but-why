@@ -237,12 +237,9 @@ export type UnknownAbandonmentContextRow = {
   readonly candidateId: unknown;
   readonly submittedSha: unknown;
   readonly setupValidationRunId: unknown;
-  readonly setupSubmittedSha: unknown;
-  readonly setupWorktreeHead: unknown;
-  readonly tempRefName: unknown;
+  readonly setupExpectedCommitSha: unknown;
   readonly worktreePath: unknown;
-  readonly cleanupWorktree: unknown;
-  readonly cleanupTempRef: unknown;
+  readonly cleanupWorkspace: unknown;
 };
 
 export const decodeAbandonmentContext = (
@@ -263,46 +260,36 @@ export const decodeAbandonmentContext = (
   const submittedSha = decodeStoredString(row.submittedSha, "Candidate submitted SHA");
   const setupValidationRunId = decodeStoredNullableString(
     row.setupValidationRunId,
-    "Validation Workspace Setup Run ID",
+    "Snapshot Workspace Setup Run ID",
   );
-  const setupSubmittedSha = decodeStoredNullableString(
-    row.setupSubmittedSha,
-    "Validation Workspace submitted SHA",
-  );
-  const setupWorktreeHead = decodeStoredNullableString(
-    row.setupWorktreeHead,
-    "Validation Workspace worktree head",
+  const setupExpectedCommitSha = decodeStoredNullableString(
+    row.setupExpectedCommitSha,
+    "Snapshot Workspace expected commit SHA",
   );
   if (
     setupValidationRunId !== null &&
-    (setupValidationRunId !== validationRunId ||
-      setupSubmittedSha !== submittedSha ||
-      setupWorktreeHead !== submittedSha)
+    (setupValidationRunId !== validationRunId || setupExpectedCommitSha !== submittedSha)
   ) {
-    throw new Error("Validation Workspace Setup relationship is inconsistent");
+    throw new Error("Snapshot Workspace Setup relationship is inconsistent");
   }
-  const cleanupWorktree = decodeCleanupState(row.cleanupWorktree, "worktree cleanup state");
-  const cleanupTempRef = decodeCleanupState(row.cleanupTempRef, "temporary ref cleanup state");
-  if (setupValidationRunId === null && (cleanupWorktree !== null || cleanupTempRef !== null)) {
-    throw new Error("Validation Run cleanup state has no Workspace Setup");
+  const cleanupWorkspace = decodeCleanupState(
+    row.cleanupWorkspace,
+    "Snapshot Workspace cleanup state",
+  );
+  if (setupValidationRunId === null && cleanupWorkspace !== null) {
+    throw new Error("Validation Run cleanup state has no Snapshot Workspace Setup");
   }
-  const tempRefName = decodeStoredNullableString(row.tempRefName, "Validation temporary ref name");
-  const worktreePath = decodeStoredNullableString(row.worktreePath, "Validation Workspace path");
-  if (
-    setupValidationRunId !== null &&
-    (tempRefName === null || cleanupWorktree === null || cleanupTempRef === null)
-  ) {
-    throw new Error("Validation Workspace Setup is incomplete");
+  const worktreePath = decodeStoredNullableString(row.worktreePath, "Snapshot Workspace path");
+  if (setupValidationRunId !== null && (worktreePath === null || cleanupWorkspace === null)) {
+    throw new Error("Snapshot Workspace Setup is incomplete");
   }
   return {
     validationRunId,
     changeId,
     candidateId,
     submittedSha,
-    ...(tempRefName === null ? {} : { tempRefName }),
     ...(worktreePath === null ? {} : { worktreePath }),
-    cleanupWorktree,
-    cleanupTempRef,
+    cleanupWorkspace,
   };
 };
 
@@ -389,7 +376,7 @@ export type UnknownToolingFailureRow = {
 };
 
 const toolingFailureKinds = new Set<ValidationToolingFailureKind>([
-  "validation_workspace_setup_failed",
+  "snapshot_workspace_setup_failed",
   "infrastructure_tooling_failed",
   "git_tooling_failed",
   "reviewer_process_execution_failed",
@@ -494,7 +481,7 @@ const decodeProducer = (value: unknown, phase: ValidationPhase): string => {
 const decodeCleanupState = (
   value: unknown,
   field: string,
-): CandidateValidationRunAbandonmentContext["cleanupWorktree"] => {
+): CandidateValidationRunAbandonmentContext["cleanupWorkspace"] => {
   const state = decodeStoredNullableString(value, field);
   if (state !== null && state !== "removed" && state !== "not_created" && state !== "failed") {
     throw new Error(`Stored ${field} is unsupported`);

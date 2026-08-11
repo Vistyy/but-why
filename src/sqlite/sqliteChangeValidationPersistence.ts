@@ -115,23 +115,18 @@ const makeSqliteChangeValidationAdapter = (
       listRunsForCandidate(sql, candidateId),
     ),
   recordWorkspaceSetup: (input) =>
-    repository.operation("record Candidate validation workspace setup", (sql) =>
+    repository.operation("record Candidate Snapshot Workspace setup", (sql) =>
       Effect.asVoid(sql`
-          INSERT INTO candidate_validation_workspace_setups (
-            validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-            cleanup_worktree, cleanup_temp_ref, created_at
+          INSERT INTO candidate_snapshot_workspaces (
+            validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
           ) VALUES (
-            ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-            ${input.worktreeHead}, ${input.worktreePath ?? null},
-            ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
+            ${input.validationRunId}, ${input.expectedCommitSha}, ${input.worktreePath},
+            ${input.cleanupWorkspace}, ${input.now}
           )
           ON CONFLICT (validation_run_id) DO UPDATE SET
-            temp_ref_name = excluded.temp_ref_name,
-            submitted_sha = excluded.submitted_sha,
-            worktree_head = excluded.worktree_head,
-            worktree_path = excluded.worktree_path,
-            cleanup_worktree = excluded.cleanup_worktree,
-            cleanup_temp_ref = excluded.cleanup_temp_ref,
+            expected_commit_sha = excluded.expected_commit_sha,
+            workspace_path = excluded.workspace_path,
+            cleanup_workspace = excluded.cleanup_workspace,
             created_at = excluded.created_at
         `),
     ),
@@ -539,12 +534,11 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     `;
     if (input.workspaceSetup !== undefined) {
       yield* sql`
-        INSERT INTO candidate_validation_workspace_setups (
-          validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-          cleanup_worktree, cleanup_temp_ref, created_at
+        INSERT INTO candidate_snapshot_workspaces (
+          validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
         ) VALUES (
-          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${candidate.headSha}, ${candidate.headSha},
-          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
+          ${validationRunId}, ${candidate.headSha}, ${input.workspaceSetup.worktreePath},
+          'not_created', ${input.now}
         )
       `;
     }
@@ -597,13 +591,12 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
         candidate.change_id AS changeId, change_row.id AS storedChangeId,
         candidate.id AS candidateId, candidate.head_sha AS submittedSha,
         setup.validation_run_id AS setupValidationRunId,
-        setup.submitted_sha AS setupSubmittedSha, setup.worktree_head AS setupWorktreeHead,
-        setup.temp_ref_name AS tempRefName, setup.worktree_path AS worktreePath,
-        setup.cleanup_worktree AS cleanupWorktree, setup.cleanup_temp_ref AS cleanupTempRef
+        setup.expected_commit_sha AS setupExpectedCommitSha,
+        setup.workspace_path AS worktreePath, setup.cleanup_workspace AS cleanupWorkspace
       FROM candidate_validation_runs AS run
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      LEFT JOIN candidate_validation_workspace_setups AS setup ON setup.validation_run_id = run.id
+      LEFT JOIN candidate_snapshot_workspaces AS setup ON setup.validation_run_id = run.id
       WHERE run.id = ${validationRunId}
     `;
     const row = rows[0];

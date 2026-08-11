@@ -360,7 +360,7 @@ export const createToolingFailureFixture = (
           INSERT INTO candidate_validation_tooling_failures (
             validation_run_id, error_kind, operation_name, error_message, created_at
           ) VALUES (
-            ${validationRunId}, 'validation_workspace_setup_failed',
+            ${validationRunId}, 'snapshot_workspace_setup_failed',
             'cleanup_validation_worktree', 'Could not remove worktree.', ${createdAt}
           )
         `,

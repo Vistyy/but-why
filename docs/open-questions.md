@@ -22,16 +22,6 @@ A benchmark remains deferred work rather than a v1 release requirement or an app
 Specialists run sequentially in v1.
 Reconsider parallel execution only after real-use evidence justifies workspace isolation, resource limits, failure collection, cancellation, and deterministic ordering.
 
-## Where should disposable Validation Workspaces live?
-
-Sandcastle places each v1 Validation Workspace under the consumer repository at `.sandcastle/worktrees/`.
-Recursive repository tools can discover an abandoned Validation Workspace unless the repository excludes `.sandcastle/**`.
-V1 setup guidance must direct the user's coding agent to configure that exclusion.
-But Why does not edit consumer tool configuration automatically.
-
-After v1, move Validation Workspaces outside the consumer repository and remove Sandcastle's control of their placement.
-Before implementation, select the external location and define naming, Git registration, cleanup, recovery, and repository-relocation behavior.
-
 ## How should agent monetary cost be measured?
 
 Reviewer invocations record token usage when Pi reports it and preserve unavailable usage as `null`.
@@ -175,7 +165,7 @@ Prefer named extension points when the behavior has stable domain meaning, and d
 V1 supports host execution only.
 Containerized reviewer execution is unsupported in v1 and deferred until after v1.
 The Agent Environment configures the repository toolchain for host-run agents.
-The project-owned Pi Reviewer Adapter uses Effect command interruption to terminate its process tree before Validation Workspace cleanup.
+The project-owned Pi Reviewer Adapter uses Effect command interruption to terminate its process tree before Snapshot Workspace cleanup.
 Automatic interrupted-run recovery remains unsupported.
 
 Before reconsidering containerized reviewers after v1, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
@@ -185,7 +175,7 @@ Select another execution provider only when it can preserve the current reviewer
 ## Does automatic writing need stronger isolation?
 
 Read-only validation uses project-owned workspace and execution contracts.
-Sandcastle remains private to Validation Workspace creation, command execution, and cleanup and provides no container isolation.
+Snapshot Workspaces use project-owned native Git worktrees and Effect command execution and provide no container isolation.
 Before automatic writing uses a container provider, that path must use a fixed image, non-root execution, restricted mounts and environment, no host credentials, no devices or Docker socket, bounded diagnostics, and complete validation before a parent-controlled push.
 
 OpenShell, Gondolin, or another provider requires an adapter and conformance tests.

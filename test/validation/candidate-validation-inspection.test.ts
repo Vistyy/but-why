@@ -5,10 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import {
-  expectedValidationWorkspacePath,
-  validationTempRefName,
-} from "../../src/change/validation/validationWorkspacePath.js";
+import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -50,15 +47,11 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("abandons an interrupted Validation Run and is idempotent", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      const tempRefName = validationTempRefName(fixture.validationRunId);
       yield* fixture.runStore.recordWorkspaceSetup({
         validationRunId: fixture.validationRunId,
-        tempRefName,
-        submittedSha: "head-sha",
-        worktreeHead: "head-sha",
-        worktreePath: expectedValidationWorkspacePath(fixture.root, tempRefName),
-        cleanupWorktree: "not_created",
-        cleanupTempRef: "not_created",
+        expectedCommitSha: "head-sha",
+        worktreePath: expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId),
+        cleanupWorkspace: "not_created",
         now,
       });
       const abandoned = yield* runByInProcessEffect(fixture.root, [
@@ -91,18 +84,15 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("retains the exact Validation Workspace path for abandonment", () =>
+  it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      const worktreePath = join(fixture.root, "linked-worktree", ".sandcastle", "validation");
+      const worktreePath = expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId);
       yield* fixture.runStore.recordWorkspaceSetup({
         validationRunId: fixture.validationRunId,
-        tempRefName: "refs/but-why/validation-runs/run/validation",
-        submittedSha: "head-sha",
-        worktreeHead: "head-sha",
+        expectedCommitSha: "head-sha",
         worktreePath,
-        cleanupWorktree: "not_created",
-        cleanupTempRef: "not_created",
+        cleanupWorkspace: "not_created",
         now,
       });
 
@@ -113,7 +103,7 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("records the initial Validation Workspace with the Active relation", () =>
+  it.effect("records the initial Snapshot Workspace with the Active relation", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.runStore.complete({
@@ -122,8 +112,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now,
       });
       const workspace = {
-        tempRefName: "refs/but-why/validation-runs/atomic/validation",
-        worktreePath: join(fixture.root, ".sandcastle", "atomic-validation"),
+        worktreePath: expectedSnapshotWorkspacePath(fixture.root, "run-with-atomic-workspace"),
       };
       const started = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
@@ -307,7 +296,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
       yield* fixture.runStore.recordToolingFailure({
         validationRunId: fixture.validationRunId,
-        errorKind: "validation_workspace_setup_failed",
+        errorKind: "snapshot_workspace_setup_failed",
         operationName: "cleanup_validation_worktree",
         errorMessage: "Could not remove worktree.",
         now: later,
@@ -407,7 +396,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           {
             sequence: 1,
             validationRunId: fixture.validationRunId,
-            errorKind: "validation_workspace_setup_failed",
+            errorKind: "snapshot_workspace_setup_failed",
             operationName: "cleanup_validation_worktree",
             errorMessage: "Could not remove worktree.",
             createdAt: later,

@@ -10,53 +10,46 @@ import {
 } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
-  ActiveValidationWorkspace,
-  ActiveValidationWorkspaceResult,
-  ValidationWorkspaceSetup,
-  ValidationWorkspaceToolingError,
-} from "./validationWorkspace.js";
-import { validationTempRefName } from "./validationWorkspacePath.js";
+  ActiveSnapshotWorkspace,
+  ActiveSnapshotWorkspaceResult,
+  SnapshotWorkspaceSetup,
+  SnapshotWorkspaceToolingError,
+} from "./snapshotWorkspace.js";
 
-export type CreateValidationWorkspaceInput = {
+export type CreateSnapshotWorkspaceInput = {
   readonly repoRoot: string;
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
   readonly recordWorkspaceSetup?: (
-    setup: ValidationWorkspaceSetup,
+    setup: SnapshotWorkspaceSetup,
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
-    toolingError: ValidationWorkspaceToolingError,
+    toolingError: SnapshotWorkspaceToolingError,
   ) => Effect.Effect<void>;
   readonly runInWorkspace?: (
-    workspace: ActiveValidationWorkspace,
+    workspace: ActiveSnapshotWorkspace,
   ) => Effect.Effect<
-    ActiveValidationWorkspaceResult,
+    ActiveSnapshotWorkspaceResult,
     ValidationToolingFailure | RepositoryStorageError
   >;
 };
 
-export type CreateValidationWorkspaceResult =
+export type CreateSnapshotWorkspaceResult =
   | {
       readonly ok: true;
-      readonly setup: ValidationWorkspaceSetup;
-      readonly activeWorkspaceResult?: ActiveValidationWorkspaceResult;
+      readonly setup: SnapshotWorkspaceSetup;
+      readonly activeWorkspaceResult?: ActiveSnapshotWorkspaceResult;
     }
-  | {
-      readonly ok: false;
-      readonly toolingError: ValidationWorkspaceToolingError;
-    }
-  | {
-      readonly ok: false;
-      readonly toolingFailure: ValidationToolingFailure;
-    };
+  | { readonly ok: false; readonly toolingError: SnapshotWorkspaceToolingError }
+  | { readonly ok: false; readonly toolingFailure: ValidationToolingFailure };
 
-export const createValidationWorkspace = (
-  input: CreateValidationWorkspaceInput,
-): Effect.Effect<CreateValidationWorkspaceResult, RepositoryStorageError> =>
-  createValidationWorkspaceAdapter(input).pipe(
+export const createSnapshotWorkspace = (
+  input: CreateSnapshotWorkspaceInput,
+): Effect.Effect<CreateSnapshotWorkspaceResult, RepositoryStorageError> =>
+  createSnapshotWorkspaceAdapter(input).pipe(
     Effect.catchTags({
-      ValidationWorkspaceSetupFailed: toolingFailureResult,
+      SnapshotWorkspaceSetupFailed: toolingFailureResult,
       InfrastructureToolingFailed: toolingFailureResult,
       GitToolingFailed: toolingFailureResult,
       ReviewerProcessToolingFailed: toolingFailureResult,
@@ -67,20 +60,19 @@ export const createValidationWorkspace = (
     }),
   );
 
-const createValidationWorkspaceAdapter = (
-  input: CreateValidationWorkspaceInput,
+const createSnapshotWorkspaceAdapter = (
+  input: CreateSnapshotWorkspaceInput,
 ): Effect.Effect<
-  CreateValidationWorkspaceResult,
+  CreateSnapshotWorkspaceResult,
   ValidationToolingFailure | RepositoryStorageError
 > => {
-  let activeWorkspaceResult: ActiveValidationWorkspaceResult | undefined;
-
+  let activeWorkspaceResult: ActiveSnapshotWorkspaceResult | undefined;
   return Effect.gen(function* () {
     const workspaceInput: RunDisposableExactCommitWorkspaceInput<
       ValidationToolingFailure | RepositoryStorageError
     > = {
       repoRoot: input.repoRoot,
-      workspaceRef: validationTempRefName(input.validationRunId),
+      workspaceId: input.validationRunId,
       commitSha: input.submittedSha,
       copyFiles: input.copyFiles,
       ...(input.recordWorkspaceSetup === undefined
@@ -114,11 +106,7 @@ const createValidationWorkspaceAdapter = (
           }),
     };
     const result = yield* runDisposableExactCommitWorkspace(workspaceInput);
-
-    if (!result.ok) {
-      return { ok: false, toolingError: validationError(result.toolingError) };
-    }
-
+    if (!result.ok) return { ok: false, toolingError: validationError(result.toolingError) };
     return {
       ok: true,
       setup: validationSetup(input.validationRunId, result.setup),
@@ -130,28 +118,28 @@ const createValidationWorkspaceAdapter = (
 const validationSetup = (
   validationRunId: string,
   setup: DisposableWorkspaceSetup,
-): ValidationWorkspaceSetup => ({
+): SnapshotWorkspaceSetup => ({
   validationRunId,
-  tempRefName: setup.tempRefName,
-  submittedSha: setup.commitSha,
-  worktreeHead: setup.worktreeHead,
-  ...(setup.worktreePath === undefined ? {} : { worktreePath: setup.worktreePath }),
+  expectedCommitSha: setup.commitSha,
+  ...(setup.workspaceHead === undefined ? {} : { workspaceHead: setup.workspaceHead }),
+  worktreePath: setup.worktreePath,
   cleanupResult: setup.cleanupResult,
 });
 
-const validationError = (error: DisposableWorkspaceError): ValidationWorkspaceToolingError => ({
+const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
   operationName: validationOperation(error.operationName),
-  tempRefName: error.tempRefName,
-  submittedSha: error.commitSha,
-  ...(error.worktreePath === undefined ? {} : { worktreePath: error.worktreePath }),
+  validationRunId: error.workspaceId,
+  expectedCommitSha: error.commitSha,
+  worktreePath: error.worktreePath,
   errorMessage: error.errorMessage,
   cleanupResult: error.cleanupResult,
 });
 
 const validationOperation = (operationName: string): string => {
-  if (operationName === "cleanup_disposable_workspace") return "cleanup_validation_workspace";
+  if (operationName === "create_disposable_workspace") return "create_snapshot_workspace";
+  if (operationName === "cleanup_disposable_workspace") return "cleanup_snapshot_workspace";
   if (operationName === "disposable_workspace_interrupted") {
-    return "validation_workspace_interrupted";
+    return "snapshot_workspace_interrupted";
   }
   return operationName;
 };

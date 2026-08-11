@@ -15,12 +15,13 @@ export const verifyCandidateIntegrity = (input: {
   readonly operationName: string;
 }): Effect.Effect<void, ValidationToolingFailure> =>
   Effect.tryPromise({
-    try: () =>
+    try: (signal) =>
       ensureCandidateIntegrity({
         commandExecutor: input.commandExecutor,
         commandCwd: input.commandCwd,
         expectedHeadSha: input.expectedHeadSha,
         allowedUntrackedFiles: input.allowedUntrackedFiles,
+        signal,
       }),
     catch: (error) =>
       error instanceof Error && "_tag" in error

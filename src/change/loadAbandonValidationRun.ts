@@ -6,7 +6,7 @@ import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteValidationRunAbandonmentPort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
-import { validationWorkspaceCleanupGit } from "./validation/validationWorkspaceCleanupGit.js";
+import { snapshotWorkspaceCleanupGit } from "./validation/snapshotWorkspaceCleanupGit.js";
 
 export type LoadAbandonValidationRunResult =
   | { readonly ok: true; readonly abandon: AbandonValidationRun }
@@ -43,7 +43,7 @@ export const loadAbandonValidationRun = (input: {
           openAbandonValidationRun({
             persistence,
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
-            workspaceCleanup: validationWorkspaceCleanupGit(context.mainCheckoutRoot),
+            workspaceCleanup: snapshotWorkspaceCleanupGit(context.mainCheckoutRoot),
           }).abandon(command),
         ).pipe(Effect.provide(repositoryLayer)),
     },
