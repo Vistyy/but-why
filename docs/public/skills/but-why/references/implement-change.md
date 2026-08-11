@@ -49,7 +49,8 @@ Do not split, cancel, replace, amend, or continue the Task autonomously.
 The Operator decides whether to continue, resolve, cancel, or replace the Task.
 Do not raise a blocker for ordinary difficulty, focused Check failures, Findings, tooling recovery, or publication recovery.
 Stop and report after raising the blocker.
-Collect only the focused evidence required for the Candidate during implementation.
+Run only the focused verification needed to determine whether the Candidate is ready for Submission.
+Treat implementation-time observations as development feedback, not as an acceptance evidence package.
 Do not manually run a repository-wide quality command, unfiltered test or coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.
 If Acceptance Context requires a blocking gate to pass, satisfy that requirement through Change Submit instead of running the gate manually.

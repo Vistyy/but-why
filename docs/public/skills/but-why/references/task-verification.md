@@ -2,7 +2,7 @@
 
 Accepted intent defines the required result.
 Implementation creates that result.
-Verification establishes justified confidence that the Candidate satisfies it, and review judges whether the Candidate and its evidence are sufficient.
+Verification establishes justified confidence that the Candidate satisfies it, and review independently judges the exact Candidate using the evidence required for that judgment.
 A test is one possible source of evidence, not the default output.
 Task Context has no required verification section or template.
 
@@ -25,7 +25,7 @@ Treat missing, malformed, unavailable, or ambiguous observations as unknown rath
 Use this reasoning to guide judgment.
 Do not require a verification plan, inventory, or standard output structure unless the Operator requests one or software must parse it.
 
-## Select and produce evidence
+## Implementation verification
 
 Read the accepted intent and applicable repository verification policy.
 Do not strengthen the product guarantee merely to make verification easier or more comprehensive.
@@ -33,8 +33,8 @@ An Implementer may use any supported evidence that establishes the relevant beha
 Use a broader system boundary only when the behavior being established depends on that boundary.
 When several mechanisms are credible, prefer the reliable one with lower execution, diagnosis, coupling, and maintenance cost.
 
-Produce evidence for the exact Candidate and relevant environment.
-Record only the command or procedure, relevant environment, and observation needed to interpret the result.
+During implementation, use focused verification to determine whether the exact Candidate is ready for Submission.
+Treat resulting observations as development feedback, not as an acceptance evidence package.
 Complete mandatory gates through their owning workflow instead of duplicating them manually.
 If an evidence mechanism fails, report the failed mechanism and remaining uncertainty.
 Do not interpret inability to collect evidence as either success or a Candidate failure.
@@ -44,8 +44,10 @@ Do not interpret inability to collect evidence as either success or a Candidate 
 Before implementation, review whether the accepted outcome is observable and whether any prescribed verification constraint is feasible and capable of observing that outcome.
 The absence of a prescribed mechanism is not itself a problem.
 
-After implementation, review the exact Candidate against accepted intent and available evidence.
-Ask whether the evidence could distinguish a materially incorrect Candidate from the accepted result, observes the boundaries on which that judgment depends, and corresponds to the exact Candidate and relevant environment.
+After implementation, the Acceptance Reviewer independently establishes the evidence required to judge the exact Candidate against accepted intent.
+The reviewer inspects relevant maintained verification and uses current Check Artifacts to confirm its execution instead of repeating the same broad Checks.
+When inspection and existing evidence are insufficient, the reviewer designs and performs a proportionate targeted experiment through the exact Candidate.
+The reviewer judges whether the evidence could distinguish a materially incorrect Candidate from the accepted result, observes the boundaries on which that judgment depends, and corresponds to the exact Candidate and relevant environment.
 Do not reject sufficient evidence merely because another mechanism is more familiar or broader.
 Report only material confidence gaps and state what remains unsupported.
 Distinguish insufficient evidence from a tooling failure that prevents a trustworthy review.
