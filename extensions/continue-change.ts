@@ -72,6 +72,7 @@ export type RetryState = {
 type ReassessmentEvidence = {
   readonly change: boolean;
   readonly acceptanceContext: boolean;
+  readonly blockerResolutions: boolean;
   readonly worktreeStatus: boolean;
   readonly candidateDiff: boolean;
 };
@@ -407,15 +408,17 @@ const inspectionFailureMessage = (message: string): string =>
 const emptyReassessmentEvidence = (): ReassessmentEvidence => ({
   change: false,
   acceptanceContext: false,
+  blockerResolutions: false,
   worktreeStatus: false,
   candidateDiff: false,
 });
 
-const reassessmentEvidenceComplete = (evidence: ReassessmentEvidence): boolean =>
-  evidence.change &&
-  evidence.acceptanceContext &&
-  evidence.worktreeStatus &&
-  evidence.candidateDiff;
+const reassessmentEvidenceComplete = (reassessment: SubmissionReassessment): boolean =>
+  reassessment.evidence.change &&
+  reassessment.evidence.acceptanceContext &&
+  (!reassessment.hasResolutions || reassessment.evidence.blockerResolutions) &&
+  reassessment.evidence.worktreeStatus &&
+  reassessment.evidence.candidateDiff;
 
 const commandReassessmentEvidence = (
   command: string,
@@ -423,15 +426,18 @@ const commandReassessmentEvidence = (
   taskId: string,
   baseRef: string,
 ): ReassessmentEvidence => {
-  const visible = visibleShellText(command);
+  const visible = visibleShellText(command).trim();
   const prefixes = ["just by", "pnpx but-why", "npx -y but-why"];
   return {
-    change: prefixes.some((prefix) => visible.includes(`${prefix} change show ${changeId}`)),
-    acceptanceContext: prefixes.some((prefix) =>
-      visible.includes(`${prefix} task context ${taskId}`),
+    change: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
+    acceptanceContext: prefixes.some(
+      (prefix) => visible === `${prefix} task context ${taskId}`,
     ),
-    worktreeStatus: /(?:^|[\n;|&(){}]\s*)git\s+status(?:\s|$)/u.test(visible),
-    candidateDiff: visible.includes(`git diff ${baseRef}...HEAD`),
+    blockerResolutions: prefixes.some(
+      (prefix) => visible === `${prefix} change blocker list ${changeId}`,
+    ),
+    worktreeStatus: visible === "git status --short",
+    candidateDiff: visible === `git diff ${baseRef}...HEAD`,
   };
 };
 
@@ -447,6 +453,9 @@ const incompleteReassessmentMessage = (
     ...(reassessment.evidence.acceptanceContext || reassessment.taskId === null
       ? []
       : [butWhyCommand(commandPrefix, "task", "context", reassessment.taskId)]),
+    ...(!reassessment.hasResolutions || reassessment.evidence.blockerResolutions
+      ? []
+      : [butWhyCommand(commandPrefix, "change", "blocker", "list", changeId)]),
     ...(reassessment.evidence.worktreeStatus ? [] : ["git status --short"]),
     ...(reassessment.evidence.candidateDiff || reassessment.baseRef === null
       ? []
@@ -986,6 +995,8 @@ export default function continueChange(pi: ExtensionAPI): void {
         change: reassessment.evidence.change || observed.change,
         acceptanceContext:
           reassessment.evidence.acceptanceContext || observed.acceptanceContext,
+        blockerResolutions:
+          reassessment.evidence.blockerResolutions || observed.blockerResolutions,
         worktreeStatus: reassessment.evidence.worktreeStatus || observed.worktreeStatus,
         candidateDiff: reassessment.evidence.candidateDiff || observed.candidateDiff,
       },
@@ -1304,7 +1315,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const reassessment = persisted?.submissionReassessment;
     if (
       reassessment?.state === "running" &&
-      !reassessmentEvidenceComplete(reassessment.evidence) &&
+      !reassessmentEvidenceComplete(reassessment) &&
       changeId !== undefined
     ) {
       pi.sendUserMessage(
@@ -1336,7 +1347,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     if (reassessment?.state === "running") {
-      if (!reassessmentEvidenceComplete(reassessment.evidence)) return;
+      if (!reassessmentEvidenceComplete(reassessment)) return;
       saveSubmissionReassessment({ ...reassessment, state: "complete" });
     }
     await continueWatching(ctx, false);
@@ -1353,6 +1364,7 @@ const isReassessmentEvidence = (value: unknown): value is ReassessmentEvidence =
   isRecord(value) &&
   typeof recordValue(value, "change") === "boolean" &&
   typeof recordValue(value, "acceptanceContext") === "boolean" &&
+  typeof recordValue(value, "blockerResolutions") === "boolean" &&
   typeof recordValue(value, "worktreeStatus") === "boolean" &&
   typeof recordValue(value, "candidateDiff") === "boolean";
 
