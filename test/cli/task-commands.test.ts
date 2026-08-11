@@ -324,6 +324,14 @@ describe("Task command Adapters", () => {
         if (testCase.command !== undefined) {
           expect(result.stdout).toMatchObject({ help: [testCase.command] });
         }
+        if (testCase.code === "task_context_draft_cleanup_failed") {
+          expect(result.stdout).toMatchObject({
+            error: {
+              task: taskRecord({ description: "Persisted description" }),
+              path: "/tmp/draft.md",
+            },
+          });
+        }
       }
     }),
   );
