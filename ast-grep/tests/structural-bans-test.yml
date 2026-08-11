@@ -129,6 +129,7 @@ invalid:
   - import { runTestProcess as execute } from "./support/testProcess.js"
   - import { helper, startTestProcess as start } from "../support/testProcess.js"
   - import { runTestProcess /* equivalent alias */ as execute } from "./support/testProcess.js"
+  - import { "runTestProcess" as execute } from "./support/testProcess.js"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:
