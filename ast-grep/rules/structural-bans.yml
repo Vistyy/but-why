@@ -84,8 +84,6 @@ rule:
           - pattern: (JSON.parse($$$ARGS)) as unknown
           - pattern: <unknown>JSON.parse($$$ARGS)
           - pattern: <unknown>(JSON.parse($$$ARGS))
-          - pattern: JSON.parse($$$ARGS) satisfies unknown
-          - pattern: (JSON.parse($$$ARGS)) satisfies unknown
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
