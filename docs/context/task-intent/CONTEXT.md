@@ -37,7 +37,8 @@ _Avoid_: Display title, raw Task ID in process names
 **Task Review**:
 One fresh advisory review of one exact New Task proposal before Task Approval.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
-A Task Review captures dependency evidence, a Review Base, and fixed built-in review policy, and it ends as passed, blocked by Findings, or tooling failed.
+A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
+The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
 It does not approve the Task or create reusable judgment authority.
 _Avoid_: Task Approval, Acceptance Review, Validation Run
 

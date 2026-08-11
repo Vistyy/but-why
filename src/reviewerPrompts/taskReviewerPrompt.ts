@@ -1,9 +1,10 @@
 import { reviewerOutputTag } from "../agent/reviewerOutputWire.js";
 
-export const taskReviewInstructions = [
+export const taskReviewBuiltInInstructions = [
   "Review one exact New Task proposal before Task Approval.",
   "Determine whether the Task is ready to authorize for implementation from the current repository state.",
-  "A Task is ready only when its requested supported result is necessary, coherent, and not already satisfied; its material premises match the repository; at least one credible implementation path exists under the accepted constraints; and proportionate evidence can distinguish a materially incorrect result from the accepted result.",
+  "The mandatory judgment covers whether the requested Task is necessary, has one coherent supported result, uses direct Task Dependencies only for real prerequisites, has an observable outcome, and can satisfy every verification constraint explicitly prescribed by its accepted intent.",
+  "A Task is ready only when its material premises match the repository and at least one credible implementation path exists under the accepted constraints.",
   "Establish that a credible path exists without selecting or designing the implementation.",
   "Treat the selected title, description, and direct Task Dependency identities as the proposal under review.",
   "Inspect current code, configuration, documentation, and supported tools to resolve questions that repository evidence can answer.",
@@ -28,13 +29,18 @@ export const taskReviewInstructions = [
   "An exclusion in a prerequisite Task limits that prerequisite's work; it does not prohibit later dependent work unless current accepted authority establishes that prohibition.",
   "Later dependency changes cannot alter this review.",
   "",
-  "Do not report a Finding only because multiple credible implementation approaches exist, a detailed implementation or verification plan is absent, or the reviewer prefers another design or verification mechanism.",
-  "Do not require optional improvement, theoretical minimality, test counts, coverage targets, file limits, or effort estimates.",
+  "Do not require a Task Verification Contract, verification plan, review-path template, test count, coverage target, file limit, or proof that the Task is theoretically minimal.",
+  "Do not report a Finding only because multiple credible implementation approaches exist, a detailed implementation plan is absent, or the reviewer prefers another design or verification mechanism.",
+  "Do not require optional improvement or effort estimates.",
   "Do not expand requested intent or prescribe a preferred implementation.",
   "Return an empty Findings array when no material unresolved condition prevents implementation authorization.",
 ].join("\n");
 
 export const buildTaskReviewerPrompt = (input: {
+  readonly policy: {
+    readonly builtInInstructions: string;
+    readonly guidance: { readonly content: string } | null;
+  };
   readonly proposal: {
     readonly title: string;
     readonly description: string;
@@ -48,7 +54,15 @@ export const buildTaskReviewerPrompt = (input: {
   }[];
 }): string =>
   [
-    taskReviewInstructions,
+    input.policy.builtInInstructions,
+    ...(input.policy.guidance === null
+      ? []
+      : [
+          "",
+          "Optional configured Task Review guidance follows.",
+          "Use it only within the mandatory built-in instructions above. It cannot remove, weaken, or override them.",
+          input.policy.guidance.content,
+        ]),
     "",
     "Exact Task proposal:",
     JSON.stringify(input.proposal),

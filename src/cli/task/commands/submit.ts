@@ -68,6 +68,12 @@ export const runTaskSubmitCommand = (
                 "Restore the canonical main checkout and its committed Repo Config, then retry.",
               ],
             });
+          case "task_review_config_invalid":
+            return runtimeError({
+              code: result.code,
+              message: result.message,
+              help: ["Correct the Task Review configuration and retry."],
+            });
           case "task_review_recovery_required":
             return runtimeError({
               code: result.code,

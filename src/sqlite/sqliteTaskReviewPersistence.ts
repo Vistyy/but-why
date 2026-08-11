@@ -1,5 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type {
   TaskReviewDependencyEvidence,
@@ -274,6 +275,12 @@ type TaskReviewJsonObject = Record<string, unknown> & {
   readonly profileScope?: unknown;
   readonly agentProfile?: unknown;
   readonly instructions?: unknown;
+  readonly profile?: unknown;
+  readonly scope?: unknown;
+  readonly builtInInstructions?: unknown;
+  readonly guidance?: unknown;
+  readonly content?: unknown;
+  readonly source?: unknown;
   readonly operation?: unknown;
   readonly message?: unknown;
 };
@@ -317,14 +324,46 @@ const parseDependencies = (source: string): readonly TaskReviewDependencyEvidenc
 };
 const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const value = parseObject(source);
-  if (value.id !== "task_advisory_review" || value.version !== 1 || value.profileScope !== "global")
-    throw new Error("Invalid policy");
+  if (value.id !== "task_advisory_review") throw new Error("Invalid policy");
+  if (value.version === 1) {
+    if (value.profileScope !== "global") throw new Error("Invalid legacy policy");
+    return {
+      id: "task_advisory_review",
+      version: 1,
+      agentProfile: requiredString(value.agentProfile),
+      profileScope: "global",
+      instructions: requiredString(value.instructions),
+    };
+  }
+  if (value.version !== 2) throw new Error("Invalid policy version");
+  const profile = parseObject(JSON.stringify(value.profile));
+  const scope = profile.scope;
+  if (scope !== "repo" && scope !== "global") throw new Error("Invalid profile scope");
+  const guidance =
+    value.guidance === null
+      ? null
+      : (() => {
+          const parsed = parseObject(JSON.stringify(value.guidance));
+          if (parsed.source !== "repo" && parsed.source !== "global") {
+            throw new Error("Invalid guidance source");
+          }
+          return {
+            content: requiredString(parsed.content),
+            source: parsed.source,
+          };
+        })();
   return {
     id: "task_advisory_review",
-    version: 1,
-    agentProfile: requiredString(value.agentProfile),
-    profileScope: "global",
-    instructions: requiredString(value.instructions),
+    version: 2,
+    profile: {
+      agentProfile: requiredString(profile.agentProfile),
+      scope,
+      profile: Schema.decodeUnknownSync(agentProfileSchema, { onExcessProperty: "error" })(
+        profile.profile,
+      ),
+    },
+    builtInInstructions: requiredString(value.builtInInstructions),
+    guidance,
   };
 };
 const parseReviewState = (value: string): TaskReviewRecord["state"] => {
