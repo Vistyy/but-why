@@ -231,13 +231,24 @@ const taskShowCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Run a fresh advisory review of one exact New Task proposal.", {
+  leaf("submit", "Run an advisory review of one exact New Task proposal.", {
     taskId: taskIdArgument,
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
       Effect.flatMap(({ runTaskSubmitCommand }) =>
         runTaskSubmitCommand({ taskId: values.taskId }, environment),
+      ),
+    ),
+);
+const taskReviewsCommand = withCliHandler(
+  leaf("reviews", "List ordered Task Review history and valid next actions.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/review.js")).pipe(
+      Effect.flatMap(({ runTaskReviewCommand }) =>
+        runTaskReviewCommand({ action: "list", taskId: values.taskId }, environment),
       ),
     ),
 );
@@ -275,6 +286,14 @@ taskReviewCommand = group(
   {},
   () => generatedCommandUsage(taskReviewCommand),
 );
+let taskReviewTopCommand: AnyCommand;
+taskReviewTopCommand = group(
+  "task-review",
+  "Inspect and recover Task Reviews.",
+  [taskReviewShowCommand, taskReviewAbandonCommand],
+  {},
+  () => generatedCommandUsage(taskReviewTopCommand),
+);
 const taskApproveCommand = withCliHandler(
   leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
   (values, environment) =>
@@ -306,6 +325,7 @@ taskCommand = group(
     taskListCommand,
     taskShowCommand,
     taskSubmitCommand,
+    taskReviewsCommand,
     taskReviewCommand,
     taskApproveCommand,
     taskContextCommand,
@@ -693,6 +713,7 @@ const commandTree = commandRootWithHandler.pipe(
     initCommand,
     snapshotCommand,
     taskCommand,
+    taskReviewTopCommand,
     changeCommand,
     validationRunCommand,
   ]),
@@ -902,5 +923,5 @@ const nativeHelpText = (help: string): string => {
 
 const rootHelpCorrection = (help: string): string =>
   help
-    .replaceAll(/\b(task|change|validation-run) \1\b/gu, "$1")
+    .replaceAll(/\b(task|task-review|change|validation-run) \1\b/gu, "$1")
     .replaceAll(/\[<task-id>\] (?=(draft|apply) <task-id>)/gu, "");

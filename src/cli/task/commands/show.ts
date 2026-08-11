@@ -77,7 +77,7 @@ export const runTaskShowCommand = (
               ? task.state === "new"
                 ? { help: [`Run \`by task submit ${task.id}\` for an advisory Task Review.`] }
                 : {}
-              : { reviewCommand: `by task review show ${review.id}` }),
+              : { reviewCommand: `by task-review show ${review.id}` }),
           });
         }),
       );

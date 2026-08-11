@@ -5,10 +5,10 @@ import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
+import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
-import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import {
   runSpecialistReviewPhase,
   type SpecialistReviewerContinuityEvidence,

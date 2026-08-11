@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 import {
   type ReviewerSessionIdentity,
   reviewerSessionFingerprint,
-  reviewerSessionsChangeRoot,
+  reviewerSessionsOwnerRoot,
   reviewerSessionsPath,
   reviewerSessionsProducerRoot,
-} from "../../src/change/reviewerSession/reviewerSession.js";
+} from "../../src/agent/reviewerSession/reviewerSession.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const identity = (changeId: string, producer: string): ReviewerSessionIdentity => ({
-  changeId,
+  ownerId: changeId,
   producer,
   agentProfile: {
     agentProfile: "strict",
@@ -43,7 +43,7 @@ describe("Reviewer Session storage", () => {
     expect(reviewerSessionsProducerRoot(root, changeId, "standards")).toBe(
       join(root, changeId, "standards"),
     );
-    expect(reviewerSessionsChangeRoot(root, changeId)).toBe(join(root, changeId));
+    expect(reviewerSessionsOwnerRoot(root, changeId)).toBe(join(root, changeId));
   });
 
   it("derives a stable fingerprint from the runtime Reviewer Session identity", () => {

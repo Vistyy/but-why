@@ -32,7 +32,7 @@ export const runTaskSubmitCommand = (
               code: "task_review_findings",
               message: "Task Review is blocked by Findings.",
               details: { review: taskReviewView(result.review) },
-              help: [`Run \`by task review show ${result.review.id}\` to inspect every Finding.`],
+              help: [`Run \`by task-review show ${result.review.id}\` to inspect every Finding.`],
             });
           }
           return runtimeError({
@@ -40,7 +40,7 @@ export const runTaskSubmitCommand = (
             message:
               "Task Review failed because its tooling did not produce a safe passing judgment.",
             details: { review: taskReviewView(result.review) },
-            help: [`Run \`by task review show ${result.review.id}\` to inspect the failure.`],
+            help: [`Run \`by task-review show ${result.review.id}\` to inspect the failure.`],
           });
         }
         switch (result.code) {
@@ -58,7 +58,7 @@ export const runTaskSubmitCommand = (
               code: result.code,
               message: "This Task already has an Active Task Review.",
               details: { taskId: resolved.taskId, reviewId: result.reviewId },
-              help: [`Run \`by task review show ${result.reviewId}\` to inspect it.`],
+              help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
             });
           case "review_base_unavailable":
             return runtimeError({
@@ -79,7 +79,7 @@ export const runTaskSubmitCommand = (
               code: result.code,
               message: "Task Review cleanup or final persistence did not complete.",
               details: { review: taskReviewView(result.review) },
-              help: [`Run \`by task review show ${result.review.id}\` to inspect recovery state.`],
+              help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],
             });
         }
       }),

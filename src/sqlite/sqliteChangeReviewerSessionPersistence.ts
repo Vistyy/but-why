@@ -32,7 +32,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
         repository.transactionImmediate("save Reviewer Session", (sql) =>
           Effect.asVoid(sql`
           INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
-          VALUES (${input.changeId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
+          VALUES (${input.ownerId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
           ON CONFLICT(change_id, producer) DO UPDATE SET
             fingerprint = excluded.fingerprint,
             session_reference = excluded.session_reference

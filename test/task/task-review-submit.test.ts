@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -537,4 +537,146 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     const review = (output as { review: { workspace: { path: string } } }).review;
     expect(existsSync(review.workspace.path)).toBe(false);
   }),
+);
+
+it.effect(
+  "continues a compatible Task Reviewer Session with the current proposal diff and exposes transcripts",
+  () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const globalConfigPath = join(root, "global.json");
+      yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      commitButWhyConfigAndRecordDefault(root);
+      writeFileSync(
+        globalConfigPath,
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "review" },
+          agentProfiles: {
+            review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+          },
+        }),
+      );
+      const proposalPath = join(root, "proposal.txt");
+      writeFileSync(proposalPath, "Initial proposal");
+      yield* runByInProcessEffect(root, [
+        "task",
+        "create",
+        "--title",
+        "Review continuity",
+        "--file",
+        proposalPath,
+      ]);
+
+      const observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0][] = [];
+      const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+        review: (input) => {
+          observed.push(input);
+          const storageRoot = input.sessionStorageRoot;
+          if (storageRoot === undefined) throw new Error("Expected Task Reviewer Session storage");
+          const sessionId = input.resumeSession ?? "task-session-1";
+          mkdirSync(storageRoot, { recursive: true });
+          const sessionFilePath = join(storageRoot, `review_${sessionId}.jsonl`);
+          writeFileSync(
+            sessionFilePath,
+            `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+          );
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+            sessionReference: sessionId,
+            sessionFilePath,
+          });
+        },
+      };
+
+      const first = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(first.status, first.stdout).toBe(0);
+
+      const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
+      const draftPath = (JSON.parse(drafted.stdout) as { draft: { path: string } }).draft.path;
+      writeFileSync(draftPath, "Changed proposal\n");
+      const applied = yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"]);
+      expect(applied.status, applied.stdout).toBe(0);
+
+      const second = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(second.status, second.stdout).toBe(0);
+      expect(observed).toHaveLength(2);
+      expect(observed[1]?.resumeSession).toBe("task-session-1");
+      expect(observed[1]?.prompt).toContain("Changed proposal");
+      expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
+
+      const history = yield* runByInProcessEffect(root, ["task", "reviews", "BY-1"]);
+      expect(history.status, history.stdout).toBe(0);
+      expect(JSON.parse(history.stdout)).toMatchObject({
+        taskId: "BY-1",
+        reviewCount: 2,
+        reviews: [
+          { sessions: [{ continuity: "fresh" }], transcripts: [{ piSessionId: "task-session-1" }] },
+          {
+            sessions: [{ continuity: "resumed" }],
+            transcripts: [{ piSessionId: "task-session-1" }],
+          },
+        ],
+      });
+      const secondId = (JSON.parse(second.stdout) as { review: { id: string } }).review.id;
+      const shown = yield* runByInProcessEffect(root, ["task-review", "show", secondId]);
+      expect(shown.status, shown.stdout).toBe(0);
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        review: {
+          proposal: { description: "Changed proposal\n" },
+          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+          transcripts: [{ piSessionId: "task-session-1" }],
+        },
+      });
+
+      const sessionStorageRoot = observed[1]?.sessionStorageRoot;
+      if (sessionStorageRoot === undefined) throw new Error("Expected session storage root");
+      const invalidTranscript = join(sessionStorageRoot, "invalid.jsonl");
+      writeFileSync(invalidTranscript, "{}\n");
+      const failedIndex = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(failedIndex.status).toBe(1);
+      expect(JSON.parse(failedIndex.stdout)).toMatchObject({
+        error: {
+          code: "task_review_recovery_required",
+          review: {
+            state: "running",
+            toolingFailure: { operation: "index_task_reviewer_transcripts" },
+          },
+        },
+      });
+      const failedReviewId = (
+        JSON.parse(failedIndex.stdout) as {
+          error: { review: { id: string } };
+        }
+      ).error.review.id;
+      rmSync(invalidTranscript);
+      const abandoned = yield* runByInProcessEffect(root, [
+        "task",
+        "review",
+        "abandon",
+        failedReviewId,
+        "--reason",
+        "Indexing interrupted completion",
+      ]);
+      expect(abandoned.status, abandoned.stdout).toBe(0);
+      expect(JSON.parse(abandoned.stdout)).toMatchObject({
+        review: {
+          id: failedReviewId,
+          state: "complete",
+          outcome: "tooling_failed",
+          transcripts: [{ piSessionId: "task-session-1" }],
+        },
+      });
+    }),
 );

@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-
+import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
@@ -27,7 +27,6 @@ import type {
   ImplementationBlockerHistory,
 } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type { ReviewerTranscript } from "./reviewerSession/reviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 

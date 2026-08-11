@@ -3,12 +3,12 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Effect } from "effect";
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { AgentEnvironmentCommand } from "../agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
 
 export type ReviewerSessionIdentity = {
-  readonly changeId: string;
+  readonly ownerId: string;
   readonly producer: string;
   readonly agentProfile: ResolvedPiAgentProfile;
   readonly instructions: string;
@@ -21,7 +21,7 @@ export type ReviewerSessionIdentity = {
 };
 
 export type ReviewerSessionRecord = {
-  readonly changeId: string;
+  readonly ownerId: string;
   readonly producer: string;
   readonly fingerprint: string;
   readonly sessionReference: string;
@@ -29,13 +29,13 @@ export type ReviewerSessionRecord = {
 
 export type ReviewerSessionStore = {
   readonly get: (
-    changeId: string,
+    ownerId: string,
     producer: string,
   ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
   readonly save: (input: ReviewerSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
   // remove clears only the active continuation record; retained Reviewer Transcript files stay on disk for Terminal Cleanup indexing.
   readonly remove: (
-    changeId: string,
+    ownerId: string,
     producer: string,
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
@@ -47,10 +47,10 @@ export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): s
 
 export const reviewerSessionsPath = (
   sessionStorageRoot: string,
-  changeId: string,
+  ownerId: string,
   producer: string,
 ): string => {
-  const path = join(sessionStorageRoot, changeId, producer, "reviewer-sessions");
+  const path = join(sessionStorageRoot, ownerId, producer, "reviewer-sessions");
   mkdirSync(path, { recursive: true, mode: 0o700 });
   chmodSync(path, 0o700);
   return path;
@@ -58,9 +58,9 @@ export const reviewerSessionsPath = (
 
 export const reviewerSessionsProducerRoot = (
   sessionStorageRoot: string,
-  changeId: string,
+  ownerId: string,
   producer: string,
-): string => join(sessionStorageRoot, changeId, producer);
+): string => join(sessionStorageRoot, ownerId, producer);
 
-export const reviewerSessionsChangeRoot = (sessionStorageRoot: string, changeId: string): string =>
-  join(sessionStorageRoot, changeId);
+export const reviewerSessionsOwnerRoot = (sessionStorageRoot: string, ownerId: string): string =>
+  join(sessionStorageRoot, ownerId);

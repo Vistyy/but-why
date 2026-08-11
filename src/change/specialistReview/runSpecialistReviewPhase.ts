@@ -13,6 +13,11 @@ import {
   ReviewerOutputContractFailed,
   validateReviewerArtifactRefs,
 } from "../../agent/reviewerOutput.js";
+import {
+  executeReviewerSession,
+  type ReviewerExecutionEvidence,
+} from "../../agent/reviewerSession/executeReviewerSession.js";
+import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
@@ -25,11 +30,6 @@ import {
   buildSpecialistReviewerPrompt,
 } from "../../reviewerPrompts/specialistReviewerPrompt.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
-import {
-  executeReviewerSession,
-  type ReviewerExecutionEvidence,
-} from "../reviewerSession/executeReviewerSession.js";
-import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
@@ -222,7 +222,7 @@ const runSpecialist = (
       }),
     );
     const identity = {
-      changeId: input.changeId,
+      ownerId: input.changeId,
       producer: policy.id,
       agentProfile: policy.profile,
       instructions: policy.instructions,

@@ -25,6 +25,19 @@ export const taskReviewView = (
   findings: review.findings,
   findingCount: review.findings.length,
   toolingFailure: review.toolingFailure,
+  recovery: {
+    workspaceCleanup: review.workspaceCleanup,
+    failedOperation: review.toolingFailure?.operation ?? null,
+    nextActions:
+      review.state === "running"
+        ? [
+            "Stop the Task Review process before abandonment.",
+            `Run \`by task-review abandon ${review.id} --reason "..."\` after the process stops.`,
+          ]
+        : [],
+  },
+  sessions: review.sessions,
+  transcripts: review.transcripts,
   abandonReason: review.abandonReason,
   createdAt: review.createdAt,
   updatedAt: review.updatedAt,

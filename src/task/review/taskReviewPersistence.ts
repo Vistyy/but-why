@@ -1,9 +1,12 @@
 import type { Effect } from "effect";
+import type { ReviewerSessionRecord } from "../../agent/reviewerSession/reviewerSession.js";
+import type { ObservedReviewerTranscript } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
+  TaskReviewExecution,
   TaskReviewFinding,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
@@ -66,6 +69,31 @@ export type TaskReviewPersistence = {
   readonly getLatestForTask: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
+  readonly listForTask: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
+  readonly getReviewerSession: (
+    taskId: string,
+    producer: string,
+  ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
+  readonly saveReviewerSession: (
+    session: ReviewerSessionRecord,
+  ) => Effect.Effect<void, RepositoryStorageError>;
+  readonly removeReviewerSession: (
+    taskId: string,
+    producer: string,
+  ) => Effect.Effect<void, RepositoryStorageError>;
+  readonly recordExecutionAndTranscripts: (input: {
+    readonly reviewId: string;
+    readonly taskId: string;
+    readonly execution?: TaskReviewExecution;
+    readonly transcripts: readonly ObservedReviewerTranscript[];
+  }) => Effect.Effect<void, RepositoryStorageError>;
+  readonly recordActiveFailure: (
+    reviewId: string,
+    failure: TaskReviewToolingFailure,
+    now: string,
+  ) => Effect.Effect<void, RepositoryStorageError>;
   readonly proposalIsCurrent: (
     review: TaskReviewRecord,
   ) => Effect.Effect<boolean, RepositoryStorageError>;

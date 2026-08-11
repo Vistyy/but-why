@@ -66,6 +66,8 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   toolingFailure: null,
   abandonReason: null,
   findings: [],
+  sessions: [],
+  transcripts: [],
   createdAt: firstNow,
   updatedAt: firstNow,
   ...overrides,
@@ -76,6 +78,7 @@ const taskReviewInspection = (
 ): TaskReviewInspectionUseCases => ({
   getById: () => Effect.succeed(undefined),
   getLatestForTask: () => Effect.succeed(latest),
+  listForTask: () => Effect.succeed(latest === undefined ? [] : [latest]),
   proposalIsCurrent: () => Effect.succeed(false),
   inspectIdentity: () => Effect.succeed({ verified: true, workspace: { state: "absent" } }),
 });
@@ -299,7 +302,7 @@ describe("Task command Adapters", () => {
           },
         },
         contextCommand: "by task context BY-1",
-        reviewCommand: "by task review show review-retained",
+        reviewCommand: "by task-review show review-retained",
       });
       expect(context.stdout).toEqual({
         task: {

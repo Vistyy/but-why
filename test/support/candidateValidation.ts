@@ -6,6 +6,7 @@ import {
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import type { ReviewerSessionStore } from "../../src/agent/reviewerSession/reviewerSession.js";
 import {
   CandidateReviewerExecution,
   CandidateValidationExecution,
@@ -13,7 +14,6 @@ import {
   CandidateValidationPaths,
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
-import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
