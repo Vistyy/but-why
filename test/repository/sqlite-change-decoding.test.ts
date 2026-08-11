@@ -470,6 +470,12 @@ describe("SQLite Change decoding", () => {
             includeClosed: true,
           }),
         ).toHaveLength(1);
+        yield* repository.operation(
+          "restore Decision history required by publication",
+          (sql) =>
+            sql`UPDATE implementation_decisions SET choice = 'Restored Decision'
+                WHERE change_id = ${captured.changeId}`,
+        );
         const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need another decision.",
@@ -483,6 +489,13 @@ describe("SQLite Change decoding", () => {
         );
         expect(yield* cancellation.getChangeByTaskId("BY-903")).toMatchObject({
           id: captured.changeId,
+        });
+        expect(yield* changes.publication.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+          implementationDecisions: [
+            { choice: "Restored Decision" },
+            { choice: "Restored Decision" },
+          ],
         });
         yield* repository.operation(
           "restore active Blocker",

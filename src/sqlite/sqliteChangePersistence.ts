@@ -316,7 +316,10 @@ export const openSqliteCandidatePublicationPort = () =>
   Effect.map(RepositorySql, (repository) => {
     const adapter = makeSqliteChangeAdapter(repository);
     return {
-      getChangeById: adapter.getChangeById,
+      getChangeById: (changeId: string) =>
+        repository.transaction("read Change for publication", (sql) =>
+          getPublicationById(sql, changeId),
+        ),
       getCurrentPassingEvidence: adapter.getCurrentPassingEvidence,
       beginPublication: adapter.beginPublication,
       replacePendingPublication: adapter.replacePendingPublication,
@@ -501,6 +504,16 @@ const getBaseById = (sql: SqlClient.SqlClient, changeId: string, operationName: 
       changeId,
     ]),
     (rows) => mapBaseRow(rows[0], operationName, sql),
+  );
+
+const getPublicationById = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.flatMap(getBaseById(sql, changeId, "read Change for publication"), (base) =>
+    base === undefined
+      ? Effect.succeed(undefined)
+      : Effect.map(listDecisions(sql, base.id), (implementationDecisions) => ({
+          ...base,
+          implementationDecisions,
+        })),
   );
 
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
