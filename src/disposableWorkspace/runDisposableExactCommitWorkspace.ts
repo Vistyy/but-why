@@ -8,7 +8,7 @@ import type {
   DisposableWorkspace,
   DisposableWorkspaceCleanupResult,
   DisposableWorkspaceError,
-  DisposableWorkspaceSetup,
+  DisposableWorkspaceOperationName,
 } from "./disposableWorkspace.js";
 import {
   cleanupExactDisposableWorkspace,
@@ -34,12 +34,16 @@ export type RunDisposableExactCommitWorkspaceInput<Error> = {
 };
 
 export type RunDisposableExactCommitWorkspaceResult =
-  | { readonly ok: true; readonly setup: DisposableWorkspaceSetup }
+  | { readonly ok: true }
   | { readonly ok: false; readonly toolingError: DisposableWorkspaceError };
 
 type SetupAttempt =
-  | { readonly ok: true; readonly workspaceHead: string }
-  | { readonly ok: false; readonly operationName: string; readonly errorMessage: string };
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly operationName: DisposableWorkspaceOperationName;
+      readonly errorMessage: string;
+    };
 
 const cleanupStepTimeoutMs = 30_000;
 const initialCleanupResult: DisposableWorkspaceCleanupResult = { workspace: "not_created" };
@@ -92,16 +96,7 @@ export const runDisposableExactCommitWorkspace = <Error>(
         },
       };
     }
-    return {
-      ok: true,
-      setup: {
-        workspaceId: input.workspaceId,
-        commitSha: input.commitSha,
-        workspaceHead: attempt.workspaceHead,
-        worktreePath,
-        cleanupResult: finalCleanupResult,
-      },
-    };
+    return { ok: true };
   });
 
 const runWorkspaceScope = <Error>(
@@ -194,7 +189,7 @@ const runWorkspaceScope = <Error>(
         commandExecutor: workspaceCommandExecutor(worktreePath),
       });
     }
-    return { ok: true, workspaceHead: input.commitSha } as const;
+    return { ok: true } as const;
   });
 
 const withInterruptedCleanupRecording = <Error>(
@@ -241,7 +236,10 @@ const workspaceCommandExecutor =
     }
   };
 
-const setupFailed = (operationName: string, errorMessage: string): SetupAttempt => ({
+const setupFailed = (
+  operationName: DisposableWorkspaceOperationName,
+  errorMessage: string,
+): SetupAttempt => ({
   ok: false,
   operationName,
   errorMessage,

@@ -21,16 +21,14 @@ export type ActiveSnapshotWorkspaceResult = {
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
-export type SnapshotWorkspaceSetup = {
-  readonly validationRunId: string;
-  readonly expectedCommitSha: string;
-  readonly workspaceHead?: string;
-  readonly worktreePath: string;
-  readonly cleanupResult: SnapshotWorkspaceCleanupResult;
-};
+export type SnapshotWorkspaceOperationName =
+  | "create_snapshot_workspace"
+  | "cleanup_snapshot_workspace"
+  | "copy_allowlisted_file"
+  | "snapshot_workspace_interrupted";
 
 export type SnapshotWorkspaceToolingError = {
-  readonly operationName: string;
+  readonly operationName: SnapshotWorkspaceOperationName;
   readonly validationRunId: string;
   readonly expectedCommitSha: string;
   readonly worktreePath: string;

@@ -3,7 +3,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type {
   DisposableWorkspaceCleanupResult,
   DisposableWorkspaceError,
-  DisposableWorkspaceSetup,
+  DisposableWorkspaceOperationName,
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import {
   type RunDisposableExactCommitWorkspaceInput,
@@ -12,7 +12,8 @@ import {
 import type {
   ActiveSnapshotWorkspace,
   ActiveSnapshotWorkspaceResult,
-  SnapshotWorkspaceSetup,
+  SnapshotWorkspaceCleanupResult,
+  SnapshotWorkspaceOperationName,
   SnapshotWorkspaceToolingError,
 } from "./snapshotWorkspace.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
@@ -23,7 +24,7 @@ export type CreateSnapshotWorkspaceInput = {
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
   readonly recordWorkspaceCleanup?: (
-    cleanupResult: SnapshotWorkspaceSetup["cleanupResult"],
+    cleanupResult: SnapshotWorkspaceCleanupResult,
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: SnapshotWorkspaceToolingError,
@@ -39,7 +40,6 @@ export type CreateSnapshotWorkspaceInput = {
 export type CreateSnapshotWorkspaceResult =
   | {
       readonly ok: true;
-      readonly setup: SnapshotWorkspaceSetup;
       readonly activeWorkspaceResult?: ActiveSnapshotWorkspaceResult;
     }
   | { readonly ok: false; readonly toolingError: SnapshotWorkspaceToolingError }
@@ -119,25 +119,13 @@ const createSnapshotWorkspaceAdapter = (
     if (!result.ok) return { ok: false, toolingError: validationError(result.toolingError) };
     return {
       ok: true,
-      setup: validationSetup(input.validationRunId, result.setup),
       ...(activeWorkspaceResult === undefined ? {} : { activeWorkspaceResult }),
     };
   });
 };
 
-const validationSetup = (
-  validationRunId: string,
-  setup: DisposableWorkspaceSetup,
-): SnapshotWorkspaceSetup => ({
-  validationRunId,
-  expectedCommitSha: setup.commitSha,
-  ...(setup.workspaceHead === undefined ? {} : { workspaceHead: setup.workspaceHead }),
-  worktreePath: setup.worktreePath,
-  cleanupResult: setup.cleanupResult,
-});
-
 const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
-  operationName: validationOperation(error.operationName),
+  operationName: snapshotWorkspaceOperation(error.operationName),
   validationRunId: error.workspaceId,
   expectedCommitSha: error.commitSha,
   worktreePath: error.worktreePath,
@@ -145,13 +133,19 @@ const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceTool
   cleanupResult: error.cleanupResult,
 });
 
-const validationOperation = (operationName: string): string => {
-  if (operationName === "create_disposable_workspace") return "create_snapshot_workspace";
-  if (operationName === "cleanup_disposable_workspace") return "cleanup_snapshot_workspace";
-  if (operationName === "disposable_workspace_interrupted") {
-    return "snapshot_workspace_interrupted";
+const snapshotWorkspaceOperation = (
+  operationName: DisposableWorkspaceOperationName,
+): SnapshotWorkspaceOperationName => {
+  switch (operationName) {
+    case "create_disposable_workspace":
+      return "create_snapshot_workspace";
+    case "cleanup_disposable_workspace":
+      return "cleanup_snapshot_workspace";
+    case "copy_allowlisted_file":
+      return "copy_allowlisted_file";
+    case "disposable_workspace_interrupted":
+      return "snapshot_workspace_interrupted";
   }
-  return operationName;
 };
 
 const toolingFailureResult = (

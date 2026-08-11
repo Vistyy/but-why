@@ -3,10 +3,13 @@ import { Data } from "effect";
 import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
-import type { SnapshotWorkspaceCleanupResult } from "./snapshotWorkspace.js";
+import type {
+  SnapshotWorkspaceCleanupResult,
+  SnapshotWorkspaceOperationName,
+} from "./snapshotWorkspace.js";
 
 export class SnapshotWorkspaceSetupFailed extends Data.TaggedError("SnapshotWorkspaceSetupFailed")<{
-  readonly operationName: string;
+  readonly operationName: SnapshotWorkspaceOperationName;
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly worktreePath: string;

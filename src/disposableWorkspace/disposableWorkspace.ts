@@ -6,21 +6,19 @@ export type DisposableWorkspaceCleanupResult = {
   readonly workspace: DisposableWorkspaceCleanupState;
 };
 
+export type DisposableWorkspaceOperationName =
+  | "create_disposable_workspace"
+  | "cleanup_disposable_workspace"
+  | "copy_allowlisted_file"
+  | "disposable_workspace_interrupted";
+
 export type DisposableWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly worktreePath: string;
 };
 
-export type DisposableWorkspaceSetup = {
-  readonly workspaceId: string;
-  readonly commitSha: string;
-  readonly workspaceHead?: string;
-  readonly worktreePath: string;
-  readonly cleanupResult: DisposableWorkspaceCleanupResult;
-};
-
 export type DisposableWorkspaceError = {
-  readonly operationName: string;
+  readonly operationName: DisposableWorkspaceOperationName;
   readonly workspaceId: string;
   readonly commitSha: string;
   readonly worktreePath: string;

@@ -28,7 +28,6 @@ export type RepoLocalPaths = {
   readonly artifactsPath: string;
   readonly snapshotsPath: string;
   readonly taskContextDraftsPath: string;
-  readonly gitignorePath: string;
 };
 
 export type RepoLocalContext = {
@@ -138,7 +137,6 @@ const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths =
     artifactsPath: join(operationalDir, "artifacts"),
     snapshotsPath: join(operationalDir, "snapshots"),
     taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
-    gitignorePath: join(root, ".gitignore"),
   };
 };
 

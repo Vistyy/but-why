@@ -52,15 +52,9 @@ describe("Snapshot Workspace lifecycle", () => {
           }),
       });
 
-      expect(result).toMatchObject({
+      expect(result).toEqual({
         ok: true,
-        setup: {
-          validationRunId,
-          expectedCommitSha: commitSha,
-          workspaceHead: commitSha,
-          worktreePath,
-          cleanupResult: { workspace: "removed" },
-        },
+        activeWorkspaceResult: { outcome: "passed", toolingFailures: [] },
       });
       expect(cleanupResults).toEqual([{ workspace: "removed" }]);
       expect(existsSync(worktreePath)).toBe(false);
@@ -83,10 +77,7 @@ describe("Snapshot Workspace lifecycle", () => {
         copyFiles: [],
       });
 
-      expect(result).toMatchObject({
-        ok: true,
-        setup: { cleanupResult: { workspace: "removed" } },
-      });
+      expect(result).toEqual({ ok: true });
       expect(existsSync(worktreePath)).toBe(false);
     }),
   );
