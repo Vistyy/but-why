@@ -74,93 +74,91 @@ describe("SQLite Change decoding", () => {
     ),
   );
 
-  it.scoped(
-    "rejects malformed selected Change relationships without inspecting unrelated rows",
-    () =>
-      withTemporaryRepositoryState((input) =>
-        Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence();
-          const changes = yield* openSqliteChangeTestDependencies();
-          const repository = yield* RepositorySql;
-          const created = yield* starts.create({
-            id: "change-malformed",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/change-malformed",
-            baseRef: "refs/remotes/origin/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
-            startingCommit: "base-sha",
-            worktreePath: `${input.commonDirectory}/worktrees/change-malformed`,
-            now: "2026-08-09T20:10:00.000Z",
+  it.scoped("scopes malformed Change relationship decoding", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const repository = yield* RepositorySql;
+        const created = yield* starts.create({
+          id: "change-malformed",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/change-malformed",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "base-sha",
+          worktreePath: `${input.commonDirectory}/worktrees/change-malformed`,
+          now: "2026-08-09T20:10:00.000Z",
+        });
+        if (!created.ok) throw new Error(created.code);
+
+        yield* repository.operation(
+          "inject incomplete Change Start",
+          (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
+        );
+        expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
+          taskId: null,
+          startingCommit: null,
+        });
+        yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+        yield* repository.operation(
+          "restore Change Start",
+          (sql) =>
+            sql`UPDATE changes SET starting_commit = 'base-sha' WHERE id = 'change-malformed'`,
+        );
+
+        const corruptAndReject = (
+          label: string,
+          update: (sql: SqlClient.SqlClient) => Effect.Effect<unknown, SqlError>,
+          read: Effect.Effect<unknown, unknown> = changes.reads.getChangeById("change-malformed"),
+        ) =>
+          Effect.gen(function* () {
+            yield* repository.operation(`inject ${label}`, (sql) => Effect.asVoid(update(sql)));
+            yield* expectPersistedDataInvalid(read);
           });
-          if (!created.ok) throw new Error(created.code);
 
-          yield* repository.operation(
-            "inject incomplete Change Start",
-            (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
-          );
-          expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
-            taskId: null,
-            startingCommit: null,
-          });
-          yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
-          yield* repository.operation(
-            "restore Change Start",
-            (sql) =>
-              sql`UPDATE changes SET starting_commit = 'base-sha' WHERE id = 'change-malformed'`,
-          );
+        yield* corruptAndReject(
+          "incomplete preparation",
+          (sql) =>
+            sql`UPDATE changes SET prepare_command = 'just init' WHERE id = 'change-malformed'`,
+        );
+        yield* repository.operation(
+          "restore preparation",
+          (sql) => sql`UPDATE changes SET prepare_command = NULL WHERE id = 'change-malformed'`,
+        );
 
-          const corruptAndReject = (
-            label: string,
-            update: (sql: SqlClient.SqlClient) => Effect.Effect<unknown, SqlError>,
-            read: Effect.Effect<unknown, unknown> = changes.reads.getChangeById("change-malformed"),
-          ) =>
-            Effect.gen(function* () {
-              yield* repository.operation(`inject ${label}`, (sql) => Effect.asVoid(update(sql)));
-              yield* expectPersistedDataInvalid(read);
-            });
+        yield* corruptAndReject(
+          "incomplete publication",
+          (sql) =>
+            sql`UPDATE changes SET publication_candidate_id = 'candidate' WHERE id = 'change-malformed'`,
+        );
+        yield* repository.operation(
+          "restore publication",
+          (sql) =>
+            sql`UPDATE changes SET publication_candidate_id = NULL WHERE id = 'change-malformed'`,
+        );
 
-          yield* corruptAndReject(
-            "incomplete preparation",
-            (sql) =>
-              sql`UPDATE changes SET prepare_command = 'just init' WHERE id = 'change-malformed'`,
-          );
-          yield* repository.operation(
-            "restore preparation",
-            (sql) => sql`UPDATE changes SET prepare_command = NULL WHERE id = 'change-malformed'`,
-          );
-
-          yield* corruptAndReject(
-            "incomplete publication",
-            (sql) =>
-              sql`UPDATE changes SET publication_candidate_id = 'candidate' WHERE id = 'change-malformed'`,
-          );
-          yield* repository.operation(
-            "restore publication",
-            (sql) =>
-              sql`UPDATE changes SET publication_candidate_id = NULL WHERE id = 'change-malformed'`,
-          );
-
-          const other = yield* starts.create({
-            id: "change-publication-owner",
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/change-publication-owner",
-            baseRef: "refs/remotes/origin/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
-            startingCommit: "base-sha",
-            worktreePath: `${input.commonDirectory}/worktrees/change-publication-owner`,
-            now: "2026-08-09T20:10:00.000Z",
-          });
-          if (!other.ok) throw new Error(other.code);
-          yield* repository.operation("inject foreign publication ownership", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`
+        const other = yield* starts.create({
+          id: "change-publication-owner",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/change-publication-owner",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "base-sha",
+          worktreePath: `${input.commonDirectory}/worktrees/change-publication-owner`,
+          now: "2026-08-09T20:10:00.000Z",
+        });
+        if (!other.ok) throw new Error(other.code);
+        yield* repository.operation("inject foreign publication ownership", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
               VALUES (
                 'foreign-candidate', 'change-publication-owner', 'base-sha', 'head-sha',
                 '2026-08-09T20:10:00.000Z'
               )
             `;
-              yield* sql`
+            yield* sql`
               INSERT INTO candidate_validation_runs (
                 id, candidate_id, policy_snapshot, implementation_decisions,
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
@@ -171,7 +169,7 @@ describe("SQLite Change decoding", () => {
                 '2026-08-09T20:10:00.000Z'
               )
             `;
-              yield* sql`
+            yield* sql`
               UPDATE changes SET
                 publication_candidate_id = 'foreign-candidate',
                 publication_validation_run_id = 'foreign-run', publication_owner = 'acme',
@@ -180,23 +178,21 @@ describe("SQLite Change decoding", () => {
                 publication_expected_head_sha = 'head-sha'
               WHERE id = 'change-malformed'
             `;
-            }),
-          );
-          yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-          yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+          }),
+        );
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
 
-          yield* repository.operation(
-            "inject malformed publication evidence relationships",
-            (sql) =>
-              Effect.gen(function* () {
-                yield* sql`
+        yield* repository.operation("inject malformed publication evidence relationships", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
               VALUES (
                 'owned-candidate', 'change-malformed', 'base-sha', 'actual-head',
                 '2026-08-09T20:10:00.000Z'
               )
             `;
-                yield* sql`
+            yield* sql`
               INSERT INTO candidate_validation_runs (
                 id, candidate_id, policy_snapshot, implementation_decisions,
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
@@ -207,7 +203,7 @@ describe("SQLite Change decoding", () => {
                 '2026-08-09T20:10:00.000Z'
               )
             `;
-                yield* sql`
+            yield* sql`
               UPDATE changes SET
                 publication_candidate_id = 'owned-candidate',
                 publication_validation_run_id = 'owned-run', publication_owner = 'acme',
@@ -217,65 +213,65 @@ describe("SQLite Change decoding", () => {
                 publication_pr_url = 'https://github.test/pull/7'
               WHERE id = 'change-malformed'
             `;
-              }),
-          );
-          yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-          yield* repository.operation("inject unsupported publication Run state", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`UPDATE changes SET publication_expected_head_sha = 'actual-head' WHERE id = 'change-malformed'`;
-              yield* sql`PRAGMA ignore_check_constraints = ON`;
-              yield* sql`UPDATE candidate_validation_runs SET state = 'corrupt' WHERE id = 'owned-run'`;
-            }),
-          );
-          const publicationAuthority = {
-            changeBaseSha: "base-sha",
-            policy: { checks: [], copyFiles: [], specialistReviews: [] },
-            implementationDecisions: [],
-          };
-          expect(
-            yield* changes.authority.getCurrentPassingEvidence(
-              "change-malformed",
-              publicationAuthority,
-            ),
-          ).toBeUndefined();
-          yield* repository.operation(
-            "inject malformed publication snapshots",
-            (sql) => sql`
+          }),
+        );
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* repository.operation("inject unsupported publication Run state", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE changes SET publication_expected_head_sha = 'actual-head' WHERE id = 'change-malformed'`;
+            yield* sql`PRAGMA ignore_check_constraints = ON`;
+            yield* sql`UPDATE candidate_validation_runs SET state = 'corrupt' WHERE id = 'owned-run'`;
+          }),
+        );
+        const publicationAuthority = {
+          changeBaseSha: "base-sha",
+          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          implementationDecisions: [],
+        };
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "inject malformed publication snapshots",
+          (sql) => sql`
             UPDATE candidate_validation_runs
             SET state = 'complete', policy_snapshot = '{"checks":"invalid"}'
             WHERE id = 'owned-run'
           `,
-          );
-          yield* expectPersistedDataInvalid(
-            changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-          );
-          yield* repository.operation(
-            "inject malformed Implementation Decision Snapshot",
-            (sql) => sql`
+        );
+        yield* expectPersistedDataInvalid(
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation(
+          "inject malformed Implementation Decision Snapshot",
+          (sql) => sql`
             UPDATE candidate_validation_runs
             SET policy_snapshot = '{"checks":[],"copyFiles":[],"specialistReviews":[]}',
               implementation_decisions = '{}'
             WHERE id = 'owned-run'
           `,
-          );
-          yield* expectPersistedDataInvalid(
-            changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-          );
-          yield* repository.operation(
-            "inject foreign publication Implementation Decision",
-            (sql) => sql`
+        );
+        yield* expectPersistedDataInvalid(
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation(
+          "inject foreign publication Implementation Decision",
+          (sql) => sql`
             UPDATE candidate_validation_runs
             SET implementation_decisions = '[{"id":"decision-1","changeId":"change-publication-owner","sequence":1,"recordedAt":"2026-08-09T20:10:00.000Z","choice":"Foreign choice","rationale":"Foreign rationale"}]'
             WHERE id = 'owned-run'
           `,
-          );
-          yield* expectPersistedDataInvalid(
-            changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-          );
-          yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`UPDATE candidate_validation_runs SET implementation_decisions = '[]' WHERE id = 'owned-run'`;
-              yield* sql`
+        );
+        yield* expectPersistedDataInvalid(
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE candidate_validation_runs SET implementation_decisions = '[]' WHERE id = 'owned-run'`;
+            yield* sql`
               INSERT INTO implementation_blockers (
                 id, change_id, reported_at, content, resolved_at, resolution_id,
                 resolution_recorded_at, resolution_content
@@ -286,19 +282,19 @@ describe("SQLite Change decoding", () => {
                 '2026-08-09T20:10:01.000Z', 'Resolved elsewhere.'
               )
             `;
-              yield* sql`
+            yield* sql`
               UPDATE candidate_validation_runs
               SET latest_resolved_blocker_id = 'foreign-blocker'
               WHERE id = 'owned-run'
             `;
-            }),
-          );
-          yield* expectPersistedDataInvalid(
-            changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-          );
-          yield* repository.operation(
-            "restore absent publication",
-            (sql) => sql`
+          }),
+        );
+        yield* expectPersistedDataInvalid(
+          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
+        );
+        yield* repository.operation(
+          "restore absent publication",
+          (sql) => sql`
             UPDATE changes SET
               publication_candidate_id = NULL, publication_validation_run_id = NULL,
               publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL,
@@ -307,11 +303,11 @@ describe("SQLite Change decoding", () => {
               publication_pr_url = NULL
             WHERE id = 'change-malformed'
           `,
-          );
+        );
 
-          yield* repository.operation("install unsupported Acceptance Context shape", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`
+        yield* repository.operation("install unsupported Acceptance Context shape", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
               INSERT INTO tasks (
                 id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
@@ -319,67 +315,43 @@ describe("SQLite Change decoding", () => {
                 '2026-08-09T20:10:00.000Z', '2026-08-09T20:10:00.000Z'
               )
             `;
-              yield* sql`
+            yield* sql`
               UPDATE changes SET task_id = 'BY-902', acceptance_context =
                 '{"version":1,"title":"Malformed intent","description":"Reject it.","unexpected":true}'
               WHERE id = 'change-malformed'
             `;
-            }),
-          );
-          yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-          yield* repository.operation(
-            "install malformed Acceptance Context resolutions",
-            (sql) => sql`
+          }),
+        );
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* repository.operation(
+          "install malformed Acceptance Context resolutions",
+          (sql) => sql`
             UPDATE changes SET acceptance_context =
               '{"version":1,"title":"Malformed intent","description":"Reject it.","resolutions":"not-an-array"}'
             WHERE id = 'change-malformed'
           `,
-          );
-          yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-          yield* repository.operation(
-            "restore taskless context",
-            (sql) =>
-              sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
-          );
+        );
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* repository.operation(
+          "restore taskless context",
+          (sql) =>
+            sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
+        );
 
-          yield* repository.operation(
-            "inject open Change terminal cleanup",
-            (sql) =>
-              sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
-          );
-          expect(
-            yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
-          ).toEqual([]);
-          yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-          yield* repository.operation(
-            "restore open Change cleanup",
-            (sql) =>
-              sql`UPDATE changes SET cleanup_state = 'complete' WHERE id = 'change-malformed'`,
-          );
-
-          yield* repository.operation("inject unrelated closed lifecycle corruption", (sql) =>
-            Effect.gen(function* () {
-              yield* sql`PRAGMA ignore_check_constraints = ON`;
-              yield* sql`
-              UPDATE changes SET state = 'closed', close_reason = NULL, closed_at = NULL
-              WHERE id = 'change-malformed'
-            `;
-            }),
-          );
-          expect(
-            (yield* changes.reads.listChanges({
-              repositoryCommonDirectory: input.commonDirectory,
-              includeClosed: false,
-            })).map((change) => change.id),
-          ).toEqual(["change-publication-owner"]);
-          yield* expectPersistedDataInvalid(
-            changes.reads.listChanges({
-              repositoryCommonDirectory: input.commonDirectory,
-              includeClosed: true,
-            }),
-          );
-        }),
-      ),
+        yield* repository.operation(
+          "inject open Change terminal cleanup",
+          (sql) => sql`UPDATE changes SET cleanup_state = 'pending' WHERE id = 'change-malformed'`,
+        );
+        expect(
+          yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
+        ).toEqual([]);
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* repository.operation(
+          "restore open Change cleanup",
+          (sql) => sql`UPDATE changes SET cleanup_state = 'complete' WHERE id = 'change-malformed'`,
+        );
+      }),
+    ),
   );
 
   it.scoped("rejects partial blocker resolution and malformed Change-shaped capture rows", () =>
