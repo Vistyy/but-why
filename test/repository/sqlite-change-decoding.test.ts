@@ -539,6 +539,109 @@ describe("SQLite Change decoding", () => {
     ),
   );
 
+  it.scoped("rejects malformed facts selected by each Change workflow", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const publication = yield* openSqliteCandidatePublicationPort();
+        const cancellation = yield* openSqliteChangeCancellationPort();
+        const reconciliation = yield* openSqliteChangeReconciliationPort();
+        const cleanup = yield* openSqliteTerminalChangeCleanupPort();
+        const repository = yield* RepositorySql;
+        const created = yield* starts.create({
+          id: "change-selected-corruption",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/change-selected-corruption",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "base-sha",
+          worktreePath: `${input.commonDirectory}/worktrees/change-selected-corruption`,
+          now: "2026-08-09T20:27:00.000Z",
+        });
+        if (!created.ok) throw new Error(created.code);
+
+        yield* repository.operation("inject unsupported selected Change state", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`PRAGMA ignore_check_constraints = ON`;
+            yield* sql`
+              UPDATE changes SET state = 'unsupported'
+              WHERE id = 'change-selected-corruption'
+            `;
+          }),
+        );
+        yield* expectPersistedDataInvalid(starts.getById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(publication.getChangeById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(
+          reconciliation.getChangeById("change-selected-corruption"),
+        );
+        yield* expectPersistedDataInvalid(
+          changes.submission.getChangeById("change-selected-corruption"),
+        );
+        yield* expectPersistedDataInvalid(
+          changes.authority.raiseImplementationBlocker({
+            changeId: "change-selected-corruption",
+            content: "Do not record this Blocker.",
+            now: "2026-08-09T20:28:00.000Z",
+          }),
+        );
+        yield* expectPersistedDataInvalid(
+          cleanup.recordCleanup({
+            changeId: "change-selected-corruption",
+            cleanup: { state: "complete", blockingReason: null },
+            now: "2026-08-09T20:28:00.000Z",
+          }),
+        );
+
+        yield* repository.operation(
+          "inject incomplete selected publication",
+          (sql) =>
+            sql`
+            UPDATE changes SET state = 'open', publication_owner = 'acme'
+            WHERE id = 'change-selected-corruption'
+          `,
+        );
+        yield* expectPersistedDataInvalid(publication.getChangeById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(
+          reconciliation.getChangeById("change-selected-corruption"),
+        );
+        yield* expectPersistedDataInvalid(
+          changes.submission.getChangeById("change-selected-corruption"),
+        );
+        expect(yield* starts.getById("change-selected-corruption")).toMatchObject({
+          id: "change-selected-corruption",
+        });
+
+        yield* repository.operation(
+          "inject unsupported selected cleanup state",
+          (sql) =>
+            sql`
+            UPDATE changes SET publication_owner = NULL, state = 'closed',
+              close_reason = 'cancelled', closed_at = '2026-08-09T20:29:00.000Z',
+              cleanup_state = 'unsupported'
+            WHERE id = 'change-selected-corruption'
+          `,
+        );
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
+        yield* expectPersistedDataInvalid(
+          reconciliation.getChangeById("change-selected-corruption"),
+        );
+        yield* expectPersistedDataInvalid(
+          cleanup.recordCleanup({
+            changeId: "change-selected-corruption",
+            cleanup: { state: "complete", blockingReason: null },
+            now: "2026-08-09T20:30:00.000Z",
+          }),
+        );
+        expect(yield* publication.getChangeById("change-selected-corruption")).toMatchObject({
+          state: "closed",
+        });
+      }),
+    ),
+  );
+
   it.scoped(
     "returns authoritative cleanup facts without decoding unrelated Change observations",
     () =>

@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeRecord, changeState } from "../change/change.js";
+import { changeState } from "../change/change.js";
 import type {
   ChangeAuthorityPort,
   ChangePublicationEvidence,
@@ -31,6 +31,11 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
+import {
+  decodeChangeState,
+  decodeStoredNullableString,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeAuthorityPort = () =>
@@ -203,7 +208,7 @@ const readSelectedBlockers = (
   );
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: string; readonly state: ChangeRecord["state"] }>`
+    const rows = yield* sql<StoredChangeStateRow>`
       SELECT id, state FROM changes WHERE id = ${changeId}
     `;
     const row = rows[0];
@@ -214,10 +219,10 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
   Effect.gen(function* () {
     const operationName = "resolve Implementation Blocker";
     const rows = yield* sql<{
-      readonly id: string;
-      readonly state: ChangeRecord["state"];
-      readonly taskId: string | null;
-      readonly acceptanceContext: string | null;
+      readonly id: unknown;
+      readonly state: unknown;
+      readonly taskId: unknown;
+      readonly acceptanceContext: unknown;
     }>`
       SELECT id, state, task_id AS taskId, acceptance_context AS acceptanceContext
       FROM changes WHERE id = ${changeId}
@@ -226,8 +231,11 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
       const selected = decodeSelectedChangeState(row, changeId);
-      const taskId = row.taskId;
-      const encodedAcceptanceContext = row.acceptanceContext;
+      const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
+      const encodedAcceptanceContext = decodeStoredNullableString(
+        row.acceptanceContext,
+        "Change Acceptance Context",
+      );
       return {
         ...selected,
         taskId,
@@ -239,8 +247,9 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
     });
   });
 const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
-  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
-  return { id: row.id, state: row.state };
+  const id = decodeStoredString(row.id, "Change id");
+  if (id !== changeId) throw new Error("Change identity does not match lookup");
+  return { id, state: decodeChangeState(row.state) };
 };
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
@@ -300,16 +309,14 @@ const getPassingEvidence = (
     const operationName = allowHistoricalCandidate
       ? "read completed Candidate Publication evidence"
       : "read current passing Change evidence";
-    const authorityRows = yield* sql<{
-      readonly id: string;
-      readonly state: ChangeRecord["state"];
-    }>`SELECT id, state FROM changes WHERE id = ${changeId}`;
+    const authorityRows = yield* sql<StoredChangeStateRow>`
+      SELECT id, state FROM changes WHERE id = ${changeId}
+    `;
     const authority = yield* decodePersisted(operationName, () => {
       const row = authorityRows[0];
       if (row === undefined) return undefined;
-      const id = row.id;
-      if (id !== changeId) throw new Error("Change identity does not match evidence lookup");
-      if (row.state !== changeState.open) return undefined;
+      const { id, state } = decodeSelectedChangeState(row, changeId);
+      if (state !== changeState.open) return undefined;
       return { id };
     });
     if (authority === undefined) return undefined;
@@ -373,15 +380,19 @@ const getPassingEvidence = (
     if (eligibleRows.length === 0) return undefined;
 
     const acceptanceContextRows = yield* sql<{
-      readonly id: string;
-      readonly acceptanceContext: string | null;
+      readonly id: unknown;
+      readonly acceptanceContext: unknown;
     }>`SELECT id, acceptance_context AS acceptanceContext
        FROM changes WHERE id = ${authority.id}`;
     const expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
       const authorityRow = acceptanceContextRows[0];
-      const id = authorityRow?.id;
+      if (authorityRow === undefined) throw new Error("Change disappeared during evidence lookup");
+      const id = decodeStoredString(authorityRow.id, "Change id");
       if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-      const encoded = authorityRow?.acceptanceContext ?? null;
+      const encoded = decodeStoredNullableString(
+        authorityRow.acceptanceContext,
+        "Change Acceptance Context",
+      );
       return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
     });
     const expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
@@ -432,6 +443,6 @@ const getPassingEvidence = (
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 type StoredChangeStateRow = {
-  readonly id: string;
-  readonly state: ChangeRecord["state"];
+  readonly id: unknown;
+  readonly state: unknown;
 };

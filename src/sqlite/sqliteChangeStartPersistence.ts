@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import type { ChangePrepareFailure, ChangeState } from "../change/change.js";
+import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
@@ -17,6 +17,12 @@ import {
   decodeSqliteChangePrepareFailure,
   encodeSqliteChangePrepareFailure,
 } from "./sqliteChangePreparation.js";
+import {
+  decodeChangeState,
+  decodeStoredNullableString,
+  decodeStoredPositiveInteger,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 import {
   decodePersisted,
   decodeTaskContextRow,
@@ -168,19 +174,19 @@ const changeStartSelectionColumns = `
 `;
 
 type StoredChangeStartRow = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly taskId: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly state: ChangeState;
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly baseRemoteUrl: unknown;
+  readonly taskId: unknown;
+  readonly startingCommit: unknown;
+  readonly worktreePath: unknown;
+  readonly acceptanceContext: unknown;
+  readonly prepareCommand: unknown;
+  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareFailure: unknown;
+  readonly state: unknown;
 };
 
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
@@ -207,37 +213,66 @@ const mapRow = (row: StoredChangeStartRow | undefined) =>
     : decodePersisted("read Change Start", () => decodeChangeStart(row));
 
 const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
+  const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
+  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
+  const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
+  const worktreePath = decodeStoredNullableString(row.worktreePath, "Change worktree path");
   if (
-    row.baseRef === null ||
-    row.baseRemoteUrl === null ||
-    row.startingCommit === null ||
-    row.worktreePath === null
+    baseRef === null ||
+    baseRemoteUrl === null ||
+    startingCommit === null ||
+    worktreePath === null
   ) {
     throw new Error("Stored Change Start relationship is incomplete");
   }
-  if ((row.prepareCommand === null) !== (row.prepareTimeoutSeconds === null)) {
+  const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
+  const encodedAcceptanceContext = decodeStoredNullableString(
+    row.acceptanceContext,
+    "Change Acceptance Context",
+  );
+  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
+    throw new Error("Stored Change Task relationship is incomplete");
+  }
+  const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
+  const prepareTimeoutSeconds =
+    row.prepareTimeoutSeconds === null
+      ? null
+      : decodeStoredPositiveInteger(row.prepareTimeoutSeconds, "Change prepare timeout");
+  if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
     throw new Error("Stored Change preparation relationship is incomplete");
   }
+  const encodedPrepareFailure = decodeStoredNullableString(
+    row.prepareFailure,
+    "Change prepare failure",
+  );
+  if (encodedPrepareFailure !== null && prepareCommand === null) {
+    throw new Error("Stored Change preparation failure relationship is incomplete");
+  }
   return {
-    id: row.id,
-    repositoryCommonDirectory: row.repositoryCommonDirectory,
-    branchRef: row.branchRef,
-    baseRef: row.baseRef,
-    baseRemoteUrl: row.baseRemoteUrl,
-    taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-    startingCommit: row.startingCommit,
-    worktreePath: row.worktreePath,
+    id: decodeStoredString(row.id, "Change id"),
+    repositoryCommonDirectory: decodeStoredString(
+      row.repositoryCommonDirectory,
+      "Change repository common directory",
+    ),
+    branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
+    baseRef,
+    baseRemoteUrl,
+    taskId: taskId === null ? null : storedPublicTaskId(taskId),
+    startingCommit,
+    worktreePath,
     acceptanceContext:
-      row.acceptanceContext === null
+      encodedAcceptanceContext === null
         ? null
-        : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
+        : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
     prepare:
-      row.prepareCommand === null || row.prepareTimeoutSeconds === null
+      prepareCommand === null || prepareTimeoutSeconds === null
         ? null
-        : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
+        : { command: prepareCommand, timeoutSeconds: prepareTimeoutSeconds },
     prepareFailure:
-      row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
-    state: row.state,
+      encodedPrepareFailure === null
+        ? null
+        : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
+    state: decodeChangeState(row.state),
   };
 };
 

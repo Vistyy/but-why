@@ -1,11 +1,16 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeCleanup, type ChangeState, changeState } from "../change/change.js";
+import { type ChangeCleanup, changeState } from "../change/change.js";
 import type { TerminalChangeCleanupPort } from "../change/changePorts.js";
 import type { RecordChangeCleanupInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import {
+  decodeChangeCleanup,
+  decodeChangeState,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteTerminalChangeCleanupPort = () =>
@@ -42,21 +47,19 @@ const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
-      const cleanup: ChangeCleanup = {
-        state: row.cleanupState,
-        blockingReason: row.cleanupBlockingReason,
-      };
+      const cleanup = decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason);
       return { ...decodeSelectedChangeState(row, changeId), cleanup };
     });
   });
-type StoredChangeStateRow = { readonly id: string; readonly state: ChangeState };
+type StoredChangeStateRow = { readonly id: unknown; readonly state: unknown };
 type StoredCleanupChangeRow = StoredChangeStateRow & {
-  readonly cleanupState: ChangeCleanup["state"];
-  readonly cleanupBlockingReason: string | null;
+  readonly cleanupState: unknown;
+  readonly cleanupBlockingReason: unknown;
 };
 const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
-  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
-  return row;
+  const id = decodeStoredString(row.id, "Change id");
+  if (id !== changeId) throw new Error("Change identity does not match lookup");
+  return { id, state: decodeChangeState(row.state) };
 };
 const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput) =>
   Effect.gen(function* () {
