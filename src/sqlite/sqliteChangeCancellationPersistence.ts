@@ -1,30 +1,21 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangePublication, changeState } from "../change/change.js";
-import type {
-  CancellationChange,
-  ChangeCancellationPort,
-  ReconciliationChange,
-} from "../change/changePorts.js";
-import type { CancelChangeInput, CompleteMergedChangeInput } from "../change/changeStore.js";
-import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
+import { changeState } from "../change/change.js";
+import type { CancellationChange, ChangeCancellationPort } from "../change/changePorts.js";
+import type { CancelChangeInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
-import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
+import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import {
-  decodeChangePublication,
-  validateChangePublicationRelationships,
-} from "./sqliteChangeReadModel.js";
-import {
-  decodeChangeCleanup,
   decodeChangeLifecycle,
   decodeChangeState,
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
+import { completeMergedChange, readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";
 import {
   type DecodedStoredTaskRecordRow,
   decodePersisted,
@@ -33,6 +24,11 @@ import {
   type StoredTaskDependencyFactRow,
   type StoredTaskRecordRow,
 } from "./sqliteTaskReadModel.js";
+import {
+  decodeTerminalChange,
+  type StoredTerminalChangeRow,
+  terminalChangeSelectionColumns,
+} from "./sqliteTerminalChangeStorage.js";
 
 export const openSqliteChangeCancellationPort = () =>
   Effect.map(
@@ -68,75 +64,6 @@ export const openSqliteChangeCancellationPort = () =>
         ),
     }),
   );
-const publicationSelectionColumns = `
-  id, state,
-  publication_candidate_id AS publicationCandidateId,
-  publication_validation_run_id AS publicationValidationRunId,
-  publication_owner AS publicationOwner, publication_repo AS publicationRepo,
-  publication_base_branch AS publicationBaseBranch,
-  publication_remote_name AS publicationRemoteName,
-  publication_head_branch AS publicationHeadBranch,
-  publication_expected_head_sha AS publicationExpectedHeadSha,
-  publication_pr_number AS publicationPrNumber,
-  publication_pr_url AS publicationPrUrl
-`;
-const terminalChangeSelectionColumns = `
-  ${publicationSelectionColumns},
-  repository_common_directory AS repositoryCommonDirectory,
-  branch_ref AS branchRef,
-  base_remote_url AS baseRemoteUrl,
-  worktree_path AS worktreePath,
-  cleanup_state AS cleanupState,
-  cleanup_blocking_reason AS cleanupBlockingReason
-`;
-const decodeTerminalChange = (
-  row: StoredTerminalChangeRow,
-  changeId: string,
-): ReconciliationChange => {
-  const publication = decodeChangePublication(row);
-  const base = {
-    ...decodeSelectedChangeState(row, changeId),
-    repositoryCommonDirectory: decodeStoredString(
-      row.repositoryCommonDirectory,
-      "Change repository common directory",
-    ),
-    branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
-    worktreePath: decodeStoredNullableString(row.worktreePath, "Change worktree path"),
-    cleanup: decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason),
-  };
-  if (publication === null) return { ...base, publication, remoteChangeBranch: null };
-  if (publication.pullRequest === null) {
-    return {
-      ...base,
-      publication: { ...publication, pullRequest: null },
-      remoteChangeBranch: null,
-    };
-  }
-  const ownedPublication = { ...publication, pullRequest: publication.pullRequest };
-  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
-  return {
-    ...base,
-    publication: ownedPublication,
-    remoteChangeBranch: remoteChangeBranchForPublication(ownedPublication, baseRemoteUrl),
-  };
-};
-const remoteChangeBranchForPublication = (
-  publication: ChangePublication & {
-    readonly pullRequest: NonNullable<ChangePublication["pullRequest"]>;
-  },
-  baseRemoteUrl: string | null,
-) => {
-  if (baseRemoteUrl === null) throw new Error("Published Change lacks its Base remote URL");
-  return {
-    owner: publication.target.owner,
-    repo: publication.target.repo,
-    remoteName: publication.target.remoteName,
-    remoteUrl: baseRemoteUrl,
-    branchName: publication.headBranch,
-    targetBranch: publication.target.baseBranch,
-    expectedHeadSha: publication.expectedHeadSha,
-  };
-};
 const decodeCancellationChange = (
   row: StoredCancellationChangeRow,
   changeId: string,
@@ -285,42 +212,6 @@ const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string
     );
     return selected;
   });
-const readChangeLifecycle = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredChangeLifecycleRow>`
-      SELECT id, state, close_reason AS closeReason
-      FROM changes WHERE id = ${changeId}
-    `;
-    const row = rows[0];
-    return row === undefined
-      ? undefined
-      : yield* decodePersisted(operationName, () => decodeSelectedChangeLifecycle(row, changeId));
-  });
-const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.gen(function* () {
-    const operationName = "complete merged Change";
-    const rows = yield* sql.unsafe<
-      PublicationSelectionRow & StoredChangeLifecycleRow & { readonly taskId: unknown }
-    >(
-      `SELECT ${publicationSelectionColumns}, close_reason AS closeReason, task_id AS taskId
-       FROM changes WHERE id = ?`,
-      [changeId],
-    );
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    const selected = yield* decodePersisted(operationName, () => ({
-      ...decodeSelectedChangeLifecycle(row, changeId),
-      taskId: decodeStoredNullableString(row.taskId, "Change Task id"),
-      publication: decodeChangePublication(row),
-    }));
-    yield* validateChangePublicationRelationships(
-      sql,
-      selected.id,
-      selected.publication,
-      operationName,
-    );
-    return selected;
-  });
 const readCancelChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "cancel Change";
@@ -344,46 +235,6 @@ const decodeSelectedChangeLifecycle = (row: StoredChangeLifecycleRow, changeId: 
   id: decodeSelectedChangeState(row, changeId).id,
   ...decodeChangeLifecycle(row),
 });
-const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
-  Effect.gen(function* () {
-    const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "complete merged Change");
-    if (lifecycle === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (lifecycle.state === changeState.closed) {
-      if (lifecycle.closeReason !== "completed") {
-        return { ok: false as const, code: "change_already_closed" as const };
-      }
-      return { ok: true as const, changed: false };
-    }
-    const change = yield* readCompleteChange(sql, input.changeId);
-    if (change === undefined)
-      return yield* invalidData("complete merged Change", "Change disappeared");
-    if (!matchesExactMergedEvidence(change, input.observed)) {
-      return { ok: false as const, code: "publication_mismatch" as const };
-    }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
-    if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'done', updated_at = ${input.now} WHERE id = ${change.taskId}`;
-    return { ok: true as const, changed: true };
-  });
-const matchesExactMergedEvidence = (
-  change: { readonly publication: ChangePublication | null },
-  observed: ObservedMergedChangeEvidence,
-): boolean => {
-  const publication = change.publication;
-  return (
-    publication !== null &&
-    publication.pullRequest !== null &&
-    publication.pullRequest.number === observed.pullRequest.number &&
-    publication.target.owner === observed.repository.owner &&
-    publication.target.repo === observed.repository.repo &&
-    publication.target.baseBranch === observed.baseBranch &&
-    publication.headBranch === observed.headBranch &&
-    publication.candidateId === observed.candidateId &&
-    publication.validationRunId === observed.validationRunId &&
-    publication.expectedHeadSha === observed.expectedHeadSha &&
-    publication.expectedHeadSha === observed.mergedHeadSha
-  );
-};
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
   Effect.gen(function* () {
     const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "cancel Change");
@@ -410,16 +261,6 @@ type StoredChangeStateRow = {
 type StoredChangeLifecycleRow = StoredChangeStateRow & {
   readonly closeReason: unknown;
 };
-type PublicationSelectionRow = StoredChangeStateRow & SqliteChangePublicationRow;
-type StoredTerminalChangeRow = StoredChangeStateRow &
-  SqliteChangePublicationRow & {
-    readonly repositoryCommonDirectory: unknown;
-    readonly branchRef: unknown;
-    readonly baseRemoteUrl: unknown;
-    readonly worktreePath: unknown;
-    readonly cleanupState: unknown;
-    readonly cleanupBlockingReason: unknown;
-  };
 type StoredCancellationChangeRow = StoredTerminalChangeRow & {
   readonly taskId: unknown;
   readonly closeReason: unknown;
