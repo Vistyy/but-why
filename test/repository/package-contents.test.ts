@@ -31,6 +31,8 @@ const expectedLazyCommandModules = [
   "./cli/task/commands/create.js",
   "./cli/task/commands/list.js",
   "./cli/task/commands/show.js",
+  "./cli/task/commands/submit.js",
+  "./cli/task/commands/review.js",
   "./cli/task/commands/approve.js",
   "./cli/task/commands/cancel.js",
   "./cli/change/decision.js",

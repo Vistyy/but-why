@@ -230,6 +230,51 @@ const taskShowCommand = withCliHandler(
       ),
     ),
 );
+const taskSubmitCommand = withCliHandler(
+  leaf("submit", "Run a fresh advisory review of one exact New Task proposal.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
+      Effect.flatMap(({ runTaskSubmitCommand }) =>
+        runTaskSubmitCommand({ taskId: values.taskId }, environment),
+      ),
+    ),
+);
+const taskReviewShowCommand = withCliHandler(
+  leaf("show", "Inspect one exact Task Review and its recovery state.", {
+    reviewId: Args.text({ name: "review-id" }),
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/review.js")).pipe(
+      Effect.flatMap(({ runTaskReviewCommand }) =>
+        runTaskReviewCommand({ action: "show", reviewId: values.reviewId }, environment),
+      ),
+    ),
+);
+const taskReviewAbandonCommand = withCliHandler(
+  leaf("abandon", "Clean and abandon one exact Active Task Review.", {
+    reviewId: Args.text({ name: "review-id" }),
+    reason: Options.text("reason"),
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/review.js")).pipe(
+      Effect.flatMap(({ runTaskReviewCommand }) =>
+        runTaskReviewCommand(
+          { action: "abandon", reviewId: values.reviewId, reason: values.reason },
+          environment,
+        ),
+      ),
+    ),
+);
+let taskReviewCommand: AnyCommand;
+taskReviewCommand = group(
+  "review",
+  "Inspect and recover Task Reviews.",
+  [taskReviewShowCommand, taskReviewAbandonCommand],
+  {},
+  () => generatedCommandUsage(taskReviewCommand),
+);
 const taskApproveCommand = withCliHandler(
   leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
   (values, environment) =>
@@ -260,6 +305,8 @@ taskCommand = group(
     taskDependenciesCommand,
     taskListCommand,
     taskShowCommand,
+    taskSubmitCommand,
+    taskReviewCommand,
     taskApproveCommand,
     taskContextCommand,
     taskCancelCommand,

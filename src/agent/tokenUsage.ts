@@ -1,10 +1,15 @@
-import { Effect, Schema } from "effect";
-
-import { TokenUsageContractFailed } from "../change/validation/validationToolingFailures.js";
+import { Data, Effect, Schema } from "effect";
 import {
+  type ContractDiagnostic,
   contractDiagnostics,
   formatContractDiagnostics,
 } from "../contracts/contractDiagnostics.js";
+
+export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContractFailed")<{
+  readonly operationName: string;
+  readonly diagnostics: readonly ContractDiagnostic[];
+  readonly message: string;
+}> {}
 
 const tokenCountSchema = Schema.Number.pipe(
   Schema.int(),
