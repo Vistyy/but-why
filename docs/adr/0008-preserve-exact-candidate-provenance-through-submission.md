@@ -24,9 +24,12 @@ Change Start fetches the remote default branch or named base branch and records 
 Submission rejects a publication remote name that later resolves to a different URL.
 Submission observes an existing owned pull request before fetching a newer Change Base because terminal pull request facts take precedence.
 An exact open owned pull request continues normally.
+An open owned pull request whose only mismatch is its head commit continues through Candidate capture and validation without reusing completed publication evidence.
+If that pull request then identifies the exact current validated Candidate, publication reconfirms the Remote Change Branch, skips a duplicate push, reapplies the open state and complete current metadata, and confirms the result.
+If the Remote Change Branch remains at the previously published head, publication retains the exact force-with-lease safeguard.
 An exact closed-unmerged owned pull request is reopened and updated by publication.
 An exact merged owned pull request is passed to terminal completion.
-Mismatched or unavailable pull request facts stop safely without durable lifecycle mutation.
+Any other mismatched or unavailable pull request facts stop safely without durable lifecycle mutation.
 Submit does not run full reconciliation or cleanup.
 A new Submission fetches the recorded Change Base and rejects divergence before Candidate or Validation Run creation.
 But Why does not modify the Managed Worktree or Repository Branch to satisfy ancestry.

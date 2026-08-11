@@ -686,6 +686,76 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("validates a revised Candidate after observing only a stale publication head", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          observedPullRequest: {
+            number: 42,
+            url: "https://github.test/acme/repo/pull/42",
+            repository: { owner: "acme", repo: "repo" },
+            state: "open",
+            merged: false,
+            baseBranch: "main",
+            headBranch: "change-1",
+            headSha: "revised-head",
+          },
+          branchHeadSha: "revised-head",
+          captureResult: {
+            ...candidate,
+            headSha: "revised-head",
+            trackedTreeMatchesChangeBase: false,
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "revised-run",
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: true,
+        status: "published",
+        candidateId: "candidate-1",
+        validationRunId: "revised-run",
+      });
+      expect(events).toEqual([
+        "observe_pull_request",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
+  );
+
   it.effect("selects authority-backed validation for a Task-backed Candidate", () =>
     Effect.gen(function* () {
       const events: string[] = [];

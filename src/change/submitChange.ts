@@ -422,6 +422,9 @@ const observeBeforeSubmission = (
         };
       }
       case "mismatch":
+        if (classification.rejection === "head_sha_mismatch") {
+          return { proceed: true, ownedPullRequestOpen: false };
+        }
         return {
           proceed: false,
           result: {
