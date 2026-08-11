@@ -5,7 +5,10 @@ import type { RecordCandidateValidationCheckRoundInput } from "../candidateValid
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
-import { runValidationCommand } from "./runValidationCommand.js";
+import {
+  runValidationCommandEffect,
+  ValidationCommandExecutionFailed,
+} from "./runValidationCommand.js";
 import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import {
   CheckCommandExecutionToolingFailed,
@@ -183,53 +186,56 @@ const runCheckCommand = (
   expectedHeadSha: string | undefined,
   allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      if (expectedHeadSha !== undefined) {
-        await ensureCandidateIntegrity({
-          commandExecutor,
-          ...(commandCwd === undefined ? {} : { commandCwd }),
-          expectedHeadSha,
-          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
-          signal,
-        });
-      }
-      const result = await runValidationCommand({
-        command: check.command,
-        timeoutSeconds: check.timeoutSeconds,
-        completionMarker: checkCompletionMarker(check.id),
-        missingTimeoutMessage: `Could not find timeout command for check ${check.id}.`,
-        exec: (command, options) => commandExecutor(command, { ...(options ?? {}), signal }),
-        ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+  Effect.gen(function* () {
+    if (expectedHeadSha !== undefined) {
+      yield* ensureCandidateIntegrity({
+        commandExecutor,
+        ...(commandCwd === undefined ? {} : { commandCwd }),
+        expectedHeadSha,
+        allowedUntrackedFiles: allowedUntrackedFiles ?? [],
       });
-      if (expectedHeadSha !== undefined) {
-        await ensureCandidateIntegrity({
-          commandExecutor,
-          ...(commandCwd === undefined ? {} : { commandCwd }),
-          expectedHeadSha,
-          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
-          signal,
-        });
-      }
+    }
+    const result = yield* runValidationCommandEffect({
+      command: check.command,
+      timeoutSeconds: check.timeoutSeconds,
+      completionMarker: checkCompletionMarker(check.id),
+      missingTimeoutMessage: `Could not find timeout command for check ${check.id}.`,
+      exec: (command, options) =>
+        commandExecutor(command, options).pipe(
+          Effect.mapError(
+            (error) => new ValidationCommandExecutionFailed({ message: error.message }),
+          ),
+        ),
+      ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+    });
+    if (expectedHeadSha !== undefined) {
+      yield* ensureCandidateIntegrity({
+        commandExecutor,
+        ...(commandCwd === undefined ? {} : { commandCwd }),
+        expectedHeadSha,
+        allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+      });
+    }
 
-      return {
-        commandResult: {
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        },
-        timedOut: result.timedOut,
-      };
-    },
-    catch: (error) =>
+    return {
+      commandResult: {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      },
+      timedOut: result.timedOut,
+    };
+  }).pipe(
+    Effect.mapError((error) =>
       error instanceof GitToolingFailed
         ? error
         : new CheckCommandExecutionToolingFailed({
             operationName: "run_check_command",
             command: check.command,
-            message: errorMessage(error),
+            message: error.message,
           }),
-  });
+    ),
+  );
 
 const writeCheckArtifacts = (input: {
   readonly validationRunId: string;

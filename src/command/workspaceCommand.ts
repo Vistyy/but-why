@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, type Effect } from "effect";
 
 export type WorkspaceCommandResult = {
   readonly exitCode: number;
@@ -14,5 +14,5 @@ export class WorkspaceCommandExecutionFailed extends Data.TaggedError(
 
 export type WorkspaceCommandExecutor = (
   command: string,
-  options?: { readonly cwd?: string; readonly signal?: AbortSignal },
-) => Promise<WorkspaceCommandResult>;
+  options?: { readonly cwd?: string },
+) => Effect.Effect<WorkspaceCommandResult, WorkspaceCommandExecutionFailed>;

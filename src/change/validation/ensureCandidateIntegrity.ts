@@ -1,34 +1,33 @@
-import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
+import { Effect } from "effect";
+import type {
+  WorkspaceCommandExecutionFailed,
+  WorkspaceCommandExecutor,
+} from "../../command/workspaceCommand.js";
 
 import { GitToolingFailed } from "./validationToolingFailures.js";
 
-export const ensureCandidateIntegrity = async (input: {
+export const ensureCandidateIntegrity = (input: {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly commandCwd?: string;
   readonly expectedHeadSha: string;
   readonly allowedUntrackedFiles: readonly string[];
-  readonly signal?: AbortSignal;
-}): Promise<void> => {
-  const result = await input.commandExecutor(
-    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
-    input.commandCwd === undefined && input.signal === undefined
-      ? undefined
-      : {
-          ...(input.commandCwd === undefined ? {} : { cwd: input.commandCwd }),
-          ...(input.signal === undefined ? {} : { signal: input.signal }),
-        },
-  );
-  const [head, ...status] = result.stdout.trimEnd().split("\n");
-  if (
-    result.exitCode !== 0 ||
-    head !== input.expectedHeadSha ||
-    !status.every(
-      (line) => line.startsWith("?? ") && input.allowedUntrackedFiles.includes(line.slice(3)),
-    )
-  ) {
-    throw new GitToolingFailed({
-      operationName: "verify_candidate_head",
-      message: "Snapshot Workspace no longer matches the Candidate.",
-    });
-  }
-};
+}): Effect.Effect<void, GitToolingFailed | WorkspaceCommandExecutionFailed> =>
+  Effect.gen(function* () {
+    const result = yield* input.commandExecutor(
+      "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
+      input.commandCwd === undefined ? undefined : { cwd: input.commandCwd },
+    );
+    const [head, ...status] = result.stdout.trimEnd().split("\n");
+    if (
+      result.exitCode !== 0 ||
+      head !== input.expectedHeadSha ||
+      !status.every(
+        (line) => line.startsWith("?? ") && input.allowedUntrackedFiles.includes(line.slice(3)),
+      )
+    ) {
+      return yield* new GitToolingFailed({
+        operationName: "verify_candidate_head",
+        message: "Snapshot Workspace no longer matches the Candidate.",
+      });
+    }
+  });

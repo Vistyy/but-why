@@ -1,11 +1,12 @@
 import { Clock, Effect } from "effect";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { runRepositoryPreparation } from "../../repositoryPreparation/runRepositoryPreparation.js";
+import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import type { RecordCandidateValidationPrepareRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
+import { ValidationCommandExecutionFailed } from "./runValidationCommand.js";
 import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import {
   GitToolingFailed,
@@ -120,50 +121,53 @@ const runPrepareCommand = (
   expectedHeadSha: string | undefined,
   allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      if (expectedHeadSha !== undefined) {
-        await ensureCandidateIntegrity({
-          commandExecutor,
-          ...(commandCwd === undefined ? {} : { commandCwd }),
-          expectedHeadSha,
-          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
-          signal,
-        });
-      }
-      const result = await runRepositoryPreparation({
-        prepare,
-        exec: (command, options) => commandExecutor(command, { ...(options ?? {}), signal }),
-        ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+  Effect.gen(function* () {
+    if (expectedHeadSha !== undefined) {
+      yield* ensureCandidateIntegrity({
+        commandExecutor,
+        ...(commandCwd === undefined ? {} : { commandCwd }),
+        expectedHeadSha,
+        allowedUntrackedFiles: allowedUntrackedFiles ?? [],
       });
-      if (expectedHeadSha !== undefined) {
-        await ensureCandidateIntegrity({
-          commandExecutor,
-          ...(commandCwd === undefined ? {} : { commandCwd }),
-          expectedHeadSha,
-          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
-          signal,
-        });
-      }
+    }
+    const result = yield* runRepositoryPreparationEffect({
+      prepare,
+      exec: (command, options) =>
+        commandExecutor(command, options).pipe(
+          Effect.mapError(
+            (error) => new ValidationCommandExecutionFailed({ message: error.message }),
+          ),
+        ),
+      ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+    });
+    if (expectedHeadSha !== undefined) {
+      yield* ensureCandidateIntegrity({
+        commandExecutor,
+        ...(commandCwd === undefined ? {} : { commandCwd }),
+        expectedHeadSha,
+        allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+      });
+    }
 
-      return {
-        commandResult: {
-          exitCode: result.exitCode,
-          stdout: result.stdout,
-          stderr: result.stderr,
-        },
-        timedOut: result.timedOut,
-      };
-    },
-    catch: (error) =>
+    return {
+      commandResult: {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      },
+      timedOut: result.timedOut,
+    };
+  }).pipe(
+    Effect.mapError((error) =>
       error instanceof GitToolingFailed
         ? error
         : new PrepareCommandExecutionToolingFailed({
             operationName: "run_prepare_command",
             command: prepare.command,
-            message: errorMessage(error),
+            message: error.message,
           }),
-  });
+    ),
+  );
 
 const recordPrepareRound = (
   input: RunPreparePhaseInput,

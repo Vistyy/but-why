@@ -418,11 +418,12 @@ const acceptancePhaseFixture = (
   const validationRunId = options.validationRunId ?? "validation-1";
   const exactCandidate = options.candidate ?? candidate;
   const rounds: RecordCandidateAcceptanceRoundInput[] = [];
-  const commandExecutor = async () => ({
-    exitCode: 0,
-    stdout: `${options.observedHeadSha ?? exactCandidate.headSha}\n`,
-    stderr: "",
-  });
+  const commandExecutor = () =>
+    Effect.succeed({
+      exitCode: 0,
+      stdout: `${options.observedHeadSha ?? exactCandidate.headSha}\n`,
+      stderr: "",
+    });
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
 
   return {

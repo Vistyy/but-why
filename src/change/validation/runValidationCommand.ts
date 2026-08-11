@@ -6,11 +6,6 @@ export type ValidationCommandResultData = {
   readonly stderr: string;
 };
 
-export type ValidationCommandExecutor = (
-  command: string,
-  options?: { readonly cwd?: string },
-) => Promise<ValidationCommandResultData>;
-
 export class ValidationCommandExecutionFailed extends Data.TaggedError(
   "ValidationCommandExecutionFailed",
 )<{
@@ -60,30 +55,6 @@ export const runValidationCommandEffect = (input: {
       timedOut: !parsed.completed,
     };
   });
-
-export const runValidationCommand = async (input: {
-  readonly command: string;
-  readonly timeoutSeconds: number;
-  readonly completionMarker: string;
-  readonly missingTimeoutMessage: string;
-  readonly exec: ValidationCommandExecutor;
-  readonly cwd?: string;
-}): Promise<ValidationCommandResult> => {
-  const available = await input.exec("command -v timeout >/dev/null 2>&1");
-  if (available.exitCode !== 0) throw new Error(input.missingTimeoutMessage);
-
-  const result = await input.exec(
-    timeoutWrappedCommand(input.command, input.timeoutSeconds, input.completionMarker),
-    input.cwd === undefined ? undefined : { cwd: input.cwd },
-  );
-  const parsed = parseCompletionMarker(result.stderr, input.completionMarker);
-  return {
-    exitCode: parsed.completed ? parsed.exitCode : timeoutExitCode,
-    stdout: result.stdout,
-    stderr: parsed.stderr,
-    timedOut: !parsed.completed,
-  };
-};
 
 const timeoutWrappedCommand = (command: string, timeoutSeconds: number, marker: string): string =>
   [

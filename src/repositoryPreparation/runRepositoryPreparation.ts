@@ -1,15 +1,10 @@
 import { Data, Effect } from "effect";
 import {
-  runValidationCommand,
   runValidationCommandEffect,
   type ValidationCommandEffectExecutor,
-  type ValidationCommandExecutor,
 } from "../change/validation/runValidationCommand.js";
 
-export type RepositoryPreparationExecutor = ValidationCommandExecutor;
-export type RepositoryPreparationEffectExecutor = RepositoryPreparationExecutor & {
-  readonly effect: ValidationCommandEffectExecutor;
-};
+export type RepositoryPreparationEffectExecutor = ValidationCommandEffectExecutor;
 
 class RepositoryPreparationExecutionFailed extends Data.TaggedError(
   "RepositoryPreparationExecutionFailed",
@@ -35,7 +30,7 @@ export const runRepositoryPreparationEffect = (input: {
     timeoutSeconds: input.prepare.timeoutSeconds,
     completionMarker: "__BUTWHY_PREPARE_COMPLETED_prepare__",
     missingTimeoutMessage: "Could not find timeout command for prepare.",
-    exec: input.exec.effect,
+    exec: input.exec,
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
   }).pipe(
     Effect.map((result) => ({ command: input.prepare.command, ...result })),
@@ -43,19 +38,3 @@ export const runRepositoryPreparationEffect = (input: {
       (error) => new RepositoryPreparationExecutionFailed({ message: error.message }),
     ),
   );
-
-export const runRepositoryPreparation = async (input: {
-  readonly prepare: { readonly command: string; readonly timeoutSeconds: number };
-  readonly exec: RepositoryPreparationExecutor;
-  readonly cwd?: string;
-}): Promise<RepositoryPreparationResult> => ({
-  command: input.prepare.command,
-  ...(await runValidationCommand({
-    command: input.prepare.command,
-    timeoutSeconds: input.prepare.timeoutSeconds,
-    completionMarker: "__BUTWHY_PREPARE_COMPLETED_prepare__",
-    missingTimeoutMessage: "Could not find timeout command for prepare.",
-    exec: input.exec,
-    ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
-  })),
-});

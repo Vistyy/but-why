@@ -49,7 +49,7 @@ type FixtureOptions = {
   readonly eligibility?: ChangeStartEligibilityError;
   readonly provision?: ReturnType<ChangeStartGitOperations["provisionWorktree"]>;
   readonly prepare?: Exclude<ChangeStartRecord["prepare"], null>;
-  readonly execute?: RepositoryPreparationEffectExecutor["effect"];
+  readonly execute?: RepositoryPreparationEffectExecutor;
 };
 
 const required = <Value>(value: Value | undefined, message: string): Value => {
@@ -97,11 +97,8 @@ const fixture = (options: FixtureOptions = {}) => {
       return options.provision ?? { ok: true };
     },
   };
-  const effect = options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
-  const executor: RepositoryPreparationEffectExecutor = Object.assign(
-    async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    { effect },
-  );
+  const executor: RepositoryPreparationEffectExecutor =
+    options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
   const operations = {
     start: (input: Parameters<typeof startChange>[3]) => startChange(store, git, executor, input),
     prepare: (changeId: string, preparedAt: string) =>

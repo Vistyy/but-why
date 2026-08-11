@@ -115,11 +115,12 @@ const phaseHarness = (): PhaseHarness => {
         sessions.delete(`${changeId}/${producer}`);
       }),
   };
-  const commandExecutor = async () => ({
-    exitCode: 0,
-    stdout: `${candidate.headSha}\n`,
-    stderr: "",
-  });
+  const commandExecutor = () =>
+    Effect.succeed({
+      exitCode: 0,
+      stdout: `${candidate.headSha}\n`,
+      stderr: "",
+    });
 
   return {
     rounds,
@@ -359,11 +360,12 @@ describe("Candidate Specialist Review phase", () => {
               validationRunId: "223e4567-e89b-42d3-a456-426614174000",
               candidate: { ...candidate, candidateId: "candidate-2", headSha: "3".repeat(40) },
               policies: [policy("alpha"), policy("beta")],
-              commandExecutor: async () => ({
-                exitCode: 0,
-                stdout: `${"3".repeat(40)}\n`,
-                stderr: "",
-              }),
+              commandExecutor: () =>
+                Effect.succeed({
+                  exitCode: 0,
+                  stdout: `${"3".repeat(40)}\n`,
+                  stderr: "",
+                }),
               reviewerExecutor: unusedReviewerExecutor,
             },
           ),
@@ -444,11 +446,12 @@ describe("Candidate Specialist Review phase", () => {
                 candidate: captured,
                 policies,
                 runtime,
-                commandExecutor: async () => ({
-                  exitCode: 0,
-                  stdout: `${captured.headSha}\n`,
-                  stderr: "",
-                }),
+                commandExecutor: () =>
+                  Effect.succeed({
+                    exitCode: 0,
+                    stdout: `${captured.headSha}\n`,
+                    stderr: "",
+                  }),
                 reviewerExecutor: unusedReviewerExecutor,
                 artifactsRoot,
                 commandCwd: repo,
@@ -645,16 +648,17 @@ describe("Candidate Specialist Review phase", () => {
         const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const rounds: RecordCandidateSpecialistRoundInput[] = [];
-        const commandExecutor = async (command: string, options?: { readonly cwd?: string }) => {
-          const result = runTestProcess("bash", ["-lc", command], {
-            cwd: options?.cwd ?? repo,
+        const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
+          Effect.sync(() => {
+            const result = runTestProcess("bash", ["-lc", command], {
+              cwd: options?.cwd ?? repo,
+            });
+            return {
+              exitCode: result.status ?? 1,
+              stdout: result.stdout,
+              stderr: result.stderr,
+            };
           });
-          return {
-            exitCode: result.status ?? 1,
-            stdout: result.stdout,
-            stderr: result.stderr,
-          };
-        };
         const integrityFailure = yield* Effect.suspend(() =>
           Effect.flip(
             runSpecialistReviewPhase({
