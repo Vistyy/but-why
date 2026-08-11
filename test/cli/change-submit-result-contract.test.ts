@@ -221,19 +221,15 @@ const cases = {
   },
   change_not_found: {
     result: { ok: false, code: "change_not_found" },
-    expected: errorResult(
-      "change_not_found",
-      "Change was not found.",
-      ["Use a Change ID returned by `by change start`."],
-    ),
+    expected: errorResult("change_not_found", "Change was not found.", [
+      "Use a Change ID returned by `by change start`.",
+    ]),
   },
   change_not_open: {
     result: { ok: false, code: "change_not_open" },
-    expected: errorResult(
-      "change_not_open",
-      "Change is closed.",
-      ["Use a Change ID returned by `by change start`."],
-    ),
+    expected: errorResult("change_not_open", "Change is closed.", [
+      "Use a Change ID returned by `by change start`.",
+    ]),
   },
   change_blocked: {
     result: { ok: false, code: "change_blocked" },
@@ -340,11 +336,9 @@ const cases = {
   },
   validation_policy_invalid: {
     result: { ok: false, code: "validation_policy_invalid", message: "Policy is invalid." },
-    expected: errorResult(
-      "validation_policy_invalid",
-      "Policy is invalid.",
-      ["Fix Repo Config or Global Config, then retry Change Submit."],
-    ),
+    expected: errorResult("validation_policy_invalid", "Policy is invalid.", [
+      "Fix Repo Config or Global Config, then retry Change Submit.",
+    ]),
   },
   publication_remote_missing: {
     result: { ok: false, code: "publication_remote_missing" },

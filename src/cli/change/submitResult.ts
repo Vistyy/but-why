@@ -29,18 +29,17 @@ export const submitRecovery = (
   retryCommand: `by change submit ${changeId}`,
 });
 
-type DistributedChangeSubmitResult<Result = ChangeSubmitResult> =
-  Result extends ChangeSubmitResult
-    ? Result extends { readonly ok: true; readonly status: infer Status extends string }
-      ? Status extends string
-        ? Omit<Result, "status"> & { readonly status: Status }
+type DistributedChangeSubmitResult<Result = ChangeSubmitResult> = Result extends ChangeSubmitResult
+  ? Result extends { readonly ok: true; readonly status: infer Status extends string }
+    ? Status extends string
+      ? Omit<Result, "status"> & { readonly status: Status }
+      : never
+    : Result extends { readonly ok: false; readonly code: infer Code extends string }
+      ? Code extends string
+        ? Omit<Result, "code"> & { readonly code: Code }
         : never
-      : Result extends { readonly ok: false; readonly code: infer Code extends string }
-        ? Code extends string
-          ? Omit<Result, "code"> & { readonly code: Code }
-          : never
-        : never
-    : never;
+      : never
+  : never;
 
 export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliResult => {
   const result = submit as DistributedChangeSubmitResult;
