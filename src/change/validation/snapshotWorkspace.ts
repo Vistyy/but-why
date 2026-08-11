@@ -24,8 +24,7 @@ export type ActiveSnapshotWorkspaceResult = {
 export type SnapshotWorkspaceOperationName =
   | "create_snapshot_workspace"
   | "cleanup_snapshot_workspace"
-  | "copy_allowlisted_file"
-  | "snapshot_workspace_interrupted";
+  | "copy_allowlisted_file";
 
 export type SnapshotWorkspaceToolingError = {
   readonly operationName: SnapshotWorkspaceOperationName;

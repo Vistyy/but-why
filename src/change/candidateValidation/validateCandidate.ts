@@ -211,13 +211,6 @@ const makeCandidateValidation = (dependencies: {
           validationRunId: started.validationRunId,
           cleanupWorkspace: cleanupResult.workspace,
         }),
-      recordInterruptedCleanupResult: (toolingError) =>
-        dependencies.persistence
-          .recordWorkspaceCleanup({
-            validationRunId: toolingError.validationRunId,
-            cleanupWorkspace: toolingError.cleanupResult.workspace,
-          })
-          .pipe(Effect.ignore),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(
           dependencies,
