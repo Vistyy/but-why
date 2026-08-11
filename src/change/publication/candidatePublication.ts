@@ -493,6 +493,7 @@ const updateOrReuse = (
       headBranch,
       expectedHeadSha,
       metadata,
+      prepared.allowExistingRemoteHead,
     );
   }
   return "recovered" in prepared
@@ -504,7 +505,11 @@ type Published = ChangePublication & {
   readonly pullRequest: NonNullable<ChangePublication["pullRequest"]>;
 };
 type UpdatePreparation =
-  | { readonly proceed: true; readonly owned: Published }
+  | {
+      readonly proceed: true;
+      readonly owned: Published;
+      readonly allowExistingRemoteHead?: boolean;
+    }
   | { readonly proceed: false; readonly owned: Published; readonly recovered: GitHubPullRequest }
   | { readonly proceed: false; readonly result: PublishCandidateResult };
 
@@ -560,7 +565,7 @@ const prepareOwnedPullRequestUpdate = (
         classification.pullRequest.headSha === expectedHeadSha
       ) {
         return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
-          ? { proceed: false, owned, recovered: classification.pullRequest }
+          ? { proceed: true, owned, allowExistingRemoteHead: true }
           : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
       }
       return { proceed: false, result: { ok: false, code: "publication_remote_mismatch" } };
@@ -604,12 +609,14 @@ const executePullRequestUpdate = (
   headBranch: string,
   expectedHeadSha: string,
   metadata: Metadata,
+  allowExistingRemoteHead = false,
 ): PublicationEffect => {
   const updated = dependencies.github.updatePullRequest({
     ...request(input.target, change.branchRef, headBranch, expectedHeadSha),
     ...metadata,
     number: owned.pullRequest.number,
     expectedCurrentHeadSha: owned.expectedHeadSha,
+    ...(allowExistingRemoteHead ? { allowExistingRemoteHead: true } : {}),
   });
   if (!updated.ok) {
     return updateFailure(dependencies, input, owned, headBranch, expectedHeadSha, updated);
@@ -677,6 +684,17 @@ const updateFailure = (
       ok: false,
       code: "current_head_mismatch",
       ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+    });
+  }
+  if (failure.code === "remote_head_mismatch") {
+    return Effect.succeed({
+      ok: false,
+      code: "publication_remote_mismatch",
+      ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+      expectedRemoteHeadSha: expectedHeadSha,
+      ...(failure.observedRemoteHeadSha === undefined
+        ? {}
+        : { observedRemoteHeadSha: failure.observedRemoteHeadSha }),
     });
   }
   return canRecoverUpdateFailure(failure.code)

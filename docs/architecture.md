@@ -69,6 +69,9 @@ The operator may recover the branch externally or cancel the Change or its linke
 
 `by change submit <change-id>` observes the current owned pull request before starting a new Submission.
 When the persisted Candidate, completed passed Validation Run, exact owned pull request, local Repository Branch head, and current durable Change authority still match the completed Candidate Publication, Submission returns that stored success before it fetches a newer Change Base or resolves current configuration.
+An open owned pull request whose only mismatch is its head commit does not reuse completed publication evidence and continues through Candidate capture and validation.
+When that pull request already identifies the exact current validated Candidate, Candidate Publication reconfirms the Remote Change Branch, skips a duplicate push, reapplies the open state and complete current metadata, and confirms the result before recording publication.
+A Remote Change Branch at the previously published head is updated with the exact force-with-lease safeguard, while any other remote head remains rejected.
 Later Change Base and configuration changes do not invalidate completed publication evidence.
 A new or revised Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.

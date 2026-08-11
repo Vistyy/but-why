@@ -184,6 +184,156 @@ describe("GitHub pull request gateway", () => {
     ]);
   });
 
+  it("updates pull request metadata without pushing when the Remote Change Branch is exact", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const ghCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return { ok: true, stdout: "candidate-sha\n" };
+      },
+      runGh: (args) => {
+        ghCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            args[1] === "graphql"
+              ? remoteHeadResponse("candidate-sha")
+              : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
+        };
+      },
+    });
+
+    expect(
+      gateway.updatePullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        expectedCurrentHeadSha: "previous-candidate-sha",
+        allowExistingRemoteHead: true,
+        number: 42,
+        title: "Revised Candidate",
+        body: "Complete decision log",
+      }),
+    ).toMatchObject({ ok: true, pullRequest: { headSha: "candidate-sha" } });
+    expect(gitCalls).toEqual([["rev-parse", "--verify", "refs/heads/feature^{commit}"]]);
+    expect(ghCalls).toEqual([
+      expect.arrayContaining(["graphql", "qualifiedName=refs/heads/feature"]),
+      [
+        "api",
+        "--method",
+        "PATCH",
+        "repos/acme/widgets/pulls/42",
+        "-f",
+        "state=open",
+        "-f",
+        "title=Revised Candidate",
+        "-f",
+        "body=Complete decision log",
+      ],
+    ]);
+  });
+
+  it("retains the exact force-with-lease when recovery finds the previously published head", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const ghCalls: (readonly string[])[] = [];
+    const candidateHead = "a".repeat(40);
+    const publishedHead = "b".repeat(40);
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            args[0] === "rev-parse"
+              ? `${candidateHead}\n`
+              : args[0] === "remote"
+                ? "https://github.com/acme/widgets.git\n"
+                : "",
+        };
+      },
+      runGh: (args) => {
+        ghCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            args[1] === "graphql"
+              ? remoteHeadResponse(publishedHead)
+              : `{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"${candidateHead}"}}`,
+        };
+      },
+    });
+
+    expect(
+      gateway.updatePullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: candidateHead,
+        expectedCurrentHeadSha: publishedHead,
+        allowExistingRemoteHead: true,
+        number: 42,
+        title: "Revised Candidate",
+        body: "Complete decision log",
+      }),
+    ).toMatchObject({ ok: true, pullRequest: { headSha: candidateHead } });
+    expect(gitCalls).toContainEqual([
+      "-c",
+      "url.https://github.com/acme/widgets.git.pushInsteadOf=https://github.com/acme/widgets.git",
+      "push",
+      `--force-with-lease=refs/heads/feature:${publishedHead}`,
+      "https://github.com/acme/widgets.git",
+      `${candidateHead}:refs/heads/feature`,
+    ]);
+    expect(ghCalls).toHaveLength(2);
+  });
+
+  it("rejects a foreign Remote Change Branch before a recovery update", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const ghCalls: (readonly string[])[] = [];
+    const foreignHead = "b".repeat(40);
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return { ok: true, stdout: "candidate-sha\n" };
+      },
+      runGh: (args) => {
+        ghCalls.push(args);
+        return { ok: true, stdout: remoteHeadResponse(foreignHead) };
+      },
+    });
+
+    expect(
+      gateway.updatePullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        expectedCurrentHeadSha: "previous-candidate-sha",
+        allowExistingRemoteHead: true,
+        number: 42,
+        title: "Revised Candidate",
+        body: "Complete decision log",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "remote_head_mismatch",
+      observedRemoteHeadSha: foreignHead,
+    });
+    expect(gitCalls).toEqual([["rev-parse", "--verify", "refs/heads/feature^{commit}"]]);
+    expect(ghCalls).toHaveLength(1);
+  });
+
   it("reads complete unmerged facts from GitHub pull request lists", () => {
     const gateway = localGitHubPullRequestGateway({
       runGh: () => ({
