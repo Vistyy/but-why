@@ -15,13 +15,14 @@ const systemPromptPaths = [
 
 const emptyAgents = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
-  stdout: '{"result":{"type":"agent_list","agents":[],"future_field":true}}',
+  stdout:
+    '{"result":{"type":"agent_list","agents":[],"future_field":true},"future_response_field":true}',
 });
 
 const openedWorktree = (): { readonly ok: true; readonly stdout: string } => ({
   ok: true,
   stdout:
-    '{"result":{"type":"worktree_opened","worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1","branch":null,"future_field":true},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123","future_field":true},"future_field":true},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","future_field":true},"already_open":false,"future_field":true}}',
+    '{"result":{"type":"worktree_opened","worktree":{"path":"/workspace/change-123","open_workspace_id":"workspace-1","branch":null,"future_field":true},"workspace":{"workspace_id":"workspace-1","worktree":{"checkout_path":"/workspace/change-123","future_field":true},"future_field":true},"tab":{"tab_id":"tab-1","workspace_id":"workspace-1","future_field":true},"root_pane":{"pane_id":"pane-1","workspace_id":"workspace-1","tab_id":"tab-1","future_field":true},"already_open":false,"future_field":true},"future_response_field":true}',
 });
 
 const input = {
@@ -239,7 +240,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":"other"},{"path":"/workspace/change-123","branch":null,"future_field":true}],"future_field":true}}',
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":"other"},{"path":"/different-representation","worktree_path":"/workspace/change-123","branch":null,"future_field":true}],"future_field":true}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
@@ -439,7 +440,7 @@ describe("Herdr Interactive Session Host", () => {
       (commands as string[][]).push([...args]);
       return {
         ok: true,
-        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","pane_id":"pane-1","agent_status":"working"}]}}`,
+        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","pane_id":"pane-1","agent_status":"working","future_field":true}]}}`,
       };
     };
 
