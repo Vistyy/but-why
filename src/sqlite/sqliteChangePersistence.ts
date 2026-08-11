@@ -308,7 +308,7 @@ const raiseBlocker = (
   input: { readonly changeId: string; readonly content: string; readonly now: string },
 ) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* getBaseById(sql, input.changeId, "raise Implementation Blocker");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return { ok: false as const, code: "change_not_open" as const };
@@ -316,12 +316,16 @@ const raiseBlocker = (
     if (history.active !== null) return { ok: false as const, code: "change_blocked" as const };
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
-    const updated = yield* requireChange(sql, input.changeId, "raise Implementation Blocker");
+    const updated = yield* requireBaseChange(sql, input.changeId, "raise Implementation Blocker");
     const recorded = yield* readBlockers(sql, input.changeId, "raise Implementation Blocker");
     const stored = recorded.blockers.find((blocker) => blocker.id === id);
     if (stored === undefined)
       return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
-    return { ok: true as const, change: updated, blocker: stored };
+    return {
+      ok: true as const,
+      change: { ...updated, activeBlocker: recorded.active },
+      blocker: stored,
+    };
   });
 
 const resolveBlocker = (
@@ -329,7 +333,7 @@ const resolveBlocker = (
   input: { readonly changeId: string; readonly content: string; readonly now: string },
 ) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* getBaseById(sql, input.changeId, "resolve Implementation Blocker");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return { ok: false as const, code: "no_active_blocker" as const };
@@ -341,12 +345,16 @@ const resolveBlocker = (
     if (change.taskId !== null && change.acceptanceContext !== null) {
       yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
     }
-    const updated = yield* requireChange(sql, input.changeId, "resolve Implementation Blocker");
+    const updated = yield* requireBaseChange(sql, input.changeId, "resolve Implementation Blocker");
     const recorded = yield* readBlockers(sql, input.changeId, "resolve Implementation Blocker");
     const resolved = recorded.blockers.find((item) => item.id === blocker.id);
     if (resolved === undefined)
       return yield* invalidData("resolve Implementation Blocker", "Blocker disappeared");
-    return { ok: true as const, change: updated, blocker: resolved };
+    return {
+      ok: true as const,
+      change: { ...updated, activeBlocker: recorded.active },
+      blocker: resolved,
+    };
   });
 
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
@@ -379,6 +387,32 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
     (rows) => mapRow(rows[0], "read Change", sql),
   );
 
+const getBaseById = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+  Effect.flatMap(
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
+      changeId,
+    ]),
+    (rows) => mapBaseRow(rows[0], operationName, sql),
+  );
+
+const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly id: unknown; readonly state: unknown }>`
+      SELECT id, state FROM changes WHERE id = ${changeId}
+    `;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    return yield* decodePersisted(operationName, () => {
+      const id = decodeStoredString(row.id, "Change ID");
+      const state = decodeStoredString(row.state, "Change state");
+      if (id !== changeId) throw new Error("Change identity does not match lookup");
+      if (state !== changeState.open && state !== changeState.closed) {
+        throw new Error("Stored Change state is unsupported");
+      }
+      return { id, state };
+    });
+  });
+
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql<UnknownImplementationDecisionRow>`
@@ -394,7 +428,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
 
 const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* readChangeState(sql, input.changeId, "record Implementation Decision");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
@@ -526,38 +560,30 @@ const getPassingEvidence = (
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<UnknownChangeRow>(
-      `SELECT ${changeReadColumns} FROM changes WHERE repository_common_directory = ?`,
+      `SELECT ${changeReadColumns} FROM changes
+       WHERE repository_common_directory = ?${input.includeClosed ? "" : " AND state = 'open'"}`,
       [input.repositoryCommonDirectory],
     ),
     (rows) =>
       Effect.map(
         Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
-        (changes) =>
-          changes
-            .filter((change) => input.includeClosed || change.state === changeState.open)
-            .sort(compareChanges),
+        (changes) => changes.sort(compareChanges),
       ),
   );
 
 const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string) =>
   Effect.flatMap(
     sql.unsafe<UnknownChangeRow>(
-      `SELECT ${changeReadColumns} FROM changes WHERE repository_common_directory = ?`,
+      `SELECT ${changeReadColumns} FROM changes
+       WHERE repository_common_directory = ?
+         AND ((state = 'open' AND publication_pr_number IS NOT NULL)
+           OR (state = 'closed' AND cleanup_state = 'pending'))`,
       [commonDirectory],
     ),
     (rows) =>
       Effect.map(
         Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
-        (changes) =>
-          changes
-            .filter(
-              (change) =>
-                (change.state === changeState.open &&
-                  change.publication !== null &&
-                  change.publication.pullRequest !== null) ||
-                (change.state === changeState.closed && change.cleanup.state === "pending"),
-            )
-            .sort(compareChanges),
+        (changes) => changes.sort(compareChanges),
       ),
   );
 
@@ -569,7 +595,9 @@ const compareStoredStrings = (left: string, right: string): number =>
 
 const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
   Effect.gen(function* () {
-    const selected = selectOpenChange(yield* getById(sql, input.changeId));
+    const selected = selectOpenChange(
+      yield* getBaseById(sql, input.changeId, "begin Change publication"),
+    );
     if (!selected.ok) return selected;
     const change = selected.change;
     if (change.publication !== null) {
@@ -581,7 +609,7 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
     return {
       ok: true as const,
       created: true,
-      change: yield* requireChange(sql, input.changeId, "begin Change publication"),
+      change: yield* requireBaseChange(sql, input.changeId, "begin Change publication"),
     };
   });
 
@@ -590,7 +618,9 @@ const replacePendingPublication = (
   input: ReplacePendingChangePublicationInput,
 ) =>
   Effect.gen(function* () {
-    const selected = selectOpenChange(yield* getById(sql, input.changeId));
+    const selected = selectOpenChange(
+      yield* getBaseById(sql, input.changeId, "replace pending Change publication"),
+    );
     if (!selected.ok) return selected;
     const publication = selected.change.publication;
     if (
@@ -607,13 +637,15 @@ const replacePendingPublication = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
     return {
       ok: true as const,
-      change: yield* requireChange(sql, input.changeId, "replace pending Change publication"),
+      change: yield* requireBaseChange(sql, input.changeId, "replace pending Change publication"),
     };
   });
 
 const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
   Effect.gen(function* () {
-    const selected = selectOpenChange(yield* getById(sql, input.changeId));
+    const selected = selectOpenChange(
+      yield* getBaseById(sql, input.changeId, "release Change publication"),
+    );
     if (!selected.ok) return selected;
     const publication = selected.change.publication;
     if (publication === null) {
@@ -625,7 +657,7 @@ const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangeP
     yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireChange(sql, input.changeId, "release Change publication"),
+      change: yield* requireBaseChange(sql, input.changeId, "release Change publication"),
     };
   });
 
@@ -634,7 +666,9 @@ const recordPublishedPullRequest = (
   input: RecordPublishedPullRequestInput,
 ) =>
   Effect.gen(function* () {
-    const selected = selectOpenChange(yield* getById(sql, input.changeId));
+    const selected = selectOpenChange(
+      yield* getBaseById(sql, input.changeId, "record Change publication"),
+    );
     if (!selected.ok) return selected;
     const change = selected.change;
     if (!canRecordPublication(change.publication, input)) {
@@ -643,13 +677,13 @@ const recordPublishedPullRequest = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireChange(sql, input.changeId, "record Change publication"),
+      change: yield* requireBaseChange(sql, input.changeId, "record Change publication"),
     };
   });
 
 const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* getBaseById(sql, input.changeId, "complete merged Change");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return change.closeReason === "completed"
@@ -664,7 +698,7 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
     return {
       ok: true as const,
       changed: true,
-      change: yield* requireChange(sql, input.changeId, "complete merged Change"),
+      change: yield* requireBaseChange(sql, input.changeId, "complete merged Change"),
     };
   });
 
@@ -690,7 +724,7 @@ const matchesExactMergedEvidence = (
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* getBaseById(sql, input.changeId, "cancel Change");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed) {
       return change.closeReason === "cancelled"
@@ -703,13 +737,13 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
     return {
       ok: true as const,
       changed: true,
-      change: yield* requireChange(sql, input.changeId, "cancel Change"),
+      change: yield* requireBaseChange(sql, input.changeId, "cancel Change"),
     };
   });
 
 const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput) =>
   Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
+    const change = yield* getBaseById(sql, input.changeId, "record Change cleanup");
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state !== changeState.closed)
       return { ok: false as const, code: "change_not_closed" as const };
@@ -717,13 +751,13 @@ const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput
     let recorded = change;
     if (changed) {
       yield* sql`UPDATE changes SET cleanup_state = ${input.cleanup.state}, cleanup_blocking_reason = ${input.cleanup.blockingReason}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
-      recorded = yield* requireChange(sql, input.changeId, "record Change cleanup");
+      recorded = yield* requireBaseChange(sql, input.changeId, "record Change cleanup");
     }
     return { ok: true as const, changed, change: recorded };
   });
 
-const requireChange = (sql: SqlClient.SqlClient, id: string, operationName: string) =>
-  Effect.flatMap(getById(sql, id), (change) =>
+const requireBaseChange = (sql: SqlClient.SqlClient, id: string, operationName: string) =>
+  Effect.flatMap(getBaseById(sql, id, operationName), (change) =>
     change === undefined
       ? invalidData(operationName, "Change disappeared")
       : Effect.succeed(change),
@@ -823,17 +857,29 @@ const mapRow = (
   operationName: string,
   sql: SqlClient.SqlClient,
 ) =>
+  Effect.flatMap(mapBaseRow(row, operationName, sql), (base) =>
+    base === undefined
+      ? Effect.succeed(undefined)
+      : Effect.gen(function* () {
+          const decisions = yield* listDecisions(sql, base.id);
+          const blockers = yield* readBlockers(sql, base.id, operationName);
+          return {
+            ...base,
+            implementationDecisions: decisions,
+            activeBlocker: blockers.active,
+          } satisfies ChangeRecord;
+        }),
+  );
+
+const mapBaseRow = (
+  row: UnknownChangeRow | undefined,
+  operationName: string,
+  sql: SqlClient.SqlClient,
+) =>
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
-        const base = yield* decodePersisted(operationName, () => decodeChangeRow(row));
-        const decisions = yield* listDecisions(sql, base.id);
-        const blockers = yield* readBlockers(sql, base.id, operationName);
-        const change: ChangeRecord = {
-          ...base,
-          implementationDecisions: decisions,
-          activeBlocker: blockers.active,
-        };
+        const change = yield* decodePersisted(operationName, () => decodeChangeRow(row));
         yield* validateChangeRelationships(sql, change, operationName);
         return change;
       });
