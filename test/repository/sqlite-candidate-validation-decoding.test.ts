@@ -202,6 +202,21 @@ describe("SQLite Candidate and Validation read decoding", () => {
           ]);
 
           yield* repository.operation(
+            "install malformed historical Candidate",
+            (sql) => sql`UPDATE candidates SET head_sha = X'07' WHERE id = ${prior.candidateId}`,
+          );
+          expect(
+            yield* validation.reads.getCurrentCandidateForChange(current.changeId),
+          ).toMatchObject({
+            id: current.candidateId,
+            headSha: "current",
+          });
+          yield* repository.operation(
+            "restore historical Candidate",
+            (sql) => sql`UPDATE candidates SET head_sha = 'prior' WHERE id = ${prior.candidateId}`,
+          );
+
+          yield* repository.operation(
             "install opaque malformed Snapshot",
             (sql) =>
               sql`UPDATE candidate_validation_runs SET policy_snapshot = '{not-json' WHERE id = ${priorRun.validationRunId}`,
@@ -212,6 +227,9 @@ describe("SQLite Candidate and Validation read decoding", () => {
           expect(
             yield* validation.reads.listToolingFailures(priorRun.validationRunId),
           ).toMatchObject([{ sequence: 1, errorKind: "infrastructure_tooling_failed" }]);
+          expect(
+            yield* validation.reads.getLatestRunForCandidate(current.candidateId),
+          ).toMatchObject({ id: active.validationRunId, state: "running" });
           const strictError = yield* validation.reads
             .getRunById(priorRun.validationRunId)
             .pipe(Effect.flip);

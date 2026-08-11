@@ -141,8 +141,8 @@ const loadChangeDetailOperation = <A>(
             query(
               {
                 getChangeById: changes.getChangeById,
-                listCandidatesForChange: validation.listCandidatesForChange,
-                listRunsForCandidate: validation.listRunsForCandidate,
+                getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
+                getLatestRunForCandidate: validation.getLatestRunForCandidate,
                 listFindings: validation.listFindings,
                 listToolingFailures: validation.listToolingFailures,
               },

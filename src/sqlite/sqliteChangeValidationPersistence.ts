@@ -70,6 +70,10 @@ const makeSqliteChangeValidationAdapter = (
     repository.transaction("read Candidate for validation history", (sql) =>
       readCandidateById(sql, candidateId, "read Candidate for validation history"),
     ),
+  getCurrentCandidateForChange: (changeId) =>
+    repository.transaction("read current Candidate", (sql) =>
+      readCurrentCandidateForChange(sql, changeId),
+    ),
   listCandidatesForChange: (changeId) =>
     repository.transaction("list Candidates for validation history", (sql) =>
       readCandidatesForChange(sql, changeId, "list Candidates for validation history"),
@@ -101,6 +105,10 @@ const makeSqliteChangeValidationAdapter = (
   getRunById: (validationRunId) =>
     repository.transaction("read Candidate Validation Run", (sql) =>
       getRunById(sql, validationRunId),
+    ),
+  getLatestRunForCandidate: (candidateId) =>
+    repository.transaction("read latest Candidate Validation Run", (sql) =>
+      getLatestRunForCandidate(sql, candidateId),
     ),
   listRunsForCandidate: (candidateId) =>
     repository.transaction("list Candidate Validation Runs", (sql) =>
@@ -205,8 +213,10 @@ export const openSqliteChangeValidationReadPort = () =>
     const adapter = makeSqliteChangeValidationAdapter(repository);
     return {
       getCandidateById: adapter.getCandidateById,
+      getCurrentCandidateForChange: adapter.getCurrentCandidateForChange,
       listCandidatesForChange: adapter.listCandidatesForChange,
       getRunById: adapter.getRunById,
+      getLatestRunForCandidate: adapter.getLatestRunForCandidate,
       listRunsForCandidate: adapter.listRunsForCandidate,
       listRounds: adapter.listRounds,
       listFindings: adapter.listFindings,
@@ -275,6 +285,22 @@ const readCandidateById = (sql: SqlClient.SqlClient, candidateId: string, operat
       if (candidate.id !== candidateId) throw new Error("Candidate identity does not match lookup");
       return candidate;
     });
+  });
+
+const readCurrentCandidateForChange = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<CandidateOwnerRow>(
+      `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
+       FROM candidates AS candidate
+       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
+       WHERE candidate.change_id = ?
+       ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1`,
+      [changeId],
+    );
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : yield* decodePersisted("read current Candidate", () => decodeOwnedCandidate(row, changeId));
   });
 
 const readCandidatesForChange = (
@@ -647,6 +673,28 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
       "decode Candidate Validation Run",
     );
     return decoded.record;
+  });
+
+const getLatestRunForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly id: unknown }>`
+      SELECT id FROM candidate_validation_runs
+      WHERE candidate_id = ${candidateId}
+      ORDER BY created_at DESC, id DESC LIMIT 1
+    `;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    const validationRunId = yield* decodePersisted("read latest Candidate Validation Run", () =>
+      decodeStoredString(row.id, "Validation Run ID"),
+    );
+    const run = yield* getRunById(sql, validationRunId);
+    if (run === undefined || run.candidateId !== candidateId) {
+      return yield* invalidData(
+        "read latest Candidate Validation Run",
+        "Latest Validation Run belongs to another or unknown Candidate",
+      );
+    }
+    return run;
   });
 
 const requireRun = (sql: SqlClient.SqlClient, validationRunId: string, operationName: string) =>
