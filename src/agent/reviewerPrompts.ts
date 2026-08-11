@@ -32,6 +32,7 @@ const universalAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context.",
   "Judge whether available evidence could distinguish a materially incorrect Candidate from the accepted result.",
+  "For a changed integration, require evidence from one normal operation through the exact Candidate implementation of that boundary; component tests, a test double at that boundary, or evidence limited to interruption, cleanup, or failure does not prove the normal operation works.",
   "Do not require a preferred verification mechanism or a durable test by default.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
