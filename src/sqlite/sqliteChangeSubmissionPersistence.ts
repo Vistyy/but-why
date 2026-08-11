@@ -13,7 +13,6 @@ import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
@@ -26,6 +25,7 @@ import {
   validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
+import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   changeReadColumns,
   decodeChangePublication,

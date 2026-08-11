@@ -31,6 +31,7 @@ import {
   validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
+import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
   decodeImplementationDecisions,
@@ -38,7 +39,6 @@ import {
   type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidatePublicationPort = () =>

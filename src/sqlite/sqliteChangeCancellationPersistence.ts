@@ -28,8 +28,8 @@ import {
   decodePersisted,
   decodeStoredTaskRecordRow,
   decodeTaskDependencyFacts,
-  type StoredTaskRecordRow,
   type StoredTaskDependencyFactRow,
+  type StoredTaskRecordRow,
 } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeCancellationPort = () =>
