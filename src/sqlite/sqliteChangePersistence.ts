@@ -242,7 +242,10 @@ export const openSqliteChangeSubmissionPort = () =>
   Effect.map(RepositorySql, (repository): ChangeSubmissionPort => {
     const adapter = makeSqliteChangeAdapter(repository);
     return {
-      getChangeById: adapter.getChangeById,
+      getChangeById: (changeId) =>
+        repository.transaction("read Change for submission", (sql) =>
+          getBaseById(sql, changeId, "read Change for submission"),
+        ),
       getCompletedPublicationEvidence: adapter.getCompletedPublicationEvidence,
       completeMergedChange: adapter.completeMergedChange,
     };
@@ -252,7 +255,10 @@ export const openSqliteChangeReconciliationPort = () =>
   Effect.map(RepositorySql, (repository): ChangeReconciliationPort => {
     const adapter = makeSqliteChangeAdapter(repository);
     return {
-      getChangeById: adapter.getChangeById,
+      getChangeById: (changeId) =>
+        repository.transaction("read Change for reconciliation", (sql) =>
+          getBaseById(sql, changeId, "read Change for reconciliation"),
+        ),
       listChangesForReconciliation: adapter.listChangesForReconciliation,
       completeMergedChange: adapter.completeMergedChange,
     };
@@ -262,7 +268,10 @@ export const openSqliteChangeCancellationPort = () =>
   Effect.map(RepositorySql, (repository): ChangeCancellationPort => {
     const adapter = makeSqliteChangeAdapter(repository);
     return {
-      getChangeById: adapter.getChangeById,
+      getChangeById: (changeId) =>
+        repository.transaction("read Change for cancellation", (sql) =>
+          getBaseById(sql, changeId, "read Change for cancellation"),
+        ),
       getChangeByTaskId: adapter.getChangeByTaskId,
       completeMergedChange: adapter.completeMergedChange,
       cancelChange: adapter.cancelChange,

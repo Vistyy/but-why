@@ -7,6 +7,10 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import {
+  openSqliteChangeCancellationPort,
+  openSqliteChangeReconciliationPort,
+} from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
@@ -359,6 +363,8 @@ describe("SQLite Change decoding", () => {
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
+        const cancellation = yield* openSqliteChangeCancellationPort();
+        const reconciliation = yield* openSqliteChangeReconciliationPort();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
@@ -448,6 +454,12 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:24:00.000Z",
         });
         if (!secondResolution.ok) throw new Error(secondResolution.code);
+        expect(yield* cancellation.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
+        expect(yield* changes.submission.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
         expect(
           yield* changes.delivery.cancelChange({
             changeId: captured.changeId,
@@ -458,6 +470,9 @@ describe("SQLite Change decoding", () => {
         expect(
           yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
         ).toHaveLength(1);
+        expect(yield* reconciliation.getChangeById(captured.changeId)).toMatchObject({
+          id: captured.changeId,
+        });
         yield* repository.operation(
           "make a Resolution belong to two Blockers",
           (sql) =>
