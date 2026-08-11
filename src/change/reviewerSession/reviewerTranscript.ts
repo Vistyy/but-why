@@ -3,6 +3,7 @@ import { basename, join, relative } from "node:path";
 
 import { Effect } from "effect";
 
+import { decodePiJsonlObject, decodePiSessionIdentity } from "../../contracts/piJsonl.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ChangeReviewerTranscriptPort } from "../changePorts.js";
 
@@ -129,27 +130,12 @@ const sessionHeaderSessionId = (filePath: string): string | undefined => {
   }
   const firstLine = content.split("\n").find((line) => line.trim().length > 0);
   if (firstLine === undefined) return undefined;
-  const header = parseSessionHeader(firstLine);
-  if (header?.type === "session" && typeof header.id === "string" && header.id.length > 0) {
-    return header.id;
-  }
-  return undefined;
-};
-
-type SessionHeader = Record<string, unknown> & {
-  readonly type?: unknown;
-  readonly id?: unknown;
-};
-
-const parseSessionHeader = (line: string): SessionHeader | undefined => {
-  let value: unknown;
   try {
-    value = JSON.parse(line);
+    const sessionId = decodePiSessionIdentity(decodePiJsonlObject(firstLine));
+    return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
   } catch {
     return undefined;
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  return value as SessionHeader;
 };
 
 const isFileSystemError = (error: unknown, code: string): boolean =>

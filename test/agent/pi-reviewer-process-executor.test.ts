@@ -151,12 +151,22 @@ describe("Pi reviewer process executor", () => {
       const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
       writeFileSync(
         sessionFile,
-        `${JSON.stringify({ type: "session", id: sessionId, cwd: "/old/workspace" })}\n`,
+        `${JSON.stringify({
+          type: "session",
+          id: sessionId,
+          cwd: "/old/workspace",
+          timestamp: "2026-08-11T20:00:00.000Z",
+          version: 3,
+          externalMetadata: { retained: true },
+        })}\n`,
       );
       let calls = 0;
       const executor = createPiReviewerProcessExecutor((command) => {
         calls += 1;
-        expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/validation/workspace"');
+        const persistedSession = readFileSync(sessionFile, "utf8");
+        expect(persistedSession).toContain('"cwd":"/validation/workspace"');
+        expect(persistedSession).toContain('"timestamp":"2026-08-11T20:00:00.000Z"');
+        expect(persistedSession).toContain('"externalMetadata":{"retained":true}');
         expect(command.args).toContain("--session");
         return Effect.succeed({
           exitCode: 0,
