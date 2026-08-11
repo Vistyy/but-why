@@ -59,7 +59,7 @@ Targeted test selections remain unlocked.
 
 ## Structural contracts
 
-Fallow assigns every maintained file under `src/` to a stable directory-pattern zone for CLI, composition, Task, Change, Repository Runtime, Adapters, or shared code.
+Fallow assigns every maintained TypeScript or JavaScript source file to a stable directory-pattern zone for CLI, composition, Task, Change, Repository Runtime, Adapters, shared code, or repository support.
 Every zone has an explicit dependency rule.
 These rules enforce these architecture contracts:
 

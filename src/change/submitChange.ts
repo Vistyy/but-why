@@ -7,7 +7,7 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
-} from "../submissionEnvironment/adapters/remoteChangeBase.js";
+} from "../submissionEnvironment/remoteChangeBase.js";
 import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type {
   CaptureLocalCandidateInput,

@@ -46,14 +46,7 @@
   },
   "boundaries": {
     "coverage": {
-      "requireAllFiles": true,
-      "allowUnmatched": [
-        ".remarkrc.mjs",
-        "extensions/**",
-        "scripts/**",
-        "test/**",
-        "vitest.config.ts"
-      ]
+      "requireAllFiles": true
     },
     "zones": [
       {
@@ -91,6 +84,10 @@
           "src/repositoryPreparation/**",
           "src/submissionEnvironment/**"
         ]
+      },
+      {
+        "name": "support",
+        "patterns": [".remarkrc.mjs", "extensions/**", "scripts/**", "test/**", "vitest.config.ts"]
       }
     ],
     "rules": [
@@ -112,8 +109,7 @@
       },
       {
         "from": "change",
-        "allow": ["repository-runtime", "shared", "task"],
-        "allowTypeOnly": ["adapters"]
+        "allow": ["repository-runtime", "shared", "task"]
       },
       {
         "from": "repository-runtime",
@@ -122,6 +118,18 @@
       {
         "from": "shared",
         "allow": []
+      },
+      {
+        "from": "support",
+        "allow": [
+          "adapters",
+          "change",
+          "cli",
+          "composition",
+          "repository-runtime",
+          "shared",
+          "task"
+        ]
       }
     ]
   }

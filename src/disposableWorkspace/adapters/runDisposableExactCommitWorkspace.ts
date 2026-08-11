@@ -5,12 +5,14 @@ import {
   type WorkspaceCommandExecutor,
 } from "../../command/workspaceCommand.js";
 import type {
-  DisposableWorkspace,
   DisposableWorkspaceCleanupResult,
-  DisposableWorkspaceError,
   DisposableWorkspaceOperationName,
 } from "../disposableWorkspace.js";
 import { expectedDisposableWorkspacePath } from "../disposableWorkspacePath.js";
+import type {
+  RunDisposableExactCommitWorkspaceInput,
+  RunDisposableExactCommitWorkspaceResult,
+} from "../runDisposableExactCommitWorkspace.js";
 import {
   cleanupExactDisposableWorkspace,
   copyDisposableWorkspaceFiles,
@@ -18,27 +20,6 @@ import {
   inspectDisposableWorktree,
   prepareDisposableWorkspaceParent,
 } from "./disposableWorkspaceGit.js";
-
-export type RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error> = {
-  readonly repoRoot: string;
-  readonly workspaceId: string;
-  readonly commitSha: string;
-  readonly copyFiles: readonly string[];
-  readonly recordWorkspaceCleanup?: (
-    cleanupResult: DisposableWorkspaceCleanupResult,
-  ) => Effect.Effect<void, Error>;
-  readonly runInWorkspace?: (
-    workspace: DisposableWorkspace,
-  ) => Effect.Effect<WorkspaceResult, Error>;
-};
-
-export type RunDisposableExactCommitWorkspaceResult<WorkspaceResult> =
-  | { readonly ok: true; readonly workspaceResult?: WorkspaceResult }
-  | { readonly ok: false; readonly toolingError: DisposableWorkspaceError };
-
-export type RunDisposableExactCommitWorkspace = <WorkspaceResult, Error>(
-  input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
-) => Effect.Effect<RunDisposableExactCommitWorkspaceResult<WorkspaceResult>, Error>;
 
 type SetupAttempt<WorkspaceResult> =
   | { readonly ok: true; readonly workspaceResult?: WorkspaceResult }
