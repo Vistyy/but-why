@@ -62,6 +62,13 @@ Programmer defects remain `internal_error`.
 The `persisted_data_invalid` result does not include Submit Recovery Guidance and does not authorize an Implementer to repair Shared Repository State.
 The `restored_transient_state` result does not include Submit Recovery Guidance and does not authorize an Implementer to repair Shared Repository State.
 
+## Task Reviews
+
+`by task show` reports the current Task Review summary, retained Findings, proposal currency, recovery state, and exact inspection command.
+`by task review show <review-id>` returns the complete captured proposal, dependency evidence, fixed policy, Review Base, workspace recovery state, retained Findings, and valid recovery action.
+`by task review abandon <review-id> --reason <reason>` reports the completed tooling-failed Review only after exact workspace cleanup succeeds.
+Task Submission returns success only for a passed Review and returns a structured nonzero result with the complete committed Review for Findings or tooling failure.
+
 ## Findings and Validation Runs
 
 Finding inspection and failed Submission results preserve complete Findings, diagnostic details, and Artifact references needed for recovery.
@@ -121,6 +128,7 @@ Its `count` is the number of returned Tasks and its `total` is the number matchi
 
 - `by task show` owns Task lifecycle, dependency, and linked Change metadata.
 - `by task context` owns the complete Task title, description, and approved Resolution context.
+- `by task review show` owns one Task Review's complete proposal, evidence, outcome, and recovery state.
 - `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
 - `by change blocker list` owns complete Implementation Blocker and Implementation Blocker Resolution history.
 - `by change findings` owns complete Findings for the current Candidate.

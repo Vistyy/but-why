@@ -7,6 +7,7 @@ import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
+  withTaskReviewReads,
   withTasks,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
@@ -29,20 +30,72 @@ export const runTaskShowCommand = (
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
-      return success({
-        task: {
-          id: task.id,
-          title: task.title,
-          state: task.state,
-          createdAt: task.createdAt,
-          updatedAt: task.updatedAt,
-          ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
-          prerequisites: task.prerequisites,
-          dependents: task.dependents,
-          change: projection,
-        },
-        contextCommand: `by task context ${task.id}`,
-      });
+      if (environment.taskUseCases !== undefined && environment.taskReviewUseCases === undefined) {
+        return success({
+          task: {
+            id: task.id,
+            title: task.title,
+            state: task.state,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+            ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
+            prerequisites: task.prerequisites,
+            dependents: task.dependents,
+            change: projection,
+          },
+          contextCommand: `by task context ${task.id}`,
+        });
+      }
+      return yield* withTaskReviewReads(environment, (reviews) =>
+        Effect.gen(function* () {
+          const review = yield* reviews.getLatestForTask(taskId.taskId);
+          const proposalCurrent =
+            review === undefined ? undefined : yield* reviews.proposalIsCurrent(review);
+          return success({
+            task: {
+              id: task.id,
+              title: task.title,
+              state: task.state,
+              createdAt: task.createdAt,
+              updatedAt: task.updatedAt,
+              ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
+              prerequisites: task.prerequisites,
+              dependents: task.dependents,
+              change: projection,
+              review:
+                review === undefined
+                  ? null
+                  : {
+                      id: review.id,
+                      state: review.state,
+                      outcome: review.outcome,
+                      proposalCurrent: proposalCurrent ?? null,
+                      findingCount: review.findings.length,
+                      findings: review.findings.map((finding) => ({
+                        title: finding.title,
+                        description: finding.description,
+                        evidence: finding.evidence,
+                        files: finding.files,
+                      })),
+                      workspaceCleanup: review.workspaceCleanup,
+                      toolingFailure:
+                        review.toolingFailure === null
+                          ? null
+                          : {
+                              operation: review.toolingFailure.operation,
+                              message: review.toolingFailure.message,
+                            },
+                    },
+            },
+            contextCommand: `by task context ${task.id}`,
+            ...(review === undefined
+              ? task.state === "new"
+                ? { help: [`Run \`by task submit ${task.id}\` for an advisory Task Review.`] }
+                : {}
+              : { reviewCommand: `by task review show ${review.id}` }),
+          });
+        }),
+      );
     });
   });
 };

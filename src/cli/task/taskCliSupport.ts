@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import type { CliResult } from "../../cliResults.js";
@@ -9,8 +10,17 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import {
+  withTaskReviewReadUseCases,
+  withTaskReviewUseCases,
+} from "../../task/composition/loadTaskReviewUseCases.js";
 import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
+import type {
+  TaskReviewReadUseCases,
+  TaskReviewUseCases,
+} from "../../task/review/taskReviewUseCases.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
@@ -19,7 +29,10 @@ export type TaskCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
+  readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
+  readonly taskReviewUseCases?: TaskReviewUseCases;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
 };
 
@@ -34,6 +47,75 @@ export const withTasks = (
         )
       : use(environment.taskUseCases);
 
+  return program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+      ),
+    ),
+  );
+};
+
+export const withTaskReviewReads = (
+  environment: TaskCommandEnvironment,
+  use: (reviews: TaskReviewReadUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> => {
+  const program =
+    environment.taskReviewUseCases === undefined
+      ? withTaskReviewReadUseCases({ cwd: environment.cwd }, use).pipe(
+          Effect.map((result) =>
+            result.ok
+              ? result.value
+              : runtimeError({
+                  code: result.error.code,
+                  message:
+                    "message" in result.error
+                      ? result.error.message
+                      : "Shared But Why? state is unavailable.",
+                  help: ["Fix the reported repository or configuration problem, then retry."],
+                }),
+          ),
+        )
+      : use(environment.taskReviewUseCases);
+  return program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+      ),
+    ),
+  );
+};
+
+export const withTaskReviews = (
+  environment: TaskCommandEnvironment,
+  use: (reviews: TaskReviewUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> => {
+  const program =
+    environment.taskReviewUseCases === undefined
+      ? withTaskReviewUseCases(
+          {
+            cwd: environment.cwd,
+            globalConfigPath: environment.globalConfigPath ?? "",
+            ...(environment.reviewerAgentRuntime === undefined
+              ? {}
+              : { reviewerRuntime: environment.reviewerAgentRuntime }),
+          },
+          use,
+        ).pipe(
+          Effect.map((result) =>
+            result.ok
+              ? result.value
+              : runtimeError({
+                  code: result.error.code,
+                  message:
+                    "message" in result.error
+                      ? result.error.message
+                      : "Shared But Why? state is unavailable.",
+                  help: ["Fix the reported repository or configuration problem, then retry."],
+                }),
+          ),
+        )
+      : use(environment.taskReviewUseCases);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
