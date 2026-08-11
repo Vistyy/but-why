@@ -79,8 +79,9 @@ The package contract test owns package inspection.
 Documentation tests own current reader-visible command and setup contracts.
 Fallow and ast-grep own their named structural contracts.
 
-`just health` produces advisory coverage, complexity, duplication, and code-health reports.
-Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
+`just health` produces one advisory report from Fallow complexity and duplication analysis and non-error Effect diagnostics.
+Its summary and findings identify the analyzer source, rule, affected location, and analyzer-provided remediation direction.
+Health findings do not change the command's successful advisory exit behavior and become implementation work only when repository evidence shows a concrete defect or maintenance cost.
 
 ## Release package verification
 

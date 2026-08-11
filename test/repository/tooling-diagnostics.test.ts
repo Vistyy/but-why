@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -10,6 +10,7 @@ const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml
 const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
 const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
 const fallowRulePath = join(repositoryRoot, "fallow-rules/architecture.json");
+const healthReportScriptPath = join(repositoryRoot, "scripts/run-health-report.mjs");
 const temporaryPaths: string[] = [];
 
 type CommandResult = {
@@ -17,8 +18,13 @@ type CommandResult = {
   readonly output: string;
 };
 
-const run = (command: string, args: string[], cwd: string): CommandResult => {
-  const result = runTestProcess(command, args, { cwd });
+const run = (
+  command: string,
+  args: string[],
+  cwd: string,
+  env?: NodeJS.ProcessEnv,
+): CommandResult => {
+  const result = runTestProcess(command, args, { cwd, ...(env === undefined ? {} : { env }) });
   return {
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
@@ -101,7 +107,7 @@ describe("Effect diagnostic sensitivity", () => {
   });
 });
 
-describe("repository-authored blocking diagnostics", () => {
+describe("repository-authored tooling diagnostics", () => {
   test.each([
     ["process-properties-belong-to-cli-entry", "export const value = process.env.TEST;"],
     ["effect-tests-use-effect-vitest-runtime", "const value = Effect.runPromise(work);"],
@@ -236,6 +242,56 @@ describe("repository-authored blocking diagnostics", () => {
 
     expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
+  });
+
+  test("health reporting keeps analyzer findings actionable and advisory", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-health-report-"));
+    temporaryPaths.push(fixtureRoot);
+    const pnpm = join(fixtureRoot, "pnpm");
+    writeFileSync(
+      pnpm,
+      `#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  *"fallow health"*)
+    [[ " $* " == *" --report-only "* ]] || exit 8
+    printf '%s' '{"findings":[{"path":"src/complex.ts","name":"complexWork","line":4,"col":7,"severity":"high","actions":[{"description":"Extract focused helper functions"}]}]}'
+    ;;
+  *"fallow dupes"*)
+    [[ " $* " != *" --fail-on-issues "* ]] || exit 8
+    printf '%s' '{"clone_groups":[{"fingerprint":"dup:1234","instances":[{"file":"src/first.ts","start_line":8,"start_col":3,"end_line":12,"end_col":5},{"file":"src/second.ts","start_line":20,"start_col":2,"end_line":24,"end_col":4}],"actions":[{"description":"Extract the shared behavior"}]}]}'
+    ;;
+  *"effect-tsgo diagnostics"*)
+    [[ " $* " == *" --severity warning,message "* && " $* " != *" --strict "* ]] || exit 8
+    printf '{"diagnostics":[{"file":"%s/src/effect.ts","line":5,"column":6,"endLine":5,"endColumn":10,"severity":"warning","name":"effectRule","message":"Use Effect.gen for immediate execution."}],"summary":{"warnings":1,"messages":0}}' "$PWD"
+    ;;
+  *)
+    printf 'unexpected analyzer command: %s\\n' "$*" >&2
+    exit 9
+    ;;
+esac
+`,
+    );
+    chmodSync(pnpm, 0o755);
+
+    const result = run(process.execPath, [healthReportScriptPath, "coverage.json"], fixtureRoot, {
+      PATH: `${fixtureRoot}:${process.env.PATH ?? ""}`,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("Advisory health summary: 3 findings across 4 locations.");
+    expect(result.output).toContain(
+      "source=Fallow health | rule=complexity | severity=high | path=src/complex.ts | location=4:7 | symbol=complexWork | remediation=Extract focused helper functions",
+    );
+    expect(result.output).toContain(
+      "source=Fallow dupes | rule=code-duplication/dup:1234 | path=src/second.ts | location=20:2-24:4 | remediation=Extract the shared behavior",
+    );
+    expect(result.output).toContain(
+      "source=Effect diagnostics | rule=effectRule | severity=warning | path=src/effect.ts | location=5:6-5:10 | remediation=Use Effect.gen for immediate execution.",
+    );
+    expect(result.output).toContain(
+      "Findings are advisory. This report exits successfully when findings exist.",
+    );
   });
 
   test.each([
