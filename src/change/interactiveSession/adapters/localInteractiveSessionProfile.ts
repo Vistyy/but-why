@@ -1,9 +1,9 @@
 import { dirname, join } from "node:path";
 
-import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
-import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
-import { readRepoConfig } from "../../init/repoConfig.js";
+import { resolveInteractiveSessionAgentProfile } from "../../../agent/agentProfiles.js";
+import { validatePiAgentProfileResources } from "../../../agent/piRuntime.js";
+import { readGlobalConfig } from "../../../init/adapters/globalConfig.js";
+import { readRepoConfig } from "../../../init/adapters/repoConfig.js";
 
 export type InteractiveSessionProfileLoadResult =
   | {

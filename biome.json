@@ -9,7 +9,6 @@
       ".fallowrc.jsonc",
       "ast-grep/tests/README.md",
       "docs/**/*.md",
-      "fallow-rules/**/*.json",
       "src/**/*.ts",
       "test/**/*.ts",
       "vitest.config.ts",

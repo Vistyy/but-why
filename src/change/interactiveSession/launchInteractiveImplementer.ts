@@ -2,12 +2,12 @@ import { Effect } from "effect";
 
 import { taskSlugForId } from "../../task/taskId.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
+import type { InteractiveSessionProfileLoader } from "./adapters/localInteractiveSessionProfile.js";
 import {
   buildImplementerInitialPrompt,
   buildImplementerSystemPromptPaths,
 } from "./implementerPrompt.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
-import type { InteractiveSessionProfileLoader } from "./localInteractiveSessionProfile.js";
 
 export type ChangeImplementResult =
   | {

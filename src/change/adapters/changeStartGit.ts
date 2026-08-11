@@ -2,16 +2,16 @@ import { spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { decodeRepoConfigSource } from "../init/repoConfig.js";
-import type { LocalRepositoryContext } from "../repositoryRuntime/repositoryContext.js";
-import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
-import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
-import { changeBranchRefForSlug } from "./changeBranch.js";
+import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
+import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
+import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
+import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
+import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
-} from "./changeStartGitOperations.js";
-import type { ChangeStartRecord } from "./changeStartStore.js";
+} from "../changeStartGitOperations.js";
+import type { ChangeStartRecord } from "../changeStartStore.js";
 
 export const resolveChangeStartGitIntent = (
   context: LocalRepositoryContext,

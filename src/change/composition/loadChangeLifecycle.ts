@@ -1,11 +1,15 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/localRepositoryPreparation.js";
+import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
-import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import {
+  provisionChangeWorktree,
+  resolveChangeStartGitIntent,
+} from "../adapters/changeStartGit.js";
 import {
   type ChangeImplementResult,
   type ChangePrepareResult,
@@ -14,10 +18,9 @@ import {
   prepareChange,
   startChange,
 } from "../changeLifecycle.js";
-import { provisionChangeWorktree, resolveChangeStartGitIntent } from "../changeStartGit.js";
-import { openHerdrInteractiveSessionHost } from "../interactiveSession/herdrInteractiveSessionHost.js";
+import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/herdrInteractiveSessionHost.js";
+import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
-import { loadLocalInteractiveSessionProfile } from "../interactiveSession/localInteractiveSessionProfile.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 

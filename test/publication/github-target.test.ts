@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { GitCommandRunner } from "../../src/submissionEnvironment/gitFacts.js";
-import { detectGitHubPrTarget } from "../../src/submissionEnvironment/githubTarget.js";
+import type { GitCommandRunner } from "../../src/submissionEnvironment/adapters/gitFacts.js";
+import { detectGitHubPrTarget } from "../../src/submissionEnvironment/adapters/githubTarget.js";
 
 const cwd = "/repo";
 

@@ -8,17 +8,17 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
+  decodeReviewerOutputContract,
+  type ReviewerOutput,
+  validateReviewerArtifactRefs,
+} from "../../agent/reviewerOutput.js";
+import {
   buildAcceptanceReviewerPrompt,
   buildReviewerOutputCorrectionPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import {
-  decodeReviewerOutputContract,
-  type ReviewerOutput,
-  validateReviewerArtifactRefs,
-} from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";

@@ -15,10 +15,10 @@ import type {
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
 import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeStartStore.js";
+import type { InteractiveSessionProfileLoader } from "./interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
 import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
-import type { InteractiveSessionProfileLoader } from "./interactiveSession/localInteractiveSessionProfile.js";
 
 export type { ChangeImplementResult };
 

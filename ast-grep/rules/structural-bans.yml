@@ -47,7 +47,7 @@ files:
   - src/**/*.ts
 ignores:
   - src/main.ts
-  - src/change/interactiveSession/herdrInteractiveSessionHost.ts
+  - src/change/interactiveSession/adapters/herdrInteractiveSessionHost.ts
 rule:
   any:
     - pattern: new Date()

@@ -1,4 +1,4 @@
-import type { RemoteChangeBaseError } from "../submissionEnvironment/remoteChangeBase.js";
+import type { RemoteChangeBaseError } from "../submissionEnvironment/adapters/remoteChangeBase.js";
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export type ChangeStartGitIntent = {

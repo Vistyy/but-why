@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } 
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
+import { cleanupChangeResources } from "../../src/change/adapters/localChangeCleanupGit.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -466,7 +466,9 @@ process.exit(result.status ?? 1);
     writeFileSync(
       cleanupScript,
       `const { cleanupChangeResources } = await import(${JSON.stringify(
-        pathToFileURL(join(import.meta.dirname, "../../src/change/localChangeCleanupGit.ts")).href,
+        pathToFileURL(
+          join(import.meta.dirname, "../../src/change/adapters/localChangeCleanupGit.ts"),
+        ).href,
       )});
 const [repositoryCommonDirectory, worktreePath, branchRef] = process.argv.slice(2);
 console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, worktreePath, branchRef, remoteChangeBranch: null })));

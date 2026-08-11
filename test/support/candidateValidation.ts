@@ -1,10 +1,11 @@
 import { Effect, Layer } from "effect";
 
-import { piReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
+import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import {
   CandidateReviewerExecution,
   CandidateValidationExecution,
@@ -14,8 +15,7 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
-import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
+import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import {
   type ChangeValidationTestDependencies,

@@ -5,7 +5,7 @@ import {
   herdrSessionName,
   openHerdrInteractiveSessionHost,
   trustedContinuationExtensionPath,
-} from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
+} from "../../src/change/interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { resolvePackageAsset } from "../../src/change/packageAssetPath.js";
 
 const systemPromptPaths = [

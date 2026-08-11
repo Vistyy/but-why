@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
-} from "../../src/change/candidateCapture/localGitCandidate.js";
+} from "../../src/change/candidateCapture/adapters/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   localGitHubChangeCleanupRemote,
   localGitHubPullRequestGateway,
-} from "../../src/submissionEnvironment/localGitHubPullRequestGateway.js";
+} from "../../src/submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 
 const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({

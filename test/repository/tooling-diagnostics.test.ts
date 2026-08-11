@@ -9,7 +9,6 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");
 const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
 const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
-const fallowRulePath = join(repositoryRoot, "fallow-rules/architecture.json");
 const healthReportScriptPath = join(repositoryRoot, "scripts/run-health-report.mjs");
 const temporaryPaths: string[] = [];
 
@@ -210,37 +209,6 @@ describe("repository-authored tooling diagnostics", () => {
     expect(result.status).not.toBe(0);
     expect(result.output).toContain("inline-import-fixture.ts");
     expect(result.output).not.toContain("dynamic-import-fixture.ts");
-    expectActionablePolicyDiagnostic(result.output);
-  });
-
-  test("Fallow architecture diagnostics explain the supported interface", () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-fallow-"));
-    temporaryPaths.push(fixtureRoot);
-    mkdirSync(join(fixtureRoot, "src"));
-    mkdirSync(join(fixtureRoot, "fallow-rules"));
-    writeFileSync(
-      join(fixtureRoot, "src/domain.ts"),
-      'import "node:fs";\nexport const value = 1;\n',
-    );
-    copyFileSync(fallowRulePath, join(fixtureRoot, "fallow-rules/architecture.json"));
-    writeFileSync(
-      join(fixtureRoot, ".fallowrc.json"),
-      JSON.stringify({
-        entry: ["src/**/*.ts"],
-        rulePacks: ["./fallow-rules/architecture.json"],
-        boundaries: {
-          zones: [{ name: "domain", patterns: ["src/**/*.ts"] }],
-        },
-      }),
-    );
-
-    const result = run(
-      join(repositoryRoot, "node_modules/.bin/fallow"),
-      ["dead-code", "--no-production", "--no-cache", "--fail-on-issues", "--root", fixtureRoot],
-      fixtureRoot,
-    );
-
-    expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
   });
 

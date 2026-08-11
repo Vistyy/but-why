@@ -23,7 +23,7 @@ import { openChangeSubmit } from "../../src/change/submitChange.js";
 import { GlobalConfigValidationFailed } from "../../src/contracts/configErrors.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
-import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";

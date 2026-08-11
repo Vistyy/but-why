@@ -19,7 +19,7 @@ The source hierarchy follows these owners:
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
 - `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production.
   `implementChange` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`.
-  `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeLifecycle.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
+  `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeLifecycle.ts` selects `adapters/herdrInteractiveSessionHost.ts` as the default and only supported host.
 - `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
 - `src/agent/` owns the project reviewer-execution contract, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
@@ -44,6 +44,8 @@ Native workflow operations require an Effect service or a documented boundary-sp
 Repository Runtime owns Local Repository resolution and the Shared Repository State lifecycle.
 It provides a scoped database capability instead of an Adapter registry or application container.
 Each workflow-owned SQLite persistence module implements one owner-defined port and selects only the facts required by that workflow.
+Concrete Adapters use dedicated `adapters/` directories, except SQLite Adapters whose stable boundary is `src/sqlite/`.
+Fallow classifies every maintained file under `src/` as CLI, composition, Task, Change, Repository Runtime, Adapter, or shared code and applies an explicit dependency rule to every class.
 
 ## Change workflow
 

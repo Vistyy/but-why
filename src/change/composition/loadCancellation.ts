@@ -9,7 +9,7 @@ import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveVali
 import { openSqliteChangeCancellationPort } from "../../sqlite/sqliteChangeCancellationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
-import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import { type CancellationUseCases, openCancellationUseCases } from "../cancelChange.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";

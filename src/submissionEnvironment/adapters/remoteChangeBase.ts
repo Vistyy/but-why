@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import { parseRemoteChangeBaseRef } from "./remoteChangeBaseRef.js";
+import { parseRemoteChangeBaseRef } from "../remoteChangeBaseRef.js";
 
 export type RemoteChangeBase = {
   readonly remoteName: string;

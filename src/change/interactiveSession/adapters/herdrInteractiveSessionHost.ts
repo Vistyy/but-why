@@ -1,14 +1,14 @@
 import { readFileSync, statSync } from "node:fs";
 import { createJiti } from "jiti/static";
 
-import { piResourceArgs } from "../../agent/piRuntime.js";
-import { executeHostCommand } from "../../command/hostCommand.js";
-import { resolvePackageAsset } from "../packageAssetPath.js";
+import { piResourceArgs } from "../../../agent/piRuntime.js";
+import { executeHostCommand } from "../../../command/hostCommand.js";
+import { resolvePackageAsset } from "../../packageAssetPath.js";
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchInput,
   InteractiveSessionLaunchResult,
-} from "./interactiveSessionHost.js";
+} from "../interactiveSessionHost.js";
 
 export type HerdrCommandExecutor = (
   args: readonly string[],

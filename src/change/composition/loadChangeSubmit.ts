@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
-import { decodeRepoConfigSource, readRepoConfig } from "../../init/repoConfig.js";
+import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
+import { decodeRepoConfigSource, readRepoConfig } from "../../init/adapters/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
@@ -15,16 +15,16 @@ import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteC
 import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
-import { detectGitHubPrTarget } from "../../submissionEnvironment/githubTarget.js";
-import { localGitHubPullRequestGateway } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
-import { refreshRemoteChangeBase } from "../../submissionEnvironment/remoteChangeBase.js";
-import { readRepositoryFileAtCommit } from "../../submissionEnvironment/repositoryFile.js";
-import type { CandidateCapturePersistence } from "../candidateCapture/candidateCapturePersistence.js";
-import { openCandidateCapture } from "../candidateCapture/captureLocalCandidate.js";
+import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
+import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
+import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
-} from "../candidateCapture/localGitCandidate.js";
+} from "../candidateCapture/adapters/localGitCandidate.js";
+import type { CandidateCapturePersistence } from "../candidateCapture/candidateCapturePersistence.js";
+import { openCandidateCapture } from "../candidateCapture/captureLocalCandidate.js";
 import { candidateValidationLayer } from "../candidateValidation/composition/candidateValidationLayer.js";
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
@@ -32,8 +32,8 @@ import type {
   ChangeReviewerSessionPort,
   ChangeSubmissionPort,
 } from "../changePorts.js";
+import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
-import { localCandidatePublicationGit } from "../publication/localCandidatePublicationGit.js";
 import {
   type ChangeSubmit,
   type ChangeSubmitResult,

@@ -34,7 +34,7 @@
 - `src/cli/change/implementerPromptFile.ts`: Implementer Prompt file input handling.
 - `src/task/`: Task intent, lifecycle, persistence interfaces, files, and composition.
 - `src/change/`: Change workflows and Change-owned implementation, Candidate, validation, and delivery modules.
-- `src/change/interactiveSession/`: Interactive Session launch preparation and host execution (`launchInteractiveImplementer.ts`, `interactiveSessionHost.ts`, `herdrInteractiveSessionHost.ts`, `implementerPrompt.ts`) with `InteractiveSessionHost` as the only injected seam and Herdr as the default host selected by `loadChangeLifecycle.ts`; `implementChange` retains Change lookup and open-state validation.
+- `src/change/interactiveSession/`: Interactive Session launch preparation and host execution (`launchInteractiveImplementer.ts`, `interactiveSessionHost.ts`, `adapters/herdrInteractiveSessionHost.ts`, `implementerPrompt.ts`) with `InteractiveSessionHost` as the only injected seam and Herdr as the default host selected by `loadChangeLifecycle.ts`; `implementChange` retains Change lookup and open-state validation.
 - `src/change/packageAssetPath.ts`: package-asset resolution.
 - `src/change/candidate/`: Candidate domain records.
 - `src/change/candidateCapture/`: Candidate capture interfaces and Git Adapters.

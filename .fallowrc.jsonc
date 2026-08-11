@@ -17,13 +17,11 @@
     "effect"
   ],
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
-  "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
     "boundary-violation": "error",
     "circular-dependencies": "error",
     "dev-dependencies-in-production": "off",
     "duplicate-exports": "error",
-    "policy-violation": "error",
     "re-export-cycle": "error",
     "require-suppression-reason": "error",
     "stale-suppressions": "error",
@@ -47,90 +45,83 @@
     "maxUnitSize": 60
   },
   "boundaries": {
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": [
+        ".remarkrc.mjs",
+        "extensions/**",
+        "scripts/**",
+        "test/**",
+        "vitest.config.ts"
+      ]
+    },
     "zones": [
       {
-        "name": "cli",
-        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**"]
-      },
-      {
-        "name": "domain",
-        "patterns": [
-          "src/change/candidate/candidate.ts",
-          "src/change/change.ts",
-          "src/change/implementationBlocker.ts",
-          "src/change/implementationDecision.ts",
-          "src/change/validationRun/cleanup.ts",
-          "src/change/validationRun/acceptanceContextSnapshot.ts",
-          "src/change/validationRun/toolingErrorKind.ts",
-          "src/change/validationRun/validationRun.ts",
-          "src/task/lifecycle.ts",
-          "src/task/task.ts",
-          "src/task/taskId.ts"
-        ]
+        "name": "adapters",
+        "patterns": ["src/**/adapters/**", "src/sqlite/**"]
       },
       {
         "name": "composition",
-        "patterns": [
-          "src/change/**/composition/**",
-          "src/change/composition/**",
-          "src/repositorySnapshot/composition/**",
-          "src/task/composition/**"
-        ]
+        "patterns": ["src/**/composition/**"]
+      },
+      {
+        "name": "cli",
+        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**", "src/main.ts"]
+      },
+      {
+        "name": "task",
+        "patterns": ["src/task/**"]
+      },
+      {
+        "name": "change",
+        "patterns": ["src/agent/**", "src/change/**"]
       },
       {
         "name": "repository-runtime",
-        "patterns": ["src/repositoryRuntime/**"]
+        "patterns": ["src/repositoryRuntime/**", "src/repositorySnapshot/**"]
       },
       {
-        "name": "storage",
-        "patterns": ["src/sqlite/**"]
-      },
-      {
-        "name": "adapters",
+        "name": "shared",
         "patterns": [
-          "src/agent/piReviewerProcessExecutor.ts",
-          "src/change/changeStartGit.ts",
-          "src/change/interactiveSession/herdrInteractiveSessionHost.ts",
-          "src/change/interactiveSession/localInteractiveSessionProfile.ts",
-          "src/change/localChangeCleanupGit.ts",
-          "src/change/candidateCapture/localGitCandidate.ts",
-          "src/change/publication/localCandidatePublicationGit.ts",
-          "src/change/validation/snapshotWorkspaceCleanupGit.ts",
-          "src/repositoryPreparation/localRepositoryPreparation.ts",
-          "src/submissionEnvironment/gitFacts.ts",
-          "src/submissionEnvironment/githubTarget.ts",
-          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
-          "src/submissionEnvironment/remoteChangeBase.ts",
-          "src/submissionEnvironment/repositoryFile.ts",
-          "src/disposableWorkspace/disposableWorkspaceGit.ts",
-          "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
-          "src/init/git.ts",
-          "src/init/globalConfig.ts",
-          "src/init/repoConfig.ts"
+          "src/command/**",
+          "src/contracts/**",
+          "src/disposableWorkspace/**",
+          "src/init/**",
+          "src/output/**",
+          "src/repositoryPreparation/**",
+          "src/submissionEnvironment/**"
         ]
-      },
-      {
-        "name": "behavior",
-        "patterns": ["src/change/**", "src/repositorySnapshot/**", "src/task/**"]
       }
     ],
     "rules": [
       {
-        "from": "cli",
-        "allow": ["behavior", "composition", "domain", "repository-runtime"]
+        "from": "adapters",
+        "allow": ["change", "repository-runtime", "shared", "task"]
       },
       {
-        "from": "domain",
-        "allow": []
+        "from": "composition",
+        "allow": ["adapters", "change", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "cli",
+        "allow": ["change", "composition", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "task",
+        "allow": ["repository-runtime", "shared"]
+      },
+      {
+        "from": "change",
+        "allow": ["repository-runtime", "shared", "task"],
+        "allowTypeOnly": ["adapters"]
       },
       {
         "from": "repository-runtime",
-        "allow": ["adapters", "storage"]
+        "allow": ["adapters", "shared"]
       },
       {
-        "from": "behavior",
-        "allow": ["domain"],
-        "allowTypeOnly": ["adapters", "repository-runtime"]
+        "from": "shared",
+        "allow": []
       }
     ]
   }

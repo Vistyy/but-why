@@ -1,14 +1,14 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
+  RunDisposableExactCommitWorkspace,
+  RunDisposableExactCommitWorkspaceInput,
+} from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import type {
   DisposableWorkspaceCleanupResult,
   DisposableWorkspaceError,
   DisposableWorkspaceOperationName,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import type {
-  RunDisposableExactCommitWorkspace,
-  RunDisposableExactCommitWorkspaceInput,
-} from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type {
   ActiveSnapshotWorkspace,
   ActiveSnapshotWorkspaceResult,

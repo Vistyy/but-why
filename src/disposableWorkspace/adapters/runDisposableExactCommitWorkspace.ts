@@ -1,15 +1,16 @@
 import { Effect, Ref, type Scope } from "effect";
-import { executeHostCommandEffect } from "../command/hostCommand.js";
+import { executeHostCommandEffect } from "../../command/hostCommand.js";
 import {
   WorkspaceCommandExecutionFailed,
   type WorkspaceCommandExecutor,
-} from "../command/workspaceCommand.js";
+} from "../../command/workspaceCommand.js";
 import type {
   DisposableWorkspace,
   DisposableWorkspaceCleanupResult,
   DisposableWorkspaceError,
   DisposableWorkspaceOperationName,
-} from "./disposableWorkspace.js";
+} from "../disposableWorkspace.js";
+import { expectedDisposableWorkspacePath } from "../disposableWorkspacePath.js";
 import {
   cleanupExactDisposableWorkspace,
   copyDisposableWorkspaceFiles,
@@ -17,7 +18,6 @@ import {
   inspectDisposableWorktree,
   prepareDisposableWorkspaceParent,
 } from "./disposableWorkspaceGit.js";
-import { expectedDisposableWorkspacePath } from "./disposableWorkspacePath.js";
 
 export type RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error> = {
   readonly repoRoot: string;

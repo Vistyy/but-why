@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { Either } from "effect";
-import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
-import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
-import { formatContractDiagnostics } from "../contracts/contractDiagnostics.js";
-import { decodeRepoConfig, type RepoConfig } from "../contracts/repoConfig.js";
+import { RepoConfigValidationFailed } from "../../contracts/configErrors.js";
+import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
+import { formatContractDiagnostics } from "../../contracts/contractDiagnostics.js";
+import { decodeRepoConfig, type RepoConfig } from "../../contracts/repoConfig.js";
 
 export type ConfigReadResult<Config, Failure> =
   | { readonly ok: true; readonly config: Config }

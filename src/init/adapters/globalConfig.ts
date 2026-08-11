@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
-import { formatContractDiagnostics } from "../contracts/contractDiagnostics.js";
-import { decodeGlobalConfig, type GlobalConfig } from "../contracts/globalConfig.js";
+import { GlobalConfigValidationFailed } from "../../contracts/configErrors.js";
+import { formatContractDiagnostics } from "../../contracts/contractDiagnostics.js";
+import { decodeGlobalConfig, type GlobalConfig } from "../../contracts/globalConfig.js";
 import { type ConfigReadResult, readConfigDocument } from "./repoConfig.js";
 
 export type GlobalConfigReadResult = ConfigReadResult<GlobalConfig, GlobalConfigValidationFailed>;

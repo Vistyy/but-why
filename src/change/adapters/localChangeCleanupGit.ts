@@ -2,11 +2,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, rmdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-import type { RemoteChangeBranch } from "./change.js";
-import { branchNameForRef, changeBranchNameForRef } from "./changeBranch.js";
-import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "./changeCleanupRemote.js";
+import type { RemoteChangeBranch } from "../change.js";
+import { branchNameForRef, changeBranchNameForRef } from "../changeBranch.js";
+import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "../changeCleanupRemote.js";
 
-export type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
+export type { ChangeCleanupRemote } from "../changeCleanupRemote.js";
 
 export type ChangeCleanupResult =
   | { readonly state: "complete" }

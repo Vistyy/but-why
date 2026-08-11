@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
 
-import { decodeTokenUsage } from "../../src/contracts/tokenUsage.js";
+import { decodeTokenUsage } from "../../src/agent/tokenUsage.js";
 
 describe("token usage contract", () => {
   it.effect("normalizes optional token buckets", () =>

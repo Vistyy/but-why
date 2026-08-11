@@ -10,6 +10,7 @@ import {
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
@@ -19,7 +20,6 @@ import type {
   ReviewerSessionStore,
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
