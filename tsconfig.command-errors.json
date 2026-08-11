@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/command/hostCommand.ts",
+    "src/change/validation/runValidationCommand.ts",
+    "src/repositoryPreparation/**/*.ts",
+    "src/agent/piReviewerProcessExecutor.ts"
+  ],
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "anyUnknownInErrorContext": "error"
+        }
+      }
+    ]
+  }
+}
