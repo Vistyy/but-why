@@ -354,14 +354,23 @@ const complete = (
   sql: SqlClient.SqlClient,
   input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
 ) =>
-  Effect.zipRight(
-    sql`
+  Effect.gen(function* () {
+    const completed = yield* sql<{ readonly validationRunId: string }>`
       UPDATE candidate_validation_runs
       SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
       WHERE id = ${input.validationRunId}
-    `,
-    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
-  ).pipe(Effect.asVoid);
+        AND NOT EXISTS (
+          SELECT 1 FROM candidate_snapshot_workspaces
+          WHERE validation_run_id = ${input.validationRunId} AND cleanup_workspace = 'failed'
+        )
+      RETURNING id AS validationRunId
+    `;
+    if (completed.length === 1 && completed[0]?.validationRunId === input.validationRunId) {
+      yield* sql`
+        DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}
+      `;
+    }
+  }).pipe(Effect.asVoid);
 
 const getActiveForChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
