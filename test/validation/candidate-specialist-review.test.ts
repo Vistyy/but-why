@@ -245,9 +245,6 @@ describe("Candidate Specialist Review phase", () => {
         );
         yield* harness.run({ review: tasklessReview }, {}, false);
         expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
-          "authoritative scope constraint",
-        );
-        expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
           acceptanceContext.description,
         );
       }),

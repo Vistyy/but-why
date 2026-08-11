@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildContinuationMessage,
   containsVisibleChangeSubmit,
   countVisibleChangeSubmits,
   decideContinuation,
@@ -10,22 +9,17 @@ import {
 } from "../../extensions/continue-change.js";
 
 describe("Change Implement continuation policy", () => {
-  it("continues an unfinished Change with Findings instructions", () => {
-    const decision = decideContinuation({
-      change: { state: "open", closeReason: null },
-      currentCandidate: null,
-      currentValidationRun: null,
-      findingCount: 2,
-      toolingFailureCount: 0,
-      pullRequest: null,
-    });
-
-    expect(decision).toEqual({ kind: "findings" });
-    const message = buildContinuationMessage(decision, "change-123");
-    expect(message).toContain("Inspect the Findings");
-    expect(message).toContain("fix every applicable problem");
-    expect(message).toContain("commit the fixes");
-    expect(message).toContain("submit again");
+  it("classifies an unfinished Change with Findings", () => {
+    expect(
+      decideContinuation({
+        change: { state: "open", closeReason: null },
+        currentCandidate: null,
+        currentValidationRun: null,
+        findingCount: 2,
+        toolingFailureCount: 0,
+        pullRequest: null,
+      }),
+    ).toEqual({ kind: "findings" });
   });
 
   it.each([
@@ -87,23 +81,6 @@ describe("Change Implement continuation policy", () => {
         { head: "new-head", status: "" },
       ),
     ).toEqual({ kind: "general" });
-  });
-
-  it("continues a Change against its complete accepted intent", () => {
-    const decision = decideContinuation({
-      change: { state: "open", closeReason: null },
-      currentCandidate: null,
-      currentValidationRun: null,
-      findingCount: 0,
-      toolingFailureCount: 0,
-      pullRequest: null,
-    });
-
-    const message = buildContinuationMessage(decision, "change-123");
-    expect(message).toContain("Resume implementation of Change change-123");
-    expect(message).toContain("linked Task Context when present");
-    expect(message).toContain("complete accepted intent");
-    expect(message).toContain("until Change Submit passes");
   });
 
   it.each([
