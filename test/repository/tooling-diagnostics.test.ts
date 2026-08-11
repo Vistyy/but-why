@@ -275,7 +275,8 @@ esac
     chmodSync(pnpm, 0o755);
 
     const result = run(process.execPath, [healthReportScriptPath, "coverage.json"], fixtureRoot, {
-      PATH: `${fixtureRoot}:${process.env.PATH ?? ""}`,
+      // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
+      PATH: `${fixtureRoot}:${process.env["PATH"] ?? ""}`,
     });
 
     expect(result.status).toBe(0);
