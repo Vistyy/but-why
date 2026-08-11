@@ -424,7 +424,7 @@ describe("quality interface", () => {
       expect(unselected.child.exitCode).toBeNull();
       expect(unselected.output).toContain("waiting: test is waiting for capacity");
 
-      const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
+      const targeted = await runJust(lockFile, ["test", "test/cli/cli-task-id.test.ts"]);
       expect(targeted.status).toBe(0);
       expect(targeted.output).toContain("1 passed");
 
