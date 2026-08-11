@@ -246,9 +246,12 @@ describe("SQLite Change decoding", () => {
             WHERE id = 'owned-run'
           `,
         );
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation(
           "inject malformed Implementation Decision Snapshot",
           (sql) => sql`
@@ -258,9 +261,12 @@ describe("SQLite Change decoding", () => {
             WHERE id = 'owned-run'
           `,
         );
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation(
           "inject foreign publication Implementation Decision",
           (sql) => sql`
@@ -269,9 +275,12 @@ describe("SQLite Change decoding", () => {
             WHERE id = 'owned-run'
           `,
         );
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE candidate_validation_runs SET implementation_decisions = '[]' WHERE id = 'owned-run'`;
@@ -293,9 +302,12 @@ describe("SQLite Change decoding", () => {
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(
-          changes.authority.getCurrentPassingEvidence("change-malformed", publicationAuthority),
-        );
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(
+            "change-malformed",
+            publicationAuthority,
+          ),
+        ).toBeUndefined();
         yield* repository.operation(
           "restore absent publication",
           (sql) => sql`

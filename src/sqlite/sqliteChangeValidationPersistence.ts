@@ -1199,18 +1199,5 @@ const validateSelectedValidationRunAuthority = (
     });
   });
 
-const readBlockerHistory = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
-      `SELECT ${implementationBlockerReadColumns}
-       FROM implementation_blockers
-       WHERE change_id = ?`,
-      [changeId],
-    );
-    return yield* decodePersisted(operationName, () =>
-      decodeImplementationBlockerHistory(rows, changeId),
-    );
-  });
-
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

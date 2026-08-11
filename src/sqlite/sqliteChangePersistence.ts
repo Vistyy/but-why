@@ -849,11 +849,12 @@ const getPassingEvidence = (
       return undefined;
     }
 
+    const requestedPolicy = query?.policy;
     const requestedPolicySnapshot =
-      query?.policy === undefined
+      requestedPolicy === undefined
         ? undefined
         : yield* Effect.try({
-            try: () => encodeSqliteCandidateValidationPolicy(query.policy),
+            try: () => encodeSqliteCandidateValidationPolicy(requestedPolicy),
             catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
           });
     const requestedRunPredicate = query?.validationRunId === undefined ? "" : "AND id = ?";

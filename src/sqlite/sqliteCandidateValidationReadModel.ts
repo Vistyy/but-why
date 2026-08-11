@@ -69,7 +69,7 @@ export type DecodedValidationRun = {
   readonly latestResolvedBlockerId: string | null;
 };
 
-export const decodeValidationRunPolicy = (row: Pick<UnknownValidationRunRow, "policySnapshot">) => {
+const decodeValidationRunPolicy = (row: Pick<UnknownValidationRunRow, "policySnapshot">) => {
   const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
   return {
     policy: decodeSqliteCandidateValidationPolicy(policySnapshot),
