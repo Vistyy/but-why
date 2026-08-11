@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import {
   executeHostCommandEffect,
+  type HostCommandError,
   type HostCommandInput,
   type HostCommandResult,
 } from "../command/hostCommand.js";
@@ -17,7 +18,9 @@ import type {
 } from "./reviewerExecution.js";
 import { ReviewerProcessExecutionFailed } from "./reviewerExecution.js";
 
-type PiCommandExecutor = (input: HostCommandInput) => Effect.Effect<HostCommandResult, unknown>;
+type PiCommandExecutor = (
+  input: HostCommandInput,
+) => Effect.Effect<HostCommandResult, HostCommandError>;
 
 const executePiReviewerProcess = (
   input: ReviewerProcessInput,

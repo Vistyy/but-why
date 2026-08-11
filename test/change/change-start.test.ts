@@ -9,6 +9,7 @@ import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
 
@@ -41,7 +42,7 @@ type FixtureOptions = {
   readonly eligibility?: ChangeStartEligibilityError;
   readonly provision?: ReturnType<ChangeStartGitOperations["provisionWorktree"]>;
   readonly prepare?: Exclude<ChangeStartRecord["prepare"], null>;
-  readonly execute?: RepositoryPreparationEffectExecutor["effect"];
+  readonly execute?: RepositoryPreparationEffectExecutor;
 };
 
 const required = <Value>(value: Value | undefined, message: string): Value => {
@@ -88,11 +89,8 @@ const fixture = (options: FixtureOptions = {}) => {
       return options.provision ?? { ok: true };
     },
   };
-  const effect = options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
-  const executor: RepositoryPreparationEffectExecutor = Object.assign(
-    async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    { effect },
-  );
+  const executor: RepositoryPreparationEffectExecutor =
+    options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
   const operations = {
     start: (input: Parameters<typeof startChange>[3]) => startChange(store, git, executor, input),
     prepare: (changeId: string, preparedAt: string) =>
@@ -220,7 +218,10 @@ describe("Change Start orchestration", () => {
     () =>
       Effect.gen(function* () {
         const responses: Array<
-          Effect.Effect<{ exitCode: number; stdout: string; stderr: string }, unknown>
+          Effect.Effect<
+            { exitCode: number; stdout: string; stderr: string },
+            WorkspaceCommandExecutionFailed
+          >
         > = [
           Effect.succeed({
             exitCode: 7,
@@ -228,7 +229,7 @@ describe("Change Start orchestration", () => {
             stderr: "failed\n__BUTWHY_PREPARE_COMPLETED_prepare__:7\n",
           }),
           Effect.succeed({ exitCode: 0, stdout: "", stderr: "timed out" }),
-          Effect.fail(new Error("executor unavailable")),
+          Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
           Effect.succeed({
             exitCode: 0,
             stdout: "",

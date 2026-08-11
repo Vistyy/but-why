@@ -1,4 +1,6 @@
-import { executeHostCommand, executeHostCommandEffect } from "../command/hostCommand.js";
+import { Effect } from "effect";
+import { executeHostCommandEffect } from "../command/hostCommand.js";
+import { WorkspaceCommandExecutionFailed } from "../command/workspaceCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "./runRepositoryPreparation.js";
 
 const commandInput = (command: string, cwd: string | undefined) => ({
@@ -7,11 +9,10 @@ const commandInput = (command: string, cwd: string | undefined) => ({
   ...(cwd === undefined ? {} : { cwd }),
 });
 
-export const executeLocalRepositoryPreparation: RepositoryPreparationEffectExecutor = Object.assign(
-  (command: string, options?: { readonly cwd?: string }) =>
-    executeHostCommand(commandInput(command, options?.cwd)),
-  {
-    effect: (command: string, options?: { readonly cwd?: string }) =>
-      executeHostCommandEffect(commandInput(command, options?.cwd)),
-  },
-);
+export const executeLocalRepositoryPreparation: RepositoryPreparationEffectExecutor = (
+  command,
+  options,
+) =>
+  executeHostCommandEffect(commandInput(command, options?.cwd)).pipe(
+    Effect.mapError((error) => new WorkspaceCommandExecutionFailed({ message: error.message })),
+  );

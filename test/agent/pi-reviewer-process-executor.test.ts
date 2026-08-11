@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber, Option } from "effect";
 
 import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
 import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
@@ -89,6 +89,20 @@ describe("Pi reviewer process executor", () => {
           totalTokens: 17,
         },
       });
+    }),
+  );
+
+  it.effect("keeps unexpected command executor defects out of the expected failure channel", () =>
+    Effect.gen(function* () {
+      const defect = new Error("unexpected command executor defect");
+      const exit = yield* Effect.exit(
+        createPiReviewerProcessExecutor(() => Effect.die(defect)).execute(input),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) return;
+      expect(Cause.failureOption(exit.cause)).toEqual(Option.none());
+      expect(Cause.dieOption(exit.cause)).toEqual(Option.some(defect));
     }),
   );
 

@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { describe } from "vitest";
 import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
+import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -43,17 +44,18 @@ describe("check round Findings", () => {
             checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
             artifactsRoot: createTestWorkspace(),
             now,
-            commandExecutor: async (command, options) => {
-              const result = runTestProcess(shPath, ["-c", command], {
-                cwd: options?.cwd ?? workspace,
-                env: { PATH: restrictedPath },
-              });
-              return {
-                exitCode: result.status ?? 0,
-                stdout: result.stdout,
-                stderr: result.stderr,
-              };
-            },
+            commandExecutor: (command, options) =>
+              Effect.sync(() => {
+                const result = runTestProcess(shPath, ["-c", command], {
+                  cwd: options?.cwd ?? workspace,
+                  env: { PATH: restrictedPath },
+                });
+                return {
+                  exitCode: result.status ?? 0,
+                  stdout: result.stdout,
+                  stderr: result.stderr,
+                };
+              }),
             recordCheckRound: () => Effect.void,
           }),
         );
@@ -66,6 +68,49 @@ describe("check round Findings", () => {
         }
         expect(existsSync(marker)).toBe(false);
       }),
+  );
+
+  it.effect("translates expected command infrastructure failures", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckPhase({
+          validationRunId: "candidate-run",
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
+          artifactsRoot: createTestWorkspace(),
+          now,
+          commandExecutor: () =>
+            Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
+          recordCheckRound: () => Effect.void,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) return;
+      expect(Cause.failureOption(exit.cause)).toMatchObject({
+        value: { _tag: "CheckCommandExecutionToolingFailed", message: "executor unavailable" },
+      });
+    }),
+  );
+
+  it.effect("preserves unexpected command executor defects", () =>
+    Effect.gen(function* () {
+      const defect = new Error("unexpected executor defect");
+      const exit = yield* Effect.exit(
+        runCheckPhase({
+          validationRunId: "candidate-run",
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
+          artifactsRoot: createTestWorkspace(),
+          now,
+          commandExecutor: () => Effect.die(defect),
+          recordCheckRound: () => Effect.void,
+        }),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) return;
+      expect(Cause.failureOption(exit.cause)).toEqual(Option.none());
+      expect(Cause.dieOption(exit.cause)).toEqual(Option.some(defect));
+    }),
   );
 
   it.effect("records every configured Check after failures when continuation is enabled", () =>
@@ -81,16 +126,21 @@ describe("check round Findings", () => {
         ],
         artifactsRoot: createTestWorkspace(),
         now,
-        commandExecutor: async (command) => {
-          commands.push(command);
-          if (command === "command -v timeout >/dev/null 2>&1") {
-            return { exitCode: 0, stdout: "", stderr: "" };
-          }
+        commandExecutor: (command) =>
+          Effect.sync(() => {
+            commands.push(command);
+            if (command === "command -v timeout >/dev/null 2>&1") {
+              return { exitCode: 0, stdout: "", stderr: "" };
+            }
 
-          return command.includes("exit 1")
-            ? { exitCode: 1, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_first__:1\n" }
-            : { exitCode: 0, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n" };
-        },
+            return command.includes("exit 1")
+              ? { exitCode: 1, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_first__:1\n" }
+              : {
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n",
+                };
+          }),
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 
@@ -118,14 +168,15 @@ describe("check round Findings", () => {
             expectedHeadSha: "abc123",
             allowedUntrackedFiles: [".validation-env"],
             now,
-            commandExecutor: async (command) => {
-              commands.push(command);
-              return {
-                exitCode: 0,
-                stdout: "abc123\n M .validation-env\n",
-                stderr: "",
-              };
-            },
+            commandExecutor: (command) =>
+              Effect.sync(() => {
+                commands.push(command);
+                return {
+                  exitCode: 0,
+                  stdout: "abc123\n M .validation-env\n",
+                  stderr: "",
+                };
+              }),
             recordCheckRound: () => Effect.void,
           }),
         );
@@ -149,13 +200,12 @@ describe("check round Findings", () => {
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
         artifactsRoot,
         now,
-        commandExecutor: async (command) => {
-          if (command === "command -v timeout >/dev/null 2>&1") {
-            return { exitCode: 0, stdout: "", stderr: "" };
-          }
-
-          return { exitCode: 124, stdout: "", stderr: "partial stderr" };
-        },
+        commandExecutor: (command) =>
+          Effect.succeed(
+            command === "command -v timeout >/dev/null 2>&1"
+              ? { exitCode: 0, stdout: "", stderr: "" }
+              : { exitCode: 124, stdout: "", stderr: "partial stderr" },
+          ),
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 
@@ -196,14 +246,16 @@ describe("check round Findings", () => {
         checks: [{ id: "[quality]", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: createTestWorkspace(),
         now,
-        commandExecutor: async (command) =>
-          command === "command -v timeout >/dev/null 2>&1"
-            ? { exitCode: 0, stdout: "", stderr: "" }
-            : {
-                exitCode: 0,
-                stdout: "",
-                stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
-              },
+        commandExecutor: (command) =>
+          Effect.succeed(
+            command === "command -v timeout >/dev/null 2>&1"
+              ? { exitCode: 0, stdout: "", stderr: "" }
+              : {
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
+                },
+          ),
         recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 

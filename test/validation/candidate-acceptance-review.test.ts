@@ -334,11 +334,12 @@ const runReviewPhases = (
         ],
         now,
       });
-      const commandExecutor = async () => ({
-        exitCode: 0,
-        stdout: `${captured.headSha}\n`,
-        stderr: "",
-      });
+      const commandExecutor = () =>
+        Effect.succeed({
+          exitCode: 0,
+          stdout: `${captured.headSha}\n`,
+          stderr: "",
+        });
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId: started.validationRunId,
         changeId: captured.changeId,

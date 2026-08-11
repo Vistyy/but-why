@@ -41,9 +41,9 @@ describe("Snapshot Workspace lifecycle", () => {
             cleanupResults.push(cleanupResult);
           }),
         runInWorkspace: (workspace) =>
-          Effect.promise(async () => {
+          Effect.gen(function* () {
             expect(gitStatus(workspace.worktreePath, "symbolic-ref", "-q", "HEAD")).toBe(1);
-            const observed = await workspace.commandExecutor(
+            const observed = yield* workspace.commandExecutor(
               'printf \'%s:%s\' "$(git rev-parse HEAD)" "$(cat .env.test)"',
             );
             expect(observed).toMatchObject({
@@ -51,7 +51,15 @@ describe("Snapshot Workspace lifecycle", () => {
               stdout: `${commitSha}:LOCAL_INPUT=yes`,
             });
             return { outcome: "passed" as const, toolingFailures: [] };
-          }),
+          }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new InfrastructureToolingFailed({
+                  operationName: "test_workspace_command",
+                  message: cause.message,
+                }),
+            ),
+          ),
       });
 
       expect(result).toEqual({
@@ -189,18 +197,20 @@ describe("Snapshot Workspace lifecycle", () => {
               interrupted.push(error.cleanupResult);
             }),
           runInWorkspace: (workspace) =>
-            Effect.tryPromise({
-              try: (signal) =>
-                workspace.commandExecutor(
-                  `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
-                  { signal },
+            workspace
+              .commandExecutor(
+                `sleep 30 & child=$!; printf '%s' "$child" > '${processIdPath}'; wait "$child"`,
+              )
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new InfrastructureToolingFailed({
+                      operationName: "interrupted_test_command",
+                      message: cause.message,
+                    }),
                 ),
-              catch: (cause) =>
-                new InfrastructureToolingFailed({
-                  operationName: "interrupted_test_command",
-                  message: String(cause),
-                }),
-            }).pipe(Effect.as({ outcome: "passed" as const, toolingFailures: [] })),
+                Effect.as({ outcome: "passed" as const, toolingFailures: [] }),
+              ),
         }),
       );
       yield* Effect.promise(

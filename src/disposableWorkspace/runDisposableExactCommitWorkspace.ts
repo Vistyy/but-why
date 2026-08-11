@@ -1,5 +1,5 @@
 import { Effect, Ref, type Scope } from "effect";
-import { executeHostCommand, type HostCommandResult } from "../command/hostCommand.js";
+import { executeHostCommandEffect } from "../command/hostCommand.js";
 import {
   WorkspaceCommandExecutionFailed,
   type WorkspaceCommandExecutor,
@@ -226,19 +226,14 @@ const withInterruptedCleanupRecording = <Error>(
 
 const workspaceCommandExecutor =
   (worktreePath: string): WorkspaceCommandExecutor =>
-  async (command, options) => {
-    try {
-      const result: HostCommandResult = await executeHostCommand({
-        command: "sh",
-        args: ["-c", command],
-        cwd: options?.cwd ?? worktreePath,
-        ...(options?.signal === undefined ? {} : { signal: options.signal }),
-      });
-      return result;
-    } catch (error) {
-      throw new WorkspaceCommandExecutionFailed({ message: errorMessage(error) });
-    }
-  };
+  (command, options) =>
+    executeHostCommandEffect({
+      command: "sh",
+      args: ["-c", command],
+      cwd: options?.cwd ?? worktreePath,
+    }).pipe(
+      Effect.mapError((error) => new WorkspaceCommandExecutionFailed({ message: error.message })),
+    );
 
 const setupFailed = (
   operationName: DisposableWorkspaceOperationName,
@@ -248,6 +243,3 @@ const setupFailed = (
   operationName,
   errorMessage,
 });
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
