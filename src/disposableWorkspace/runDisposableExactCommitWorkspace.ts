@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { Effect, Ref, type Scope } from "effect";
 import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
 import {
-  type WorkspaceCommandExecutor,
   WorkspaceCommandExecutionFailed,
+  type WorkspaceCommandExecutor,
 } from "../command/workspaceCommand.js";
 import type {
   DisposableWorkspace,
