@@ -1,3 +1,4 @@
+import { NodeFileSystem } from "@effect/platform-node";
 import { Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../../agent/piReviewerProcessExecutor.js";
 import {
@@ -29,6 +30,7 @@ export const candidateValidationLayer = (input: {
   CandidateValidationLive.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
+        NodeFileSystem.layer,
         Layer.succeed(CandidateValidationPaths, {
           localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
           artifactsRoot: input.artifactsRoot,

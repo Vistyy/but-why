@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Clock, Effect } from "effect";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -13,7 +14,7 @@ import {
   PrepareCommandExecutionToolingFailed,
   type ValidationToolingFailure,
 } from "./validationToolingFailures.js";
-import { writeCommandEvidence } from "./writeCommandEvidence.js";
+import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
 export type RunPreparePhaseInput = {
   readonly validationRunId: string;
@@ -56,7 +57,11 @@ type PrepareCommandResult = {
 const prepareProducer = "prepare";
 export const runPreparePhase = (
   input: RunPreparePhaseInput,
-): Effect.Effect<RunPreparePhaseResult, ValidationToolingFailure | RepositoryStorageError> =>
+): Effect.Effect<
+  RunPreparePhaseResult,
+  ValidationToolingFailure | RepositoryStorageError,
+  FileSystem.FileSystem
+> =>
   runWithSubmitProgress({
     progress: input.progress,
     phase: { kind: "prepare" },
@@ -199,31 +204,29 @@ const writePrepareArtifacts = (input: {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
-}): Effect.Effect<ReturnType<typeof writeCommandEvidence>, ValidationToolingFailure> =>
-  Effect.try({
-    try: () =>
-      writeCommandEvidence({
-        validationRunId: input.validationRunId,
-        phase: validationPhase.prepare,
-        producer: prepareProducer,
-        commandResult: { ...input.commandResult, timedOut: input.timedOut },
-        durationMs: input.durationMs,
-        logFields: [
-          { name: "producer", value: prepareProducer },
-          { name: "command", value: input.prepare.command },
-          { name: "timeoutSeconds", value: input.prepare.timeoutSeconds },
-        ],
-        artifactsRoot: input.artifactsRoot,
-        ...(input.artifactMaxBytes === undefined
-          ? {}
-          : { artifactMaxBytes: input.artifactMaxBytes }),
-      }),
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_prepare_artifacts",
-        message: errorMessage(error),
-      }),
-  });
+}): Effect.Effect<ValidationCommandArtifacts, ValidationToolingFailure, FileSystem.FileSystem> =>
+  writeCommandEvidence({
+    validationRunId: input.validationRunId,
+    phase: validationPhase.prepare,
+    producer: prepareProducer,
+    commandResult: { ...input.commandResult, timedOut: input.timedOut },
+    durationMs: input.durationMs,
+    logFields: [
+      { name: "producer", value: prepareProducer },
+      { name: "command", value: input.prepare.command },
+      { name: "timeoutSeconds", value: input.prepare.timeoutSeconds },
+    ],
+    artifactsRoot: input.artifactsRoot,
+    ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new InfrastructureToolingFailed({
+          operationName: "record_prepare_artifacts",
+          message: errorMessage(error),
+        }),
+    ),
+  );
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

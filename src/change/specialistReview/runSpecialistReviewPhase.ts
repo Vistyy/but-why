@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import {
@@ -135,7 +136,8 @@ export const runSpecialistReviewPhase = (
   input: RunSpecialistReviewPhaseInput,
 ): Effect.Effect<
   RunSpecialistReviewPhaseResult,
-  ValidationToolingFailure | RepositoryStorageError
+  ValidationToolingFailure | RepositoryStorageError,
+  FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
     let hasFindings = false;
@@ -189,7 +191,8 @@ const runSpecialist = (
     readonly toolingFailure?: ValidationToolingFailure;
     readonly reviewerEvidence?: SpecialistReviewerContinuityEvidence;
   },
-  ValidationToolingFailure | RepositoryStorageError
+  ValidationToolingFailure | RepositoryStorageError,
+  FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);

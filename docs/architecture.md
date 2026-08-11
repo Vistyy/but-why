@@ -38,6 +38,9 @@ CLI modules select operations and translate results.
 They do not construct storage or coordinate persistence.
 Task and Change modules own cohesive persistence ports and the operations that preserve their invariants.
 Each behavior selects concrete Adapters and constructs its workflow in its own `composition/` directory.
+Workflow and domain modules expose the Effect service requirements that they own, and composition selects concrete services.
+Runtime Adapters may use native Node or Promise APIs when adapting external boundaries.
+Native workflow operations require an Effect service or a documented boundary-specific reason.
 Repository Runtime owns Local Repository resolution and the Shared Repository State lifecycle.
 It provides a scoped database capability instead of an Adapter registry or application container.
 Each workflow-owned SQLite persistence module implements one owner-defined port and selects only the facts required by that workflow.

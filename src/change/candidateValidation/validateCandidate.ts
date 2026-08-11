@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
@@ -149,12 +150,14 @@ export class CandidateValidation extends Context.Tag("CandidateValidation")<
 export const CandidateValidationLive = Layer.effect(
   CandidateValidation,
   Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
     const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
     return makeCandidateValidation({
       ...paths,
+      fileSystem,
       persistence,
       reviewerExecution,
       createSnapshotWorkspace,
@@ -165,6 +168,7 @@ export const CandidateValidationLive = Layer.effect(
 const makeCandidateValidation = (dependencies: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
+  readonly fileSystem: FileSystem.FileSystem;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
@@ -331,6 +335,7 @@ const makeCandidateValidation = (dependencies: {
 const runCandidatePhases = (
   dependencies: {
     readonly artifactsRoot: string;
+    readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
     readonly sessionStore?: ReviewerSessionStore;
@@ -394,7 +399,7 @@ const runCandidatePhases = (
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
                 now: input.now,
                 recordPrepareRound: dependencies.persistence.recordPrepareRound,
-              }),
+              }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
       checks: () =>
         runCheckPhase({
@@ -410,7 +415,7 @@ const runCandidatePhases = (
           now: input.now,
           continueAfterFinding: true,
           recordCheckRound: dependencies.persistence.recordCheckRound,
-        }),
+        }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
       ...(acceptanceContext === undefined || acceptanceReview === undefined
         ? {}
         : {
@@ -439,7 +444,7 @@ const runCandidatePhases = (
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
                 recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
                 ...sessionOptions,
-              }),
+              }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
       specialistReviews: () =>
         runSpecialistReviewPhase({
@@ -464,7 +469,7 @@ const runCandidatePhases = (
             dependencies.persistence.listPreviousCandidateReviewerFindings,
           recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
           ...sessionOptions,
-        }),
+        }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });
   })();
 

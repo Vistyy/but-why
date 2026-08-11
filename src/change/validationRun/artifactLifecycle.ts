@@ -1,6 +1,5 @@
-import { rmSync } from "node:fs";
 import { relative, resolve } from "node:path";
-
+import * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -13,7 +12,7 @@ import type { ValidationArtifactLifecyclePort } from "../validation/changeValida
 export const openArtifactLifecycle = (input: {
   readonly persistence: Pick<ValidationArtifactLifecyclePort, "listRunIdsForChange">;
   readonly artifactsRoot: string;
-}): ArtifactLifecycleOwner => ({
+}): ArtifactLifecycleOwner<FileSystem.FileSystem> => ({
   removeContent: (changeId) => removeChangeArtifactContent(input, changeId),
 });
 
@@ -23,25 +22,32 @@ const removeChangeArtifactContent = (
     readonly artifactsRoot: string;
   },
   changeId: string,
-): Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError> =>
+): Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
     const runIds = yield* dependencies.persistence.listRunIdsForChange(changeId);
     let removed = true;
     for (const runId of runIds) {
-      if (!removeValidationRunContent(dependencies.artifactsRoot, runId)) removed = false;
+      const result = yield* removeValidationRunContent(
+        fileSystem,
+        dependencies.artifactsRoot,
+        runId,
+      );
+      if (!result) removed = false;
     }
     return removed ? { ok: true } : { ok: false };
   });
 
-const removeValidationRunContent = (artifactsRoot: string, validationRunId: string): boolean => {
-  try {
-    const target = safeArtifactDirectory(artifactsRoot, validationRunId);
-    rmSync(target, { recursive: true, force: true });
+const removeValidationRunContent = (
+  fileSystem: FileSystem.FileSystem,
+  artifactsRoot: string,
+  validationRunId: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const target = yield* Effect.try(() => safeArtifactDirectory(artifactsRoot, validationRunId));
+    yield* fileSystem.remove(target, { recursive: true, force: true });
     return true;
-  } catch {
-    return false;
-  }
-};
+  }).pipe(Effect.orElseSucceed(() => false));
 
 const safeArtifactDirectory = (artifactsRoot: string, validationRunId: string): string => {
   const root = resolve(artifactsRoot);

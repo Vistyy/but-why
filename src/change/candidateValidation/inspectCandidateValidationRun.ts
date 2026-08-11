@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
@@ -55,21 +56,21 @@ export type CandidateValidationArtifactContentResult =
   | { readonly ok: false; readonly code: "artifact_not_found" }
   | { readonly ok: false; readonly code: "artifact_content_unavailable" };
 
-export type CandidateValidationRunInspectionUseCases = {
+export type CandidateValidationRunInspectionUseCases<R = never> = {
   readonly inspectRun: (
     validationRunId: string,
-  ) => Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError>;
+  ) => Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError, R>;
   readonly readArtifact: (
     validationRunId: string,
     artifactRef: string,
-  ) => Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError>;
+  ) => Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError, R>;
 };
 
 export const openCandidateValidationRunInspection = (input: {
   readonly persistence: ChangeValidationReadPort;
   readonly changePersistence: ChangeReadPort;
   readonly artifactsRoot: string;
-}): CandidateValidationRunInspectionUseCases => ({
+}): CandidateValidationRunInspectionUseCases<FileSystem.FileSystem> => ({
   inspectRun: (validationRunId) => inspectRun(input, validationRunId),
   readArtifact: (validationRunId, artifactRef) => readArtifact(input, validationRunId, artifactRef),
 });
@@ -81,7 +82,11 @@ const inspectRun = (
     readonly artifactsRoot: string;
   },
   validationRunId: string,
-): Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError> =>
+): Effect.Effect<
+  CandidateValidationRunInspection | undefined,
+  RepositoryStorageError,
+  FileSystem.FileSystem
+> =>
   Effect.gen(function* () {
     const validationRun = yield* dependencies.persistence.getRunById(validationRunId);
     if (validationRun === undefined) return undefined;
@@ -98,6 +103,16 @@ const inspectRun = (
     const findingArtifactRefs = new Set(findings.flatMap((finding) => finding.artifactRefs));
     const includeAllAvailablePreviews = toolingFailures.length > 0;
 
+    const inspectedArtifacts = yield* Effect.forEach(artifacts, (artifact) => {
+      const referencedByFinding = findingArtifactRefs.has(artifact.ref);
+      if (!referencedByFinding && !includeAllAvailablePreviews) return Effect.succeed(artifact);
+
+      return Effect.map(readPreview(dependencies.artifactsRoot, artifact), (preview) => ({
+        ...artifact,
+        ...(referencedByFinding || preview.status === "available" ? { preview } : {}),
+      }));
+    });
+
     return {
       validationRun,
       change,
@@ -108,16 +123,7 @@ const inspectRun = (
       specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
       findings,
       toolingFailures,
-      artifacts: artifacts.map((artifact) => {
-        const referencedByFinding = findingArtifactRefs.has(artifact.ref);
-        if (!referencedByFinding && !includeAllAvailablePreviews) return artifact;
-
-        const preview = readPreview(dependencies.artifactsRoot, artifact);
-        return {
-          ...artifact,
-          ...(referencedByFinding || preview.status === "available" ? { preview } : {}),
-        };
-      }),
+      artifacts: inspectedArtifacts,
     };
   });
 
@@ -128,7 +134,11 @@ const readArtifact = (
   },
   validationRunId: string,
   artifactRef: string,
-): Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError> =>
+): Effect.Effect<
+  CandidateValidationArtifactContentResult,
+  RepositoryStorageError,
+  FileSystem.FileSystem
+> =>
   Effect.gen(function* () {
     if ((yield* dependencies.persistence.getRunById(validationRunId)) === undefined) {
       return { ok: false, code: "validation_run_not_found" };
@@ -138,7 +148,7 @@ const readArtifact = (
     );
     if (artifact === undefined) return { ok: false, code: "artifact_not_found" };
 
-    const content = readValidationArtifactContent(dependencies.artifactsRoot, artifact.path);
+    const content = yield* readValidationArtifactContent(dependencies.artifactsRoot, artifact.path);
     return content === undefined
       ? { ok: false, code: "artifact_content_unavailable" }
       : { ok: true, artifact, content: content.toString("utf8") };
@@ -147,16 +157,16 @@ const readArtifact = (
 const readPreview = (
   artifactsRoot: string,
   artifact: CandidateValidationArtifact,
-): CandidateValidationArtifactPreview => {
-  const content = readValidationArtifactContent(artifactsRoot, artifact.path);
-  if (content === undefined) return { status: "unavailable", reason: "content_unavailable" };
+): Effect.Effect<CandidateValidationArtifactPreview, never, FileSystem.FileSystem> =>
+  Effect.map(readValidationArtifactContent(artifactsRoot, artifact.path), (content) => {
+    if (content === undefined) return { status: "unavailable", reason: "content_unavailable" };
 
-  const preview = content.subarray(0, candidateValidationArtifactPreviewBytes);
-  return {
-    status: "available",
-    content: preview.toString("utf8"),
-    bytes: preview.byteLength,
-    storedBytes: artifact.storedBytes,
-    truncated: content.byteLength > preview.byteLength,
-  };
-};
+    const preview = content.subarray(0, candidateValidationArtifactPreviewBytes);
+    return {
+      status: "available",
+      content: preview.toString("utf8"),
+      bytes: preview.byteLength,
+      storedBytes: artifact.storedBytes,
+      truncated: content.byteLength > preview.byteLength,
+    };
+  });
