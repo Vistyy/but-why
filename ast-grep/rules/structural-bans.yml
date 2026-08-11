@@ -165,23 +165,17 @@ rule:
     - pattern: execFileSync("npm", $$$ARGS)
     - pattern: spawnSync('npm', $$$ARGS)
     - pattern: execFileSync('npm', $$$ARGS)
-    - pattern: runTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: runTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
-    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
-    - pattern: startTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: startTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND], $$$OPTIONS)
-    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, [$NPM_COMMAND, $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: runTestProcessOrThrow($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: startTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: $TEST_PROCESS_NAMESPACE.runTestProcessOrThrow($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
+    - pattern: $TEST_PROCESS_NAMESPACE.startTestProcess($NPM_EXECUTABLE, $NPM_ARGUMENTS, $$$OPTIONS)
 constraints:
   NPM_EXECUTABLE:
     regex: '^["''`]npm["''`]$'
-  NPM_COMMAND:
-    regex: '^["''`](?:add|ci|cit|clean-install|clean-install-test|i|ic|in|ins|inst|insta|instal|install|install-ci-test|install-clean|install-test|isnt|isnta|isntal|isntall|isntall-clean|it|pack|sit)["''`]$'
+  NPM_ARGUMENTS:
+    regex: '^[^\[]*\[\s*["''`](?:add|ci|cit|clean-install|clean-install-test|i|ic|in|ins|inst|insta|instal|install|install-ci-test|install-clean|install-test|isnt|isnta|isntal|isntall|isntall-clean|it|pack|sit)["''`]'
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

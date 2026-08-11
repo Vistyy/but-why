@@ -97,6 +97,7 @@ id: package-installation-belongs-to-package-contract
 valid:
   - spawnSync("git", ["status"])
   - runTestProcess("npm", ["view", "but-why"])
+  - runTestProcess("npm", ["view", "install"], { cwd })
 invalid:
   - spawnSync("npm", ["pack"])
   - execFileSync("npm", ["pack"])
@@ -125,6 +126,9 @@ invalid:
   - runTestProcess("npm", ["it"], { cwd })
   - runTestProcess("npm", ["sit"], { cwd })
   - runTestProcessOrThrow("npm", ["pack"], { cwd })
+  - runTestProcessOrThrow("npm", (["pack"]), { cwd })
+  - runTestProcess("npm", (["install"]), { cwd })
+  - runTestProcess("npm", ["install"] as const, { cwd })
   - startTestProcess("npm", ["install"], { cwd })
   - testProcess.runTestProcess("npm", ["install"], { cwd })
   - "runTestProcess(`npm`, [`install`], { cwd })"

@@ -162,7 +162,7 @@ describe("repository-authored tooling diagnostics", () => {
     ],
     [
       "package-installation-belongs-to-package-contract",
-      "const result = runTestProcess(`npm`, [`install`], { cwd });",
+      "const result = runTestProcess(`npm`, ([`install`] as const), { cwd });",
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
