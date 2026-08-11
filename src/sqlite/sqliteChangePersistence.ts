@@ -334,20 +334,15 @@ const raiseBlocker = (
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return { ok: false as const, code: "change_not_open" as const };
-    const history = yield* readBlockers(sql, input.changeId, "raise Implementation Blocker");
-    if (history.active !== null) return { ok: false as const, code: "change_blocked" as const };
+    const active = yield* readActiveBlocker(sql, input.changeId, "raise Implementation Blocker");
+    if (active !== null) return { ok: false as const, code: "change_blocked" as const };
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
     const updated = yield* requireBaseChange(sql, input.changeId, "raise Implementation Blocker");
-    const recorded = yield* readBlockers(sql, input.changeId, "raise Implementation Blocker");
-    const stored = recorded.blockers.find((blocker) => blocker.id === id);
+    const stored = yield* readBlockerById(sql, input.changeId, id, "raise Implementation Blocker");
     if (stored === undefined)
       return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
-    return {
-      ok: true as const,
-      change: { ...updated, activeBlocker: recorded.active },
-      blocker: stored,
-    };
+    return { ok: true as const, change: { ...updated, activeBlocker: stored }, blocker: stored };
   });
 
 const resolveBlocker = (
@@ -362,8 +357,7 @@ const resolveBlocker = (
     const change = yield* readBlockerResolutionChange(sql, input.changeId);
     if (change === undefined)
       return yield* invalidData("resolve Implementation Blocker", "Change disappeared");
-    const history = yield* readBlockers(sql, input.changeId, "resolve Implementation Blocker");
-    const blocker = history.active;
+    const blocker = yield* readActiveBlocker(sql, input.changeId, "resolve Implementation Blocker");
     if (blocker === null) return { ok: false as const, code: "no_active_blocker" as const };
     const resolutionId = randomUUID();
     yield* sql`UPDATE implementation_blockers SET resolved_at = ${input.now}, resolution_id = ${resolutionId}, resolution_recorded_at = ${input.now}, resolution_content = ${input.content} WHERE id = ${blocker.id}`;
@@ -371,15 +365,15 @@ const resolveBlocker = (
       yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
     }
     const updated = yield* requireBaseChange(sql, input.changeId, "resolve Implementation Blocker");
-    const recorded = yield* readBlockers(sql, input.changeId, "resolve Implementation Blocker");
-    const resolved = recorded.blockers.find((item) => item.id === blocker.id);
+    const resolved = yield* readBlockerById(
+      sql,
+      input.changeId,
+      blocker.id,
+      "resolve Implementation Blocker",
+    );
     if (resolved === undefined)
       return yield* invalidData("resolve Implementation Blocker", "Blocker disappeared");
-    return {
-      ok: true as const,
-      change: { ...updated, activeBlocker: recorded.active },
-      blocker: resolved,
-    };
+    return { ok: true as const, change: { ...updated, activeBlocker: null }, blocker: resolved };
   });
 
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
@@ -399,6 +393,44 @@ const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName:
     sql.unsafe<UnknownImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
       [changeId],
+    ),
+    (rows) =>
+      decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
+  );
+
+const readActiveBlocker = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+  Effect.map(
+    readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND resolved_at IS NULL", [
+      changeId,
+    ]),
+    (history) => history.active,
+  );
+
+const readBlockerById = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  blockerId: string,
+  operationName: string,
+) =>
+  Effect.map(
+    readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND id = ?", [
+      changeId,
+      blockerId,
+    ]),
+    (history) => history.blockers[0],
+  );
+
+const readSelectedBlockers = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+  predicate: string,
+  parameters: readonly unknown[],
+) =>
+  Effect.flatMap(
+    sql.unsafe<UnknownImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE ${predicate}`,
+      parameters,
     ),
     (rows) =>
       decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
@@ -612,6 +644,23 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
       ),
   );
 
+const readDecisionById = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  decisionId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(
+    sql<UnknownImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
+        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
+      FROM implementation_decisions
+      WHERE change_id = ${changeId} AND id = ${decisionId}
+    `,
+    (rows) =>
+      decodePersisted(operationName, () => decodeImplementationDecisions(rows, changeId)[0]),
+  );
+
 const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
   Effect.gen(function* () {
     const change = yield* readChangeState(sql, input.changeId, "record Implementation Decision");
@@ -622,8 +671,12 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
       INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
       VALUES (${id}, ${input.changeId}, ${input.now}, ${input.choice}, ${input.rationale})
     `;
-    const decisions = yield* listDecisions(sql, input.changeId);
-    const decision = decisions.find((item) => item.id === id);
+    const decision = yield* readDecisionById(
+      sql,
+      input.changeId,
+      id,
+      "record Implementation Decision",
+    );
     if (decision === undefined)
       return yield* invalidData("record Implementation Decision", "Decision disappeared");
     return { ok: true as const, decision };
@@ -634,7 +687,7 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
     sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
       taskId,
     ]),
-    (rows) => mapRow(rows[0], "read Change by Task", sql),
+    (rows) => mapTaskRow(rows[0], "read Change by Task", sql),
   );
 
 const getPassingEvidence = (
@@ -752,7 +805,7 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
     ),
     (rows) =>
       Effect.map(
-        Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
+        Effect.forEach(rows, (row) => mapRequiredBaseRow(row, "list Changes", sql)),
         (changes) => changes.sort(compareChanges),
       ),
   );
@@ -768,7 +821,9 @@ const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string
     ),
     (rows) =>
       Effect.map(
-        Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
+        Effect.forEach(rows, (row) =>
+          mapRequiredBaseRow(row, "list Changes for reconciliation", sql),
+        ),
         (changes) => changes.sort(compareChanges),
       ),
   );
@@ -1069,8 +1124,12 @@ const sameTarget = (
   left.baseBranch === right.baseBranch &&
   left.remoteName === right.remoteName;
 
-const mapRequiredRow = (row: UnknownChangeRow, operationName: string, sql: SqlClient.SqlClient) =>
-  Effect.flatMap(mapRow(row, operationName, sql), (change) =>
+const mapRequiredBaseRow = (
+  row: UnknownChangeRow,
+  operationName: string,
+  sql: SqlClient.SqlClient,
+) =>
+  Effect.flatMap(mapBaseRow(row, operationName, sql), (change) =>
     change === undefined
       ? invalidData(operationName, "Change row disappeared")
       : Effect.succeed(change),
@@ -1086,13 +1145,27 @@ const mapRow = (
       ? Effect.succeed(undefined)
       : Effect.gen(function* () {
           const decisions = yield* listDecisions(sql, base.id);
-          const blockers = yield* readBlockers(sql, base.id, operationName);
+          const activeBlocker = yield* readActiveBlocker(sql, base.id, operationName);
           return {
             ...base,
             implementationDecisions: decisions,
-            activeBlocker: blockers.active,
+            activeBlocker,
           } satisfies ChangeRecord;
         }),
+  );
+
+const mapTaskRow = (
+  row: UnknownChangeRow | undefined,
+  operationName: string,
+  sql: SqlClient.SqlClient,
+) =>
+  Effect.flatMap(mapBaseRow(row, operationName, sql), (base) =>
+    base === undefined
+      ? Effect.succeed(undefined)
+      : Effect.map(readActiveBlocker(sql, base.id, operationName), (activeBlocker) => ({
+          ...base,
+          activeBlocker,
+        })),
   );
 
 const mapBaseRow = (

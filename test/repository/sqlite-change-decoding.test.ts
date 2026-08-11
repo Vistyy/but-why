@@ -416,11 +416,26 @@ describe("SQLite Change decoding", () => {
             WHERE id = ${raised.blocker.id}
           `,
         );
-        yield* repository.operation(
-          "corrupt unrelated Implementation Decision history",
-          (sql) =>
-            sql`UPDATE implementation_decisions SET choice = 7 WHERE change_id = ${captured.changeId}`,
+        yield* repository.operation("corrupt unrelated Change history", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE implementation_decisions SET choice = 7 WHERE change_id = ${captured.changeId}`;
+            yield* sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${raised.blocker.id}`;
+          }),
         );
+        expect(
+          yield* changes.authority.recordImplementationDecision({
+            changeId: captured.changeId,
+            choice: "Record only the new Decision",
+            rationale: "Earlier Decision history is not required by this mutation.",
+            now: "2026-08-09T20:22:30.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(
+          yield* changes.reads.listChanges({
+            repositoryCommonDirectory: input.commonDirectory,
+            includeClosed: true,
+          }),
+        ).toHaveLength(1);
         const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Need another decision.",
@@ -433,6 +448,16 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:24:00.000Z",
         });
         if (!secondResolution.ok) throw new Error(secondResolution.code);
+        expect(
+          yield* changes.delivery.cancelChange({
+            changeId: captured.changeId,
+            reason: "Exercise reconciliation selection.",
+            now: "2026-08-09T20:25:00.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(
+          yield* changes.delivery.listChangesForReconciliation(input.commonDirectory),
+        ).toHaveLength(1);
         yield* repository.operation(
           "make a Resolution belong to two Blockers",
           (sql) =>
