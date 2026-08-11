@@ -8,6 +8,10 @@ if (coveragePath === undefined) {
   process.exit(2);
 }
 
+/**
+ * @param {string} label
+ * @param {readonly string[]} args
+ */
 const runAnalyzer = (label, args) => {
   const result = spawnSync("pnpm", args, {
     cwd: process.cwd(),
@@ -23,6 +27,11 @@ const runAnalyzer = (label, args) => {
   return result.stdout;
 };
 
+/**
+ * @param {string} label
+ * @param {string} source
+ * @returns {Readonly<Record<string, unknown>>}
+ */
 const decodeObject = (label, source) => {
   const parsed = JSON.parse(source);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -31,48 +40,100 @@ const decodeObject = (label, source) => {
   return parsed;
 };
 
+/**
+ * @param {unknown} result
+ * @param {string} field
+ * @param {string} label
+ */
+const property = (result, field, label) => {
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    throw new Error(`${label} result is not an object`);
+  }
+  return Reflect.get(result, field);
+};
+
+/**
+ * @param {unknown} result
+ * @param {string} field
+ * @param {string} label
+ * @returns {readonly unknown[]}
+ */
 const requiredArray = (result, field, label) => {
-  const value = Reflect.get(result, field);
+  const value = property(result, field, label);
   if (!Array.isArray(value)) throw new Error(`${label} result is missing ${field}`);
   return value;
 };
 
+/**
+ * @param {unknown} result
+ * @param {string} field
+ * @param {string} label
+ * @returns {Readonly<Record<string, unknown>>}
+ */
 const requiredObject = (result, field, label) => {
-  const value = Reflect.get(result, field);
+  const value = property(result, field, label);
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} result is missing ${field}`);
   }
   return value;
 };
 
+/**
+ * @param {unknown} result
+ * @param {string} field
+ * @param {string} label
+ */
 const requiredString = (result, field, label) => {
-  const value = Reflect.get(result, field);
+  const value = property(result, field, label);
   if (typeof value !== "string") throw new Error(`${label} is missing ${field}`);
   return value;
 };
 
+/**
+ * @param {unknown} result
+ * @param {string} field
+ * @param {string} label
+ */
 const requiredNumber = (result, field, label) => {
-  const value = Reflect.get(result, field);
+  const value = property(result, field, label);
   if (typeof value !== "number") throw new Error(`${label} is missing ${field}`);
   return value;
 };
 
+/**
+ * @param {unknown} result
+ * @param {string} field
+ */
 const optionalNumber = (result, field) => {
-  const value = Reflect.get(result, field);
+  const value = property(result, field, "Optional numeric field");
   return typeof value === "number" ? value : undefined;
 };
 
+/** @param {string} value */
 const concise = (value) => value.replaceAll(/\s+/g, " ").trim();
 
+/**
+ * @param {number} line
+ * @param {number} column
+ * @param {number} [endLine]
+ * @param {number} [endColumn]
+ */
 const location = (line, column, endLine, endColumn) => {
   const start = `${line}:${column}`;
-  return endLine === undefined || endColumn === undefined || (endLine === line && endColumn === column)
+  return endLine === undefined ||
+    endColumn === undefined ||
+    (endLine === line && endColumn === column)
     ? start
     : `${start}-${endLine}:${endColumn}`;
 };
 
+/** @param {string} path */
 const repositoryPath = (path) => (isAbsolute(path) ? relative(process.cwd(), path) : path);
 
+/**
+ * @param {unknown} finding
+ * @param {string} label
+ */
 const firstAction = (finding, label) => {
   const actions = requiredArray(finding, "actions", label);
   const action = actions[0];
@@ -132,17 +193,22 @@ const complexityFindings = requiredArray(health, "findings", "Fallow health");
 const cloneGroups = requiredArray(duplication, "clone_groups", "Fallow duplication");
 const effectDiagnostics = requiredArray(effect, "diagnostics", "Effect diagnostics");
 const effectSummary = requiredObject(effect, "summary", "Effect diagnostics");
-const duplicationLocations = cloneGroups.reduce(
-  (count, group, index) =>
-    count + requiredArray(group, "instances", `Fallow duplication finding ${index + 1}`).length,
-  0,
-);
+let duplicationLocations = 0;
+for (const [index, group] of cloneGroups.entries()) {
+  duplicationLocations += requiredArray(
+    group,
+    "instances",
+    `Fallow duplication finding ${index + 1}`,
+  ).length;
+}
 const findingCount = complexityFindings.length + cloneGroups.length + effectDiagnostics.length;
 const locationCount = complexityFindings.length + duplicationLocations + effectDiagnostics.length;
 
 console.log(`Advisory health summary: ${findingCount} findings across ${locationCount} locations.`);
 console.log(`- Fallow complexity: ${complexityFindings.length} findings.`);
-console.log(`- Fallow duplication: ${cloneGroups.length} findings across ${duplicationLocations} locations.`);
+console.log(
+  `- Fallow duplication: ${cloneGroups.length} findings across ${duplicationLocations} locations.`,
+);
 console.log(
   `- Effect diagnostics: ${effectDiagnostics.length} findings (${requiredNumber(effectSummary, "warnings", "Effect summary")} warnings, ${requiredNumber(effectSummary, "messages", "Effect summary")} messages).`,
 );

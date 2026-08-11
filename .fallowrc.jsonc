@@ -1,11 +1,13 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": [
-    "src/main.ts",
+    ".remarkrc.mjs",
     "extensions/**/*.ts",
-    "test/**/*.ts",
+    "scripts/**/*.mjs",
     "scripts/**/*.ts",
-    "scripts/run-health-report.mjs"
+    "src/main.ts",
+    "test/**/*.ts",
+    "vitest.config.ts"
   ],
   "ignoreDependencies": [
     "@effect/cli",

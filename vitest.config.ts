@@ -6,7 +6,7 @@ export default defineConfig({
     reporters: ["dot"],
     coverage: {
       all: true,
-      include: ["src/**/*.ts"],
+      include: ["extensions/**/*.ts", "scripts/**/*.{mjs,ts}", "src/**/*.ts"],
       provider: "istanbul",
       reporter: ["json", "json-summary"],
       reportsDirectory: "coverage",

@@ -78,10 +78,10 @@ const openState = async (input: OpenStateInput): Promise<number> => {
   );
 
   if (outcome._tag === "Left") {
-    process.stdout.write(JSON.stringify({ ok: false, error: { _tag: outcome.left._tag } }) + "\n");
+    process.stdout.write(`${JSON.stringify({ ok: false, error: { _tag: outcome.left._tag } })}\n`);
     return 1;
   }
-  process.stdout.write(JSON.stringify(outcome.right) + "\n");
+  process.stdout.write(`${JSON.stringify(outcome.right)}\n`);
   return 0;
 };
 
@@ -128,10 +128,10 @@ const openRead = async (input: {
   );
 
   if (outcome._tag === "Left") {
-    process.stdout.write(JSON.stringify({ ok: false, error: { _tag: outcome.left._tag } }) + "\n");
+    process.stdout.write(`${JSON.stringify({ ok: false, error: { _tag: outcome.left._tag } })}\n`);
     return 1;
   }
-  process.stdout.write(JSON.stringify(outcome.right) + "\n");
+  process.stdout.write(`${JSON.stringify(outcome.right)}\n`);
   return 0;
 };
 
@@ -180,7 +180,7 @@ const main = async (): Promise<number> => {
     case "hold-lock": {
       const [statePath, releasePath] = rest;
       if (statePath === undefined || releasePath === undefined) {
-        process.stderr.write(usage + "\n");
+        process.stderr.write(`${usage}\n`);
         return 2;
       }
       return await holdLock(statePath, releasePath);
@@ -189,7 +189,7 @@ const main = async (): Promise<number> => {
       const [statePath, commonDirectory, busyTimeoutMs, contentionTimeoutMs, retryDelayMs, title] =
         rest;
       if (statePath === undefined || commonDirectory === undefined || title === undefined) {
-        process.stderr.write(usage + "\n");
+        process.stderr.write(`${usage}\n`);
         return 2;
       }
       return await openState({
@@ -206,7 +206,7 @@ const main = async (): Promise<number> => {
     case "open-read": {
       const [statePath, commonDirectory, busyTimeoutMs, contentionTimeoutMs, retryDelayMs] = rest;
       if (statePath === undefined || commonDirectory === undefined) {
-        process.stderr.write(usage + "\n");
+        process.stderr.write(`${usage}\n`);
         return 2;
       }
       return await openRead({
@@ -220,7 +220,7 @@ const main = async (): Promise<number> => {
       });
     }
     default:
-      process.stderr.write(usage + "\n");
+      process.stderr.write(`${usage}\n`);
       return 2;
   }
 };

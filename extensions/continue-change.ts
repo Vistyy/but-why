@@ -3,10 +3,10 @@ import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  isBashToolResult,
-  isToolCallEventType,
   type ExtensionAPI,
   type ExtensionContext,
+  isBashToolResult,
+  isToolCallEventType,
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 
@@ -78,12 +78,7 @@ type ReassessmentEvidence = {
 };
 
 type SubmissionReassessment = {
-  readonly state:
-    | "awaiting-settle"
-    | "awaiting-restart"
-    | "running"
-    | "complete"
-    | "not-required";
+  readonly state: "awaiting-settle" | "awaiting-restart" | "running" | "complete" | "not-required";
   readonly taskId: string | null;
   readonly baseRef: string | null;
   readonly hasResolutions: boolean;
@@ -345,7 +340,10 @@ const visibleShellText = (rawCommand: string): string => {
     } else if (character === "\\") {
       result += " ".repeat(Math.min(2, command.length - index));
       index += 1;
-    } else if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+    } else if (
+      character === "#" &&
+      (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))
+    ) {
       comment = true;
       result += " ";
     } else {
@@ -374,7 +372,10 @@ const findCommandSubstitutionEnd = (command: string, start: number): number | un
       continue;
     }
     if (character === "'" || character === '"') quote = character;
-    else if (character === "#" && (index === start || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+    else if (
+      character === "#" &&
+      (index === start || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))
+    ) {
       comment = true;
     } else if (character === "(") depth += 1;
     else if (character === ")") {
@@ -435,9 +436,7 @@ const commandReassessmentEvidence = (
   const prefixes = ["just by", "pnpx but-why", "npx -y but-why"];
   return {
     change: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
-    acceptanceContext: prefixes.some(
-      (prefix) => visible === `${prefix} task context ${taskId}`,
-    ),
+    acceptanceContext: prefixes.some((prefix) => visible === `${prefix} task context ${taskId}`),
     blockerResolutions: prefixes.some(
       (prefix) => visible === `${prefix} change blocker list ${changeId}`,
     ),
@@ -514,10 +513,7 @@ export const decideContinuation = (
   snapshot: ChangeInspectionSnapshot,
   git?: { readonly head: string; readonly status: string },
 ): ContinuationDecision => {
-  if (
-    snapshot.change.state === "closed" ||
-    snapshot.toolingFailureCount > 0
-  ) {
+  if (snapshot.change.state === "closed" || snapshot.toolingFailureCount > 0) {
     return { kind: "idle" };
   }
   if (snapshot.findingCount > 0) return { kind: "findings" };
@@ -622,33 +618,30 @@ export default function continueChange(pi: ExtensionAPI): void {
           return "◌ Waiting for human merge";
       }
     })();
-    ctx.ui.setWidget(
-      watcherWidget,
-      (_tui, theme) => ({
-        render(width) {
-          return [
-            theme.fg(
-              display.kind === "paused" || display.kind === "inspection-failed"
-                ? "warning"
-                : display.kind === "blocked" ||
-                    display.kind === "stopped" ||
-                    display.kind === "cancelled" ||
-                    display.kind === "cleanup-needed"
-                  ? "error"
-                  : display.kind === "complete" ||
-                      display.kind === "idle" ||
-                      display.kind === "waiting-for-human-merge"
-                    ? "success"
-                    : display.kind === "checking"
-                      ? "muted"
-                      : "accent",
-              text.slice(0, Math.max(width, 0)),
-            ),
-          ];
-        },
-        invalidate() {},
-      }),
-    );
+    ctx.ui.setWidget(watcherWidget, (_tui, theme) => ({
+      render(width) {
+        return [
+          theme.fg(
+            display.kind === "paused" || display.kind === "inspection-failed"
+              ? "warning"
+              : display.kind === "blocked" ||
+                  display.kind === "stopped" ||
+                  display.kind === "cancelled" ||
+                  display.kind === "cleanup-needed"
+                ? "error"
+                : display.kind === "complete" ||
+                    display.kind === "idle" ||
+                    display.kind === "waiting-for-human-merge"
+                  ? "success"
+                  : display.kind === "checking"
+                    ? "muted"
+                    : "accent",
+            text.slice(0, Math.max(width, 0)),
+          ),
+        ];
+      },
+      invalidate() {},
+    }));
   };
 
   const displayFor = (
@@ -705,11 +698,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     pi.appendEntry(stateEntry, state);
   };
 
-  const run = async (
-    command: string,
-    args: readonly string[],
-    cwd: string,
-  ): Promise<RunResult> => {
+  const run = async (command: string, args: readonly string[], cwd: string): Promise<RunResult> => {
     const label = [command, ...args].join(" ");
     try {
       const result = await pi.exec(command, [...args], { cwd, timeout: 15_000 });
@@ -737,7 +726,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       accessSync(join(cwd, "bin/by"), constants.X_OK);
       const launcher = readFileSync(join(cwd, "bin/by"), "utf8");
       return launcher.includes("main_checkout_unavailable") &&
-          launcher.includes("trusted_executable_unavailable")
+        launcher.includes("trusted_executable_unavailable")
         ? "just by"
         : "npx -y but-why";
     } catch {
@@ -763,16 +752,23 @@ export default function continueChange(pi: ExtensionAPI): void {
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
     const args = ["change", "show", id];
     const blockerArgs = ["change", "blocker", "list", id];
-    const [changeResult, blockerResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
-      await Promise.all([
-        inspectCommand(args, ctx.cwd),
-        inspectCommand(blockerArgs, ctx.cwd),
-        run("git", ["rev-parse", "HEAD"], ctx.cwd),
-        run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
-        run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
-        run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
-        run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
-      ]);
+    const [
+      changeResult,
+      blockerResult,
+      headResult,
+      statusResult,
+      unstagedResult,
+      stagedResult,
+      untrackedResult,
+    ] = await Promise.all([
+      inspectCommand(args, ctx.cwd),
+      inspectCommand(blockerArgs, ctx.cwd),
+      run("git", ["rev-parse", "HEAD"], ctx.cwd),
+      run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
+      run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
+      run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
+      run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
+    ]);
     const results = [
       changeResult,
       blockerResult,
@@ -884,7 +880,10 @@ export default function continueChange(pi: ExtensionAPI): void {
       return { ok: false, message: "But Why Change inspection returned malformed JSON" };
     }
     if (!isSnapshot(snapshotValue) || snapshotValue.change.taskId === undefined) {
-      return { ok: false, message: "But Why inspection returned an unsupported Change state shape" };
+      return {
+        ok: false,
+        message: "But Why inspection returned an unsupported Change state shape",
+      };
     }
     if (snapshotValue.change.taskId === null) {
       return { ok: true, taskId: null, baseRef: null, hasResolutions: false };
@@ -910,7 +909,10 @@ export default function continueChange(pi: ExtensionAPI): void {
       return { ok: false, message: "But Why blocker inspection returned malformed JSON" };
     }
     if (!isBlockerHistory(blockerValue)) {
-      return { ok: false, message: "But Why inspection returned an unsupported blocker history shape" };
+      return {
+        ok: false,
+        message: "But Why inspection returned an unsupported blocker history shape",
+      };
     }
     return {
       ok: true,
@@ -1002,10 +1004,8 @@ export default function continueChange(pi: ExtensionAPI): void {
       ...reassessment,
       evidence: {
         change: reassessment.evidence.change || observed.change,
-        acceptanceContext:
-          reassessment.evidence.acceptanceContext || observed.acceptanceContext,
-        blockerResolutions:
-          reassessment.evidence.blockerResolutions || observed.blockerResolutions,
+        acceptanceContext: reassessment.evidence.acceptanceContext || observed.acceptanceContext,
+        blockerResolutions: reassessment.evidence.blockerResolutions || observed.blockerResolutions,
         worktreeStatus: reassessment.evidence.worktreeStatus || observed.worktreeStatus,
         candidateDiff: reassessment.evidence.candidateDiff || observed.candidateDiff,
       },
@@ -1064,9 +1064,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const latest = resolutionId(latestResolution(observed.blockerHistory));
     const previousResolutionId = persisted?.resolutionId;
     const resolutionChanged =
-      previousResolutionId !== undefined &&
-      latest !== null &&
-      latest !== previousResolutionId;
+      previousResolutionId !== undefined && latest !== null && latest !== previousResolutionId;
     const pendingResolutionId = persisted?.pendingResolutionId;
     const pendingResolution =
       resolutionChanged ||
@@ -1091,7 +1089,10 @@ export default function continueChange(pi: ExtensionAPI): void {
 
   const pause = (ctx: ExtensionContext): void => {
     if (changeId === undefined) {
-      ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
+      ctx.ui.notify(
+        "But Why automatic continuation is unavailable because this session has no Change.",
+        "warning",
+      );
       return;
     }
     pauseGeneration += 1;
@@ -1200,7 +1201,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         resolutionId: currentResolutionId,
         pendingResolutionId: resolutionChanged
           ? currentResolutionId
-          : previous.pendingResolutionId ?? null,
+          : (previous.pendingResolutionId ?? null),
       });
 
       if (observed.blockerHistory.active !== null) {
@@ -1307,7 +1308,10 @@ export default function continueChange(pi: ExtensionAPI): void {
     description: "Refresh and continue the Change watcher",
     handler: async (_args, ctx) => {
       if (changeId === undefined) {
-        ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
+        ctx.ui.notify(
+          "But Why automatic continuation is unavailable because this session has no Change.",
+          "warning",
+        );
         return;
       }
       if (settling) {
@@ -1458,7 +1462,8 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest"))) &&
     (cleanup === undefined ||
       (isRecord(cleanup) &&
-        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending"))) &&
+        (recordValue(cleanup, "state") === "complete" ||
+          recordValue(cleanup, "state") === "pending"))) &&
     (publication === undefined ||
       publication === null ||
       (isRecord(publication) &&
