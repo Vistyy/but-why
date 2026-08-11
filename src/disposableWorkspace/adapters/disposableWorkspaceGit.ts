@@ -2,13 +2,13 @@ import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, realpathSync
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { Effect } from "effect";
-import { executeHostCommandEffect } from "../command/hostCommand.js";
-import type { DisposableWorkspaceCleanupResult } from "./disposableWorkspace.js";
+import { executeHostCommandEffect } from "../../command/hostCommand.js";
+import type { DisposableWorkspaceCleanupResult } from "../disposableWorkspace.js";
 import {
   disposableWorkspaceRoot,
   expectedDisposableWorkspacePath,
   isExpectedDisposableWorkspacePath,
-} from "./disposableWorkspacePath.js";
+} from "../disposableWorkspacePath.js";
 
 export type DisposableWorktreeInspection =
   | { readonly state: "absent" }

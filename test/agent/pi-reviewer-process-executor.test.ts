@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 
-import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
+import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import { executeHostCommandEffect } from "../../src/command/hostCommand.js";
 import { observeUntil } from "../support/observe.js";
 

@@ -7,7 +7,7 @@ import {
   buildImplementerSystemPromptPaths,
 } from "./implementerPrompt.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
-import type { InteractiveSessionProfileLoader } from "./localInteractiveSessionProfile.js";
+import type { InteractiveSessionProfileLoader } from "./interactiveSessionProfile.js";
 
 export type ChangeImplementResult =
   | {

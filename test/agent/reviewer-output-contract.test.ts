@@ -5,7 +5,7 @@ import { describe, expect } from "vitest";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
-} from "../../src/contracts/reviewerOutput.js";
+} from "../../src/agent/reviewerOutput.js";
 
 describe("reviewer output contract", () => {
   it.effect("accepts reviewer Findings with the shared core and artifact references", () =>

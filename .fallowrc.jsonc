@@ -17,13 +17,11 @@
     "effect"
   ],
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
-  "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
     "boundary-violation": "error",
     "circular-dependencies": "error",
     "dev-dependencies-in-production": "off",
     "duplicate-exports": "error",
-    "policy-violation": "error",
     "re-export-cycle": "error",
     "require-suppression-reason": "error",
     "stale-suppressions": "error",
@@ -47,90 +45,117 @@
     "maxUnitSize": 60
   },
   "boundaries": {
+    "coverage": {
+      "requireAllFiles": true
+    },
     "zones": [
       {
+        "name": "adapters",
+        "patterns": ["src/**/adapters/**", "src/sqlite/**"]
+      },
+      {
+        "name": "task-composition",
+        "patterns": ["src/task/composition/**"]
+      },
+      {
+        "name": "change-composition",
+        "patterns": ["src/change/**/composition/**"]
+      },
+      {
+        "name": "repository-runtime-composition",
+        "patterns": ["src/repositorySnapshot/composition/**"]
+      },
+      {
         "name": "cli",
-        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**"]
+        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**", "src/main.ts"]
       },
       {
-        "name": "domain",
-        "patterns": [
-          "src/change/candidate/candidate.ts",
-          "src/change/change.ts",
-          "src/change/implementationBlocker.ts",
-          "src/change/implementationDecision.ts",
-          "src/change/validationRun/cleanup.ts",
-          "src/change/validationRun/acceptanceContextSnapshot.ts",
-          "src/change/validationRun/toolingErrorKind.ts",
-          "src/change/validationRun/validationRun.ts",
-          "src/task/lifecycle.ts",
-          "src/task/task.ts",
-          "src/task/taskId.ts"
-        ]
+        "name": "task",
+        "patterns": ["src/task/**"]
       },
       {
-        "name": "composition",
-        "patterns": [
-          "src/change/**/composition/**",
-          "src/change/composition/**",
-          "src/repositorySnapshot/composition/**",
-          "src/task/composition/**"
-        ]
+        "name": "change",
+        "patterns": ["src/agent/**", "src/change/**"]
       },
       {
         "name": "repository-runtime",
-        "patterns": ["src/repositoryRuntime/**"]
+        "patterns": ["src/repositoryRuntime/**", "src/repositorySnapshot/**"]
       },
       {
-        "name": "storage",
-        "patterns": ["src/sqlite/**"]
-      },
-      {
-        "name": "adapters",
+        "name": "shared",
         "patterns": [
-          "src/agent/piReviewerProcessExecutor.ts",
-          "src/change/changeStartGit.ts",
-          "src/change/interactiveSession/herdrInteractiveSessionHost.ts",
-          "src/change/interactiveSession/localInteractiveSessionProfile.ts",
-          "src/change/localChangeCleanupGit.ts",
-          "src/change/candidateCapture/localGitCandidate.ts",
-          "src/change/publication/localCandidatePublicationGit.ts",
-          "src/change/validation/snapshotWorkspaceCleanupGit.ts",
-          "src/repositoryPreparation/localRepositoryPreparation.ts",
-          "src/submissionEnvironment/gitFacts.ts",
-          "src/submissionEnvironment/githubTarget.ts",
-          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
-          "src/submissionEnvironment/remoteChangeBase.ts",
-          "src/submissionEnvironment/repositoryFile.ts",
-          "src/disposableWorkspace/disposableWorkspaceGit.ts",
-          "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
-          "src/init/git.ts",
-          "src/init/globalConfig.ts",
-          "src/init/repoConfig.ts"
+          "src/command/**",
+          "src/contracts/**",
+          "src/disposableWorkspace/**",
+          "src/init/**",
+          "src/output/**",
+          "src/repositoryPreparation/**",
+          "src/submissionEnvironment/**"
         ]
       },
       {
-        "name": "behavior",
-        "patterns": ["src/change/**", "src/repositorySnapshot/**", "src/task/**"]
+        "name": "support",
+        "patterns": [".remarkrc.mjs", "extensions/**", "scripts/**", "test/**", "vitest.config.ts"]
       }
     ],
     "rules": [
       {
-        "from": "cli",
-        "allow": ["behavior", "composition", "domain", "repository-runtime"]
+        "from": "adapters",
+        "allow": ["change", "repository-runtime", "shared", "task"]
       },
       {
-        "from": "domain",
-        "allow": []
+        "from": "task-composition",
+        "allow": ["adapters", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "change-composition",
+        "allow": ["adapters", "change", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "repository-runtime-composition",
+        "allow": ["adapters", "repository-runtime", "shared"]
+      },
+      {
+        "from": "cli",
+        "allow": [
+          "change",
+          "change-composition",
+          "repository-runtime",
+          "repository-runtime-composition",
+          "shared",
+          "task",
+          "task-composition"
+        ]
+      },
+      {
+        "from": "task",
+        "allow": ["repository-runtime", "shared"]
+      },
+      {
+        "from": "change",
+        "allow": ["repository-runtime", "shared", "task"]
       },
       {
         "from": "repository-runtime",
-        "allow": ["adapters", "storage"]
+        "allow": ["adapters", "shared"]
       },
       {
-        "from": "behavior",
-        "allow": ["domain"],
-        "allowTypeOnly": ["adapters", "repository-runtime"]
+        "from": "shared",
+        "allow": []
+      },
+      {
+        "from": "support",
+        "allow": [
+          "adapters",
+          "change",
+          "change-composition",
+          "cli",
+          "repository-runtime",
+          "repository-runtime-composition",
+          "shared",
+          "task",
+          "task-composition"
+        ]
       }
     ]
   }

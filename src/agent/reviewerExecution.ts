@@ -1,8 +1,7 @@
 import { Data, type Effect } from "effect";
-
-import type { TokenUsage } from "../contracts/tokenUsage.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
+import type { TokenUsage } from "./tokenUsage.js";
 
 export class ReviewerProcessExecutionFailed extends Data.TaggedError(
   "ReviewerProcessExecutionFailed",

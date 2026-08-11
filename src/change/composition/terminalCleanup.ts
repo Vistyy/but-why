@@ -5,9 +5,9 @@ import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryC
 import { openSqliteChangeReviewerTranscriptPort } from "../../sqlite/sqliteChangeReviewerTranscriptPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../../sqlite/sqliteValidationArtifactLifecyclePersistence.js";
-import { localGitHubChangeCleanupRemote } from "../../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { localGitHubChangeCleanupRemote } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import { cleanupChangeResourcesWithRemote } from "../adapters/localChangeCleanupGit.js";
 import { openTerminalCleanup } from "../cleanupTerminalChange.js";
-import { cleanupChangeResourcesWithRemote } from "../localChangeCleanupGit.js";
 import { reviewerSessionsChangeRoot } from "../reviewerSession/reviewerSession.js";
 import { openReviewerTranscriptIndex } from "../reviewerSession/reviewerTranscript.js";
 import { openArtifactLifecycle } from "../validationRun/artifactLifecycle.js";

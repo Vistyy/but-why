@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Data, Effect } from "effect";
 import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
-import type { TokenUsage } from "../contracts/tokenUsage.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import type {
@@ -13,6 +12,7 @@ import type {
 } from "./reviewerExecution.js";
 import { ReviewerProcessExecutionFailed } from "./reviewerExecution.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
+import type { TokenUsage } from "./tokenUsage.js";
 
 export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecutionFailed")<{
   readonly kind: "process_execution" | "output_contract";

@@ -7,8 +7,8 @@ import type {
   ReviewerOutputDecoder,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
+import type { TokenUsage } from "../../agent/tokenUsage.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { TokenUsage } from "../../contracts/tokenUsage.js";
 import {
   type ReviewerContinuity,
   type ReviewerSessionIdentity,

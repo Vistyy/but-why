@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { resolveCandidateValidationPolicy } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import { decodeRepoConfig } from "../../src/contracts/repoConfig.js";
-import { readGlobalConfig } from "../../src/init/globalConfig.js";
+import { readGlobalConfig } from "../../src/init/adapters/globalConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Candidate validation policy configuration", () => {

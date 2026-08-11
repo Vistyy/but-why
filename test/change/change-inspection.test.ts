@@ -6,11 +6,11 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
 } from "../../src/change/composition/loadChangeInspection.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";

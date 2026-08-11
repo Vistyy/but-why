@@ -3,7 +3,7 @@ import { basename, join, relative } from "node:path";
 
 import { Effect } from "effect";
 
-import { decodePiJsonlObject, decodePiSessionIdentity } from "../../contracts/piJsonl.js";
+import { decodePiJsonlObject, decodePiSessionIdentity } from "../../agent/piJsonl.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ChangeReviewerTranscriptPort } from "../changePorts.js";
 

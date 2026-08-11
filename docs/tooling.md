@@ -59,11 +59,16 @@ Targeted test selections remain unlocked.
 
 ## Structural contracts
 
-Fallow enforces these architecture contracts:
+Fallow assigns every maintained TypeScript or JavaScript source file to a stable directory-pattern zone for CLI, owner-specific composition, Task, Change, Repository Runtime, Adapters, shared code, or repository support.
+Every zone has an explicit dependency rule.
+These rules enforce these architecture contracts:
 
-- Behavior modules use ports instead of concrete storage or Repository Runtime Adapters, and concrete Adapter selection stays in composition directories.
-- CLI modules do not import storage.
-- Domain modules do not import Node infrastructure.
+- Behavior modules use ports instead of concrete Adapters, and concrete Adapter selection stays in composition directories.
+- CLI modules do not import concrete Adapters.
+- Task behavior and Task composition do not depend on Change behavior.
+- Repository Runtime composition does not depend on Task or Change behavior.
+
+Semantic domain, transaction, and supported-behavior rules remain in their owning code and tests.
 
 ast-grep enforces syntax contracts for process ownership, Effect tests, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, Snapshot Workspace tests, and JSON.parse trusted assertions.
 The custom Biome rule rejects TypeScript import type expressions because top-level type imports keep dependencies visible without prohibiting required runtime dynamic imports.

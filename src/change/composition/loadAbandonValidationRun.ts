@@ -4,7 +4,7 @@ import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "../abandonValidationRun.js";
-import { snapshotWorkspaceCleanupGit } from "../validation/snapshotWorkspaceCleanupGit.js";
+import { snapshotWorkspaceCleanupGit } from "../validation/adapters/snapshotWorkspaceCleanupGit.js";
 
 export type LoadAbandonValidationRunResult =
   | { readonly ok: true; readonly abandon: AbandonValidationRun }

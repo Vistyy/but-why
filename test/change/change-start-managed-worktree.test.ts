@@ -5,9 +5,9 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
+import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,

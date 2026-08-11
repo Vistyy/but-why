@@ -7,7 +7,8 @@ import {
   type HostCommandError,
   type HostCommandInput,
   type HostCommandResult,
-} from "../command/hostCommand.js";
+} from "../../command/hostCommand.js";
+import type { AgentEnvironmentCommand } from "../agentEnvironment.js";
 import {
   decodePiAssistantMessageEnd,
   decodePiAssistantText,
@@ -16,16 +17,15 @@ import {
   decodePiSessionHeader,
   decodePiSessionIdentity,
   isPiSessionRecord,
-} from "../contracts/piJsonl.js";
-import type { TokenUsage } from "../contracts/tokenUsage.js";
-import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
-import { piResourceArgs } from "./piRuntime.js";
+} from "../piJsonl.js";
+import { piResourceArgs } from "../piRuntime.js";
 import type {
   ReviewerProcessExecutor,
   ReviewerProcessInput,
   ReviewerProcessResult,
-} from "./reviewerExecution.js";
-import { ReviewerProcessExecutionFailed } from "./reviewerExecution.js";
+} from "../reviewerExecution.js";
+import { ReviewerProcessExecutionFailed } from "../reviewerExecution.js";
+import type { TokenUsage } from "../tokenUsage.js";
 
 type PiCommandExecutor = (
   input: HostCommandInput,

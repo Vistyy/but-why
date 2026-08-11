@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { localCandidatePublicationGit } from "../../src/change/publication/localCandidatePublicationGit.js";
+import { localCandidatePublicationGit } from "../../src/change/publication/adapters/localCandidatePublicationGit.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 

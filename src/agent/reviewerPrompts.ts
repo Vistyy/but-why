@@ -2,7 +2,7 @@ import type { ImplementationBlockerHistory } from "../change/implementationBlock
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
-import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
+import type { ReviewerOutput } from "./reviewerOutput.js";
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 
 const reviewerExecutionInstructions = [

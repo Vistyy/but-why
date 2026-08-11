@@ -8,6 +8,11 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
+  decodeReviewerOutputContract,
+  type ReviewerOutput,
+  validateReviewerArtifactRefs,
+} from "../../agent/reviewerOutput.js";
+import {
   buildReviewerOutputCorrectionPrompt,
   buildReviewerRevisionPrompt,
   buildSpecialistContinuationPrompt,
@@ -16,11 +21,6 @@ import {
 } from "../../agent/reviewerPrompts.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import {
-  decodeReviewerOutputContract,
-  type ReviewerOutput,
-  validateReviewerArtifactRefs,
-} from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   executeReviewerSession,

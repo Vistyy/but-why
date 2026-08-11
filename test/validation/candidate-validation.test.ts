@@ -6,13 +6,13 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, vi } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import {
   CandidateValidation,
   type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {

@@ -1,31 +1,10 @@
 import { dirname, join } from "node:path";
 
-import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
-import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
-import { readRepoConfig } from "../../init/repoConfig.js";
-
-export type InteractiveSessionProfileLoadResult =
-  | {
-      readonly ok: true;
-      readonly profile: NonNullable<
-        Extract<
-          ReturnType<typeof resolveInteractiveSessionAgentProfile>,
-          { readonly ok: true }
-        >["profile"]
-      >;
-      readonly globalConfigDirectory: string;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "repo_config_invalid" | "agent_profile_invalid";
-      readonly message: string;
-    };
-
-export type InteractiveSessionProfileLoader = (
-  worktreePath: string,
-  globalConfigPath: string,
-) => InteractiveSessionProfileLoadResult;
+import { resolveInteractiveSessionAgentProfile } from "../../../agent/agentProfiles.js";
+import { validatePiAgentProfileResources } from "../../../agent/piRuntime.js";
+import { readGlobalConfig } from "../../../init/adapters/globalConfig.js";
+import { readRepoConfig } from "../../../init/adapters/repoConfig.js";
+import type { InteractiveSessionProfileLoader } from "../interactiveSessionProfile.js";
 
 export const loadLocalInteractiveSessionProfile: InteractiveSessionProfileLoader = (
   worktreePath,

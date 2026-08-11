@@ -6,7 +6,7 @@ import type {
   CandidateCaptureGit,
   LocalCandidateWorkspaceResult,
   RepositoryBranchHeadResult,
-} from "./candidateCaptureGit.js";
+} from "../candidateCaptureGit.js";
 
 export const localCandidateCaptureGit: CandidateCaptureGit = {
   readWorkspace: (cwd) => Effect.sync(() => readLocalCandidateWorkspace(cwd)),

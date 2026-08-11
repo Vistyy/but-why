@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import type { GitHubPullRequest } from "../change/ownedPullRequestGateway.js";
+import type { GitHubPullRequest } from "../../change/ownedPullRequestGateway.js";
 
 const nonEmptyStringSchema = Schema.String.pipe(Schema.minLength(1));
 const safePositiveIntegerSchema = Schema.Number.pipe(

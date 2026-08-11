@@ -1,19 +1,19 @@
 import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 import { spawnSync } from "node:child_process";
 
-import type { ChangePublicationTarget } from "../change/change.js";
-import { changeBranchNameForRef } from "../change/changeBranch.js";
+import type { ChangePublicationTarget } from "../../change/change.js";
+import { changeBranchNameForRef } from "../../change/changeBranch.js";
 import type {
   ChangeCleanupRemote,
   RemoteBranchDeletionResult,
   RemoteBranchHeadResult,
-} from "../change/changeCleanupRemote.js";
+} from "../../change/changeCleanupRemote.js";
 import type {
   GitHubPullRequestCloser,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
-} from "../change/ownedPullRequestGateway.js";
+} from "../../change/ownedPullRequestGateway.js";
 import {
   decodeGitHubPullRequest,
   decodeGitHubPullRequestList,

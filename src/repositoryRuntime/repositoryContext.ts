@@ -15,8 +15,8 @@ import {
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
-import { findCurrentWorktreeFacts, findGitRoot } from "../init/git.js";
-import { readRepoConfig, writeRepoConfig } from "../init/repoConfig.js";
+import { findCurrentWorktreeFacts, findGitRoot } from "../init/adapters/git.js";
+import { readRepoConfig, writeRepoConfig } from "../init/adapters/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 
 export type LocalRepositoryPaths = {

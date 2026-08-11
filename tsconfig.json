@@ -38,7 +38,7 @@
         "overrides": [
           {
             "include": [
-              "src/agent/piReviewerProcessExecutor.ts",
+              "src/agent/adapters/piReviewerProcessExecutor.ts",
               "src/change/validation/ensureCandidateIntegrity.ts",
               "src/change/validation/runCheckRound.ts",
               "src/change/validation/runPreparePhase.ts",
@@ -46,7 +46,7 @@
               "src/command/hostCommand.ts",
               "src/command/runTimedCommand.ts",
               "src/command/workspaceCommand.ts",
-              "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
+              "src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.ts",
               "src/repositoryPreparation/**/*.ts"
             ],
             "options": {

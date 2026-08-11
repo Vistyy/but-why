@@ -11,11 +11,11 @@ import type {
   ReviewerProcessResult,
 } from "../../src/agent/reviewerExecution.js";
 import { ReviewerProcessExecutionFailed } from "../../src/agent/reviewerExecution.js";
-import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
-} from "../../src/contracts/reviewerOutput.js";
+} from "../../src/agent/reviewerOutput.js";
+import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 
 const decodeEmptyFindings = (output: unknown) =>
   decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(

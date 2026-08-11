@@ -199,7 +199,7 @@ describe("disposable workspace sibling ownership", () => {
       yield* Effect.scoped(
         Effect.gen(function* () {
           workspace = yield* testWorkspace;
-          // Derive exactly as src/change/changeStartGit.ts does
+          // Derive exactly as src/change/adapters/changeStartGit.ts does
           const slug = `change-${workspace.slice(-6)}`;
           managedWorktreePath = join(
             dirname(workspace),

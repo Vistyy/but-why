@@ -1,12 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { Layer } from "effect";
-import { piReviewerProcessExecutor } from "../../../agent/piReviewerProcessExecutor.js";
+import { piReviewerProcessExecutor } from "../../../agent/adapters/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../../agent/reviewerAgentRuntime.js";
-import type { ReviewerOutput } from "../../../contracts/reviewerOutput.js";
-import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
+import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
+import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import type { ReviewerSessionStore } from "../../reviewerSession/reviewerSession.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
 import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";

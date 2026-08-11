@@ -10,6 +10,7 @@ import {
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
+import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type {
   ReviewerSessionRecord,
@@ -22,7 +23,6 @@ import {
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
