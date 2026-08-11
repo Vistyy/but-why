@@ -94,7 +94,7 @@ export const readValidationRunById = (
     return decoded.record;
   });
 
-export type StoredActiveValidationRunRow = {
+type StoredActiveValidationRunRow = {
   readonly validationRunId: string;
   readonly changeId: string;
   readonly runId: string;

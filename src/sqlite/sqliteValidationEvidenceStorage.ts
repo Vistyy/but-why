@@ -38,7 +38,7 @@ export type StoredValidationFindingRow = {
   readonly updatedAt: string;
 };
 
-export type StoredToolingFailureRow = {
+type StoredToolingFailureRow = {
   readonly sequence: number;
   readonly validationRunId: string;
   readonly errorKind: ValidationToolingFailureKind;
@@ -47,7 +47,7 @@ export type StoredToolingFailureRow = {
   readonly createdAt: string;
 };
 
-export type StoredValidationArtifactRow = {
+type StoredValidationArtifactRow = {
   readonly ref: string;
   readonly validationRunId: string;
   readonly phase: ValidationPhase;
