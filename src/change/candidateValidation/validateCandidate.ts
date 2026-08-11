@@ -18,14 +18,14 @@ import type { CandidateValidationExecutionPort } from "../validation/changeValid
 import { createSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
-import type { SubmitProgress } from "../validation/submitProgress.js";
-import {
-  type ValidationToolingFailure,
-  SnapshotWorkspaceSetupFailed,
-  validationToolingFailureRecord,
-} from "../validation/validationToolingFailures.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
 import { expectedSnapshotWorkspacePath } from "../validation/snapshotWorkspacePath.js";
+import type { SubmitProgress } from "../validation/submitProgress.js";
+import {
+  SnapshotWorkspaceSetupFailed,
+  type ValidationToolingFailure,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type {

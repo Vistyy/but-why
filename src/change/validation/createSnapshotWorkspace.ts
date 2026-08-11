@@ -8,13 +8,13 @@ import {
   type RunDisposableExactCommitWorkspaceInput,
   runDisposableExactCommitWorkspace,
 } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
-import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
   ActiveSnapshotWorkspace,
   ActiveSnapshotWorkspaceResult,
   SnapshotWorkspaceSetup,
   SnapshotWorkspaceToolingError,
 } from "./snapshotWorkspace.js";
+import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type CreateSnapshotWorkspaceInput = {
   readonly repoRoot: string;

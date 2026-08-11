@@ -85,6 +85,38 @@ const installPublicationIdentity = (
     );
   });
 
+const rollbackNativeSnapshotWorkspaceMigration = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN expected_commit_sha TO submitted_sha
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN workspace_path TO worktree_path
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN cleanup_workspace TO cleanup_worktree
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN worktree_head TEXT NOT NULL DEFAULT ''
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN temp_ref_name TEXT NOT NULL DEFAULT ''
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN cleanup_temp_ref TEXT NOT NULL DEFAULT 'not_created'
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME TO candidate_validation_workspace_setups
+    `);
+  });
+
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
   const rows = yield* repositorySql.operation(
@@ -2077,6 +2109,7 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+              yield* rollbackNativeSnapshotWorkspaceMigration(sql);
               yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 29`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
@@ -2645,6 +2678,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 29`;
                 }),
               );
@@ -2902,6 +2936,7 @@ describe("repository SQL storage", () => {
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
             yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
+            yield* rollbackNativeSnapshotWorkspaceMigration(sql);
             yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 29`;
           }),
         );
@@ -3011,6 +3046,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 29`;
                 }),
               );
@@ -3087,6 +3123,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 29`;
                 }),
               );
@@ -3161,6 +3198,7 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 29`;
                   yield* sql`
                     INSERT INTO changes (
@@ -3427,6 +3465,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 29`;
                 }),
               );
@@ -3505,6 +3544,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 29`;
                 }),
               );
@@ -3616,6 +3656,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                    yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                     yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 29`;
                   }),
                 );
@@ -3722,6 +3763,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 29`;
                 }),
               );
@@ -3808,6 +3850,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
                   yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 29`;
                 }),
               );

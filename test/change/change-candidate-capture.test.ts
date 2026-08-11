@@ -246,7 +246,7 @@ const captureReadyRepo = (workspace?: string): string => {
   configureGit(root);
   git(root, "checkout", "-b", "main");
   writeFileSync(join(root, "tracked.txt"), "main\n");
-  git(root, "add", "tracked.txt", ".gitignore", ".but-why/config.json");
+  git(root, "add", "tracked.txt", ".but-why/config.json");
   git(root, "commit", "-m", "main");
   git(root, "remote", "add", "origin", "https://example.com/origin.git");
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");

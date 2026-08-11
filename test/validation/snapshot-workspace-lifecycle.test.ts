@@ -13,8 +13,8 @@ import { Effect, Fiber } from "effect";
 import { describe } from "vitest";
 
 import { createSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
-import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { InfrastructureToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 

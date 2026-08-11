@@ -598,7 +598,7 @@ const initializedRepository = (workspace?: string): string => {
   git(root, "config", "user.email", "but-why@example.test");
   git(root, "branch", "-M", "main");
   writeFileSync(join(root, "README.md"), "# Test repository\n");
-  git(root, "add", "README.md", ".gitignore", ".but-why/config.json");
+  git(root, "add", "README.md", ".but-why/config.json");
   git(root, "commit", "-m", "Initialize repository");
   configurePublicationRemote(root, root);
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
