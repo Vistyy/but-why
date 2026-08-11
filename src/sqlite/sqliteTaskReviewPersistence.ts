@@ -339,19 +339,7 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const profile = parseObject(JSON.stringify(value.profile));
   const scope = profile.scope;
   if (scope !== "repo" && scope !== "global") throw new Error("Invalid profile scope");
-  const guidance =
-    value.guidance === null
-      ? null
-      : (() => {
-          const parsed = parseObject(JSON.stringify(value.guidance));
-          if (parsed.source !== "repo" && parsed.source !== "global") {
-            throw new Error("Invalid guidance source");
-          }
-          return {
-            content: requiredString(parsed.content),
-            source: parsed.source,
-          };
-        })();
+  const guidance = value.guidance === null ? null : parseGuidance(value.guidance);
   return {
     id: "task_advisory_review",
     version: 2,
@@ -364,6 +352,18 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
     },
     builtInInstructions: requiredString(value.builtInInstructions),
     guidance,
+  };
+};
+const parseGuidance = (
+  value: unknown,
+): NonNullable<Extract<TaskReviewPolicySnapshot, { readonly version: 2 }>["guidance"]> => {
+  const parsed = parseObject(JSON.stringify(value));
+  if (parsed.source !== "repo" && parsed.source !== "global") {
+    throw new Error("Invalid guidance source");
+  }
+  return {
+    content: requiredString(parsed.content),
+    source: parsed.source,
   };
 };
 const parseReviewState = (value: string): TaskReviewRecord["state"] => {
