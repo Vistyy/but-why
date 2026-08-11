@@ -187,8 +187,7 @@ it.effect("rejects a Review Base directory as guidance before Task Review admiss
       ).status,
     ).toBe(0);
     expect(
-      runTestProcess("git", ["commit", "-m", "Configure directory guidance"], { cwd: root })
-        .status,
+      runTestProcess("git", ["commit", "-m", "Configure directory guidance"], { cwd: root }).status,
     ).toBe(0);
     writeFileSync(
       globalConfigPath,
