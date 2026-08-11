@@ -10,6 +10,7 @@ import type {
 } from "../change/changeCleanupRemote.js";
 import type {
   GitHubPullRequest,
+  GitHubPullRequestCloser,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
@@ -53,12 +54,15 @@ const evidence = (
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;
 
-export const githubChangeCleanupRemote = (
-  gateway: GitHubPullRequestGateway,
-): ChangeCleanupRemote => ({
-  readRemoteBranchHead: gateway.readRemoteBranchHead ?? (() => ({ state: "unavailable" as const })),
-  deleteRemoteBranch: gateway.deleteRemoteBranch ?? (() => ({ state: "failed" as const })),
-});
+export const localGitHubChangeCleanupRemote = (
+  input: { readonly cwd?: string; readonly runGh?: PublicationCommandRunner } = {},
+): ChangeCleanupRemote => {
+  const runGh = input.runGh ?? ((args) => runCommand("gh", args, input.cwd));
+  return {
+    readRemoteBranchHead: (cleanupInput) => readRemoteBranchHead(runGh, cleanupInput),
+    deleteRemoteBranch: (cleanupInput) => deleteRemoteBranch(runGh, cleanupInput),
+  };
+};
 
 export const localGitHubPullRequestGateway = (
   input: {
@@ -66,41 +70,14 @@ export const localGitHubPullRequestGateway = (
     readonly runGit?: PublicationCommandRunner;
     readonly runGh?: PublicationCommandRunner;
   } = {},
-): GitHubPullRequestGateway => {
+): GitHubPullRequestGateway & GitHubPullRequestCloser => {
   const runGit = input.runGit ?? ((args) => runCommand("git", args, input.cwd));
   const runGh = input.runGh ?? ((args) => runCommand("gh", args, input.cwd));
-  let lastFailureEvidence: ReturnType<typeof evidence> | undefined;
 
   return {
-    getLastFailureEvidence: () => lastFailureEvidence,
-
-    findPullRequests: (target, headBranch) => {
-      const found = findPullRequests(
-        runGh,
-        target,
-        headBranch,
-        (result, classification, parseFailure) => {
-          lastFailureEvidence = evidence("remote_lookup", result, classification, parseFailure);
-        },
-      );
-      if (found !== undefined) lastFailureEvidence = undefined;
-      return found;
-    },
-    getPullRequest: (target, number) => {
-      const result = getPullRequest(
-        runGh,
-        target,
-        number,
-        (command, classification, parseFailure) => {
-          lastFailureEvidence = evidence("remote_lookup", command, classification, parseFailure);
-        },
-      );
-      if (result !== undefined) lastFailureEvidence = undefined;
-      return result;
-    },
-    closePullRequest: (input) => closePullRequest(runGh, input),
-    readRemoteBranchHead: (input) => readRemoteBranchHead(runGh, input),
-    deleteRemoteBranch: (input) => deleteRemoteBranch(runGh, input),
+    findPullRequests: (target, headBranch) => findPullRequests(runGh, target, headBranch),
+    getPullRequest: (target, number) => getPullRequest(runGh, target, number),
+    closePullRequest: (closeInput) => closePullRequest(runGh, closeInput),
     createPullRequest: (request) => createPullRequest(runGit, runGh, request),
     updatePullRequest: (request) => updatePullRequest(runGit, runGh, request),
   };
@@ -110,12 +87,7 @@ const findPullRequests = (
   runGh: PublicationCommandRunner,
   target: ChangePublicationTarget,
   headBranch: string,
-  onFailure: (
-    result: PublicationCommandResult,
-    classification: "rejected" | "response_parse_failure" | "unavailable",
-    parseFailure?: string,
-  ) => void,
-): readonly GitHubPullRequest[] | undefined => {
+): ReturnType<GitHubPullRequestGateway["findPullRequests"]> => {
   const query = new URLSearchParams({
     state: "open",
     head: `${target.owner}:${headBranch}`,
@@ -123,44 +95,39 @@ const findPullRequests = (
   });
   const result = runGh(["api", `repos/${target.owner}/${target.repo}/pulls?${query}`]);
   if (!result.ok) {
-    onFailure(
-      result,
-      result.status === undefined && result.stdout === undefined && result.stderr === undefined
-        ? "unavailable"
-        : "rejected",
-    );
-    return undefined;
+    return {
+      ok: false,
+      evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
+    };
   }
   const parsed = parsePullRequestList(result.stdout);
-  if (parsed === undefined)
-    onFailure(result, "response_parse_failure", "pull request list was not valid JSON");
-  return parsed;
+  return parsed === undefined
+    ? {
+        ok: false,
+        evidence: evidence("remote_lookup", result, "response_parse_failure"),
+      }
+    : { ok: true, pullRequests: parsed };
 };
 
 const getPullRequest = (
   runGh: PublicationCommandRunner,
   target: ChangePublicationTarget,
   number: number,
-  onFailure: (
-    result: PublicationCommandResult,
-    classification: "rejected" | "response_parse_failure" | "unavailable",
-    parseFailure?: string,
-  ) => void,
-): GitHubPullRequest | undefined => {
+): ReturnType<GitHubPullRequestGateway["getPullRequest"]> => {
   const result = runGh(["api", `repos/${target.owner}/${target.repo}/pulls/${number}`]);
   if (!result.ok) {
-    onFailure(
-      result,
-      result.status === undefined && result.stdout === undefined && result.stderr === undefined
-        ? "unavailable"
-        : "rejected",
-    );
-    return undefined;
+    return {
+      ok: false,
+      evidence: evidence("remote_lookup", result, classifyCommandFailure(result)),
+    };
   }
   const parsed = parsePullRequest(result.stdout);
-  if (parsed === undefined)
-    onFailure(result, "response_parse_failure", "pull request response was not usable");
-  return parsed;
+  return parsed === undefined
+    ? {
+        ok: false,
+        evidence: evidence("remote_lookup", result, "response_parse_failure"),
+      }
+    : { ok: true, pullRequest: parsed };
 };
 
 const closePullRequest = (

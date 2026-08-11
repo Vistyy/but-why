@@ -5,6 +5,7 @@ import {
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
+import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import {
   CandidateReviewerExecution,
@@ -34,8 +35,7 @@ export const candidateValidationLayer = (input: {
           ...(input.sessionStore === undefined
             ? {}
             : {
-                sessionStore:
-                  input.sessionStore as import("../reviewerSession/reviewerSession.js").ReviewerSessionStore,
+                sessionStore: input.sessionStore as ReviewerSessionStore,
               }),
         }),
         Layer.succeed(CandidateValidationExecution, input.persistence),

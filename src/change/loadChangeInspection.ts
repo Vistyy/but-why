@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
-import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { type RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
   openSqliteChangeAuthorityPort,
   openSqliteChangeReadPort,
@@ -75,7 +75,7 @@ const loadOperation = <A>(
 
 const provideRepository = <A, E>(
   context: LoadedContext["context"],
-  effect: Effect.Effect<A, E, import("../sqlite/repositorySql.js").RepositorySql>,
+  effect: Effect.Effect<A, E, RepositorySql>,
 ) =>
   effect.pipe(
     Effect.provide(
@@ -141,8 +141,8 @@ const loadChangeDetailOperation = <A>(
             query(
               {
                 getChangeById: changes.getChangeById,
-                listCandidatesForChange: validation.listCandidatesForChange,
-                listRunsForCandidate: validation.listRunsForCandidate,
+                getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
+                getLatestRunForCandidate: validation.getLatestRunForCandidate,
                 listFindings: validation.listFindings,
                 listToolingFailures: validation.listToolingFailures,
               },

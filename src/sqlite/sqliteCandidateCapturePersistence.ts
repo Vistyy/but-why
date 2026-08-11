@@ -164,23 +164,25 @@ const captureStoredCandidate = (
     const rows = yield* sql.unsafe<UnknownCandidateRow>(
       `SELECT ${candidateReadColumns}
        FROM candidates AS candidate
-       WHERE candidate.change_id = ?`,
-      [changeId],
+       WHERE candidate.change_id = ?
+         AND candidate.change_base_sha = ? AND candidate.head_sha = ?`,
+      [changeId, input.changeBaseSha, input.headSha],
     );
-    const candidates = yield* decodePersisted("commit Candidate capture", () =>
-      rows.map((row) => {
+    const row = rows[0];
+    if (row !== undefined) {
+      const existing = yield* decodePersisted("commit Candidate capture", () => {
         const candidate = decodeCandidate(row);
         if (candidate.changeId !== changeId) {
           throw new Error("Candidate belongs to another Change");
         }
+        if (
+          candidate.changeBaseSha !== input.changeBaseSha ||
+          candidate.headSha !== input.headSha
+        ) {
+          throw new Error("Candidate identity does not match capture");
+        }
         return candidate;
-      }),
-    );
-    const existing = candidates.find(
-      (candidate) =>
-        candidate.changeBaseSha === input.changeBaseSha && candidate.headSha === input.headSha,
-    );
-    if (existing !== undefined) {
+      });
       return { ok: true, candidateId: existing.id, reused: true } as const;
     }
 

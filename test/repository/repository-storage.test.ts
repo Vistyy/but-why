@@ -1540,21 +1540,6 @@ describe("repository SQL storage", () => {
                 )
               `,
           );
-          const malformedHistoryError = yield* validation.execution
-            .startOrReuse({
-              candidateId: captured.candidateId,
-              changeBaseSha: "base-sha",
-              headSha: "head-sha",
-              policy: simplifiedReviewPolicy,
-              now: "2026-07-25T16:12:40.000Z",
-            })
-            .pipe(Effect.flip);
-          expect(malformedHistoryError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-          yield* repository.operation(
-            "remove malformed Validation Run fixture",
-            (sql) =>
-              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-duplicate-representation'`,
-          );
           const simplifiedCurrent = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
@@ -1562,6 +1547,11 @@ describe("repository SQL storage", () => {
             policy: simplifiedReviewPolicy,
             now: "2026-07-25T16:12:40.000Z",
           });
+          yield* repository.operation(
+            "remove unrelated malformed Validation Run fixture",
+            (sql) =>
+              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-duplicate-representation'`,
+          );
           if (simplifiedCurrent.reused || "blocked" in simplifiedCurrent)
             throw new Error("Expected a policy-distinct Validation Run");
           yield* validation.execution.complete({

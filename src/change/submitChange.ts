@@ -32,7 +32,10 @@ import {
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequestReader,
+  PublicationFailureEvidence,
+} from "./ownedPullRequestGateway.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
@@ -119,8 +122,8 @@ export type ChangeSubmitResult =
   | {
       readonly ok: false;
       readonly code: PublishCandidateFailureCode;
-      readonly evidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
-      readonly recoveryEvidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
       readonly observedRemoteHeadSha?: string;
     }
@@ -174,7 +177,7 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
-  readonly github: GitHubPullRequestGateway;
+  readonly github: GitHubPullRequestReader;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
     worktreePath: string,

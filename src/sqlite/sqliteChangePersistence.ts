@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { type Context, Effect } from "effect";
 
 import {
   type ChangeCleanup,
@@ -38,12 +38,16 @@ import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestCla
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
+  candidateReadColumns,
+  decodeCandidate,
   decodeValidationRun,
-  decodeValidationRunPolicy,
+  type UnknownCandidateRow,
   type UnknownValidationRunRow,
   validateValidationRunImplementationDecisionRelationships,
   validateValidationRunLatestResolvedBlockerRelationship,
+  validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
 import {
   changeReadColumns,
@@ -70,7 +74,7 @@ import {
 } from "./sqliteTaskReadModel.js";
 
 const makeSqliteChangeAdapter = (
-  repository: import("effect").Context.Tag.Service<typeof RepositorySql>,
+  repository: Context.Tag.Service<typeof RepositorySql>,
 ): ChangeAuthorityPort &
   ChangeReadPort &
   ChangeDeliveryPort &
@@ -811,135 +815,129 @@ const getPassingEvidence = (
       return { id };
     });
     if (authority === undefined) return undefined;
+
     const candidatePredicate =
-      query?.candidateId === undefined || !allowHistoricalCandidate
-        ? `candidate.id = (
-             SELECT current.id FROM candidates AS current
-             WHERE current.change_id = ?
-             ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-           )`
-        : "candidate.change_id = ? AND candidate.id = ?";
-    const runPredicate = query?.validationRunId === undefined ? "1 = 1" : "run.id = ?";
-    const parameters = [
+      allowHistoricalCandidate && query?.candidateId !== undefined
+        ? "candidate.change_id = ? AND candidate.id = ?"
+        : `candidate.id = (
+           SELECT current.id FROM candidates AS current
+           WHERE current.change_id = ?
+           ORDER BY current.created_at DESC, current.id DESC LIMIT 1
+         )`;
+    const candidateParameters = [
       authority.id,
-      ...(query?.candidateId === undefined || !allowHistoricalCandidate ? [] : [query.candidateId]),
-      ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
+      ...(allowHistoricalCandidate && query?.candidateId !== undefined ? [query.candidateId] : []),
     ];
-    const rows = yield* sql.unsafe<PassingPublicationEvidenceRow>(
-      `SELECT candidate.id AS publicationCandidateId,
-        candidate.change_base_sha AS changeBaseSha, candidate.head_sha AS headSha,
-        run.id, run.candidate_id AS candidateId, run.policy_snapshot AS policySnapshot,
-        run.implementation_decisions AS implementationDecisions,
-        run.latest_resolved_blocker_id AS latestResolvedBlockerId,
-        run.state, run.outcome, run.created_at AS createdAt, run.updated_at AS updatedAt
-       FROM candidates AS candidate
-       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
-       WHERE ${candidatePredicate} AND ${runPredicate}
-         AND run.state = 'complete' AND run.outcome = 'passed'
-       ORDER BY run.created_at DESC, run.id DESC`,
-      parameters,
+    const candidateRows = yield* sql.unsafe<UnknownCandidateRow>(
+      `SELECT ${candidateReadColumns} FROM candidates AS candidate WHERE ${candidatePredicate}`,
+      candidateParameters,
     );
-    if (rows.length === 0) return undefined;
-    let authorityHistoryLoaded = false;
-    let expectedDecisionsSnapshot = "";
-    let expectedAcceptanceContext: unknown;
-    let currentLatestResolvedBlockerId: string | null | undefined;
-    let current: PassingPublicationEvidence | undefined;
+    const candidate = yield* decodePersisted(operationName, () => {
+      const row = candidateRows[0];
+      if (row === undefined) return undefined;
+      const decoded = decodeCandidate(row);
+      if (decoded.changeId !== authority.id) {
+        throw new Error("Evidence Candidate belongs to another Change");
+      }
+      return decoded;
+    });
+    if (
+      candidate === undefined ||
+      (query?.candidateId !== undefined && candidate.id !== query.candidateId) ||
+      (query?.changeBaseSha !== undefined && candidate.changeBaseSha !== query.changeBaseSha)
+    ) {
+      return undefined;
+    }
+
+    const requestedPolicy = query?.policy;
+    const requestedPolicySnapshot =
+      requestedPolicy === undefined
+        ? undefined
+        : yield* Effect.try({
+            try: () => encodeSqliteCandidateValidationPolicy(requestedPolicy),
+            catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+          });
+    const requestedRunPredicate = query?.validationRunId === undefined ? "" : "AND id = ?";
+    const requestedPolicyPredicate =
+      requestedPolicySnapshot === undefined ? "" : "AND policy_snapshot = ?";
+    const requestedRunParameters = [
+      candidate.id,
+      ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
+      ...(requestedPolicySnapshot === undefined ? [] : [requestedPolicySnapshot]),
+    ];
+    const eligibleRows = yield* sql.unsafe<{ readonly found: unknown }>(
+      `SELECT 1 AS found FROM candidate_validation_runs
+       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
+         ${requestedRunPredicate} ${requestedPolicyPredicate}
+       LIMIT 1`,
+      requestedRunParameters,
+    );
+    if (eligibleRows.length === 0) return undefined;
+
+    const acceptanceContextRows = yield* sql<{
+      readonly id: unknown;
+      readonly taskId: unknown;
+      readonly acceptanceContext: unknown;
+    }>`SELECT id, task_id AS taskId, acceptance_context AS acceptanceContext
+       FROM changes WHERE id = ${authority.id}`;
+    const expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
+      const authorityRow = acceptanceContextRows[0];
+      const id = decodeStoredString(authorityRow?.id, "Change ID");
+      if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
+      const taskId = decodeStoredNullableString(authorityRow?.taskId, "Change Task ID");
+      const encoded = decodeStoredNullableString(
+        authorityRow?.acceptanceContext,
+        "Change Acceptance Context",
+      );
+      if ((taskId === null) !== (encoded === null)) {
+        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
+      }
+      return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
+    });
+    const expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
+    const currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
+      sql,
+      authority.id,
+      operationName,
+    );
+
+    const rows = yield* sql.unsafe<UnknownValidationRunRow>(
+      `SELECT ${validationRunReadColumns}
+       FROM candidate_validation_runs
+       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
+         ${requestedRunPredicate} ${requestedPolicyPredicate}
+         AND implementation_decisions = ? AND latest_resolved_blocker_id IS ?
+       ORDER BY created_at DESC, id DESC`,
+      [...requestedRunParameters, expectedDecisionsSnapshot, currentLatestResolvedBlockerId],
+    );
     for (const row of rows) {
-      const selectedCandidate = yield* decodePersisted(operationName, () => ({
-        publicationCandidateId: decodeStoredString(
-          row.publicationCandidateId,
-          "evidence Candidate ID",
-        ),
-        changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
-      }));
-      if (
-        (query?.candidateId !== undefined &&
-          selectedCandidate.publicationCandidateId !== query.candidateId) ||
-        (query?.changeBaseSha !== undefined &&
-          selectedCandidate.changeBaseSha !== query.changeBaseSha)
-      )
-        continue;
-      if (
-        query?.policy !== undefined &&
-        !isDeepStrictEqual(
-          yield* decodePersisted(operationName, () => decodeValidationRunPolicy(row).policy),
-          query.policy,
-        )
-      )
-        continue;
       const run = yield* decodePersisted(operationName, () => decodeValidationRun(row));
       yield* decodePersisted(operationName, () =>
         validateValidationRunImplementationDecisionRelationships(run, authority.id),
       );
-      if (run.record.candidateId !== selectedCandidate.publicationCandidateId) continue;
-      const evidence: PassingPublicationEvidence = {
-        ...selectedCandidate,
-        headSha: yield* decodePersisted(operationName, () =>
-          decodeStoredString(row.headSha, "Candidate head SHA"),
-        ),
-        run,
-      };
-      if (!authorityHistoryLoaded) {
-        const acceptanceContextRows = yield* sql<{
-          readonly id: unknown;
-          readonly taskId: unknown;
-          readonly acceptanceContext: unknown;
-        }>`SELECT id, task_id AS taskId, acceptance_context AS acceptanceContext
-           FROM changes WHERE id = ${authority.id}`;
-        expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
-          const authorityRow = acceptanceContextRows[0];
-          const id = decodeStoredString(authorityRow?.id, "Change ID");
-          if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-          const taskId = decodeStoredNullableString(authorityRow?.taskId, "Change Task ID");
-          const encoded = decodeStoredNullableString(
-            authorityRow?.acceptanceContext,
-            "Change Acceptance Context",
-          );
-          if ((taskId === null) !== (encoded === null)) {
-            throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-          }
-          return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
-        });
-        expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
-        authorityHistoryLoaded = true;
+      if (run.record.candidateId !== candidate.id) {
+        return yield* invalidData(operationName, "Validation Run belongs to another Candidate");
       }
-      if (
-        evidence.run.implementationDecisionsSnapshot !== expectedDecisionsSnapshot ||
-        !isDeepStrictEqual(evidence.run.record.policy.acceptanceContext, expectedAcceptanceContext)
-      )
+      if (!isDeepStrictEqual(run.record.policy.acceptanceContext, expectedAcceptanceContext)) {
         continue;
-      if (currentLatestResolvedBlockerId === undefined) {
-        currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
-          sql,
-          authority.id,
-          operationName,
-        );
       }
       const latestResolvedBlockerIdAtRun = yield* readLatestResolvedBlockerId(
         sql,
         authority.id,
         operationName,
-        evidence.run.record.createdAt,
+        run.record.createdAt,
       );
       yield* decodePersisted(operationName, () =>
-        validateValidationRunLatestResolvedBlockerRelationship(
-          evidence.run,
-          latestResolvedBlockerIdAtRun,
-        ),
+        validateValidationRunLatestResolvedBlockerRelationship(run, latestResolvedBlockerIdAtRun),
       );
-      if (evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId) {
-        current = evidence;
-        break;
-      }
+      return {
+        candidateId: candidate.id,
+        validationRunId: run.record.id,
+        changeBaseSha: candidate.changeBaseSha,
+        headSha: candidate.headSha,
+      } satisfies ChangePublicationEvidence;
     }
-    if (current === undefined) return undefined;
-    return {
-      candidateId: current.publicationCandidateId,
-      validationRunId: current.run.record.id,
-      changeBaseSha: current.changeBaseSha,
-      headSha: current.headSha,
-    } satisfies ChangePublicationEvidence;
+    return undefined;
   });
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
@@ -1340,16 +1338,3 @@ const mapChangeWithoutHistoryRow = (
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-type PassingPublicationEvidenceRow = UnknownValidationRunRow & {
-  readonly publicationCandidateId: unknown;
-  readonly changeBaseSha: unknown;
-  readonly headSha: unknown;
-};
-
-type PassingPublicationEvidence = {
-  readonly publicationCandidateId: string;
-  readonly changeBaseSha: string;
-  readonly headSha: string;
-  readonly run: ReturnType<typeof decodeValidationRun>;
-};

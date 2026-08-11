@@ -19,8 +19,11 @@ import {
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
+  GitHubPullRequestListResult,
   GitHubPullRequestMutationResult,
+  GitHubPullRequestReadResult,
   GitHubPullRequestRequest,
+  PublicationFailureEvidence,
 } from "../ownedPullRequestGateway.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
@@ -70,8 +73,8 @@ export type PublishCandidateResult =
         | "publication_remote_mismatch"
         | "publication_state_conflict"
         | "publication_tooling_failed";
-      readonly evidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
-      readonly recoveryEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
       readonly observedRemoteHeadSha?: string;
     };
@@ -230,7 +233,7 @@ const releaseWithEvidence = (
   dependencies: Dependencies,
   pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
-  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
+  failureEvidence?: PublicationFailureEvidence,
 ): PublicationEffect =>
   Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
     released.ok
@@ -258,15 +261,15 @@ const recover = (
     const marker = change.publication;
     if (marker === null || marker.pullRequest !== null)
       return { ok: false, code: "publication_state_conflict" };
-    const found = dependencies.github.findPullRequests(marker.target, marker.headBranch);
-    if (found === undefined) {
-      const failureEvidence = dependencies.github.getLastFailureEvidence?.();
+    const foundResult = readPullRequestList(dependencies.github, marker.target, marker.headBranch);
+    if (!foundResult.ok) {
       return {
         ok: false,
         code: "publication_tooling_failed",
-        ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+        evidence: foundResult.evidence,
       };
     }
+    const found = foundResult.pullRequests;
     if (!sameTarget(marker.target, input.target))
       return { ok: false, code: "publication_state_conflict" };
     const selected = selectRecoveredPullRequest(
@@ -388,19 +391,21 @@ const confirmCreation = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
-  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
+  failureEvidence?: PublicationFailureEvidence,
 ): PublicationEffect => {
-  const found = dependencies.github.findPullRequests(input.target, headBranch);
-  const selected = selectRecoveredPullRequest(found, input.target, headBranch, expectedHeadSha);
-  const lookupEvidence = dependencies.github.getLastFailureEvidence?.();
+  const found = readPullRequestList(dependencies.github, input.target, headBranch);
+  const selected = selectRecoveredPullRequest(
+    found.ok ? found.pullRequests : undefined,
+    input.target,
+    headBranch,
+    expectedHeadSha,
+  );
   return selected.ok
     ? record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest)
     : Effect.succeed({
         ...selected,
         ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
-        recoveryEvidence:
-          lookupEvidence ??
-          (found === undefined ? unavailableRecoveryEvidence : conflictingRecoveryEvidence),
+        recoveryEvidence: found.ok ? conflictingRecoveryEvidence : found.evidence,
       });
 };
 
@@ -617,35 +622,15 @@ const confirmUpdatedPullRequest = (
   headBranch: string,
   expectedHeadSha: string,
 ): PublicationEffect =>
-  Effect.gen(function* () {
-    const delay =
-      dependencies.delayBeforeConfirmation ??
-      ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
-    yield* delay(100);
-    const confirmed = safeGetPullRequest(
-      dependencies.github,
-      input.target,
-      owned.pullRequest.number,
-    );
-    if (confirmed === undefined) {
-      return {
-        ok: false,
-        code: "publication_tooling_failed",
-        evidence: conflictingMutationEvidence("pull_request_update"),
-        recoveryEvidence:
-          dependencies.github.getLastFailureEvidence?.() ?? unavailableRecoveryEvidence,
-      };
-    }
-    if (isExpectedUpdatedPullRequest(confirmed, owned, input, headBranch, expectedHeadSha)) {
-      return yield* record(dependencies, input, headBranch, expectedHeadSha, confirmed, owned);
-    }
-    return {
-      ok: false,
-      code: "publication_remote_mismatch",
-      evidence: conflictingMutationEvidence("pull_request_update"),
-      recoveryEvidence: conflictingRecoveryEvidence,
-    };
-  });
+  readBackUpdatedPullRequest(
+    dependencies,
+    input,
+    owned,
+    headBranch,
+    expectedHeadSha,
+    conflictingMutationEvidence("pull_request_update"),
+    true,
+  );
 
 const isExpectedUpdatedPullRequest = (
   pullRequest: GitHubPullRequest,
@@ -688,13 +673,14 @@ const updateFailure = (
     });
   }
   return canRecoverUpdateFailure(failure.code)
-    ? recoverUpdatedPullRequest(
+    ? readBackUpdatedPullRequest(
         dependencies,
         input,
         owned,
         headBranch,
         expectedHeadSha,
         failure.evidence,
+        false,
       )
     : Effect.succeed({
         ok: false,
@@ -711,33 +697,53 @@ const canRecoverUpdateFailure = (
   failure === "remote_rejected" ||
   failure === "push_failed";
 
-const recoverUpdatedPullRequest = (
+const readBackUpdatedPullRequest = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
-  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
-): PublicationEffect => {
-  const recovered = safeGetPullRequest(dependencies.github, input.target, owned.pullRequest.number);
-  if (recovered === undefined) {
-    return Effect.succeed({
-      ok: false,
-      code: "publication_tooling_failed",
-      ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
-      recoveryEvidence:
-        dependencies.github.getLastFailureEvidence?.() ?? unavailableRecoveryEvidence,
-    });
-  }
-  return isExpectedUpdatedPullRequest(recovered, owned, input, headBranch, expectedHeadSha)
-    ? record(dependencies, input, headBranch, expectedHeadSha, recovered, owned)
-    : Effect.succeed({
+  failureEvidence: PublicationFailureEvidence | undefined,
+  delayBeforeRead: boolean,
+): PublicationEffect =>
+  Effect.gen(function* () {
+    if (delayBeforeRead) {
+      const delay =
+        dependencies.delayBeforeConfirmation ??
+        ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
+      yield* delay(100);
+    }
+    const recovered = readPullRequest(dependencies.github, input.target, owned.pullRequest.number);
+    if (!recovered.ok) {
+      return {
         ok: false,
-        code: "publication_remote_mismatch",
+        code: "publication_tooling_failed",
         ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
-        recoveryEvidence: conflictingRecoveryEvidence,
-      });
-};
+        recoveryEvidence: recovered.evidence,
+      };
+    }
+    return isExpectedUpdatedPullRequest(
+      recovered.pullRequest,
+      owned,
+      input,
+      headBranch,
+      expectedHeadSha,
+    )
+      ? yield* record(
+          dependencies,
+          input,
+          headBranch,
+          expectedHeadSha,
+          recovered.pullRequest,
+          owned,
+        )
+      : {
+          ok: false,
+          code: "publication_remote_mismatch",
+          ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+          recoveryEvidence: conflictingRecoveryEvidence,
+        };
+  });
 
 const record = (
   dependencies: Dependencies,
@@ -808,15 +814,27 @@ const facts = (input: PublishCandidateInput, headBranch: string, expectedHeadSha
   headBranch,
   expectedHeadSha,
 });
-const safeGetPullRequest = (
+const readPullRequest = (
   github: GitHubPullRequestGateway,
   target: ChangePublicationTarget,
   number: number,
-): GitHubPullRequest | undefined => {
+): GitHubPullRequestReadResult => {
   try {
     return github.getPullRequest(target, number);
   } catch {
-    return undefined;
+    return { ok: false, evidence: unavailableRecoveryEvidence };
+  }
+};
+
+const readPullRequestList = (
+  github: GitHubPullRequestGateway,
+  target: ChangePublicationTarget,
+  headBranch: string,
+): GitHubPullRequestListResult => {
+  try {
+    return github.findPullRequests(target, headBranch);
+  } catch {
+    return { ok: false, evidence: unavailableRecoveryEvidence };
   }
 };
 

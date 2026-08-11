@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
-import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { type RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import {
   openSqliteChangeReconciliationPort,
   openSqliteChangeReviewerTranscriptPort,
@@ -12,7 +12,7 @@ import {
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../sqlite/sqliteChangeValidationPersistence.js";
 import {
-  githubChangeCleanupRemote,
+  localGitHubChangeCleanupRemote,
   localGitHubPullRequestGateway,
 } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import {
@@ -65,7 +65,7 @@ const loadContext = (input: LoadInput) => {
 const provideRepository = <A, E, R>(
   statePath: string,
   commonDirectory: string,
-  effect: Effect.Effect<A, E, R | import("../sqlite/repositorySql.js").RepositorySql>,
+  effect: Effect.Effect<A, E, R | RepositorySql>,
 ) => effect.pipe(Effect.provide(repositorySqlLayer({ statePath, commonDirectory })));
 
 export const withChangeStart = <A, E, R>(
@@ -208,7 +208,7 @@ export const withChangeReconciliation = <A, E, R>(
             github,
             cleanupTerminal: openTerminalCleanup({
               persistence: terminalCleanup,
-              cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              cleanup: cleanupChangeResourcesWithRemote(localGitHubChangeCleanupRemote()),
               indexTranscripts: openReviewerTranscriptIndex({ persistence: reviewerTranscripts }),
               reviewerSessionPathFor: (changeId) =>
                 reviewerSessionsChangeRoot(context.paths.operationalDir, changeId),

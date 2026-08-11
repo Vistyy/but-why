@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { type Context, Effect } from "effect";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
@@ -44,6 +44,8 @@ import {
   type UnknownValidationRoundRow,
   type UnknownValidationRunRow,
   validateValidationRunAuthorityRelationships,
+  validateValidationRunImplementationDecisionRelationships,
+  validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
 import {
@@ -58,7 +60,7 @@ import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
 
 const makeSqliteChangeValidationAdapter = (
-  repository: import("effect").Context.Tag.Service<typeof RepositorySql>,
+  repository: Context.Tag.Service<typeof RepositorySql>,
 ): CandidateValidationExecutionPort &
   ChangeValidationReadPort &
   ActiveValidationRunPort &
@@ -67,6 +69,10 @@ const makeSqliteChangeValidationAdapter = (
   getCandidateById: (candidateId) =>
     repository.transaction("read Candidate for validation history", (sql) =>
       readCandidateById(sql, candidateId, "read Candidate for validation history"),
+    ),
+  getCurrentCandidateForChange: (changeId) =>
+    repository.transaction("read current Candidate", (sql) =>
+      readCurrentCandidateForChange(sql, changeId),
     ),
   listCandidatesForChange: (changeId) =>
     repository.transaction("list Candidates for validation history", (sql) =>
@@ -99,6 +105,10 @@ const makeSqliteChangeValidationAdapter = (
   getRunById: (validationRunId) =>
     repository.transaction("read Candidate Validation Run", (sql) =>
       getRunById(sql, validationRunId),
+    ),
+  getLatestRunForCandidate: (candidateId) =>
+    repository.transaction("read latest Candidate Validation Run", (sql) =>
+      getLatestRunForCandidate(sql, candidateId),
     ),
   listRunsForCandidate: (candidateId) =>
     repository.transaction("list Candidate Validation Runs", (sql) =>
@@ -203,8 +213,10 @@ export const openSqliteChangeValidationReadPort = () =>
     const adapter = makeSqliteChangeValidationAdapter(repository);
     return {
       getCandidateById: adapter.getCandidateById,
+      getCurrentCandidateForChange: adapter.getCurrentCandidateForChange,
       listCandidatesForChange: adapter.listCandidatesForChange,
       getRunById: adapter.getRunById,
+      getLatestRunForCandidate: adapter.getLatestRunForCandidate,
       listRunsForCandidate: adapter.listRunsForCandidate,
       listRounds: adapter.listRounds,
       listFindings: adapter.listFindings,
@@ -273,6 +285,22 @@ const readCandidateById = (sql: SqlClient.SqlClient, candidateId: string, operat
       if (candidate.id !== candidateId) throw new Error("Candidate identity does not match lookup");
       return candidate;
     });
+  });
+
+const readCurrentCandidateForChange = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<CandidateOwnerRow>(
+      `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
+       FROM candidates AS candidate
+       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
+       WHERE candidate.change_id = ?
+       ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1`,
+      [changeId],
+    );
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : yield* decodePersisted("read current Candidate", () => decodeOwnedCandidate(row, changeId));
   });
 
 const readCandidatesForChange = (
@@ -452,29 +480,31 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     });
     const decisionsSnapshot = JSON.stringify(implementationDecisions);
 
-    const historyRows = yield* sql.unsafe<UnknownValidationRunRow>(
+    const reusableRows = yield* sql.unsafe<UnknownValidationRunRow>(
       `SELECT ${validationRunReadColumns}
        FROM candidate_validation_runs
        WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
-       ORDER BY created_at DESC, id DESC`,
-      [candidate.id],
+         AND policy_snapshot = ? AND implementation_decisions = ?
+         AND latest_resolved_blocker_id IS ?
+       ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [candidate.id, policySnapshot, decisionsSnapshot, currentLatestResolvedBlockerId],
     );
-    const history = yield* decodePersisted("start Candidate Validation Run", () =>
-      historyRows.map((row) => {
-        const decoded = decodeValidationRun(row);
-        if (decoded.record.candidateId !== candidate.id) {
-          throw new Error("Validation Run belongs to another Candidate");
-        }
-        validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockerHistory);
-        return decoded;
-      }),
-    );
-    const reusable = history.find(
-      (run) =>
-        run.policySnapshot === policySnapshot &&
-        run.implementationDecisionsSnapshot === decisionsSnapshot &&
-        run.latestResolvedBlockerId === currentLatestResolvedBlockerId,
-    );
+    const reusableRow = reusableRows[0];
+    const reusable =
+      reusableRow === undefined
+        ? undefined
+        : yield* decodePersisted("start Candidate Validation Run", () => {
+            const decoded = decodeValidationRun(reusableRow);
+            if (decoded.record.candidateId !== candidate.id) {
+              throw new Error("Validation Run belongs to another Candidate");
+            }
+            validateValidationRunAuthorityRelationships(
+              decoded,
+              candidate.changeId,
+              blockerHistory,
+            );
+            return decoded;
+          });
     if (reusable !== undefined) {
       return {
         reused: true,
@@ -636,15 +666,60 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
         "Validation Run belongs to an unknown Candidate",
       );
     }
-    const blockers = yield* readBlockerHistory(
+    yield* validateSelectedValidationRunAuthority(
       sql,
+      decoded,
       candidate.changeId,
       "decode Candidate Validation Run",
     );
-    yield* decodePersisted("decode Candidate Validation Run", () =>
-      validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockers),
-    );
     return decoded.record;
+  });
+
+const getLatestRunForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly id: unknown }>`
+      SELECT id FROM candidate_validation_runs
+      WHERE candidate_id = ${candidateId}
+      ORDER BY created_at DESC, id DESC LIMIT 1
+    `;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    const validationRunId = yield* decodePersisted("read latest Candidate Validation Run", () =>
+      decodeStoredString(row.id, "Validation Run ID"),
+    );
+    const run = yield* getRunById(sql, validationRunId);
+    if (run === undefined || run.candidateId !== candidateId) {
+      return yield* invalidData(
+        "read latest Candidate Validation Run",
+        "Latest Validation Run belongs to another or unknown Candidate",
+      );
+    }
+    return run;
+  });
+
+const requireRun = (sql: SqlClient.SqlClient, validationRunId: string, operationName: string) =>
+  Effect.flatMap(getRunById(sql, validationRunId), (run) =>
+    run === undefined
+      ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
+      : Effect.succeed(run),
+  );
+
+const requireRunIdentity = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  operationName: string,
+  missingMessage: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly id: unknown }>`
+      SELECT id FROM candidate_validation_runs WHERE id = ${validationRunId}
+    `;
+    const row = rows[0];
+    if (row === undefined) return yield* invalidData(operationName, missingMessage);
+    yield* decodePersisted(operationName, () => {
+      const id = decodeStoredString(row.id, "Validation Run ID");
+      if (id !== validationRunId) throw new Error("Validation Run identity does not match lookup");
+    });
   });
 
 const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
@@ -663,25 +738,31 @@ const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
         "Validation Run history belongs to an unknown Candidate",
       );
     }
-    const blockers = yield* readBlockerHistory(
-      sql,
-      candidate.changeId,
-      "decode Candidate Validation Run",
+    const decodedRuns = yield* decodePersisted("decode Candidate Validation Run", () =>
+      rows.map((row) => {
+        const decoded = decodeValidationRun(row);
+        if (decoded.record.candidateId !== candidateId)
+          throw new Error("Validation Run belongs to another Candidate");
+        return decoded;
+      }),
     );
-    return yield* decodePersisted("decode Candidate Validation Run", () =>
-      rows
-        .map((row) => {
-          const decoded = decodeValidationRun(row);
-          if (decoded.record.candidateId !== candidateId)
-            throw new Error("Validation Run belongs to another Candidate");
-          validateValidationRunAuthorityRelationships(decoded, candidate.changeId, blockers);
-          return decoded.record;
-        })
-        .sort(
-          (left, right) =>
-            compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id),
+    yield* Effect.forEach(
+      decodedRuns,
+      (run) =>
+        validateSelectedValidationRunAuthority(
+          sql,
+          run,
+          candidate.changeId,
+          "decode Candidate Validation Run",
         ),
+      { discard: true },
     );
+    return decodedRuns
+      .map(({ record }) => record)
+      .sort(
+        (left, right) =>
+          compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id),
+      );
   });
 
 const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationCommandRoundInput) =>
@@ -762,14 +843,33 @@ const listFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
        WHERE validation_run_id = ?`,
       [validationRunId],
     );
-    const rounds = yield* listRounds(sql, validationRunId);
-    return yield* decodePersisted("decode Candidate validation Finding", () => {
-      const findings = rows.map((row) =>
-        assertRunOwner(decodeValidationFinding(row), validationRunId),
+    const findings = yield* decodePersisted("decode Candidate validation Finding", () =>
+      rows.map((row) => assertRunOwner(decodeValidationFinding(row), validationRunId)),
+    );
+    if (findings.length === 0) return findings;
+    const run = yield* requireRun(sql, validationRunId, "decode Candidate validation Finding");
+    const roundRows = yield* sql<UnknownValidationRoundRow>`
+      SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
+        CAST(round.round_number AS TEXT) AS roundNumber,
+        typeof(round.round_number) AS roundNumberType,
+        round.status, round.created_at AS createdAt
+      FROM candidate_validation_rounds AS round
+      WHERE round.validation_run_id = ${validationRunId}
+        AND EXISTS (
+          SELECT 1 FROM candidate_validation_findings AS finding
+          WHERE finding.validation_run_id = round.validation_run_id
+            AND finding.phase = round.phase AND finding.producer = round.producer
+        )
+    `;
+    const rounds = yield* decodePersisted("decode Candidate validation Finding", () => {
+      const selected = roundRows.map((row) =>
+        assertRunOwner(decodeValidationRound(row), validationRunId),
       );
-      validateFindingRoundRelationships(findings, rounds);
-      return findings.sort((left, right) => compareEvidence(left, right, rounds));
+      validateRoundPolicyRelationships(selected, new Map([[run.id, run]]));
+      validateFindingRoundRelationships(findings, selected);
+      return selected;
     });
+    return findings.sort((left, right) => compareEvidence(left, right, rounds));
   });
 
 const listPreviousCandidateReviewerFindings = (
@@ -787,106 +887,86 @@ const listPreviousCandidateReviewerFindings = (
       "list previous Candidate reviewer Findings",
     );
     if (current === undefined) return [];
-    const candidates = yield* readCandidatesForChange(
+    const selectedRows = yield* sql<{
+      readonly candidateId: unknown;
+      readonly validationRunId: unknown;
+    }>`
+      SELECT candidate.id AS candidateId, run.id AS validationRunId
+      FROM candidates AS candidate
+      JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
+      JOIN candidate_validation_rounds AS round ON round.validation_run_id = run.id
+      WHERE candidate.change_id = ${current.changeId}
+        AND (candidate.created_at < ${current.createdAt}
+          OR (candidate.created_at = ${current.createdAt} AND candidate.id < ${current.id}))
+        AND round.phase = ${input.phase} AND round.producer = ${input.producer}
+        AND (round.status = 'passed' OR EXISTS (
+          SELECT 1 FROM candidate_validation_findings AS finding
+          WHERE finding.validation_run_id = round.validation_run_id
+            AND finding.phase = round.phase AND finding.producer = round.producer
+        ))
+      ORDER BY candidate.created_at DESC, candidate.id DESC,
+        run.created_at DESC, run.id DESC, round.round_number DESC
+      LIMIT 1
+    `;
+    const selected = yield* decodePersisted("list previous Candidate reviewer Findings", () => {
+      const row = selectedRows[0];
+      return row === undefined
+        ? undefined
+        : {
+            candidateId: decodeStoredString(row.candidateId, "previous Candidate ID"),
+            validationRunId: decodeStoredString(row.validationRunId, "previous Validation Run ID"),
+          };
+    });
+    if (selected === undefined) return [];
+    const candidate = yield* readCandidateById(
       sql,
-      current.changeId,
+      selected.candidateId,
       "list previous Candidate reviewer Findings",
     );
-    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
-    const blockers = yield* readBlockerHistory(
+    if (
+      candidate === undefined ||
+      candidate.changeId !== current.changeId ||
+      compareCandidatesAscending(candidate, current) >= 0
+    ) {
+      return yield* invalidData(
+        "list previous Candidate reviewer Findings",
+        "Selected reviewer history belongs to an unrelated Candidate",
+      );
+    }
+    const run = yield* requireRun(
       sql,
-      current.changeId,
+      selected.validationRunId,
       "list previous Candidate reviewer Findings",
     );
-    const runRows = yield* sql.unsafe<
-      UnknownValidationRunRow & { readonly runCandidateId: unknown }
-    >(
-      `SELECT ${validationRunReadColumns}, candidate_id AS runCandidateId
-       FROM candidate_validation_runs
-       WHERE candidate_id IN (SELECT id FROM candidates WHERE change_id = ?)`,
-      [current.changeId],
-    );
-    const runs = yield* decodePersisted("list previous Candidate reviewer Findings", () =>
-      runRows.map((row) => {
-        const decoded = decodeValidationRun(row);
-        const run = decoded.record;
-        const owner = decodeStoredString(row.runCandidateId, "Validation Run Candidate ID");
-        if (run.candidateId !== owner || !candidateIds.has(owner)) {
-          throw new Error("Validation Run belongs to a foreign Candidate");
-        }
-        validateValidationRunAuthorityRelationships(decoded, current.changeId, blockers);
-        return run;
-      }),
-    );
-    const runIds = new Set(runs.map((run) => run.id));
+    if (run.candidateId !== candidate.id) {
+      return yield* invalidData(
+        "list previous Candidate reviewer Findings",
+        "Selected reviewer history belongs to an unrelated Validation Run",
+      );
+    }
     const roundRows = yield* sql<UnknownValidationRoundRow>`
       SELECT validation_run_id AS validationRunId, phase, producer,
         CAST(round_number AS TEXT) AS roundNumber, typeof(round_number) AS roundNumberType,
         status, created_at AS createdAt
       FROM candidate_validation_rounds
-      WHERE validation_run_id IN (
-        SELECT run.id FROM candidate_validation_runs AS run
-        JOIN candidates AS candidate ON candidate.id = run.candidate_id
-        WHERE candidate.change_id = ${current.changeId}
-      )
+      WHERE validation_run_id = ${run.id}
+        AND phase = ${input.phase} AND producer = ${input.producer}
     `;
     const findingRows = yield* sql.unsafe<UnknownValidationFindingRow>(
       `SELECT ${findingReadColumns}
        FROM candidate_validation_findings
-       WHERE validation_run_id IN (
-         SELECT run.id FROM candidate_validation_runs AS run
-         JOIN candidates AS candidate ON candidate.id = run.candidate_id
-         WHERE candidate.change_id = ?
-       )`,
-      [current.changeId],
+       WHERE validation_run_id = ? AND phase = ? AND producer = ?`,
+      [run.id, input.phase, input.producer],
     );
-    const decoded = yield* decodePersisted("list previous Candidate reviewer Findings", () => {
-      const rounds = roundRows.map((row) => {
-        const round = decodeValidationRound(row);
-        if (!runIds.has(round.validationRunId))
-          throw new Error("Validation round belongs to a foreign Run");
-        return round;
-      });
-      validateRoundPolicyRelationships(rounds, new Map(runs.map((run) => [run.id, run])));
-      const findings = findingRows.map((row) => {
-        const finding = decodeValidationFinding(row);
-        if (!runIds.has(finding.validationRunId))
-          throw new Error("Finding belongs to a foreign Run");
-        return finding;
-      });
-      validateFindingRoundRelationships(findings, rounds);
-      return { rounds, findings };
-    });
-
-    const candidatesById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-    const runsById = new Map(runs.map((run) => [run.id, run]));
-    const eligibleRounds = decoded.rounds.filter((round) => {
-      const run = runsById.get(round.validationRunId);
-      const candidate = run === undefined ? undefined : candidatesById.get(run.candidateId);
-      if (candidate === undefined || compareCandidatesAscending(candidate, current) >= 0)
-        return false;
-      if (round.phase !== input.phase || round.producer !== input.producer) return false;
-      return (
-        round.status === "passed" ||
-        decoded.findings.some(
-          (finding) =>
-            finding.validationRunId === round.validationRunId &&
-            finding.phase === round.phase &&
-            finding.producer === round.producer,
-        )
+    return yield* decodePersisted("list previous Candidate reviewer Findings", () => {
+      const rounds = roundRows.map((row) => assertRunOwner(decodeValidationRound(row), run.id));
+      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]]));
+      const findings = findingRows.map((row) =>
+        assertRunOwner(decodeValidationFinding(row), run.id),
       );
+      validateFindingRoundRelationships(findings, rounds);
+      return findings.sort((left, right) => compareStrings(left.id, right.id));
     });
-    eligibleRounds.sort((left, right) => comparePriorRounds(right, left, runsById, candidatesById));
-    const selected = eligibleRounds[0];
-    if (selected === undefined) return [];
-    return decoded.findings
-      .filter(
-        (finding) =>
-          finding.validationRunId === selected.validationRunId &&
-          finding.phase === input.phase &&
-          finding.producer === input.producer,
-      )
-      .sort((left, right) => compareStrings(left.id, right.id));
   });
 
 const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) =>
@@ -905,13 +985,12 @@ const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) 
         .sort((left, right) => left.sequence - right.sequence),
     );
     if (failures.length === 0) return failures;
-    const run = yield* getRunById(sql, validationRunId);
-    if (run === undefined) {
-      return yield* invalidData(
-        "list Candidate validation Tooling Failures",
-        "Tooling Failures belong to an unknown Run",
-      );
-    }
+    yield* requireRunIdentity(
+      sql,
+      validationRunId,
+      "list Candidate validation Tooling Failures",
+      "Tooling Failures belong to an unknown Run",
+    );
     return failures;
   });
 
@@ -932,10 +1011,27 @@ const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
         .sort(compareArtifacts),
     );
     if (artifacts.length === 0) return artifacts;
-    const rounds = yield* listRounds(sql, validationRunId);
-    yield* decodePersisted("list Candidate validation Artifacts", () =>
-      validateArtifactRoundRelationships(artifacts, rounds),
-    );
+    const run = yield* requireRun(sql, validationRunId, "list Candidate validation Artifacts");
+    const roundRows = yield* sql<UnknownValidationRoundRow>`
+      SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
+        CAST(round.round_number AS TEXT) AS roundNumber,
+        typeof(round.round_number) AS roundNumberType,
+        round.status, round.created_at AS createdAt
+      FROM candidate_validation_rounds AS round
+      WHERE round.validation_run_id = ${validationRunId}
+        AND EXISTS (
+          SELECT 1 FROM candidate_validation_artifacts AS artifact
+          WHERE artifact.validation_run_id = round.validation_run_id
+            AND artifact.phase = round.phase AND artifact.producer = round.producer
+        )
+    `;
+    yield* decodePersisted("list Candidate validation Artifacts", () => {
+      const rounds = roundRows.map((row) =>
+        assertRunOwner(decodeValidationRound(row), validationRunId),
+      );
+      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]]));
+      validateArtifactRoundRelationships(artifacts, rounds);
+    });
     return artifacts;
   });
 
@@ -1077,45 +1173,30 @@ const validateArtifactRoundRelationships = (
 const compareCandidatesAscending = (left: CandidateRecord, right: CandidateRecord): number =>
   compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id);
 
-const comparePriorRounds = (
-  left: CandidateValidationRound,
-  right: CandidateValidationRound,
-  runs: ReadonlyMap<
-    string,
-    { readonly id: string; readonly candidateId: string; readonly createdAt: string }
-  >,
-  candidates: ReadonlyMap<string, CandidateRecord>,
-): number => {
-  const leftRun = runs.get(left.validationRunId);
-  const rightRun = runs.get(right.validationRunId);
-  if (leftRun === undefined || rightRun === undefined)
-    throw new Error("Validation round has no Run");
-  const leftCandidate = candidates.get(leftRun.candidateId);
-  const rightCandidate = candidates.get(rightRun.candidateId);
-  if (leftCandidate === undefined || rightCandidate === undefined)
-    throw new Error("Validation Run has no Candidate");
-  return (
-    compareCandidatesAscending(leftCandidate, rightCandidate) ||
-    compareStrings(leftRun.createdAt, rightRun.createdAt) ||
-    compareStrings(leftRun.id, rightRun.id) ||
-    left.roundNumber - right.roundNumber
-  );
-};
-
 const compareStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
-const readBlockerHistory = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+const validateSelectedValidationRunAuthority = (
+  sql: SqlClient.SqlClient,
+  run: ReturnType<typeof decodeValidationRun>,
+  changeId: string,
+  operationName: string,
+) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
+    const latestRows = yield* sql.unsafe<UnknownImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns}
        FROM implementation_blockers
-       WHERE change_id = ?`,
-      [changeId],
+       WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
+       ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
+      [changeId, run.record.createdAt],
     );
-    return yield* decodePersisted(operationName, () =>
-      decodeImplementationBlockerHistory(rows, changeId),
+    const latestBlockerId = yield* decodePersisted(operationName, () =>
+      latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId)),
     );
+    yield* decodePersisted(operationName, () => {
+      validateValidationRunImplementationDecisionRelationships(run, changeId);
+      validateValidationRunLatestResolvedBlockerRelationship(run, latestBlockerId);
+    });
   });
 
 const invalidData = (operationName: string, message: string) =>

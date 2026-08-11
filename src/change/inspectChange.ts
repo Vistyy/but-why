@@ -71,8 +71,8 @@ export const queryChangeTaskProjection = (
 
 type ChangeDetailDependencies = {
   readonly getChangeById: ChangeReadPort["getChangeById"];
-  readonly listCandidatesForChange: ChangeValidationReadPort["listCandidatesForChange"];
-  readonly listRunsForCandidate: ChangeValidationReadPort["listRunsForCandidate"];
+  readonly getCurrentCandidateForChange: ChangeValidationReadPort["getCurrentCandidateForChange"];
+  readonly getLatestRunForCandidate: ChangeValidationReadPort["getLatestRunForCandidate"];
   readonly listFindings: ChangeValidationReadPort["listFindings"];
   readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
 };
@@ -84,12 +84,11 @@ export const queryChangeDetail = (
   Effect.gen(function* () {
     const change = yield* dependencies.getChangeById(changeId);
     if (change === undefined) return undefined;
-    const candidates = yield* dependencies.listCandidatesForChange(changeId);
-    const candidate = candidates.at(-1) ?? null;
+    const candidate = (yield* dependencies.getCurrentCandidateForChange(changeId)) ?? null;
     const validationRun =
       candidate === null
         ? null
-        : ((yield* dependencies.listRunsForCandidate(candidate.id)).at(-1) ?? null);
+        : ((yield* dependencies.getLatestRunForCandidate(candidate.id)) ?? null);
     return {
       change,
       currentCandidate: candidate,
