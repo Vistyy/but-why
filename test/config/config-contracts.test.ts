@@ -149,7 +149,7 @@ describe("configuration contracts", () => {
           runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "medium" },
         },
       },
-      validationWorkspace: { copyFiles: [".env.test"] },
+      snapshotWorkspace: { copyFiles: [".env.test"] },
     };
 
     expect(right(decodeRepoConfig(config))).toEqual(config);

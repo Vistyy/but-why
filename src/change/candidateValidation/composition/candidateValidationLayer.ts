@@ -8,7 +8,7 @@ import type { ReviewerOutput } from "../../../contracts/reviewerOutput.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type { ReviewerSessionStore } from "../../reviewerSession/reviewerSession.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
-import { makeCreateValidationWorkspace } from "../../validation/createValidationWorkspace.js";
+import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";
 import {
   CandidateReviewerExecution,
   type CandidateValidation,
@@ -40,7 +40,7 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateValidationExecution, input.persistence),
         Layer.succeed(
           CandidateValidationWorkspace,
-          makeCreateValidationWorkspace(runDisposableExactCommitWorkspace),
+          makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace),
         ),
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,

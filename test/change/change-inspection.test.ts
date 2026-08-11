@@ -246,7 +246,7 @@ describe("Change inspection CLI", () => {
         candidate: { id: secondCandidate.id },
         validationRun: { id: newerRun.validationRunId, state: "running", outcome: null },
         findings: [{ id: `${newerRun.validationRunId}-F1`, files: ["src/main.ts"] }],
-        toolingFailures: [{ operationName: "cleanup_validation_worktree" }],
+        toolingFailures: [{ operationName: "cleanup_snapshot_workspace" }],
         count: 1,
       });
       expect(JSON.parse(history.stdout)).toMatchObject({

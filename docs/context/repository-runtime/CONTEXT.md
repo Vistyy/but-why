@@ -42,13 +42,13 @@ _Avoid_: Migration file, migration script, editable migration
 **Agent Environment**:
 The optional command wrapper read from Repo Config that starts each headless reviewer with the repository's required development tools.
 Interactive Sessions use the Herdr pane shell environment instead of this wrapper.
-The Agent Environment applies in a headless Validation Workspace.
+The Agent Environment applies in a headless Snapshot Workspace.
 It does not alter Repository Preparation or Checks.
 If the configured wrapper fails, But Why stops the reviewer operation without an unwrapped retry.
 _Avoid_: Interactive Session Environment, Reviewer Environment, Caller-checkout config, Global Config preference, Repository Preparation, Herdr configuration
 
 **Repository Preparation**:
-The configured setup that establishes dependencies or tools in a new Managed Worktree or Validation Workspace.
+The configured setup that establishes dependencies or tools in a new Managed Worktree or Snapshot Workspace.
 When Repo Config omits Repository Preparation, But Why runs no Repository Preparation.
 _Avoid_: Validation-only setup, package-manager-specific install stage
 

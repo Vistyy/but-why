@@ -1,10 +1,8 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
-const sandcastleWorkspaceGlob = ".sandcastle/**";
-
 export default defineConfig({
   test: {
-    exclude: [...configDefaults.exclude, ".direnv/**", sandcastleWorkspaceGlob],
+    exclude: [...configDefaults.exclude, ".direnv/**"],
     reporters: ["dot"],
     coverage: {
       all: true,

@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInitializedRepo } from "./initializedRepo.js";
 import { runTestProcess } from "./testProcess.js";
@@ -11,6 +12,7 @@ export const candidateReadyRepo = (workspace?: string): string => {
   git(root, "remote", "add", "origin", "https://example.com/origin.git");
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
   git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  writeFileSync(join(root, ".gitignore"), "");
   git(root, "add", ".gitignore", ".but-why/config.json");
   git(root, "commit", "-m", "initialize but why");
   git(root, "checkout", "-b", "feature");

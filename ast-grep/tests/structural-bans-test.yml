@@ -104,15 +104,6 @@ valid:
 invalid:
   - openHerdrInteractiveSessionHost(undefined)
 ---
-id: direct-sandcastle-helpers-belong-to-disposable-workspace
-valid:
-  - runDisposableExactCommitWorkspace(input)
-invalid:
-  - import { createSandbox } from "@ai-hero/sandcastle";
-  - import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-  - createSandbox(input)
-  - noSandbox()
----
 id: repository-sql-layer-belongs-to-repository-runtime
 valid:
   - runtime.provide(program)

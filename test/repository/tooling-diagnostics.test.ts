@@ -48,10 +48,6 @@ describe("repository-authored blocking diagnostics", () => {
       "test-child-processes-use-test-process-adapter",
       'const childProcess = await import("node:child_process/promises");',
     ],
-    [
-      "sandcastle-dependency-belongs-to-runtime-adapter",
-      'import { createSandbox } from "@ai-hero/sandcastle";',
-    ],
     ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],
     ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
     ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
@@ -60,10 +56,6 @@ describe("repository-authored blocking diagnostics", () => {
       'const result = spawnSync("npm", ["pack"]);',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
-    [
-      "direct-sandcastle-helpers-belong-to-disposable-workspace",
-      "const sandbox = createSandbox();",
-    ],
   ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
@@ -73,7 +65,6 @@ describe("repository-authored blocking diagnostics", () => {
       "process-test-helpers-belong-to-process-boundaries",
       "package-installation-belongs-to-package-contract",
       "live-agent-helper-belongs-to-test-host",
-      "direct-sandcastle-helpers-belong-to-disposable-workspace",
     ].includes(ruleId)
       ? "test"
       : "src";

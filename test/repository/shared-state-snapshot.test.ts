@@ -85,7 +85,7 @@ describe("Shared Repository State Snapshots", () => {
       expect(initialized.status).toBe(0);
       runGit(root, "config", "user.name", "But Why Test");
       runGit(root, "config", "user.email", "but-why@example.test");
-      runGit(root, "add", ".but-why/config.json", ".gitignore");
+      runGit(root, "add", ".but-why/config.json");
       runGit(root, "commit", "-m", "Initialize But Why");
 
       const linked = `${root}-linked`;

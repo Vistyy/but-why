@@ -12,8 +12,9 @@ import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const validationRunId = "run-1";
 const changeId = "change-1";
-const tempRefName = "refs/but-why/validation-runs/run-1/validation";
-const worktreePath = "/linked-main/.sandcastle/worktrees/validation-run";
+const worktreePath =
+  "/linked-main/.sandcastle/worktrees/refs-but-why-validation-runs-run-1-validation";
+const preNativeRefName = "refs/but-why/validation-runs/run-1/validation";
 
 const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
@@ -31,10 +32,9 @@ const abandonmentContext: CandidateValidationRunAbandonmentContext = {
   changeId,
   candidateId: runningRun.candidateId,
   submittedSha: "head-sha",
-  tempRefName,
   worktreePath,
-  cleanupWorktree: "not_created",
-  cleanupTempRef: "not_created",
+  preNativeRefName,
+  cleanupWorkspace: "not_created",
 };
 
 const passThroughLock: ExecutionLock = {
@@ -52,7 +52,7 @@ const persistenceFor = (overrides: {
 });
 
 describe("Validation Run abandonment cleanup seam", () => {
-  it.effect("cleans the exact persisted workspace through injected Adapters", () =>
+  it.effect("cleans the exact persisted workspace through the injected Adapter", () =>
     Effect.gen(function* () {
       const calls: string[] = [];
       const abandoned = yield* openAbandonValidationRun({
@@ -61,12 +61,13 @@ describe("Validation Run abandonment cleanup seam", () => {
         }),
         executionLock: passThroughLock,
         workspaceCleanup: {
-          cleanup: (input) => {
-            calls.push(
-              `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedTempRefName}:${input.recordedWorktreePath}`,
-            );
-            return { worktree: "removed", tempRef: "removed" };
-          },
+          cleanup: (input) =>
+            Effect.sync(() => {
+              calls.push(
+                `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedWorktreePath}:${input.preNativeRefName}`,
+              );
+              return { workspace: "removed" as const };
+            }),
         },
       }).abandon({
         validationRunId,
@@ -76,7 +77,7 @@ describe("Validation Run abandonment cleanup seam", () => {
 
       expect(abandoned).toEqual({ ok: true, status: "abandoned", validationRunId });
       expect(calls).toEqual([
-        `cleanup:${validationRunId}:head-sha:${tempRefName}:${worktreePath}`,
+        `cleanup:${validationRunId}:head-sha:${worktreePath}:${preNativeRefName}`,
         "abandon",
       ]);
     }),
@@ -96,7 +97,7 @@ describe("Validation Run abandonment cleanup seam", () => {
         }),
         executionLock: passThroughLock,
         workspaceCleanup: {
-          cleanup: () => ({ worktree: "failed", tempRef: "removed" }),
+          cleanup: () => Effect.succeed({ workspace: "failed" }),
         },
       }).abandon({
         validationRunId,
@@ -109,11 +110,9 @@ describe("Validation Run abandonment cleanup seam", () => {
         status: "cleanup_failed",
         validationRunId,
         changeId,
-        cleanup: { worktree: "failed", tempRef: "removed" },
+        cleanup: { workspace: "failed" },
       });
-      expect(failures).toEqual([
-        "The validation process terminated. Cleanup worktree=failed; temporary ref=removed.",
-      ]);
+      expect(failures).toEqual(["The validation process terminated. Cleanup workspace=failed."]);
       expect(abandoned).toBe(false);
     }),
   );

@@ -50,7 +50,6 @@ const contextFor = (root: string): LocalRepositoryContext => {
       artifactsPath: join(operationalDir, "artifacts"),
       snapshotsPath: join(operationalDir, "snapshots"),
       taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
-      gitignorePath: join(root, ".gitignore"),
     },
   };
 };

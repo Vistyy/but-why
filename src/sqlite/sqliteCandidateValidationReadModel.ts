@@ -211,12 +211,12 @@ export type StoredAbandonmentContextRow = {
   readonly candidateId: string;
   readonly submittedSha: string;
   readonly setupValidationRunId: string | null;
-  readonly setupSubmittedSha: string | null;
-  readonly setupWorktreeHead: string | null;
-  readonly tempRefName: string | null;
+  readonly setupExpectedCommitSha: string | null;
   readonly worktreePath: string | null;
-  readonly cleanupWorktree: CandidateValidationRunAbandonmentContext["cleanupWorktree"];
-  readonly cleanupTempRef: CandidateValidationRunAbandonmentContext["cleanupTempRef"];
+  readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
+  readonly preNativeRefName: string | null;
+  readonly preNativeWorkspacePath: string | null;
+  readonly preNativeExpectedCommitSha: string | null;
 };
 
 export const decodeAbandonmentContext = (
@@ -236,38 +236,42 @@ export const decodeAbandonmentContext = (
   }
   const submittedSha = row.submittedSha;
   const setupValidationRunId = row.setupValidationRunId;
-  const setupSubmittedSha = row.setupSubmittedSha;
-  const setupWorktreeHead = row.setupWorktreeHead;
+  const setupExpectedCommitSha = row.setupExpectedCommitSha;
   if (
     setupValidationRunId !== null &&
-    (setupValidationRunId !== validationRunId ||
-      setupSubmittedSha !== submittedSha ||
-      setupWorktreeHead !== submittedSha)
+    (setupValidationRunId !== validationRunId || setupExpectedCommitSha !== submittedSha)
   ) {
-    throw new Error("Validation Workspace Setup relationship is inconsistent");
+    throw new Error("Snapshot Workspace Setup relationship is inconsistent");
   }
-  const cleanupWorktree = row.cleanupWorktree;
-  const cleanupTempRef = row.cleanupTempRef;
-  if (setupValidationRunId === null && (cleanupWorktree !== null || cleanupTempRef !== null)) {
-    throw new Error("Validation Run cleanup state has no Workspace Setup");
+  const cleanupWorkspace = row.cleanupWorkspace;
+  if (setupValidationRunId === null && cleanupWorkspace !== null) {
+    throw new Error("Validation Run cleanup state has no Snapshot Workspace Setup");
   }
-  const tempRefName = row.tempRefName;
   const worktreePath = row.worktreePath;
+  if (setupValidationRunId !== null && (worktreePath === null || cleanupWorkspace === null)) {
+    throw new Error("Snapshot Workspace Setup is incomplete");
+  }
+  const preNativeIdentityParts = [
+    row.preNativeRefName,
+    row.preNativeWorkspacePath,
+    row.preNativeExpectedCommitSha,
+  ].filter((value) => value !== null).length;
   if (
-    setupValidationRunId !== null &&
-    (tempRefName === null || cleanupWorktree === null || cleanupTempRef === null)
+    (preNativeIdentityParts !== 0 && preNativeIdentityParts !== 3) ||
+    (row.preNativeRefName !== null &&
+      (row.preNativeWorkspacePath !== worktreePath ||
+        row.preNativeExpectedCommitSha !== submittedSha))
   ) {
-    throw new Error("Validation Workspace Setup is incomplete");
+    throw new Error("Pre-native Snapshot Workspace cleanup identity is inconsistent");
   }
   return {
     validationRunId,
     changeId,
     candidateId,
     submittedSha,
-    ...(tempRefName === null ? {} : { tempRefName }),
     ...(worktreePath === null ? {} : { worktreePath }),
-    cleanupWorktree,
-    cleanupTempRef,
+    ...(row.preNativeRefName === null ? {} : { preNativeRefName: row.preNativeRefName }),
+    cleanupWorkspace,
   };
 };
 

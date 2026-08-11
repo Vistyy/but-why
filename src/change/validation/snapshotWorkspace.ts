@@ -5,37 +5,33 @@ import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
-export type ValidationWorkspaceCleanupResult = {
-  readonly worktree: CleanupState;
-  readonly tempRef: CleanupState;
+export type SnapshotWorkspaceCleanupResult = {
+  readonly workspace: CleanupState;
 };
 
-export type ActiveValidationWorkspace = {
+export type ActiveSnapshotWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly worktreePath: string;
 };
 
-export type ActiveValidationWorkspaceResult = {
+export type ActiveSnapshotWorkspaceResult = {
   readonly outcome: CandidateValidationOutcome;
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
-export type ValidationWorkspaceSetup = {
-  readonly validationRunId: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreeHead: string;
-  readonly worktreePath?: string;
-  readonly cleanupResult: ValidationWorkspaceCleanupResult;
-};
+export type SnapshotWorkspaceOperationName =
+  | "create_snapshot_workspace"
+  | "cleanup_snapshot_workspace"
+  | "copy_allowlisted_file"
+  | "snapshot_workspace_interrupted";
 
-export type ValidationWorkspaceToolingError = {
-  readonly operationName: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreePath?: string;
+export type SnapshotWorkspaceToolingError = {
+  readonly operationName: SnapshotWorkspaceOperationName;
+  readonly validationRunId: string;
+  readonly expectedCommitSha: string;
+  readonly worktreePath: string;
   readonly errorMessage: string;
-  readonly cleanupResult: ValidationWorkspaceCleanupResult;
+  readonly cleanupResult: SnapshotWorkspaceCleanupResult;
 };

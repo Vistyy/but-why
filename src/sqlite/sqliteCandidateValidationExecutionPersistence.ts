@@ -64,27 +64,27 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
           complete(sql, input),
         ),
-      recordWorkspaceSetup: (input) =>
-        repository.operation("record Candidate validation workspace setup", (sql) =>
-          Effect.asVoid(sql`
-            INSERT INTO candidate_validation_workspace_setups (
-              validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-              cleanup_worktree, cleanup_temp_ref, created_at
-            ) VALUES (
-              ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-              ${input.worktreeHead}, ${input.worktreePath ?? null},
-              ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
-            )
-            ON CONFLICT (validation_run_id) DO UPDATE SET
-              temp_ref_name = excluded.temp_ref_name,
-              submitted_sha = excluded.submitted_sha,
-              worktree_head = excluded.worktree_head,
-              worktree_path = excluded.worktree_path,
-              cleanup_worktree = excluded.cleanup_worktree,
-              cleanup_temp_ref = excluded.cleanup_temp_ref,
-              created_at = excluded.created_at
-          `),
-        ),
+      recordWorkspaceCleanup: (input) =>
+        repository
+          .operation(
+            "record Candidate Snapshot Workspace cleanup",
+            (sql) => sql<{ readonly validationRunId: string }>`
+              UPDATE candidate_snapshot_workspaces
+              SET cleanup_workspace = ${input.cleanupWorkspace}
+              WHERE validation_run_id = ${input.validationRunId}
+              RETURNING validation_run_id AS validationRunId
+            `,
+          )
+          .pipe(
+            Effect.flatMap((updated) =>
+              updated.length === 1 && updated[0]?.validationRunId === input.validationRunId
+                ? Effect.void
+                : invalidData(
+                    "record Candidate Snapshot Workspace cleanup",
+                    "Snapshot Workspace cleanup requires its persisted Validation Run identity.",
+                  ),
+            ),
+          ),
       recordToolingFailure: (input) =>
         repository.operation("record Candidate validation Tooling Failure", (sql) =>
           Effect.asVoid(sql`
@@ -335,12 +335,11 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     `;
     if (input.workspaceSetup !== undefined) {
       yield* sql`
-        INSERT INTO candidate_validation_workspace_setups (
-          validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-          cleanup_worktree, cleanup_temp_ref, created_at
+        INSERT INTO candidate_snapshot_workspaces (
+          validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
         ) VALUES (
-          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${candidate.headSha}, ${candidate.headSha},
-          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
+          ${validationRunId}, ${candidate.headSha}, ${input.workspaceSetup.worktreePath},
+          'not_created', ${input.now}
         )
       `;
     }

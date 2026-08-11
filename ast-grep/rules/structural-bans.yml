@@ -185,21 +185,6 @@ rule:
   any:
     - pattern: openHerdrInteractiveSessionHost($$$ARGS)
 ---
-# The disposable workspace Adapter owns direct Sandcastle factories.
-id: direct-sandcastle-helpers-belong-to-disposable-workspace
-language: TypeScript
-severity: error
-message: Do not use Sandcastle factories in tests because the disposable workspace Adapter owns Sandcastle setup; use runDisposableExactCommitWorkspace with test inputs for behavior variations.
-files:
-  - test/**/*.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - pattern: createSandbox($$$ARGS)
-    - pattern: noSandbox($$$ARGS)
----
 # Repository Runtime is the only production owner of the Shared Repository State database lifecycle.
 id: repository-sql-layer-belongs-to-repository-runtime
 language: TypeScript

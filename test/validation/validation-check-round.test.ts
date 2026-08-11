@@ -133,7 +133,7 @@ describe("check round Findings", () => {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
           expect(Cause.pretty(exit.cause)).toContain(
-            "Validation workspace no longer matches the Candidate.",
+            "Snapshot Workspace no longer matches the Candidate.",
           );
         }
         expect(commands).toHaveLength(1);

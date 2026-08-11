@@ -49,7 +49,7 @@
 - `src/init/`: initialization-specific Git and Repo Config Adapters.
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
-- `src/disposableWorkspace/`: disposable exact-commit workspace Adapter and the private Sandcastle Validation Workspace Adapter.
+- `src/disposableWorkspace/`: project-owned native Git Snapshot Workspace creation, identity verification, Effect command execution, interruption handling, and cleanup.
 - `src/sqlite/`: SQLite persistence Adapters.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
 

@@ -74,7 +74,7 @@ export const resolveCandidateValidationPolicy = (input: {
     ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
-    copyFiles: validationRepoConfig.validationWorkspace?.copyFiles ?? [],
+    copyFiles: validationRepoConfig.snapshotWorkspace?.copyFiles ?? [],
     specialistReviews: specialistReviews.policies,
   };
   if (!input.acceptanceContextSupplied)

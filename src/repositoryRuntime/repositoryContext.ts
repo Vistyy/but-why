@@ -16,7 +16,6 @@ import {
 } from "../contracts/repositoryStorageError.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findCurrentWorktreeFacts, findGitRoot } from "../init/git.js";
-import { ensureGitignoreBlock } from "../init/gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "../init/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 
@@ -29,7 +28,6 @@ export type LocalRepositoryPaths = {
   readonly artifactsPath: string;
   readonly snapshotsPath: string;
   readonly taskContextDraftsPath: string;
-  readonly gitignorePath: string;
 };
 
 export const findCurrentRepositoryWorktreeFacts = findCurrentWorktreeFacts;
@@ -144,7 +142,6 @@ const repoLocalPaths = (root: string, commonDirectory: string): LocalRepositoryP
     artifactsPath: join(operationalDir, "artifacts"),
     snapshotsPath: join(operationalDir, "snapshots"),
     taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
-    gitignorePath: join(root, ".gitignore"),
   };
 };
 
@@ -219,7 +216,6 @@ const completeRepoInitialization = (
   }
 
   if (reviewersRepair.created) created.push(".but-why/reviewers/");
-  if (ensureGitignoreBlock(prepared.paths.gitignorePath)) updated.push(".gitignore");
 
   const status = prepared.configCreated
     ? "initialized"

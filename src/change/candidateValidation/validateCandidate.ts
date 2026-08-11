@@ -15,20 +15,17 @@ import {
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
-import type { CreateValidationWorkspace } from "../validation/createValidationWorkspace.js";
+import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
+import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
+import { expectedSnapshotWorkspacePath } from "../validation/snapshotWorkspacePath.js";
 import type { SubmitProgress } from "../validation/submitProgress.js";
 import {
+  SnapshotWorkspaceSetupFailed,
   type ValidationToolingFailure,
-  ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
-import type { ActiveValidationWorkspace } from "../validation/validationWorkspace.js";
-import {
-  expectedValidationWorkspacePath,
-  validationTempRefName,
-} from "../validation/validationWorkspacePath.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type {
@@ -113,7 +110,7 @@ export class CandidateValidationExecution extends Context.Tag("CandidateValidati
 
 export class CandidateValidationWorkspace extends Context.Tag("CandidateValidationWorkspace")<
   CandidateValidationWorkspace,
-  CreateValidationWorkspace
+  CreateSnapshotWorkspace
 >() {}
 
 type CandidateReviewerExecutionValue = {
@@ -155,12 +152,12 @@ export const CandidateValidationLive = Layer.effect(
     const paths = yield* CandidateValidationPaths;
     const persistence = yield* CandidateValidationExecution;
     const reviewerExecution = yield* CandidateReviewerExecution;
-    const createValidationWorkspace = yield* CandidateValidationWorkspace;
+    const createSnapshotWorkspace = yield* CandidateValidationWorkspace;
     return makeCandidateValidation({
       ...paths,
       persistence,
       reviewerExecution,
-      createValidationWorkspace,
+      createSnapshotWorkspace,
     });
   }),
 );
@@ -170,7 +167,7 @@ const makeCandidateValidation = (dependencies: {
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
-  readonly createValidationWorkspace: CreateValidationWorkspace;
+  readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
@@ -178,7 +175,6 @@ const makeCandidateValidation = (dependencies: {
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   ) {
     const validationRunId = randomUUID();
-    const tempRefName = validationTempRefName(validationRunId);
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
@@ -186,10 +182,9 @@ const makeCandidateValidation = (dependencies: {
       policy: input.policy,
       validationRunId,
       workspaceSetup: {
-        tempRefName,
-        worktreePath: expectedValidationWorkspacePath(
+        worktreePath: expectedSnapshotWorkspacePath(
           dependencies.localRepositoryMainCheckoutRoot,
-          tempRefName,
+          validationRunId,
         ),
       },
       now: input.now,
@@ -206,22 +201,23 @@ const makeCandidateValidation = (dependencies: {
     }
     if (started.reused) return { ok: true, ...started } as const;
 
-    const workspace = yield* dependencies.createValidationWorkspace({
+    const workspace = yield* dependencies.createSnapshotWorkspace({
       repoRoot: dependencies.localRepositoryMainCheckoutRoot,
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,
       copyFiles: started.authority.policy.copyFiles,
-      recordWorkspaceSetup: (setup) =>
-        dependencies.persistence.recordWorkspaceSetup({
-          validationRunId: setup.validationRunId,
-          tempRefName: setup.tempRefName,
-          submittedSha: setup.submittedSha,
-          worktreeHead: setup.worktreeHead,
-          ...(setup.worktreePath === undefined ? {} : { worktreePath: setup.worktreePath }),
-          cleanupWorktree: setup.cleanupResult.worktree,
-          cleanupTempRef: setup.cleanupResult.tempRef,
-          now: input.now,
+      recordWorkspaceCleanup: (cleanupResult) =>
+        dependencies.persistence.recordWorkspaceCleanup({
+          validationRunId: started.validationRunId,
+          cleanupWorkspace: cleanupResult.workspace,
         }),
+      recordInterruptedCleanupResult: (toolingError) =>
+        dependencies.persistence
+          .recordWorkspaceCleanup({
+            validationRunId: toolingError.validationRunId,
+            cleanupWorkspace: toolingError.cleanupResult.workspace,
+          })
+          .pipe(Effect.ignore),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(
           dependencies,
@@ -233,19 +229,21 @@ const makeCandidateValidation = (dependencies: {
     });
 
     if (!workspace.ok) {
+      const cleanupResult =
+        "toolingFailure" in workspace
+          ? workspace.cleanupResult
+          : workspace.toolingError.cleanupResult;
       const failure =
         "toolingFailure" in workspace
           ? validationToolingFailureRecord(workspace.toolingFailure)
           : validationToolingFailureRecord(
-              new ValidationWorkspaceSetupFailed({
+              new SnapshotWorkspaceSetupFailed({
                 operationName: workspace.toolingError.operationName,
-                tempRefName: workspace.toolingError.tempRefName,
-                submittedSha: workspace.toolingError.submittedSha,
-                ...(workspace.toolingError.worktreePath === undefined
-                  ? {}
-                  : { worktreePath: workspace.toolingError.worktreePath }),
+                validationRunId: workspace.toolingError.validationRunId,
+                submittedSha: workspace.toolingError.expectedCommitSha,
+                worktreePath: workspace.toolingError.worktreePath,
                 errorMessage: workspace.toolingError.errorMessage,
-                cleanupResult: workspace.toolingError.cleanupResult,
+                cleanupResult,
               }),
             );
       yield* dependencies.persistence.recordToolingFailure({
@@ -253,6 +251,13 @@ const makeCandidateValidation = (dependencies: {
         ...failure,
         now: input.now,
       });
+      if (cleanupResult.workspace === "failed") {
+        return {
+          ok: false,
+          code: "active_validation_run",
+          validationRunId: started.validationRunId,
+        } as const;
+      }
       yield* dependencies.persistence.complete({
         validationRunId: started.validationRunId,
         outcome: "tooling_failed",
@@ -265,18 +270,6 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    yield* dependencies.persistence.recordWorkspaceSetup({
-      validationRunId: started.validationRunId,
-      tempRefName: workspace.setup.tempRefName,
-      submittedSha: workspace.setup.submittedSha,
-      worktreeHead: workspace.setup.worktreeHead,
-      ...(workspace.setup.worktreePath === undefined
-        ? {}
-        : { worktreePath: workspace.setup.worktreePath }),
-      cleanupWorktree: workspace.setup.cleanupResult.worktree,
-      cleanupTempRef: workspace.setup.cleanupResult.tempRef,
-      now: input.now,
-    });
     const activeResult = workspace.activeWorkspaceResult;
     const toolingFailures =
       (
@@ -346,7 +339,7 @@ const runCandidatePhases = (
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
   validationRunId: string,
-  activeWorkspace: ActiveValidationWorkspace,
+  activeWorkspace: ActiveSnapshotWorkspace,
 ): Effect.Effect<
   {
     readonly outcome: CandidateValidationOutcome;

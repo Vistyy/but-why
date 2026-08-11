@@ -13,7 +13,7 @@ import {
   CandidateValidationWorkspace,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
-import { makeCreateValidationWorkspace } from "../../src/change/validation/createValidationWorkspace.js";
+import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
@@ -52,7 +52,7 @@ export const candidateValidationForTest = (input: {
         persistenceLayer,
         Layer.succeed(
           CandidateValidationWorkspace,
-          makeCreateValidationWorkspace(runDisposableExactCommitWorkspace),
+          makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace),
         ),
         Layer.succeed(CandidateReviewerExecution, {
           runtime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,

@@ -252,9 +252,9 @@ The first implementation slice may extract only the low-level mechanisms require
 - reviewer process execution behind a domain-neutral Adapter that translates failures into Task-owned or Change-owned errors at each wrapper;
 - injected reviewer output correction behind a domain-neutral contract boundary supplied by the owning Task or Change wrapper;
 - session-file and transcript mechanics; and
-- disposable commit-workspace mechanics behind a domain-neutral Adapter, including temporary refs, Sandcastle worktrees, exact-head checks, scoped execution, interruption, and cleanup.
+- disposable exact-commit workspace mechanics behind a domain-neutral Adapter, including detached native Git worktrees, exact-head checks, scoped execution, interruption, and cleanup.
 
-The extraction moves direct Sandcastle factory ownership to the neutral workspace Adapter and updates the structural boundary that enforces that ownership.
+The extraction keeps workspace creation and cleanup ownership in the neutral workspace Adapter.
 Task Review must not import Change Validation errors, Validation-only reviewer output, or Change-owned workspace records.
 
 Task and Change domain wrappers, records, persistence, errors, policies, sessions, and lifecycle cleanup remain separate.

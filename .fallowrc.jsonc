@@ -2,7 +2,6 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": ["src/main.ts", "extensions/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
   "ignoreDependencies": [
-    "@ai-hero/sandcastle",
     "@effect/cli",
     "@effect/experimental",
     "@effect/platform",
@@ -90,7 +89,7 @@
           "src/change/localChangeCleanupGit.ts",
           "src/change/candidateCapture/localGitCandidate.ts",
           "src/change/publication/localCandidatePublicationGit.ts",
-          "src/change/validation/validationWorkspaceCleanupGit.ts",
+          "src/change/validation/snapshotWorkspaceCleanupGit.ts",
           "src/repositoryPreparation/localRepositoryPreparation.ts",
           "src/submissionEnvironment/gitFacts.ts",
           "src/submissionEnvironment/githubTarget.ts",
@@ -99,9 +98,7 @@
           "src/submissionEnvironment/repositoryFile.ts",
           "src/disposableWorkspace/disposableWorkspaceGit.ts",
           "src/disposableWorkspace/runDisposableExactCommitWorkspace.ts",
-          "src/disposableWorkspace/workspaceRuntimeAdapter.ts",
           "src/init/git.ts",
-          "src/init/gitignore.ts",
           "src/init/globalConfig.ts",
           "src/init/repoConfig.ts"
         ]

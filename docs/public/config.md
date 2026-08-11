@@ -36,7 +36,7 @@ A complete example is:
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
   },
-  "validationWorkspace": {
+  "snapshotWorkspace": {
     "copyFiles": [".env.test"]
   },
   "review": {
@@ -66,7 +66,7 @@ A complete example is:
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
-`validationWorkspace.copyFiles` is an optional list of local regular files copied into each Validation Workspace.
+`snapshotWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
 `review` selects Acceptance Review and Specialists.
 `reviewers` supplies Specialist instruction files.
 Each configured Specialist instruction file must positively define exactly one concern.
@@ -89,7 +89,7 @@ Change Submit starts Checks without an empty Prepare phase.
 
 Change Start runs Repository Preparation in the new Managed Worktree.
 A failure preserves the Change and Managed Worktree, is recorded as the current preparation failure, and does not block implementation or Submission.
-Change Submit runs it before Checks in the Validation Workspace.
+Change Submit runs it before Checks in the Snapshot Workspace.
 Retry it with:
 
 ```bash
@@ -115,18 +115,18 @@ Any Check Finding stops reviewer phases for that Candidate.
 
 ## Copied local files
 
-`validationWorkspace.copyFiles` is optional.
+`snapshotWorkspace.copyFiles` is optional.
 When present, it must be a non-empty list of normalized paths relative to the Local Repository's main checkout.
 The Repo Config schema rejects paths that are not repo-relative or that use parent traversal.
-During Validation Workspace setup, each path must identify an existing regular file.
+During Snapshot Workspace setup, each path must identify an existing regular file.
 A missing path, directory, symbolic link, or other non-regular path creates a Validation Tooling Failure.
 Change Submit reports `validation_tooling_failed`; fix the path or the validation tooling, then retry Change Submit.
 Duplicate entries are accepted but do not identify additional files.
 
-But Why copies each file once into the Validation Workspace.
+But Why copies each file once into the Snapshot Workspace.
 Copied files are local environment inputs, not Candidate content.
 Their contents are not hashed, stored, or exposed through Findings.
-But Why removes them with the temporary workspace.
+But Why removes them with the Snapshot Workspace.
 
 ## Review and Specialists
 
@@ -255,7 +255,7 @@ Interactive Session selection uses the Change Managed Worktree Repo Config, then
 Configured resource arrays are exact allowlists.
 An empty array disables that resource type.
 An omitted field preserves normal Pi behavior.
-Repo paths resolve from the Candidate Validation Workspace and remain inside the repository.
+Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
 Global relative paths resolve from the Global Config directory.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
 

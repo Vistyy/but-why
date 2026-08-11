@@ -3,17 +3,18 @@ import { Data } from "effect";
 import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
-import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
+import type {
+  SnapshotWorkspaceCleanupResult,
+  SnapshotWorkspaceOperationName,
+} from "./snapshotWorkspace.js";
 
-export class ValidationWorkspaceSetupFailed extends Data.TaggedError(
-  "ValidationWorkspaceSetupFailed",
-)<{
-  readonly operationName: string;
-  readonly tempRefName: string;
+export class SnapshotWorkspaceSetupFailed extends Data.TaggedError("SnapshotWorkspaceSetupFailed")<{
+  readonly operationName: SnapshotWorkspaceOperationName;
+  readonly validationRunId: string;
   readonly submittedSha: string;
-  readonly worktreePath?: string;
+  readonly worktreePath: string;
   readonly errorMessage: string;
-  readonly cleanupResult: ValidationWorkspaceCleanupResult;
+  readonly cleanupResult: SnapshotWorkspaceCleanupResult;
 }> {}
 
 export class InfrastructureToolingFailed extends Data.TaggedError("InfrastructureToolingFailed")<{
@@ -62,7 +63,7 @@ export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContra
 }> {}
 
 export type ValidationToolingFailure =
-  | ValidationWorkspaceSetupFailed
+  | SnapshotWorkspaceSetupFailed
   | InfrastructureToolingFailed
   | GitToolingFailed
   | ReviewerProcessToolingFailed
@@ -74,28 +75,26 @@ export type ValidationToolingFailure =
 export type ValidationToolingFailureRecordInput = {
   readonly errorKind: ValidationToolingFailureKind;
   readonly operationName: string;
-  readonly tempRefName?: string;
+  readonly validationRunId?: string;
   readonly submittedSha?: string;
   readonly worktreePath?: string;
   readonly errorMessage: string;
-  readonly cleanupWorktree?: CleanupState;
-  readonly cleanupTempRef?: CleanupState;
+  readonly cleanupWorkspace?: CleanupState;
 };
 
 export const validationToolingFailureRecord = (
   failure: ValidationToolingFailure,
 ): ValidationToolingFailureRecordInput => {
   switch (failure._tag) {
-    case "ValidationWorkspaceSetupFailed":
+    case "SnapshotWorkspaceSetupFailed":
       return {
-        errorKind: "validation_workspace_setup_failed",
+        errorKind: "snapshot_workspace_setup_failed",
         operationName: failure.operationName,
-        tempRefName: failure.tempRefName,
+        validationRunId: failure.validationRunId,
         submittedSha: failure.submittedSha,
-        ...(failure.worktreePath === undefined ? {} : { worktreePath: failure.worktreePath }),
+        worktreePath: failure.worktreePath,
         errorMessage: failure.errorMessage,
-        cleanupWorktree: failure.cleanupResult.worktree,
-        cleanupTempRef: failure.cleanupResult.tempRef,
+        cleanupWorkspace: failure.cleanupResult.workspace,
       };
     case "InfrastructureToolingFailed":
       return {

@@ -184,13 +184,14 @@ const runCheckCommand = (
   allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       if (expectedHeadSha !== undefined) {
         await ensureCandidateIntegrity({
           commandExecutor,
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+          signal,
         });
       }
       const result = await runValidationCommand({
@@ -198,7 +199,7 @@ const runCheckCommand = (
         timeoutSeconds: check.timeoutSeconds,
         completionMarker: checkCompletionMarker(check.id),
         missingTimeoutMessage: `Could not find timeout command for check ${check.id}.`,
-        exec: (command, options) => commandExecutor(command, options),
+        exec: (command, options) => commandExecutor(command, { ...(options ?? {}), signal }),
         ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
       });
       if (expectedHeadSha !== undefined) {
@@ -207,6 +208,7 @@ const runCheckCommand = (
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+          signal,
         });
       }
 
