@@ -90,7 +90,7 @@ invalid:
 ---
 id: test-child-processes-use-test-process-adapter
 valid:
-  - export { runTestProcess } from "./testProcess.js"
+  - import { runTestProcess } from "./testProcess.js"
 invalid:
   - export { spawn } from "node:child_process"
   - export * as childProcess from "child_process/promises"
@@ -120,16 +120,22 @@ invalid:
   - startTestProcess("npm", ["install"], { cwd })
   - testProcess.runTestProcess("npm", ["install"], { cwd })
   - "runTestProcess(`npm`, [`install`], { cwd })"
+  - (runTestProcess)("npm", ["install"], { cwd })
+  - runTestProcess!("npm", ["install"], { cwd })
+  - runTestProcess?.("npm", ["install"], { cwd })
 ---
 id: test-process-helper-imports-keep-canonical-names
 valid:
   - import { runTestProcess } from "./support/testProcess.js"
   - import { runTestProcess as execute } from "./other.js"
+  - export { runTestProcess as execute } from "./other.js"
 invalid:
   - import { runTestProcess as execute } from "./support/testProcess.js"
   - import { helper, startTestProcess as start } from "../support/testProcess.js"
   - import { runTestProcess /* equivalent alias */ as execute } from "./support/testProcess.js"
   - import { "runTestProcess" as execute } from "./support/testProcess.js"
+  - export { runTestProcess } from "./support/testProcess.js"
+  - export { runTestProcess as execute } from "./support/testProcess.js"
 ---
 id: live-agent-helper-belongs-to-test-host
 valid:
