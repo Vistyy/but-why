@@ -1,6 +1,7 @@
 import { Data } from "effect";
 
-import type { ContractDiagnostic } from "../../contracts/contractDiagnostics.js";
+import type { ReviewerOutputContractFailed } from "../../agent/reviewerOutput.js";
+import type { TokenUsageContractFailed } from "../../agent/tokenUsage.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
 import type {
@@ -45,20 +46,6 @@ export class CheckCommandExecutionToolingFailed extends Data.TaggedError(
 )<{
   readonly operationName: string;
   readonly command: string;
-  readonly message: string;
-}> {}
-
-export class ReviewerOutputContractFailed extends Data.TaggedError("ReviewerOutputContractFailed")<{
-  readonly operationName: string;
-  readonly reviewer: string;
-  readonly attempts: number;
-  readonly diagnostics: readonly ContractDiagnostic[];
-  readonly message: string;
-}> {}
-
-export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContractFailed")<{
-  readonly operationName: string;
-  readonly diagnostics: readonly ContractDiagnostic[];
   readonly message: string;
 }> {}
 

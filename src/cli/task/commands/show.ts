@@ -7,7 +7,7 @@ import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskReviewReads,
+  withTaskReviewInspection,
   withTasks,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
@@ -30,7 +30,7 @@ export const runTaskShowCommand = (
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
-      return yield* withTaskReviewReads(environment, (reviews) =>
+      return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {
           const review = yield* reviews.getLatestForTask(taskId.taskId);
           const proposalCurrent =

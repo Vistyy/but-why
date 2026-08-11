@@ -14,13 +14,15 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import {
   type LoadTaskReviewError,
-  withTaskReviewReadUseCases,
-  withTaskReviewUseCases,
+  withTaskReviewInspectionUseCases,
+  withTaskReviewRecoveryUseCases,
+  withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
 import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
 import type {
-  TaskReviewReadUseCases,
-  TaskReviewUseCases,
+  TaskReviewInspectionUseCases,
+  TaskReviewRecoveryUseCases,
+  TaskReviewSubmissionUseCases,
 } from "../../task/review/taskReviewUseCases.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
@@ -32,8 +34,9 @@ export type TaskCommandEnvironment = {
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
-  readonly taskReviewReadUseCases?: TaskReviewReadUseCases;
-  readonly taskReviewUseCases?: TaskReviewUseCases;
+  readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
+  readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
+  readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
 };
@@ -58,35 +61,45 @@ export const withTasks = (
   );
 };
 
-export const withTaskReviewReads = (
+export const withTaskReviewInspection = (
   environment: TaskCommandEnvironment,
-  use: (reviews: TaskReviewReadUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  use: (reviews: TaskReviewInspectionUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
-  const injected = environment.taskReviewReadUseCases ?? environment.taskReviewUseCases;
+  const injected = environment.taskReviewInspectionUseCases;
   const program =
     injected === undefined
-      ? withTaskReviewReadUseCases({ cwd: environment.cwd }, use).pipe(
+      ? withTaskReviewInspectionUseCases({ cwd: environment.cwd }, use).pipe(
           Effect.map((result) =>
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
       : use(injected);
-  return program.pipe(
-    Effect.catchAll((error) =>
-      Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
-      ),
-    ),
-  );
+  return catchTaskReviewStorageError(environment, program);
 };
 
-export const withTaskReviews = (
+export const withTaskReviewRecovery = (
   environment: TaskCommandEnvironment,
-  use: (reviews: TaskReviewUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  use: (reviews: TaskReviewRecoveryUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> => {
+  const injected = environment.taskReviewRecoveryUseCases;
+  const program =
+    injected === undefined
+      ? withTaskReviewRecoveryUseCases({ cwd: environment.cwd }, use).pipe(
+          Effect.map((result) =>
+            result.ok ? result.value : taskReviewLoadErrorResult(result.error),
+          ),
+        )
+      : use(injected);
+  return catchTaskReviewStorageError(environment, program);
+};
+
+export const withTaskReviewSubmission = (
+  environment: TaskCommandEnvironment,
+  use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
 ): Effect.Effect<CliResult> => {
   const program =
-    environment.taskReviewUseCases === undefined
-      ? withTaskReviewUseCases(
+    environment.taskReviewSubmissionUseCases === undefined
+      ? withTaskReviewSubmissionUseCases(
           {
             cwd: environment.cwd,
             globalConfigPath: environment.globalConfigPath ?? "",
@@ -100,7 +113,7 @@ export const withTaskReviews = (
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
-      : use(environment.taskReviewUseCases);
+      : use(environment.taskReviewSubmissionUseCases);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
@@ -109,6 +122,18 @@ export const withTaskReviews = (
     ),
   );
 };
+
+const catchTaskReviewStorageError = (
+  environment: TaskCommandEnvironment,
+  program: Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> =>
+  program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+      ),
+    ),
+  );
 
 const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
   error.code === "task_review_config_invalid"

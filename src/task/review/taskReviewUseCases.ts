@@ -57,12 +57,7 @@ export type TaskReviewIdentityInspection =
     }
   | { readonly verified: false; readonly message: string };
 
-export type TaskReviewReadUseCases = {
-  readonly abandon: (
-    reviewId: string,
-    reason: string,
-    now: string,
-  ) => Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError>;
+export type TaskReviewInspectionUseCases = {
   readonly getById: (
     reviewId: string,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
@@ -77,26 +72,24 @@ export type TaskReviewReadUseCases = {
   ) => Effect.Effect<TaskReviewIdentityInspection>;
 };
 
-export type TaskReviewUseCases = TaskReviewReadUseCases & {
-  readonly submit: (
-    taskId: PublicTaskId,
-    now: string,
-  ) => Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError>;
+export type TaskReviewRecoveryUseCases = {
   readonly abandon: (
     reviewId: string,
     reason: string,
     now: string,
   ) => Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError>;
-  readonly getById: (
-    reviewId: string,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly getLatestForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
-  readonly proposalIsCurrent: (
-    review: TaskReviewRecord,
-  ) => Effect.Effect<boolean, RepositoryStorageError>;
 };
+
+export type TaskReviewSubmissionUseCases = {
+  readonly submit: (
+    taskId: PublicTaskId,
+    now: string,
+  ) => Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError>;
+};
+
+export type TaskReviewUseCases = TaskReviewInspectionUseCases &
+  TaskReviewRecoveryUseCases &
+  TaskReviewSubmissionUseCases;
 
 type WorkspaceExecution =
   | { readonly ok: true; readonly output: ReviewerOutput }

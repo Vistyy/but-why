@@ -53,7 +53,7 @@
     "zones": [
       {
         "name": "adapters",
-        "patterns": ["src/**/adapters/**", "src/sqlite/**", "src/task/review/taskReviewGit.ts"]
+        "patterns": ["src/**/adapters/**", "src/sqlite/**"]
       },
       {
         "name": "agent",
@@ -111,7 +111,7 @@
       },
       {
         "from": "agent",
-        "allow": ["change", "shared"]
+        "allow": ["shared"]
       },
       {
         "from": "task-composition",

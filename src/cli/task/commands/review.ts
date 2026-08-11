@@ -1,7 +1,11 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
-import { type TaskCommandEnvironment, withTaskReviewReads } from "../taskCliSupport.js";
+import {
+  type TaskCommandEnvironment,
+  withTaskReviewInspection,
+  withTaskReviewRecovery,
+} from "../taskCliSupport.js";
 import { taskReviewView } from "./taskReviewView.js";
 
 export type TaskReviewCommand =
@@ -11,10 +15,10 @@ export type TaskReviewCommand =
 export const runTaskReviewCommand = (
   command: TaskReviewCommand,
   environment: TaskCommandEnvironment,
-): Effect.Effect<CliResult> =>
-  withTaskReviewReads(environment, (reviews) => {
-    if (command.action === "show") {
-      return Effect.gen(function* () {
+): Effect.Effect<CliResult> => {
+  if (command.action === "show") {
+    return withTaskReviewInspection(environment, (reviews) =>
+      Effect.gen(function* () {
         const review = yield* reviews.getById(command.reviewId);
         if (review === undefined) return reviewNotFound(command.reviewId);
         const proposalCurrent = yield* reviews.proposalIsCurrent(review);
@@ -35,18 +39,20 @@ export const runTaskReviewCommand = (
                 }
             : {}),
         });
-      });
-    }
-    if (command.reason.trim().length === 0) {
-      return Effect.succeed(
-        usageError({
-          code: "invalid_reason",
-          message: "--reason must not be blank.",
-          help: ["Pass a non-blank abandonment reason."],
-        }),
-      );
-    }
-    return Effect.map(
+      }),
+    );
+  }
+  if (command.reason.trim().length === 0) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_reason",
+        message: "--reason must not be blank.",
+        help: ["Pass a non-blank abandonment reason."],
+      }),
+    );
+  }
+  return withTaskReviewRecovery(environment, (reviews) =>
+    Effect.map(
       reviews.abandon(command.reviewId, command.reason, environment.now().toISOString()),
       (result) => {
         if (result.ok) return success({ review: taskReviewView(result.review) });
@@ -71,8 +77,9 @@ export const runTaskReviewCommand = (
         }
         return reviewNotFound(command.reviewId);
       },
-    );
-  });
+    ),
+  );
+};
 
 const reviewNotFound = (reviewId: string): CliResult =>
   runtimeError({

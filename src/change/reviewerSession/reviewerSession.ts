@@ -8,7 +8,7 @@ import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import {
   currentCandidateReReviewInstructions,
   previousFindingsPrompt,
-} from "../../agent/reviewerPrompts.js";
+} from "../reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";

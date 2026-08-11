@@ -6,7 +6,7 @@ import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withTaskReviews,
+  withTaskReviewSubmission,
   withTasks,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
@@ -21,7 +21,7 @@ export const runTaskSubmitCommand = (
   return withTasks(environment, (tasks) => {
     const resolved = resolveTaskId(tasks, parsed.taskId);
     if (!resolved.ok) return Effect.succeed(resolved.result);
-    return withTaskReviews(environment, (reviews) =>
+    return withTaskReviewSubmission(environment, (reviews) =>
       Effect.map(reviews.submit(resolved.taskId, environment.now().toISOString()), (result) => {
         if (result.ok) {
           if (result.review.outcome === "passed") {

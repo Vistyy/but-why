@@ -15,7 +15,7 @@ import { dashboard } from "../../src/cli/task/dashboard.js";
 import type { TaskCommandEnvironment } from "../../src/cli/task/taskCliSupport.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
-import type { TaskReviewReadUseCases } from "../../src/task/review/taskReviewUseCases.js";
+import type { TaskReviewInspectionUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
 import type { ApplyTaskContextDraftResult, TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -71,10 +71,9 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   ...overrides,
 });
 
-const taskReviewReads = (
+const taskReviewInspection = (
   latest: TaskReviewRecord | undefined = undefined,
-): TaskReviewReadUseCases => ({
-  abandon: () => Effect.succeed({ ok: false, code: "task_review_not_found" }),
+): TaskReviewInspectionUseCases => ({
   getById: () => Effect.succeed(undefined),
   getLatestForTask: () => Effect.succeed(latest),
   proposalIsCurrent: () => Effect.succeed(false),
@@ -84,13 +83,13 @@ const taskReviewReads = (
 const environment = (
   taskUseCases: TaskUseCases,
   now = firstNow,
-  taskReviewReadUseCases: TaskReviewReadUseCases = taskReviewReads(),
+  taskReviewInspectionUseCases: TaskReviewInspectionUseCases = taskReviewInspection(),
 ): TaskCommandEnvironment => ({
   cwd: createTestWorkspace(),
   now: () => new Date(now),
   stdin: { fd: -1, isTerminal: true },
   taskUseCases,
-  taskReviewReadUseCases,
+  taskReviewInspectionUseCases,
 });
 
 describe("Task command Adapters", () => {
@@ -264,7 +263,7 @@ describe("Task command Adapters", () => {
           }),
         }),
         firstNow,
-        taskReviewReads(retainedReview),
+        taskReviewInspection(retainedReview),
       );
 
       const shown = yield* runTaskShowCommand({ taskId: "BY-1" }, commandEnvironment);

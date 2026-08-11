@@ -25,22 +25,58 @@ import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
-} from "../review/taskReviewGit.js";
+} from "../review/adapters/taskReviewGit.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
   openTaskReviewUseCases,
-  type TaskReviewReadUseCases,
-  type TaskReviewUseCases,
+  type TaskReviewInspectionUseCases,
+  type TaskReviewRecoveryUseCases,
+  type TaskReviewSubmissionUseCases,
 } from "../review/taskReviewUseCases.js";
 
 export type LoadTaskReviewError =
   | RepositoryRuntimeLoadError
   | { readonly code: "task_review_config_invalid"; readonly message: string };
 
-export const withTaskReviewReadUseCases = <A, E, R>(
+export const withTaskReviewInspectionUseCases = <A, E, R>(
   input: { readonly cwd: string },
-  use: (reviews: TaskReviewReadUseCases) => Effect.Effect<A, E, R>,
+  use: (reviews: TaskReviewInspectionUseCases) => Effect.Effect<A, E, R>,
+): Effect.Effect<
+  | { readonly ok: true; readonly value: A }
+  | { readonly ok: false; readonly error: LoadTaskReviewError },
+  E | RepositoryStorageError,
+  R
+> => {
+  const loaded = openRepositoryRuntime(input.cwd);
+  if (!loaded.ok) return Effect.succeed(loaded);
+  const context = loaded.runtime.context;
+  return loaded.runtime.provide(
+    openSqliteTaskReviewPersistence().pipe(
+      Effect.flatMap((persistence) =>
+        use({
+          getById: persistence.getById,
+          getLatestForTask: persistence.getLatestForTask,
+          proposalIsCurrent: persistence.proposalIsCurrent,
+          inspectIdentity: (review) =>
+            inspectTaskReviewIdentity(
+              {
+                mainCheckoutRoot: context.mainCheckoutRoot,
+                verifyReviewBase: verifyRecordedTaskReviewBase,
+                inspectWorkspace: inspectDisposableWorktree,
+              },
+              review,
+            ),
+        }),
+      ),
+      Effect.map((value) => ({ ok: true as const, value })),
+    ),
+  );
+};
+
+export const withTaskReviewRecoveryUseCases = <A, E, R>(
+  input: { readonly cwd: string },
+  use: (reviews: TaskReviewRecoveryUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly error: LoadTaskReviewError },
@@ -66,18 +102,6 @@ export const withTaskReviewReadUseCases = <A, E, R>(
               reason,
               now,
             ),
-          getById: persistence.getById,
-          getLatestForTask: persistence.getLatestForTask,
-          proposalIsCurrent: persistence.proposalIsCurrent,
-          inspectIdentity: (review) =>
-            inspectTaskReviewIdentity(
-              {
-                mainCheckoutRoot: context.mainCheckoutRoot,
-                verifyReviewBase: verifyRecordedTaskReviewBase,
-                inspectWorkspace: inspectDisposableWorktree,
-              },
-              review,
-            ),
         }),
       ),
       Effect.map((value) => ({ ok: true as const, value })),
@@ -85,13 +109,13 @@ export const withTaskReviewReadUseCases = <A, E, R>(
   );
 };
 
-export const withTaskReviewUseCases = <A, E, R>(
+export const withTaskReviewSubmissionUseCases = <A, E, R>(
   input: {
     readonly cwd: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   },
-  use: (reviews: TaskReviewUseCases) => Effect.Effect<A, E, R>,
+  use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly error: LoadTaskReviewError },
