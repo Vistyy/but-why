@@ -715,6 +715,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         let branchHead = fixture.captured.headSha;
         let remote = pullRequest(branchHead);
         const updates: unknown[] = [];
+        const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes.publication,
           git: {
@@ -728,12 +729,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates.push(request);
-              return {
-                ok: true,
-                pullRequest: { ...remote, title: request.title, body: request.body },
-              };
+              const staleMetadata = { ...remote, title: "Stale title", body: "Stale body" };
+              remote = { ...remote, title: request.title, body: request.body };
+              return { ok: true, pullRequest: staleMetadata };
             },
           },
+          delayBeforeConfirmation: (milliseconds) =>
+            Effect.sync(() => {
+              confirmationDelays.push(milliseconds);
+            }),
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
 
@@ -764,6 +768,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             body: expect.stringContaining("Reapply the complete current metadata."),
           }),
         ]);
+        expect(confirmationDelays).toEqual([100]);
         expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
           {
             publication: {
