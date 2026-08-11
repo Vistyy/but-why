@@ -13,7 +13,7 @@ export const expectedDisposableWorkspacePath = (
   workspaceId: string,
 ): string => join(disposableWorkspaceRoot(mainCheckoutRoot), workspaceId);
 
-export const isDisposableWorkspaceId = (workspaceId: string): boolean =>
+const isDisposableWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.length > 0 &&
   workspaceId !== "." &&
   workspaceId !== ".." &&
