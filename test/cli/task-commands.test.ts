@@ -6,9 +6,9 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { runApproveCommand } from "../../src/cli/task/commands/approve.js";
+import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply.js";
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
-import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runListCommand } from "../../src/cli/task/commands/list.js";
 import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
 import { dashboard } from "../../src/cli/task/dashboard.js";

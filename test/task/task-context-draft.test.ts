@@ -10,8 +10,8 @@ import type { RepoLocalContext } from "../../src/init/repoContext.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
-import { openTaskUseCases } from "../../src/task/taskUseCases.js";
 import type { UpdateTaskContextResult } from "../../src/task/taskStore.js";
+import { openTaskUseCases } from "../../src/task/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const taskId = publicTaskId("BY-1");
