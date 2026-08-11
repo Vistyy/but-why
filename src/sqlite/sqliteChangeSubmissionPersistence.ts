@@ -1,30 +1,13 @@
-import { isDeepStrictEqual } from "node:util";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { type Context, Effect } from "effect";
+import { Effect } from "effect";
 
 import { type ChangePublication, type ChangeRecord, changeState } from "../change/change.js";
-import type {
-  ChangePublicationEvidence,
-  ChangeSubmissionPort,
-  CurrentChangeEvidenceQuery,
-  SubmissionChange,
-} from "../change/changePorts.js";
+import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
-import {
-  candidateReadColumns,
-  decodeCandidate,
-  decodeValidationRun,
-  type StoredCandidateRow,
-  type StoredValidationRunRow,
-  validateValidationRunImplementationDecisionRelationships,
-  validateValidationRunLatestResolvedBlockerRelationship,
-  validationRunReadColumns,
-} from "./sqliteCandidateValidationReadModel.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   changeReadColumns,
@@ -45,17 +28,9 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
+import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
-const completedPublicationEvidence = (
-  repository: Context.Tag.Service<typeof RepositorySql>,
-  changeId: string,
-  candidateId: string,
-  validationRunId: string,
-) =>
-  repository.transaction("read completed Candidate Publication evidence", (sql) =>
-    getPassingEvidence(sql, changeId, { candidateId, validationRunId }, true),
-  );
 export const openSqliteChangeSubmissionPort = () =>
   Effect.map(
     RepositorySql,
@@ -67,7 +42,9 @@ export const openSqliteChangeSubmissionPort = () =>
       getChangeForOutputById: (changeId) =>
         repository.transaction("read Change for Submit output", (sql) => getById(sql, changeId)),
       getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
-        completedPublicationEvidence(repository, changeId, candidateId, validationRunId),
+        repository.transaction("read completed Candidate Publication evidence", (sql) =>
+          readCompletedCandidatePublicationEvidence(sql, changeId, candidateId, validationRunId),
+        ),
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.map(completeMergedChange(sql, input), (result) =>
@@ -95,42 +72,6 @@ const readActiveBlocker = (sql: SqlClient.SqlClient, changeId: string, operation
     ]),
     (history) => history.active,
   );
-const readLatestResolvedBlockerId = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  operationName: string,
-  resolvedAtOrBefore?: string,
-) =>
-  Effect.gen(function* () {
-    const upperBound = resolvedAtOrBefore === undefined ? "" : "AND resolved_at <= ?";
-    const rows = yield* sql.unsafe<
-      Pick<
-        StoredImplementationBlockerRow,
-        | "id"
-        | "changeId"
-        | "sequence"
-        | "resolvedAt"
-        | "resolutionId"
-        | "resolutionRecordedAt"
-        | "resolutionContent"
-      >
-    >(
-      `SELECT id, change_id AS changeId, sequence, resolved_at AS resolvedAt,
-        resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
-        resolution_content AS resolutionContent
-       FROM implementation_blockers
-       WHERE change_id = ? AND resolved_at IS NOT NULL ${upperBound}
-       ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      resolvedAtOrBefore === undefined ? [changeId] : [changeId, resolvedAtOrBefore],
-    );
-    return yield* decodePersisted(operationName, () => {
-      const row = rows[0];
-      if (row === undefined) return null;
-      const owner = row.changeId;
-      if (owner !== changeId) throw new Error("Implementation Blocker belongs to another Change");
-      return row.id;
-    });
-  });
 const readSelectedBlockers = (
   sql: SqlClient.SqlClient,
   changeId: string,
@@ -251,147 +192,6 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
         decodeImplementationDecisions(rows, changeId),
       ),
   );
-const getPassingEvidence = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  query: CurrentChangeEvidenceQuery | undefined,
-  allowHistoricalCandidate: boolean,
-) =>
-  Effect.gen(function* () {
-    const operationName = allowHistoricalCandidate
-      ? "read completed Candidate Publication evidence"
-      : "read current passing Change evidence";
-    const authorityRows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeId}
-    `;
-    const authority = yield* decodePersisted(operationName, () => {
-      const row = authorityRows[0];
-      if (row === undefined) return undefined;
-      const { id, state } = decodeSelectedChangeState(row, changeId);
-      if (state !== changeState.open) return undefined;
-      return { id };
-    });
-    if (authority === undefined) return undefined;
-
-    const candidatePredicate =
-      allowHistoricalCandidate && query?.candidateId !== undefined
-        ? "candidate.change_id = ? AND candidate.id = ?"
-        : `candidate.id = (
-           SELECT current.id FROM candidates AS current
-           WHERE current.change_id = ?
-           ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-         )`;
-    const candidateParameters = [
-      authority.id,
-      ...(allowHistoricalCandidate && query?.candidateId !== undefined ? [query.candidateId] : []),
-    ];
-    const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
-      `SELECT ${candidateReadColumns} FROM candidates AS candidate WHERE ${candidatePredicate}`,
-      candidateParameters,
-    );
-    const candidate = yield* decodePersisted(operationName, () => {
-      const row = candidateRows[0];
-      if (row === undefined) return undefined;
-      const decoded = decodeCandidate(row);
-      if (decoded.changeId !== authority.id) {
-        throw new Error("Evidence Candidate belongs to another Change");
-      }
-      return decoded;
-    });
-    if (
-      candidate === undefined ||
-      (query?.candidateId !== undefined && candidate.id !== query.candidateId) ||
-      (query?.changeBaseSha !== undefined && candidate.changeBaseSha !== query.changeBaseSha)
-    ) {
-      return undefined;
-    }
-
-    const requestedPolicy = query?.policy;
-    const requestedPolicySnapshot =
-      requestedPolicy === undefined
-        ? undefined
-        : yield* Effect.try({
-            try: () => encodeSqliteCandidateValidationPolicy(requestedPolicy),
-            catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
-          });
-    const requestedRunPredicate = query?.validationRunId === undefined ? "" : "AND id = ?";
-    const requestedPolicyPredicate =
-      requestedPolicySnapshot === undefined ? "" : "AND policy_snapshot = ?";
-    const requestedRunParameters = [
-      candidate.id,
-      ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
-      ...(requestedPolicySnapshot === undefined ? [] : [requestedPolicySnapshot]),
-    ];
-    const eligibleRows = yield* sql.unsafe<{ readonly found: number }>(
-      `SELECT 1 AS found FROM candidate_validation_runs
-       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
-         ${requestedRunPredicate} ${requestedPolicyPredicate}
-       LIMIT 1`,
-      requestedRunParameters,
-    );
-    if (eligibleRows.length === 0) return undefined;
-
-    const acceptanceContextRows = yield* sql<{
-      readonly id: unknown;
-      readonly acceptanceContext: unknown;
-    }>`SELECT id, acceptance_context AS acceptanceContext
-       FROM changes WHERE id = ${authority.id}`;
-    const expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
-      const authorityRow = acceptanceContextRows[0];
-      if (authorityRow === undefined) throw new Error("Change disappeared during evidence lookup");
-      const id = decodeStoredString(authorityRow.id, "Change id");
-      if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-      const encoded = decodeStoredNullableString(
-        authorityRow.acceptanceContext,
-        "Change Acceptance Context",
-      );
-      return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
-    });
-    const expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
-    const currentLatestResolvedBlockerId = yield* readLatestResolvedBlockerId(
-      sql,
-      authority.id,
-      operationName,
-    );
-
-    const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs
-       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
-         ${requestedRunPredicate} ${requestedPolicyPredicate}
-         AND implementation_decisions = ? AND latest_resolved_blocker_id IS ?
-       ORDER BY created_at DESC, id DESC`,
-      [...requestedRunParameters, expectedDecisionsSnapshot, currentLatestResolvedBlockerId],
-    );
-    for (const row of rows) {
-      const run = yield* decodePersisted(operationName, () => decodeValidationRun(row));
-      yield* decodePersisted(operationName, () =>
-        validateValidationRunImplementationDecisionRelationships(run, authority.id),
-      );
-      if (run.record.candidateId !== candidate.id) {
-        return yield* invalidData(operationName, "Validation Run belongs to another Candidate");
-      }
-      if (!isDeepStrictEqual(run.record.policy.acceptanceContext, expectedAcceptanceContext)) {
-        continue;
-      }
-      const latestResolvedBlockerIdAtRun = yield* readLatestResolvedBlockerId(
-        sql,
-        authority.id,
-        operationName,
-        run.record.createdAt,
-      );
-      yield* decodePersisted(operationName, () =>
-        validateValidationRunLatestResolvedBlockerRelationship(run, latestResolvedBlockerIdAtRun),
-      );
-      return {
-        candidateId: candidate.id,
-        validationRunId: run.record.id,
-        changeBaseSha: candidate.changeBaseSha,
-        headSha: candidate.headSha,
-      } satisfies ChangePublicationEvidence;
-    }
-    return undefined;
-  });
 const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
   Effect.gen(function* () {
     const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "complete merged Change");
