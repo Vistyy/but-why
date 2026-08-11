@@ -88,10 +88,14 @@ describe("Effect diagnostic sensitivity", () => {
     const diagnostics = decodeEffectDiagnostics(result.output);
     expect(diagnostics.every(({ severity }) => severity === "error")).toBe(true);
     expect(diagnostics.map(({ file, name }) => [basename(file), name]).sort()).toEqual([
+      ["effect-fn-implicit-any.ts", "effectFnImplicitAny"],
+      ["floating-effect-in-vitest.ts", "floatingEffectInVitest"],
       ["floating-effect.ts", "floatingEffect"],
       ["invalid-declarations.ts", "classSelfMismatch"],
       ["invalid-declarations.ts", "overriddenSchemaConstructor"],
       ["missing-generator-marker.ts", "missingStarInYieldEffectGen"],
+      ["missing-return-yield-star.ts", "missingReturnYieldStar"],
+      ["non-object-service.ts", "nonObjectEffectServiceType"],
       ["promise-success.ts", "promiseInEffectSuccess"],
     ]);
   });

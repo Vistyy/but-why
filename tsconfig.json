@@ -27,8 +27,13 @@
         "ignoreEffectWarningsInTscExitCode": true,
         "ignoreEffectErrorsInTscExitCode": false,
         "diagnosticSeverity": {
+          "missingEffectContext": "warning",
+          "missingEffectError": "warning",
+          "missingLayerContext": "warning",
           "outdatedApi": "off",
-          "promiseInEffectSuccess": "error"
+          "promiseInEffectSuccess": "error",
+          "schemaLiteralNonFinite": "off",
+          "schemaOpaqueInstanceMember": "off"
         }
       }
     ]
