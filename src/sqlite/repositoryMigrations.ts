@@ -28,6 +28,7 @@ import { repairValidationPolicySnapshotOkFieldMigration as repairValidationPolic
 import { currentCandidateValidationAdmissionsMigration as currentCandidateValidationAdmissions } from "./migrations/0026_current_candidate_validation_admissions.js";
 import { removeCandidateValidationAdmissionsMigration as removeCandidateValidationAdmissions } from "./migrations/0027_remove_candidate_validation_admissions.js";
 import { projectRuntimeFailureNamesMigration as projectRuntimeFailureNames } from "./migrations/0028_project_runtime_failure_names.js";
+import { enforceStableStorageConstraintsMigration as enforceStableStorageConstraints } from "./migrations/0029_enforce_stable_storage_constraints.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -58,6 +59,7 @@ const migrations = {
   "0026_current_candidate_validation_admissions": currentCandidateValidationAdmissions,
   "0027_remove_candidate_validation_admissions": removeCandidateValidationAdmissions,
   "0028_project_runtime_failure_names": projectRuntimeFailureNames,
+  "0029_enforce_stable_storage_constraints": enforceStableStorageConstraints,
 };
 
 export const migrateRepositoryState = Migrator.make({})({
