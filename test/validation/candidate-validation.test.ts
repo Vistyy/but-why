@@ -306,7 +306,9 @@ describe("Candidate validation", () => {
                     version: 1,
                     title: "Validate the fixed Gate",
                     description: "Run each eligible phase in its fixed order.",
-                  })} WHERE id = ${captured.changeId}
+                  })}, base_remote_url = 'https://github.com/acme/repo.git',
+                    starting_commit = ${captured.changeBaseSha}, worktree_path = ${mainCheckout}
+                  WHERE id = ${captured.changeId}
                 `;
               }),
             ),

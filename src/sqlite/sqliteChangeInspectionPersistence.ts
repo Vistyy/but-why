@@ -1,32 +1,27 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeRecord, changeState } from "../change/change.js";
+import { type ChangeRecord, type ChangeState, changeState } from "../change/change.js";
 import type {
   ChangeListRecord,
   ChangeReadPort,
   ChangeTaskProjectionRecord,
 } from "../change/changePorts.js";
 import type { ListChangesInput } from "../change/changeStore.js";
+import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   changeReadColumns,
   decodeChangeRow,
-  decodeChangeState,
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
   implementationBlockerReadColumns,
-  type UnknownChangeRow,
-  type UnknownImplementationBlockerRow,
-  type UnknownImplementationDecisionRow,
+  type StoredChangeRow,
+  type StoredImplementationBlockerRow,
+  type StoredImplementationDecisionRow,
   validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredString,
-  decodeStoredTaskId,
-} from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeReadPort = () =>
   Effect.map(
@@ -55,7 +50,7 @@ const readSelectedBlockers = (
   parameters: readonly unknown[],
 ) =>
   Effect.flatMap(
-    sql.unsafe<UnknownImplementationBlockerRow>(
+    sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE ${predicate}`,
       parameters,
     ),
@@ -64,16 +59,16 @@ const readSelectedBlockers = (
   );
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
+    sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
       changeId,
     ]),
     (rows) => mapRow(rows[0], "read Change", sql),
   );
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql<UnknownImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
-        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
+    sql<StoredImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, sequence,
+        recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE change_id = ${changeId}
     `,
     (rows) =>
@@ -84,16 +79,13 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const operationName = "read Change by Task";
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<StoredTaskProjectionRow>(
       "SELECT id, state FROM changes WHERE task_id = ?",
       [taskId],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
-    const selected = yield* decodePersisted(operationName, () => ({
-      id: decodeStoredString(row["id"], "Change ID"),
-      state: decodeChangeState(row["state"]),
-    }));
+    const selected = { id: row.id, state: row.state };
     const activeBlocker =
       selected.state === changeState.closed
         ? null
@@ -102,7 +94,7 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   });
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
-    sql.unsafe<Record<string, unknown>>(
+    sql.unsafe<StoredChangeListRow>(
       `SELECT id, task_id AS taskId, state, branch_ref AS branchRef,
         worktree_path AS worktreePath, created_at AS createdAt
        FROM changes
@@ -117,17 +109,10 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
         (changes) => changes.sort(compareChanges),
       ),
   );
-const decodeChangeListRecord = (row: Record<string, unknown>): ChangeListRecord => {
-  const storedTaskId = decodeStoredNullableString(row["taskId"], "Change Task ID");
-  return {
-    id: decodeStoredString(row["id"], "Change ID"),
-    taskId: storedTaskId === null ? null : decodeStoredTaskId(storedTaskId, "Change Task ID"),
-    state: decodeChangeState(row["state"]),
-    branchRef: decodeStoredString(row["branchRef"], "Change Repository Branch"),
-    worktreePath: decodeStoredNullableString(row["worktreePath"], "Change Managed Worktree path"),
-    createdAt: decodeStoredString(row["createdAt"], "Change creation time"),
-  };
-};
+const decodeChangeListRecord = (row: StoredChangeListRow): ChangeListRecord => ({
+  ...row,
+  taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
+});
 const compareChanges = (
   left: Pick<ChangeListRecord, "createdAt" | "id">,
   right: Pick<ChangeListRecord, "createdAt" | "id">,
@@ -136,7 +121,7 @@ const compareChanges = (
 const compareStoredStrings = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 const mapRow = (
-  row: UnknownChangeRow | undefined,
+  row: StoredChangeRow | undefined,
   operationName: string,
   sql: SqlClient.SqlClient,
 ) =>
@@ -158,7 +143,7 @@ const mapRow = (
         }),
   );
 const mapChangeWithoutHistoryRow = (
-  row: UnknownChangeRow | undefined,
+  row: StoredChangeRow | undefined,
   operationName: string,
   sql: SqlClient.SqlClient,
 ) =>
@@ -169,3 +154,16 @@ const mapChangeWithoutHistoryRow = (
         yield* validateChangeRelationships(sql, change, operationName);
         return change;
       });
+
+type StoredTaskProjectionRow = {
+  readonly id: string;
+  readonly state: ChangeState;
+};
+type StoredChangeListRow = {
+  readonly id: string;
+  readonly taskId: string | null;
+  readonly state: ChangeState;
+  readonly branchRef: string;
+  readonly worktreePath: string | null;
+  readonly createdAt: string;
+};

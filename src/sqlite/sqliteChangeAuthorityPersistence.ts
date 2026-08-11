@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { changeState } from "../change/change.js";
+import { type ChangeRecord, changeState } from "../change/change.js";
 import type {
   ChangeAuthorityPort,
   ChangePublicationEvidence,
@@ -18,26 +18,20 @@ import {
   candidateReadColumns,
   decodeCandidate,
   decodeValidationRun,
-  type UnknownCandidateRow,
-  type UnknownValidationRunRow,
+  type StoredCandidateRow,
+  type StoredValidationRunRow,
   validateValidationRunImplementationDecisionRelationships,
   validateValidationRunLatestResolvedBlockerRelationship,
   validationRunReadColumns,
 } from "./sqliteCandidateValidationReadModel.js";
 import {
-  decodeChangeState,
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
   implementationBlockerReadColumns,
-  type UnknownImplementationBlockerRow,
-  type UnknownImplementationDecisionRow,
+  type StoredImplementationBlockerRow,
+  type StoredImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredSqlitePositiveInteger,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeAuthorityPort = () =>
   Effect.map(
@@ -118,18 +112,18 @@ const resolveBlocker = (
   });
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
-    const exists = yield* sql<
-      Record<string, unknown>
-    >`SELECT id FROM changes WHERE id = ${changeId}`;
+    const exists = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE id = ${changeId}
+    `;
     if (exists.length === 0) return undefined;
-    yield* decodePersisted("list Implementation Blockers", () =>
-      decodeStoredString(exists[0]?.["id"], "Change ID"),
-    );
+    yield* decodePersisted("list Implementation Blockers", () => {
+      if (exists[0]?.id !== changeId) throw new Error("Change identity does not match lookup");
+    });
     return yield* readBlockers(sql, changeId, "list Implementation Blockers");
   });
 const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.flatMap(
-    sql.unsafe<UnknownImplementationBlockerRow>(
+    sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
       [changeId],
     ),
@@ -164,18 +158,19 @@ const readLatestResolvedBlockerId = (
 ) =>
   Effect.gen(function* () {
     const upperBound = resolvedAtOrBefore === undefined ? "" : "AND resolved_at <= ?";
-    const rows = yield* sql.unsafe<{
-      readonly id: unknown;
-      readonly changeId: unknown;
-      readonly sequence: unknown;
-      readonly sequenceType: unknown;
-      readonly resolvedAt: unknown;
-      readonly resolutionId: unknown;
-      readonly resolutionRecordedAt: unknown;
-      readonly resolutionContent: unknown;
-    }>(
-      `SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
-        typeof(sequence) AS sequenceType, resolved_at AS resolvedAt,
+    const rows = yield* sql.unsafe<
+      Pick<
+        StoredImplementationBlockerRow,
+        | "id"
+        | "changeId"
+        | "sequence"
+        | "resolvedAt"
+        | "resolutionId"
+        | "resolutionRecordedAt"
+        | "resolutionContent"
+      >
+    >(
+      `SELECT id, change_id AS changeId, sequence, resolved_at AS resolvedAt,
         resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
         resolution_content AS resolutionContent
        FROM implementation_blockers
@@ -186,18 +181,9 @@ const readLatestResolvedBlockerId = (
     return yield* decodePersisted(operationName, () => {
       const row = rows[0];
       if (row === undefined) return null;
-      const owner = decodeStoredString(row.changeId, "Implementation Blocker Change ID");
+      const owner = row.changeId;
       if (owner !== changeId) throw new Error("Implementation Blocker belongs to another Change");
-      decodeStoredSqlitePositiveInteger(
-        row.sequence,
-        row.sequenceType,
-        "Implementation Blocker sequence",
-      );
-      decodeStoredString(row.resolvedAt, "Implementation Blocker resolution time");
-      decodeStoredString(row.resolutionId, "Resolution ID");
-      decodeStoredString(row.resolutionRecordedAt, "Resolution recorded time");
-      decodeStoredString(row.resolutionContent, "Resolution content");
-      return decodeStoredString(row.id, "Implementation Blocker ID");
+      return row.id;
     });
   });
 const readSelectedBlockers = (
@@ -208,7 +194,7 @@ const readSelectedBlockers = (
   parameters: readonly unknown[],
 ) =>
   Effect.flatMap(
-    sql.unsafe<UnknownImplementationBlockerRow>(
+    sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE ${predicate}`,
       parameters,
     ),
@@ -217,7 +203,7 @@ const readSelectedBlockers = (
   );
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: unknown; readonly state: unknown }>`
+    const rows = yield* sql<{ readonly id: string; readonly state: ChangeRecord["state"] }>`
       SELECT id, state FROM changes WHERE id = ${changeId}
     `;
     const row = rows[0];
@@ -228,10 +214,10 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
   Effect.gen(function* () {
     const operationName = "resolve Implementation Blocker";
     const rows = yield* sql<{
-      readonly id: unknown;
-      readonly state: unknown;
-      readonly taskId: unknown;
-      readonly acceptanceContext: unknown;
+      readonly id: string;
+      readonly state: ChangeRecord["state"];
+      readonly taskId: string | null;
+      readonly acceptanceContext: string | null;
     }>`
       SELECT id, state, task_id AS taskId, acceptance_context AS acceptanceContext
       FROM changes WHERE id = ${changeId}
@@ -240,14 +226,8 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
       const selected = decodeSelectedChangeState(row, changeId);
-      const taskId = decodeStoredNullableString(row.taskId, "Change Task ID");
-      const encodedAcceptanceContext = decodeStoredNullableString(
-        row.acceptanceContext,
-        "Change Acceptance Context",
-      );
-      if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-      }
+      const taskId = row.taskId;
+      const encodedAcceptanceContext = row.acceptanceContext;
       return {
         ...selected,
         taskId,
@@ -258,16 +238,15 @@ const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string)
       };
     });
   });
-const decodeSelectedChangeState = (row: Record<string, unknown>, changeId: string) => {
-  const id = decodeStoredString(row["id"], "Change ID");
-  if (id !== changeId) throw new Error("Change identity does not match lookup");
-  return { id, state: decodeChangeState(row["state"]) };
+const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
+  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
+  return { id: row.id, state: row.state };
 };
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql<UnknownImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
-        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
+    sql<StoredImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, sequence,
+        recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE change_id = ${changeId}
     `,
     (rows) =>
@@ -282,9 +261,9 @@ const readDecisionById = (
   operationName: string,
 ) =>
   Effect.flatMap(
-    sql<UnknownImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
-        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
+    sql<StoredImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, sequence,
+        recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions
       WHERE change_id = ${changeId} AND id = ${decisionId}
     `,
@@ -322,15 +301,15 @@ const getPassingEvidence = (
       ? "read completed Candidate Publication evidence"
       : "read current passing Change evidence";
     const authorityRows = yield* sql<{
-      readonly id: unknown;
-      readonly state: unknown;
+      readonly id: string;
+      readonly state: ChangeRecord["state"];
     }>`SELECT id, state FROM changes WHERE id = ${changeId}`;
     const authority = yield* decodePersisted(operationName, () => {
       const row = authorityRows[0];
       if (row === undefined) return undefined;
-      const id = decodeStoredString(row.id, "Change ID");
+      const id = row.id;
       if (id !== changeId) throw new Error("Change identity does not match evidence lookup");
-      if (decodeChangeState(row.state) !== changeState.open) return undefined;
+      if (row.state !== changeState.open) return undefined;
       return { id };
     });
     if (authority === undefined) return undefined;
@@ -347,7 +326,7 @@ const getPassingEvidence = (
       authority.id,
       ...(allowHistoricalCandidate && query?.candidateId !== undefined ? [query.candidateId] : []),
     ];
-    const candidateRows = yield* sql.unsafe<UnknownCandidateRow>(
+    const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
       `SELECT ${candidateReadColumns} FROM candidates AS candidate WHERE ${candidatePredicate}`,
       candidateParameters,
     );
@@ -384,7 +363,7 @@ const getPassingEvidence = (
       ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
       ...(requestedPolicySnapshot === undefined ? [] : [requestedPolicySnapshot]),
     ];
-    const eligibleRows = yield* sql.unsafe<{ readonly found: unknown }>(
+    const eligibleRows = yield* sql.unsafe<{ readonly found: number }>(
       `SELECT 1 AS found FROM candidate_validation_runs
        WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
          ${requestedRunPredicate} ${requestedPolicyPredicate}
@@ -394,23 +373,15 @@ const getPassingEvidence = (
     if (eligibleRows.length === 0) return undefined;
 
     const acceptanceContextRows = yield* sql<{
-      readonly id: unknown;
-      readonly taskId: unknown;
-      readonly acceptanceContext: unknown;
-    }>`SELECT id, task_id AS taskId, acceptance_context AS acceptanceContext
+      readonly id: string;
+      readonly acceptanceContext: string | null;
+    }>`SELECT id, acceptance_context AS acceptanceContext
        FROM changes WHERE id = ${authority.id}`;
     const expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
       const authorityRow = acceptanceContextRows[0];
-      const id = decodeStoredString(authorityRow?.id, "Change ID");
+      const id = authorityRow?.id;
       if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
-      const taskId = decodeStoredNullableString(authorityRow?.taskId, "Change Task ID");
-      const encoded = decodeStoredNullableString(
-        authorityRow?.acceptanceContext,
-        "Change Acceptance Context",
-      );
-      if ((taskId === null) !== (encoded === null)) {
-        throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
-      }
+      const encoded = authorityRow?.acceptanceContext ?? null;
       return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
     });
     const expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
@@ -420,7 +391,7 @@ const getPassingEvidence = (
       operationName,
     );
 
-    const rows = yield* sql.unsafe<UnknownValidationRunRow>(
+    const rows = yield* sql.unsafe<StoredValidationRunRow>(
       `SELECT ${validationRunReadColumns}
        FROM candidate_validation_runs
        WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
@@ -460,3 +431,7 @@ const getPassingEvidence = (
   });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+type StoredChangeStateRow = {
+  readonly id: string;
+  readonly state: ChangeRecord["state"];
+};

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { ChangeReviewerSessionPort } from "../change/changePorts.js";
 import { RepositorySql } from "./repositorySql.js";
-import { decodeReviewerSession } from "./sqliteChangeReadModel.js";
+import { decodeReviewerSession, type StoredReviewerSessionRow } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeReviewerSessionPort = () =>
@@ -12,7 +12,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
       getReviewerSession: (changeId, producer) =>
         repository.transaction("read Reviewer Session", (sql) =>
           Effect.flatMap(
-            sql<Record<string, unknown>>`
+            sql<StoredReviewerSessionRow>`
             SELECT change_id AS changeId, producer, fingerprint,
               session_reference AS sessionReference
             FROM reviewer_sessions

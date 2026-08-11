@@ -12,9 +12,12 @@ import { RepositorySql } from "./repositorySql.js";
 import {
   candidateReadColumns,
   decodeCandidate,
-  type UnknownCandidateRow,
+  type StoredCandidateRow,
 } from "./sqliteCandidateValidationReadModel.js";
-import { decodeCandidateCaptureChange } from "./sqliteChangeReadModel.js";
+import {
+  decodeCandidateCaptureChange,
+  type StoredCandidateCaptureChangeRow,
+} from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
@@ -26,21 +29,13 @@ export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
     getChangeById: (changeId) =>
       repository
         .operation("read Change for Candidate capture", (sql) => readChangeById(sql, changeId))
-        .pipe(
-          Effect.flatMap((row) =>
-            decodeCandidateCaptureOptional(row, "read Change for Candidate capture"),
-          ),
-        ),
+        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row))),
     getChangeByRepositoryBranch: (repositoryCommonDirectory, branchRef) =>
       repository
         .operation("read Change branch for Candidate capture", (sql) =>
           readChangeByBranch(sql, repositoryCommonDirectory, branchRef),
         )
-        .pipe(
-          Effect.flatMap((row) =>
-            decodeCandidateCaptureOptional(row, "read Change branch for Candidate capture"),
-          ),
-        ),
+        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row))),
     commitCapture: (input) =>
       repository.transactionImmediate("commit Candidate capture", (sql) =>
         commitCapture(sql, input),
@@ -161,7 +156,7 @@ const captureStoredCandidate = (
   input: CommitCandidateCaptureInput,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<UnknownCandidateRow>(
+    const rows = yield* sql.unsafe<StoredCandidateRow>(
       `SELECT ${candidateReadColumns}
        FROM candidates AS candidate
        WHERE candidate.change_id = ?
@@ -198,13 +193,11 @@ const captureStoredCandidate = (
   });
 
 const getChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.flatMap(readChangeById(sql, changeId), (row) =>
-    decodeCandidateCaptureOptional(row, "commit Candidate capture"),
-  );
+  Effect.flatMap(readChangeById(sql, changeId), (row) => decodeCandidateCaptureOptional(row));
 
 const readChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.map(
-    sql<Record<string, unknown>>`
+    sql<StoredCandidateCaptureChangeRow>`
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
       FROM changes
@@ -219,7 +212,7 @@ const getChangeByBranch = (
   branchRef: string,
 ) =>
   Effect.flatMap(readChangeByBranch(sql, repositoryCommonDirectory, branchRef), (row) =>
-    decodeCandidateCaptureOptional(row, "commit Candidate capture"),
+    decodeCandidateCaptureOptional(row),
   );
 
 const readChangeByBranch = (
@@ -228,7 +221,7 @@ const readChangeByBranch = (
   branchRef: string,
 ) =>
   Effect.map(
-    sql<Record<string, unknown>>`
+    sql<StoredCandidateCaptureChangeRow>`
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
       FROM changes
@@ -238,13 +231,8 @@ const readChangeByBranch = (
     (rows) => rows[0],
   );
 
-const decodeCandidateCaptureOptional = (
-  row: Record<string, unknown> | undefined,
-  operationName: string,
-) =>
-  row === undefined
-    ? Effect.succeed(undefined)
-    : decodePersisted(operationName, () => decodeCandidateCaptureChange(row));
+const decodeCandidateCaptureOptional = (row: StoredCandidateCaptureChangeRow | undefined) =>
+  Effect.succeed(row === undefined ? undefined : decodeCandidateCaptureChange(row));
 
 const invalidData = (message: string) =>
   Effect.fail(

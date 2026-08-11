@@ -1,17 +1,12 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeCleanup, changeState } from "../change/change.js";
+import { type ChangeCleanup, type ChangeState, changeState } from "../change/change.js";
 import type { TerminalChangeCleanupPort } from "../change/changePorts.js";
 import type { RecordChangeCleanupInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { decodeChangeState } from "./sqliteChangeReadModel.js";
-import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteTerminalChangeCleanupPort = () =>
   Effect.map(
@@ -29,7 +24,7 @@ export const openSqliteTerminalChangeCleanupPort = () =>
   );
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: unknown; readonly state: unknown }>`
+    const rows = yield* sql<StoredChangeStateRow>`
       SELECT id, state FROM changes WHERE id = ${changeId}
     `;
     const row = rows[0];
@@ -39,7 +34,7 @@ const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationNa
 const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "record Change cleanup";
-    const rows = yield* sql<Record<string, unknown>>`
+    const rows = yield* sql<StoredCleanupChangeRow>`
       SELECT id, state, cleanup_state AS cleanupState,
         cleanup_blocking_reason AS cleanupBlockingReason
       FROM changes WHERE id = ${changeId}
@@ -47,28 +42,21 @@ const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
-      const cleanupState = decodeStoredString(row["cleanupState"], "Change cleanup state");
-      if (cleanupState !== "complete" && cleanupState !== "pending") {
-        throw new Error("Stored Change cleanup state is unsupported");
-      }
-      const cleanupBlockingReason = decodeStoredNullableString(
-        row["cleanupBlockingReason"],
-        "Change cleanup blocking reason",
-      );
-      if (cleanupState === "complete" && cleanupBlockingReason !== null) {
-        throw new Error("Stored completed Change cleanup has a blocking reason");
-      }
       const cleanup: ChangeCleanup = {
-        state: cleanupState,
-        blockingReason: cleanupBlockingReason,
+        state: row.cleanupState,
+        blockingReason: row.cleanupBlockingReason,
       };
       return { ...decodeSelectedChangeState(row, changeId), cleanup };
     });
   });
-const decodeSelectedChangeState = (row: Record<string, unknown>, changeId: string) => {
-  const id = decodeStoredString(row["id"], "Change ID");
-  if (id !== changeId) throw new Error("Change identity does not match lookup");
-  return { id, state: decodeChangeState(row["state"]) };
+type StoredChangeStateRow = { readonly id: string; readonly state: ChangeState };
+type StoredCleanupChangeRow = StoredChangeStateRow & {
+  readonly cleanupState: ChangeCleanup["state"];
+  readonly cleanupBlockingReason: string | null;
+};
+const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
+  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
+  return row;
 };
 const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput) =>
   Effect.gen(function* () {

@@ -1,7 +1,12 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeCleanup, type ChangePublication, changeState } from "../change/change.js";
+import {
+  type ChangeCleanup,
+  type ChangePublication,
+  type ChangeRecord,
+  changeState,
+} from "../change/change.js";
 import type {
   CancellationChange,
   ChangeCancellationPort,
@@ -11,24 +16,20 @@ import type { CancelChangeInput, CompleteMergedChangeInput } from "../change/cha
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskDependencyFact } from "../task/task.js";
-import type { PublicTaskId } from "../task/taskId.js";
+import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
+import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
-  decodeChangeState,
-  decodeCloseReason,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
 import {
   type DecodedStoredTaskRecordRow,
   decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredString,
-  decodeStoredTaskId,
   decodeStoredTaskRecordRow,
   decodeTaskDependencyFacts,
-  type UnknownStoredTaskRecordRow,
-  type UnknownTaskDependencyFactRow,
+  type StoredTaskRecordRow,
+  type StoredTaskDependencyFactRow,
 } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeCancellationPort = () =>
@@ -74,8 +75,7 @@ const publicationSelectionColumns = `
   publication_remote_name AS publicationRemoteName,
   publication_head_branch AS publicationHeadBranch,
   publication_expected_head_sha AS publicationExpectedHeadSha,
-  CAST(publication_pr_number AS TEXT) AS publicationPrNumber,
-  typeof(publication_pr_number) AS publicationPrNumberType,
+  publication_pr_number AS publicationPrNumber,
   publication_pr_url AS publicationPrUrl
 `;
 const terminalChangeSelectionColumns = `
@@ -88,18 +88,15 @@ const terminalChangeSelectionColumns = `
   cleanup_blocking_reason AS cleanupBlockingReason
 `;
 const decodeTerminalChange = (
-  row: Record<string, unknown>,
+  row: StoredTerminalChangeRow,
   changeId: string,
 ): ReconciliationChange => {
   const publication = decodeChangePublication(row);
   const base = {
     ...decodeSelectedChangeState(row, changeId),
-    repositoryCommonDirectory: decodeStoredString(
-      row["repositoryCommonDirectory"],
-      "Change repository common directory",
-    ),
-    branchRef: decodeStoredString(row["branchRef"], "Change branch reference"),
-    worktreePath: decodeStoredNullableString(row["worktreePath"], "Change Managed Worktree path"),
+    repositoryCommonDirectory: row.repositoryCommonDirectory,
+    branchRef: row.branchRef,
+    worktreePath: row.worktreePath,
     cleanup: decodeSelectedCleanup(row),
   };
   if (publication === null) return { ...base, publication, remoteChangeBranch: null };
@@ -111,7 +108,7 @@ const decodeTerminalChange = (
     };
   }
   const ownedPublication = { ...publication, pullRequest: publication.pullRequest };
-  const baseRemoteUrl = decodeStoredNullableString(row["baseRemoteUrl"], "Change Base remote URL");
+  const baseRemoteUrl = row.baseRemoteUrl;
   return {
     ...base,
     publication: ownedPublication,
@@ -135,31 +132,20 @@ const remoteChangeBranchForPublication = (
     expectedHeadSha: publication.expectedHeadSha,
   };
 };
-const decodeSelectedCleanup = (row: Record<string, unknown>): ChangeCleanup => {
-  const state = decodeStoredString(row["cleanupState"], "Change cleanup state");
-  if (state !== "complete" && state !== "pending") {
-    throw new Error("Stored Change cleanup state is unsupported");
-  }
-  const blockingReason = decodeStoredNullableString(
-    row["cleanupBlockingReason"],
-    "Change cleanup blocking reason",
-  );
-  if (state === "complete" && blockingReason !== null) {
-    throw new Error("Stored completed Change cleanup has a blocking reason");
-  }
-  return { state, blockingReason };
-};
+const decodeSelectedCleanup = (row: StoredTerminalChangeRow): ChangeCleanup => ({
+  state: row.cleanupState,
+  blockingReason: row.cleanupBlockingReason,
+});
 const decodeCancellationChange = (
-  row: Record<string, unknown>,
+  row: StoredCancellationChangeRow,
   changeId: string,
 ): CancellationChange => {
   const terminal = decodeTerminalChange(row, changeId);
-  const storedTaskId = decodeStoredNullableString(row["taskId"], "Change Task ID");
   return {
     ...terminal,
-    taskId: storedTaskId === null ? null : decodeStoredTaskId(storedTaskId, "Change Task ID"),
-    closeReason: decodeCloseReason(row["closeReason"]),
-    cancelReason: decodeStoredNullableString(row["cancelReason"], "Change cancellation reason"),
+    taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
+    closeReason: row.closeReason,
+    cancelReason: row.cancelReason,
   };
 };
 const readCancellationChange = (
@@ -168,7 +154,7 @@ const readCancellationChange = (
   operationName: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<StoredCancellationChangeRow>(
       `SELECT ${terminalChangeSelectionColumns}, task_id AS taskId,
         close_reason AS closeReason, cancel_reason AS cancelReason
        FROM changes WHERE id = ?`,
@@ -204,9 +190,8 @@ const readRequiredCancellationTask = (sql: SqlClient.SqlClient, change: Cancella
 const readCancellationTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const operationName = "read committed cancellation";
-    const rows = yield* sql<UnknownStoredTaskRecordRow>`
-      SELECT id, CAST(numeric_id AS TEXT) AS numericId,
-        typeof(numeric_id) AS numericIdType, title, description, state,
+    const rows = yield* sql<StoredTaskRecordRow>`
+      SELECT id, numeric_id AS numericId, title, description, state,
         cancel_reason AS cancelReason, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
       WHERE id = ${taskId}
@@ -237,17 +222,15 @@ const cancellationTaskDependencyFacts = (
   Effect.gen(function* () {
     const rows =
       direction === "prerequisites"
-        ? yield* sql<UnknownTaskDependencyFactRow>`
-            SELECT tasks.id, CAST(tasks.numeric_id AS TEXT) AS numericId,
-              typeof(tasks.numeric_id) AS numericIdType, tasks.title, tasks.state
+        ? yield* sql<StoredTaskDependencyFactRow>`
+            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
             WHERE task_dependencies.dependent_task_id = ${taskId}
             ORDER BY tasks.numeric_id ASC
           `
-        : yield* sql<UnknownTaskDependencyFactRow>`
-            SELECT tasks.id, CAST(tasks.numeric_id AS TEXT) AS numericId,
-              typeof(tasks.numeric_id) AS numericIdType, tasks.title, tasks.state
+        : yield* sql<StoredTaskDependencyFactRow>`
+            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
             WHERE task_dependencies.prerequisite_task_id = ${taskId}
@@ -275,7 +258,7 @@ const cancellationTaskRecord = (
 const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const operationName = "read Change by Task for cancellation";
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<StoredCancellationChangeRow>(
       `SELECT ${terminalChangeSelectionColumns}, task_id AS taskId,
         close_reason AS closeReason, cancel_reason AS cancelReason
        FROM changes WHERE task_id = ?`,
@@ -283,7 +266,7 @@ const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string
     );
     const row = rows[0];
     if (row === undefined) return undefined;
-    const changeId = decodeStoredString(row["id"], "Change ID");
+    const changeId = row.id;
     const selected = yield* decodePersisted(operationName, () =>
       decodeCancellationChange(row, changeId),
     );
@@ -297,7 +280,7 @@ const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string
   });
 const readChangeLifecycle = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<Record<string, unknown>>`
+    const rows = yield* sql<StoredChangeLifecycleRow>`
       SELECT id, state, close_reason AS closeReason, closed_at AS closedAt
       FROM changes WHERE id = ${changeId}
     `;
@@ -309,7 +292,9 @@ const readChangeLifecycle = (sql: SqlClient.SqlClient, changeId: string, operati
 const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "complete merged Change";
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<
+      PublicationSelectionRow & StoredChangeLifecycleRow & { readonly taskId: string | null }
+    >(
       `SELECT ${publicationSelectionColumns}, close_reason AS closeReason,
         closed_at AS closedAt, task_id AS taskId
        FROM changes WHERE id = ?`,
@@ -319,7 +304,7 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => ({
       ...decodeSelectedChangeLifecycle(row, changeId),
-      taskId: decodeStoredNullableString(row["taskId"], "Change Task ID"),
+      taskId: row.taskId,
       publication: decodeChangePublication(row),
     }));
     yield* validateChangePublicationRelationships(
@@ -333,7 +318,7 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
 const readCancelChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "cancel Change";
-    const rows = yield* sql<Record<string, unknown>>`
+    const rows = yield* sql<StoredChangeLifecycleRow & { readonly taskId: string | null }>`
       SELECT id, state, close_reason AS closeReason, closed_at AS closedAt,
         task_id AS taskId
       FROM changes WHERE id = ${changeId}
@@ -342,26 +327,17 @@ const readCancelChange = (sql: SqlClient.SqlClient, changeId: string) =>
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => ({
       ...decodeSelectedChangeLifecycle(row, changeId),
-      taskId: decodeStoredNullableString(row["taskId"], "Change Task ID"),
+      taskId: row.taskId,
     }));
   });
-const decodeSelectedChangeState = (row: Record<string, unknown>, changeId: string) => {
-  const id = decodeStoredString(row["id"], "Change ID");
-  if (id !== changeId) throw new Error("Change identity does not match lookup");
-  return { id, state: decodeChangeState(row["state"]) };
+const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
+  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
+  return { id: row.id, state: row.state };
 };
-const decodeSelectedChangeLifecycle = (row: Record<string, unknown>, changeId: string) => {
-  const selected = decodeSelectedChangeState(row, changeId);
-  const closeReason = decodeCloseReason(row["closeReason"]);
-  const closedAt = decodeStoredNullableString(row["closedAt"], "Change closure time");
-  if (
-    (selected.state === changeState.open && (closeReason !== null || closedAt !== null)) ||
-    (selected.state === changeState.closed && (closeReason === null || closedAt === null))
-  ) {
-    throw new Error("Stored Change lifecycle relationship is inconsistent");
-  }
-  return { ...selected, closeReason };
-};
+const decodeSelectedChangeLifecycle = (row: StoredChangeLifecycleRow, changeId: string) => ({
+  ...decodeSelectedChangeState(row, changeId),
+  closeReason: row.closeReason,
+});
 const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
   Effect.gen(function* () {
     const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "complete merged Change");
@@ -421,3 +397,26 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
   });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+type StoredChangeStateRow = {
+  readonly id: string;
+  readonly state: ChangeRecord["state"];
+};
+type StoredChangeLifecycleRow = StoredChangeStateRow & {
+  readonly closeReason: ChangeRecord["closeReason"];
+  readonly closedAt: string | null;
+};
+type PublicationSelectionRow = StoredChangeStateRow & SqliteChangePublicationRow;
+type StoredTerminalChangeRow = StoredChangeStateRow &
+  SqliteChangePublicationRow & {
+    readonly repositoryCommonDirectory: string;
+    readonly branchRef: string;
+    readonly baseRemoteUrl: string | null;
+    readonly worktreePath: string | null;
+    readonly cleanupState: ChangeCleanup["state"];
+    readonly cleanupBlockingReason: string | null;
+  };
+type StoredCancellationChangeRow = StoredTerminalChangeRow & {
+  readonly taskId: string | null;
+  readonly closeReason: ChangeRecord["closeReason"];
+  readonly cancelReason: string | null;
+};

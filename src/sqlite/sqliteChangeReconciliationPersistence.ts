@@ -1,23 +1,23 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import { type ChangeCleanup, type ChangePublication, changeState } from "../change/change.js";
+import {
+  type ChangeCleanup,
+  type ChangePublication,
+  type ChangeRecord,
+  changeState,
+} from "../change/change.js";
 import type { ChangeReconciliationPort, ReconciliationChange } from "../change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
-  decodeChangeState,
-  decodeCloseReason,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodePersisted,
-  decodeStoredNullableString,
-  decodeStoredString,
-} from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeReconciliationPort = () =>
   Effect.map(
@@ -51,8 +51,7 @@ const publicationSelectionColumns = `
   publication_remote_name AS publicationRemoteName,
   publication_head_branch AS publicationHeadBranch,
   publication_expected_head_sha AS publicationExpectedHeadSha,
-  CAST(publication_pr_number AS TEXT) AS publicationPrNumber,
-  typeof(publication_pr_number) AS publicationPrNumberType,
+  publication_pr_number AS publicationPrNumber,
   publication_pr_url AS publicationPrUrl
 `;
 const terminalChangeSelectionColumns = `
@@ -65,18 +64,15 @@ const terminalChangeSelectionColumns = `
   cleanup_blocking_reason AS cleanupBlockingReason
 `;
 const decodeTerminalChange = (
-  row: Record<string, unknown>,
+  row: StoredTerminalChangeRow,
   changeId: string,
 ): ReconciliationChange => {
   const publication = decodeChangePublication(row);
   const base = {
     ...decodeSelectedChangeState(row, changeId),
-    repositoryCommonDirectory: decodeStoredString(
-      row["repositoryCommonDirectory"],
-      "Change repository common directory",
-    ),
-    branchRef: decodeStoredString(row["branchRef"], "Change branch reference"),
-    worktreePath: decodeStoredNullableString(row["worktreePath"], "Change Managed Worktree path"),
+    repositoryCommonDirectory: row.repositoryCommonDirectory,
+    branchRef: row.branchRef,
+    worktreePath: row.worktreePath,
     cleanup: decodeSelectedCleanup(row),
   };
   if (publication === null) return { ...base, publication, remoteChangeBranch: null };
@@ -88,7 +84,7 @@ const decodeTerminalChange = (
     };
   }
   const ownedPublication = { ...publication, pullRequest: publication.pullRequest };
-  const baseRemoteUrl = decodeStoredNullableString(row["baseRemoteUrl"], "Change Base remote URL");
+  const baseRemoteUrl = row.baseRemoteUrl;
   return {
     ...base,
     publication: ownedPublication,
@@ -112,27 +108,17 @@ const remoteChangeBranchForPublication = (
     expectedHeadSha: publication.expectedHeadSha,
   };
 };
-const decodeSelectedCleanup = (row: Record<string, unknown>): ChangeCleanup => {
-  const state = decodeStoredString(row["cleanupState"], "Change cleanup state");
-  if (state !== "complete" && state !== "pending") {
-    throw new Error("Stored Change cleanup state is unsupported");
-  }
-  const blockingReason = decodeStoredNullableString(
-    row["cleanupBlockingReason"],
-    "Change cleanup blocking reason",
-  );
-  if (state === "complete" && blockingReason !== null) {
-    throw new Error("Stored completed Change cleanup has a blocking reason");
-  }
-  return { state, blockingReason };
-};
+const decodeSelectedCleanup = (row: StoredTerminalChangeRow): ChangeCleanup => ({
+  state: row.cleanupState,
+  blockingReason: row.cleanupBlockingReason,
+});
 const readReconciliationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<StoredTerminalChangeRow>(
       `SELECT ${terminalChangeSelectionColumns} FROM changes WHERE id = ?`,
       [changeId],
     );
@@ -157,7 +143,7 @@ const requireReconciliationChange = (sql: SqlClient.SqlClient, changeId: string)
   );
 const readChangeLifecycle = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<Record<string, unknown>>`
+    const rows = yield* sql<StoredChangeLifecycleRow>`
       SELECT id, state, close_reason AS closeReason, closed_at AS closedAt
       FROM changes WHERE id = ${changeId}
     `;
@@ -169,7 +155,9 @@ const readChangeLifecycle = (sql: SqlClient.SqlClient, changeId: string, operati
 const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "complete merged Change";
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<
+      PublicationSelectionRow & StoredChangeLifecycleRow & { readonly taskId: string | null }
+    >(
       `SELECT ${publicationSelectionColumns}, close_reason AS closeReason,
         closed_at AS closedAt, task_id AS taskId
        FROM changes WHERE id = ?`,
@@ -179,7 +167,7 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => ({
       ...decodeSelectedChangeLifecycle(row, changeId),
-      taskId: decodeStoredNullableString(row["taskId"], "Change Task ID"),
+      taskId: row.taskId,
       publication: decodeChangePublication(row),
     }));
     yield* validateChangePublicationRelationships(
@@ -190,27 +178,18 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
     );
     return selected;
   });
-const decodeSelectedChangeState = (row: Record<string, unknown>, changeId: string) => {
-  const id = decodeStoredString(row["id"], "Change ID");
-  if (id !== changeId) throw new Error("Change identity does not match lookup");
-  return { id, state: decodeChangeState(row["state"]) };
+const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
+  if (row.id !== changeId) throw new Error("Change identity does not match lookup");
+  return { id: row.id, state: row.state };
 };
-const decodeSelectedChangeLifecycle = (row: Record<string, unknown>, changeId: string) => {
-  const selected = decodeSelectedChangeState(row, changeId);
-  const closeReason = decodeCloseReason(row["closeReason"]);
-  const closedAt = decodeStoredNullableString(row["closedAt"], "Change closure time");
-  if (
-    (selected.state === changeState.open && (closeReason !== null || closedAt !== null)) ||
-    (selected.state === changeState.closed && (closeReason === null || closedAt === null))
-  ) {
-    throw new Error("Stored Change lifecycle relationship is inconsistent");
-  }
-  return { ...selected, closeReason };
-};
+const decodeSelectedChangeLifecycle = (row: StoredChangeLifecycleRow, changeId: string) => ({
+  ...decodeSelectedChangeState(row, changeId),
+  closeReason: row.closeReason,
+});
 const listReconciliationChanges = (sql: SqlClient.SqlClient, commonDirectory: string) =>
   Effect.gen(function* () {
     const operationName = "list Changes for reconciliation";
-    const rows = yield* sql.unsafe<Record<string, unknown>>(
+    const rows = yield* sql.unsafe<StoredTerminalChangeRow & { readonly createdAt: string }>(
       `SELECT ${terminalChangeSelectionColumns}, created_at AS createdAt FROM changes
        WHERE repository_common_directory = ?
          AND ((state = 'open' AND publication_pr_number IS NOT NULL)
@@ -219,9 +198,7 @@ const listReconciliationChanges = (sql: SqlClient.SqlClient, commonDirectory: st
     );
     const selected = yield* Effect.forEach(rows, (row) =>
       Effect.gen(function* () {
-        const changeId = yield* decodePersisted(operationName, () =>
-          decodeStoredString(row["id"], "Change ID"),
-        );
+        const changeId = row.id;
         const change = yield* decodePersisted(operationName, () =>
           decodeTerminalChange(row, changeId),
         );
@@ -231,9 +208,7 @@ const listReconciliationChanges = (sql: SqlClient.SqlClient, commonDirectory: st
           change.publication,
           operationName,
         );
-        const createdAt = yield* decodePersisted(operationName, () =>
-          decodeStoredString(row["createdAt"], "Change creation time"),
-        );
+        const createdAt = row.createdAt;
         return { change, createdAt };
       }),
     );
@@ -289,3 +264,21 @@ const matchesExactMergedEvidence = (
 };
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+type StoredChangeStateRow = {
+  readonly id: string;
+  readonly state: ChangeRecord["state"];
+};
+type StoredChangeLifecycleRow = StoredChangeStateRow & {
+  readonly closeReason: ChangeRecord["closeReason"];
+  readonly closedAt: string | null;
+};
+type PublicationSelectionRow = StoredChangeStateRow & SqliteChangePublicationRow;
+type StoredTerminalChangeRow = StoredChangeStateRow &
+  SqliteChangePublicationRow & {
+    readonly repositoryCommonDirectory: string;
+    readonly branchRef: string;
+    readonly baseRemoteUrl: string | null;
+    readonly worktreePath: string | null;
+    readonly cleanupState: ChangeCleanup["state"];
+    readonly cleanupBlockingReason: string | null;
+  };
