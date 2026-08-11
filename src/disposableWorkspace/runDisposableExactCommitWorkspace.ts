@@ -3,7 +3,10 @@ import { join } from "node:path";
 
 import { Effect, Ref, type Scope } from "effect";
 import type { ReviewerProcessExecutor } from "../agent/reviewerExecution.js";
-import type { WorkspaceCommandExecutor } from "../command/workspaceCommand.js";
+import {
+  type WorkspaceCommandExecutor,
+  WorkspaceCommandExecutionFailed,
+} from "../command/workspaceCommand.js";
 import type {
   DisposableWorkspace,
   DisposableWorkspaceCleanupResult,
@@ -72,7 +75,9 @@ type DisposableExactCommitWorkspaceAdapters = {
         readonly worktreePath?: string;
       }
   >;
-  readonly readWorktreeHead: (workspace: WorkspaceAdapter) => Effect.Effect<CommandResult>;
+  readonly readWorktreeHead: (
+    workspace: WorkspaceAdapter,
+  ) => Effect.Effect<CommandResult, WorkspaceCommandExecutionFailed>;
 };
 
 type WorkspaceAdapter = {
@@ -439,7 +444,15 @@ const verifyWorktreeHead = <Error>(
   workspace: WorkspaceAdapter,
 ): Effect.Effect<WorkspaceSetupAttempt> =>
   Effect.gen(function* () {
-    const headResult = yield* adapters.readWorktreeHead(workspace);
+    const headAttempt = yield* Effect.either(adapters.readWorktreeHead(workspace));
+    if (headAttempt._tag === "Left") {
+      return setupFailed(
+        "create_disposable_workspace",
+        headAttempt.left.message,
+        state.worktreePath,
+      );
+    }
+    const headResult = headAttempt.right;
 
     if (headResult.exitCode !== 0) {
       return setupFailed(
@@ -506,7 +519,13 @@ const productionDisposableExactCommitWorkspaceAdapters: DisposableExactCommitWor
       }
     }),
   readWorktreeHead: (workspace) =>
-    Effect.promise(() => workspace.commandExecutor("git rev-parse HEAD")),
+    Effect.tryPromise({
+      try: () => workspace.commandExecutor("git rev-parse HEAD"),
+      catch: (error) =>
+        error instanceof WorkspaceCommandExecutionFailed
+          ? error
+          : new WorkspaceCommandExecutionFailed({ message: errorMessage(error) }),
+    }),
 };
 
 const setupFailed = (

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Fiber } from "effect";
+import { Effect, Fiber } from "effect";
 import { afterEach, describe, vi } from "vitest";
 
 import type { createValidationWorkspace as createValidationWorkspaceType } from "../../src/change/validation/createValidationWorkspace.js";
@@ -553,7 +553,7 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
-  it.scoped("runs acquired-resource cleanup when the workflow defects", () =>
+  it.scoped("translates a workspace HEAD command failure and runs acquired-resource cleanup", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const createValidationWorkspace = yield* Effect.promise(() =>
@@ -562,9 +562,19 @@ describe("Validation Workspace scoped lifecycle", () => {
         }),
       );
 
-      const exit = yield* Effect.exit(createValidationWorkspace(input));
-      expect(Exit.isFailure(exit)).toBe(true);
+      const result = yield* createValidationWorkspace(input);
 
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_disposable_workspace",
+          errorMessage: "boom",
+          cleanupResult: {
+            worktree: "removed",
+            tempRef: "removed",
+          },
+        },
+      });
       expect(events).toEqual([
         "acquire:temp_ref",
         "acquire:worktree",
