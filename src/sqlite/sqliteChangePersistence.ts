@@ -24,6 +24,8 @@ import type {
   ChangeSubmissionPort,
   ChangeTaskProjectionRecord,
   CurrentChangeEvidenceQuery,
+  PendingCandidatePublicationChange,
+  PublishedCandidatePublicationChange,
   ReconciliationChange,
   RecordImplementationDecisionInput,
   SubmissionChange,
@@ -591,9 +593,13 @@ const decodeTerminalChange = (
     worktreePath: decodeStoredNullableString(row["worktreePath"], "Change Managed Worktree path"),
     cleanup: decodeSelectedCleanup(row),
   };
-  if (publication === null) return { ...base, publication };
+  if (publication === null) return { ...base, publication, remoteChangeBranch: null };
   if (publication.pullRequest === null) {
-    return { ...base, publication: { ...publication, pullRequest: null } };
+    return {
+      ...base,
+      publication: { ...publication, pullRequest: null },
+      remoteChangeBranch: null,
+    };
   }
   const ownedPublication = { ...publication, pullRequest: publication.pullRequest };
   const baseRemoteUrl = decodeStoredNullableString(row["baseRemoteUrl"], "Change Base remote URL");
@@ -804,6 +810,47 @@ const requireCandidatePublicationChange = (
     change === undefined
       ? invalidData(operationName, "Change disappeared")
       : Effect.succeed(change),
+  );
+
+const requirePendingCandidatePublicationChange = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) => {
+    const publication = change.publication;
+    return publication === null || publication.pullRequest !== null
+      ? invalidData(operationName, "Pending Change publication was not stored")
+      : Effect.succeed({
+          ...change,
+          publication: { ...publication, pullRequest: null },
+        } satisfies PendingCandidatePublicationChange);
+  });
+
+const requirePublishedCandidatePublicationChange = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) => {
+    const publication = change.publication;
+    return publication === null || publication.pullRequest === null
+      ? invalidData(operationName, "Published Change pull request was not stored")
+      : Effect.succeed({
+          ...change,
+          publication: { ...publication, pullRequest: publication.pullRequest },
+        } satisfies PublishedCandidatePublicationChange);
+  });
+
+const requireReleasedCandidatePublication = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) =>
+    change.publication === null
+      ? Effect.succeed({ publication: null })
+      : invalidData(operationName, "Change publication was not released"),
   );
 
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
@@ -1296,7 +1343,7 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
       return {
         ok: true as const,
         created: false,
-        change: yield* requireCandidatePublicationChange(
+        change: yield* requirePendingCandidatePublicationChange(
           sql,
           input.changeId,
           "begin Change publication",
@@ -1307,7 +1354,7 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
     return {
       ok: true as const,
       created: true,
-      change: yield* requireCandidatePublicationChange(
+      change: yield* requirePendingCandidatePublicationChange(
         sql,
         input.changeId,
         "begin Change publication",
@@ -1343,7 +1390,7 @@ const replacePendingPublication = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
     return {
       ok: true as const,
-      change: yield* requireCandidatePublicationChange(
+      change: yield* requirePendingCandidatePublicationChange(
         sql,
         input.changeId,
         "replace pending Change publication",
@@ -1371,11 +1418,11 @@ const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangeP
     yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireCandidatePublicationChange(
+      ...(yield* requireReleasedCandidatePublication(
         sql,
         input.changeId,
         "release Change publication",
-      ),
+      )),
     };
   });
 
@@ -1399,7 +1446,7 @@ const recordPublishedPullRequest = (
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
     return {
       ok: true as const,
-      change: yield* requireCandidatePublicationChange(
+      change: yield* requirePublishedCandidatePublicationChange(
         sql,
         input.changeId,
         "record Change publication",

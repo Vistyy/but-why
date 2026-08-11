@@ -31,7 +31,7 @@ describe("Change-owned terminal cleanup operation", () => {
         ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events),
         cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
           return { state: "complete", blockingReason: null };
         },
         artifactLifecycle: {
@@ -69,7 +69,7 @@ describe("Change-owned terminal cleanup operation", () => {
         ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events),
         cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
           return { state: "complete", blockingReason: null };
         },
         indexTranscripts: (input) => {
@@ -206,16 +206,16 @@ describe("Change-owned terminal cleanup operation", () => {
   it.effect("delegates cleanup without a Remote Change Branch for an unpublished Change", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const { remoteChangeBranch: _remoteChangeBranch, ...publishedChange } = changeRecord({
-        closeReason: "cancelled",
-        cleanup: pendingCleanup,
-      });
-      const change = { ...publishedChange, publication: null };
+      const change = {
+        ...changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
+        publication: null,
+        remoteChangeBranch: null,
+      };
       const cleanup = openTerminalCleanup({
         ...noOpTerminalCleanupDependencies,
         persistence: fakePersistence(events),
         cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
           return { state: "complete", blockingReason: null };
         },
       });
@@ -298,7 +298,7 @@ describe("Change-owned terminal cleanup operation", () => {
         ...noOpTerminalCleanupDependencies,
         persistence: echoPersistence(events),
         cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
           return { state: "complete", blockingReason: null };
         },
         artifactLifecycle: {
@@ -340,7 +340,7 @@ describe("Change-owned terminal cleanup operation", () => {
         ...noOpTerminalCleanupDependencies,
         persistence: echoPersistence(events),
         cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
           return { state: "complete", blockingReason: null };
         },
         artifactLifecycle: {
@@ -609,7 +609,7 @@ const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullReque
 
 const cancellationDependencies = (input: {
   readonly task: TaskRecord;
-  readonly change: ChangeRecord;
+  readonly change: ChangeRecord & TerminalCleanupChange;
   readonly events: string[];
 }): CancellationDependencies & {
   readonly cancellation: ReturnType<typeof openCancellationUseCases>;

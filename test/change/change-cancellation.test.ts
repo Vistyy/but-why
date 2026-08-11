@@ -517,7 +517,7 @@ describe("Change cancellation", () => {
 
   it.effect("closes an owned open pull request before deleting its Remote Change Branch", () => {
     const events: string[] = [];
-    const cleanupRemoteBranches: (object | undefined)[] = [];
+    const cleanupRemoteBranches: (object | null)[] = [];
     const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
@@ -765,7 +765,7 @@ const cancellationDependencies = (input: {
   readonly cleanupResult?:
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
-  readonly cleanupRemoteBranches?: (object | undefined)[];
+  readonly cleanupRemoteBranches?: (object | null)[];
   readonly activeValidationRunId?: string;
   readonly events: string[];
 }): CancellationDependencies & { readonly closePullRequestInputs: unknown[] } => {

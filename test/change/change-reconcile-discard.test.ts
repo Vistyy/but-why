@@ -146,6 +146,7 @@ describe("Change reconciliation discard boundary", () => {
               repositoryCommonDirectory: fixture.commonDirectory,
               worktreePath: first.worktreePath,
               branchRef: "refs/heads/but-why/change-a",
+              remoteChangeBranch: null,
               discardWork: true,
             },
           ]);
@@ -213,6 +214,7 @@ describe("Change reconciliation discard boundary", () => {
             repositoryCommonDirectory: fixture.commonDirectory,
             worktreePath: terminal.worktreePath,
             branchRef: "refs/heads/but-why/change-a",
+            remoteChangeBranch: null,
             discardWork: false,
           },
         ]);

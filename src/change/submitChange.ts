@@ -28,6 +28,7 @@ import {
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
 import {
+  type OwnedPublication,
   type OwnedPullRequestUnavailableReason,
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
@@ -482,7 +483,17 @@ const completedPublicationEvidence = (
     ) {
       return { ok: false };
     }
-    return { ok: true, result: publishedResult(change, false) };
+    return {
+      ok: true,
+      result: publishedResult(
+        change.id,
+        {
+          ...change.publication,
+          pullRequest: change.publication.pullRequest,
+        },
+        false,
+      ),
+    };
   });
 
 const validateAndPublish = (
@@ -668,18 +679,16 @@ const detectPublicationTarget = (
     change.baseRemoteUrl,
   );
 
-const publishedResult = (change: SubmissionChange, created: boolean): ChangeSubmitResult => {
-  const publication = change.publication;
-  if (publication?.pullRequest === null || publication === null) {
-    throw new Error("Reconciled Change lacks owned pull request facts");
-  }
-  return {
-    ok: true,
-    status: "published",
-    changeId: change.id,
-    candidateId: publication.candidateId,
-    validationRunId: publication.validationRunId,
-    created,
-    pullRequest: publication.pullRequest,
-  };
-};
+const publishedResult = (
+  changeId: string,
+  publication: OwnedPublication,
+  created: boolean,
+): ChangeSubmitResult => ({
+  ok: true,
+  status: "published",
+  changeId,
+  candidateId: publication.candidateId,
+  validationRunId: publication.validationRunId,
+  created,
+  pullRequest: publication.pullRequest,
+});

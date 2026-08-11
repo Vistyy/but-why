@@ -225,7 +225,13 @@ describe("Reviewer Transcript discovery", () => {
             reviewerSessionPathFor: (change) => join(input.commonDirectory, "but-why", change),
           });
 
-          const result = yield* cleanup(closedChange(changeId, input.commonDirectory), now);
+          const result = yield* cleanup(
+            {
+              ...closedChange(changeId, input.commonDirectory),
+              remoteChangeBranch: null,
+            },
+            now,
+          );
 
           expect(result).toMatchObject({ ok: true, cleanup: { state: "complete" } });
           const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(changeId);

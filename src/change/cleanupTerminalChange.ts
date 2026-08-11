@@ -1,9 +1,6 @@
 import { Effect } from "effect";
 
-import {
-  RepositoryPersistedDataInvalid,
-  type RepositoryStorageError,
-} from "../contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { type ChangeCleanup, changeState, type RemoteChangeBranch } from "./change.js";
 import type { TerminalChangeCleanupPort, TerminalCleanupChange } from "./changePorts.js";
 import type {
@@ -19,7 +16,7 @@ export type ChangeCleanupOperation = (input: {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
-  readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly remoteChangeBranch: RemoteChangeBranch | null;
   readonly discardWork?: boolean;
 }) => ChangeCleanupOperationResult;
 
@@ -72,24 +69,11 @@ const cleanupTerminalChange = (
       });
     }
 
-    const remoteChangeBranch = change.remoteChangeBranch;
-    if (
-      change.publication !== null &&
-      change.publication.pullRequest !== null &&
-      remoteChangeBranch === undefined
-    ) {
-      return yield* Effect.fail(
-        new RepositoryPersistedDataInvalid({
-          operationName: "clean terminal Change",
-          cause: new Error("Published Change lacks its Remote Change Branch"),
-        }),
-      );
-    }
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
-      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
+      remoteChangeBranch: change.remoteChangeBranch,
       ...(discardWork === undefined ? {} : { discardWork }),
     });
     if (result.state === "pending") {

@@ -6,6 +6,7 @@ import type { CandidateValidationPolicySnapshot } from "./candidateValidation/ca
 import type {
   ChangeCleanup,
   ChangeCloseReason,
+  ChangeOwnedPullRequest,
   ChangePublication,
   ChangeRecord,
   ChangeState,
@@ -162,7 +163,7 @@ export type TerminalCleanupChange = {
   readonly worktreePath: string | null;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
-  readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly remoteChangeBranch: RemoteChangeBranch | null;
 };
 
 export type SubmissionChange = {
@@ -246,7 +247,7 @@ export type TerminalChangeCleanupPort = {
   readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
 };
 
-export type CandidatePublicationChange = {
+type CandidatePublicationChangeBase = {
   readonly id: string;
   readonly state: ChangeState;
   readonly branchRef: string;
@@ -254,7 +255,18 @@ export type CandidatePublicationChange = {
   readonly taskId: PublicTaskId | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions: readonly ImplementationDecision[];
+};
+
+export type CandidatePublicationChange = CandidatePublicationChangeBase & {
   readonly publication: ChangePublication | null;
+};
+
+export type PendingCandidatePublicationChange = CandidatePublicationChangeBase & {
+  readonly publication: ChangePublication & { readonly pullRequest: null };
+};
+
+export type PublishedCandidatePublicationChange = CandidatePublicationChangeBase & {
+  readonly publication: ChangePublication & { readonly pullRequest: ChangeOwnedPullRequest };
 };
 
 export type CandidatePublicationPort = {
@@ -266,7 +278,11 @@ export type CandidatePublicationPort = {
     query?: CurrentChangeEvidenceQuery,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
   readonly beginPublication: (input: BeginChangePublicationInput) => StorageEffect<
-    | { readonly ok: true; readonly created: boolean; readonly change: CandidatePublicationChange }
+    | {
+        readonly ok: true;
+        readonly created: boolean;
+        readonly change: PendingCandidatePublicationChange;
+      }
     | {
         readonly ok: false;
         readonly code: "change_not_found" | "change_closed" | "publication_already_owned";
@@ -275,21 +291,21 @@ export type CandidatePublicationPort = {
   readonly replacePendingPublication: (
     input: ReplacePendingChangePublicationInput,
   ) => StorageEffect<
-    | { readonly ok: true; readonly change: CandidatePublicationChange }
+    | { readonly ok: true; readonly change: PendingCandidatePublicationChange }
     | {
         readonly ok: false;
         readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
       }
   >;
   readonly releasePendingPublication: (input: BeginChangePublicationInput) => StorageEffect<
-    | { readonly ok: true; readonly change: CandidatePublicationChange }
+    | { readonly ok: true; readonly publication: null }
     | {
         readonly ok: false;
         readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
       }
   >;
   readonly recordPublishedPullRequest: (input: RecordPublishedPullRequestInput) => StorageEffect<
-    | { readonly ok: true; readonly change: CandidatePublicationChange }
+    | { readonly ok: true; readonly change: PublishedCandidatePublicationChange }
     | {
         readonly ok: false;
         readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
