@@ -368,6 +368,7 @@ const submitTaskReview = (
         const failure = {
           operation: "record_task_review_execution",
           message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
+          pendingExecution: executionInput.execution,
         };
         yield* input.persistence.recordActiveFailure(reviewId, failure, now);
         const active = yield* input.persistence.getById(reviewId);
@@ -504,6 +505,31 @@ export const abandonTaskReview = (
         message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
       } as const;
     }
+    const pendingExecution = review.toolingFailure?.pendingExecution;
+    if (pendingExecution !== undefined) {
+      const recordedExecution = yield* Effect.either(
+        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, {
+          reviewId: review.id,
+          execution: pendingExecution,
+        }),
+      );
+      if (recordedExecution._tag === "Left") {
+        const failure = {
+          operation: "record_task_review_execution",
+          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
+          pendingExecution,
+        };
+        yield* input.persistence.recordActiveFailure(review.id, failure, now);
+        const current = yield* input.persistence.getById(review.id);
+        return {
+          ok: false,
+          code: "task_review_cleanup_failed",
+          review: current ?? review,
+          message: failure.message,
+        } as const;
+      }
+    }
+
     const transcriptDiscovery = discoverObservedReviewerTranscripts(
       reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
       review.taskId,

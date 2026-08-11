@@ -330,20 +330,38 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
       loaded.runtime.provide(
         openSqliteTaskReviewPersistence().pipe(
           Effect.flatMap((reviews) =>
-            reviews.admit({
-              reviewId,
-              taskId: publicTaskId("BY-1"),
-              policy: {
-                id: "task_advisory_review",
-                version: 1,
-                agentProfile: "review",
-                profileScope: "global",
-                instructions: taskReviewBuiltInInstructions,
-              },
-              baseRef: "refs/heads/main",
-              baseCommit: commit,
-              workspacePath,
-              now: "2026-08-11T12:00:00.000Z",
+            Effect.gen(function* () {
+              yield* reviews.admit({
+                reviewId,
+                taskId: publicTaskId("BY-1"),
+                policy: {
+                  id: "task_advisory_review",
+                  version: 1,
+                  agentProfile: "review",
+                  profileScope: "global",
+                  instructions: taskReviewBuiltInInstructions,
+                },
+                baseRef: "refs/heads/main",
+                baseCommit: commit,
+                workspacePath,
+                now: "2026-08-11T12:00:00.000Z",
+              });
+              yield* reviews.recordActiveFailure(
+                reviewId,
+                {
+                  operation: "record_task_review_execution",
+                  message: "Task Review execution persistence failed twice.",
+                  pendingExecution: {
+                    continuity: "fresh",
+                    identityFingerprint: "fingerprint",
+                    durationMs: 5,
+                    reviewCalls: 1,
+                    invocationUsage: [null],
+                    sessionReference: "session-1",
+                  },
+                },
+                "2026-08-11T12:00:01.000Z",
+              );
             }),
           ),
         ),
@@ -357,6 +375,10 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
         id: reviewId,
         state: "running",
         workspace: { path: workspacePath },
+        toolingFailure: {
+          operation: "record_task_review_execution",
+          pendingExecution: { sessionReference: "session-1" },
+        },
         identity: { verified: true, workspace: { state: "matching" } },
       },
     });
@@ -370,7 +392,12 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
     ]);
     expect(abandoned.status, abandoned.stdout).toBe(0);
     expect(JSON.parse(abandoned.stdout)).toMatchObject({
-      review: { state: "complete", outcome: "tooling_failed", workspace: { cleanup: "removed" } },
+      review: {
+        state: "complete",
+        outcome: "tooling_failed",
+        workspace: { cleanup: "removed" },
+        sessions: [{ continuity: "fresh", sessionReference: "session-1" }],
+      },
     });
     expect(existsSync(workspacePath)).toBe(false);
 

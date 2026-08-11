@@ -44,6 +44,7 @@ export type TaskReviewPolicySnapshot = TaskReviewPolicySnapshotV1 | TaskReviewPo
 export type TaskReviewToolingFailure = {
   readonly operation: string;
   readonly message: string;
+  readonly pendingExecution?: TaskReviewExecution;
 };
 
 export type TaskReviewFinding = ReviewerFindingCore & {

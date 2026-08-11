@@ -409,6 +409,14 @@ type TaskReviewJsonObject = Record<string, unknown> & {
   readonly source?: unknown;
   readonly operation?: unknown;
   readonly message?: unknown;
+  readonly pendingExecution?: unknown;
+  readonly continuity?: unknown;
+  readonly identityFingerprint?: unknown;
+  readonly restartReason?: unknown;
+  readonly durationMs?: unknown;
+  readonly reviewCalls?: unknown;
+  readonly invocationUsage?: unknown;
+  readonly sessionReference?: unknown;
 };
 
 const parseObject = (source: string): TaskReviewJsonObject => {
@@ -538,6 +546,34 @@ const parseFailure = (source: string): TaskReviewToolingFailure => {
   return {
     operation: requiredString(value.operation),
     message: requiredString(value.message),
+    ...(value.pendingExecution === undefined
+      ? {}
+      : { pendingExecution: parseExecution(value.pendingExecution) }),
+  };
+};
+const parseExecution = (source: unknown): TaskReviewExecution => {
+  const value = parseObject(JSON.stringify(source));
+  if (
+    value.continuity !== "fresh" &&
+    value.continuity !== "resumed" &&
+    value.continuity !== "restarted"
+  ) {
+    throw new Error("Invalid Task Review execution continuity");
+  }
+  if (value.restartReason !== undefined && typeof value.restartReason !== "string") {
+    throw new Error("Invalid Task Review execution restart reason");
+  }
+  if (value.sessionReference !== null && typeof value.sessionReference !== "string") {
+    throw new Error("Invalid Task Review execution session reference");
+  }
+  return {
+    continuity: value.continuity,
+    identityFingerprint: requiredString(value.identityFingerprint),
+    ...(value.restartReason === undefined ? {} : { restartReason: value.restartReason }),
+    durationMs: requiredTokenCount(value.durationMs),
+    reviewCalls: requiredTokenCount(value.reviewCalls),
+    invocationUsage: parseInvocationUsage(JSON.stringify(value.invocationUsage)),
+    sessionReference: value.sessionReference,
   };
 };
 const invalid = (operationName: string, message: string) =>
