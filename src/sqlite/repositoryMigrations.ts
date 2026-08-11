@@ -33,6 +33,7 @@ import { nativeSnapshotWorkspacesMigration as nativeSnapshotWorkspaces } from ".
 import { preNativeSnapshotWorkspaceCleanupMigration as preNativeSnapshotWorkspaceCleanup } from "./migrations/0031_pre_native_snapshot_workspace_cleanup.js";
 import { backfillPreNativeSnapshotWorkspaceCleanupMigration as backfillPreNativeSnapshotWorkspaceCleanup } from "./migrations/0032_backfill_pre_native_snapshot_workspace_cleanup.js";
 import { removePreNativeSnapshotWorkspaceCleanupMigration as removePreNativeSnapshotWorkspaceCleanup } from "./migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
+import { taskReviewsMigration as taskReviews } from "./migrations/0034_task_reviews.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -68,6 +69,7 @@ const migrations = {
   "0031_pre_native_snapshot_workspace_cleanup": preNativeSnapshotWorkspaceCleanup,
   "0032_backfill_pre_native_snapshot_workspace_cleanup": backfillPreNativeSnapshotWorkspaceCleanup,
   "0033_remove_pre_native_snapshot_workspace_cleanup": removePreNativeSnapshotWorkspaceCleanup,
+  "0034_task_reviews": taskReviews,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

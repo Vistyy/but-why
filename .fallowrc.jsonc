@@ -2,6 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": [
     "src/main.ts",
+    "src/cli/task/commands/review.ts",
+    "src/cli/task/commands/submit.ts",
     "extensions/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
@@ -54,6 +56,10 @@
         "patterns": ["src/**/adapters/**", "src/sqlite/**"]
       },
       {
+        "name": "agent",
+        "patterns": ["src/agent/**"]
+      },
+      {
         "name": "task-composition",
         "patterns": ["src/task/composition/**"]
       },
@@ -75,7 +81,7 @@
       },
       {
         "name": "change",
-        "patterns": ["src/agent/**", "src/change/**"]
+        "patterns": ["src/change/**"]
       },
       {
         "name": "repository-runtime",
@@ -101,15 +107,19 @@
     "rules": [
       {
         "from": "adapters",
-        "allow": ["change", "repository-runtime", "shared", "task"]
+        "allow": ["agent", "change", "repository-runtime", "shared", "task"]
+      },
+      {
+        "from": "agent",
+        "allow": ["shared"]
       },
       {
         "from": "task-composition",
-        "allow": ["adapters", "repository-runtime", "shared", "task"]
+        "allow": ["adapters", "agent", "repository-runtime", "shared", "task"]
       },
       {
         "from": "change-composition",
-        "allow": ["adapters", "change", "repository-runtime", "shared", "task"]
+        "allow": ["adapters", "agent", "change", "repository-runtime", "shared", "task"]
       },
       {
         "from": "repository-runtime-composition",
@@ -118,6 +128,7 @@
       {
         "from": "cli",
         "allow": [
+          "agent",
           "change",
           "change-composition",
           "repository-runtime",
@@ -129,11 +140,11 @@
       },
       {
         "from": "task",
-        "allow": ["repository-runtime", "shared"]
+        "allow": ["agent", "repository-runtime", "shared"]
       },
       {
         "from": "change",
-        "allow": ["repository-runtime", "shared", "task"]
+        "allow": ["agent", "repository-runtime", "shared", "task"]
       },
       {
         "from": "repository-runtime",
@@ -147,6 +158,7 @@
         "from": "support",
         "allow": [
           "adapters",
+          "agent",
           "change",
           "change-composition",
           "cli",

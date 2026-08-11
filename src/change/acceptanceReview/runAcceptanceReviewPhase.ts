@@ -10,18 +10,19 @@ import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
   decodeReviewerOutputContract,
   type ReviewerOutput,
+  ReviewerOutputContractFailed,
   validateReviewerArtifactRefs,
 } from "../../agent/reviewerOutput.js";
-import {
-  buildAcceptanceReviewerPrompt,
-  buildReviewerOutputCorrectionPrompt,
-  reviewerFindingHistory,
-} from "../../agent/reviewerPrompts.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
+import {
+  buildAcceptanceReviewerPrompt,
+  buildReviewerOutputCorrectionPrompt,
+  reviewerFindingHistory,
+} from "../reviewerPrompts.js";
 import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,
@@ -36,7 +37,6 @@ import {
   type SubmitProgressProfile,
 } from "../validation/submitProgress.js";
 import {
-  ReviewerOutputContractFailed,
   ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";

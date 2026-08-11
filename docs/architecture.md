@@ -9,13 +9,14 @@ A Task owns requested intent, dependencies, and user-facing lifecycle.
 A Change owns one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and an owned pull request.
 A Change may link to one Task.
 
-Task commands manage intent and lifecycle.
+Task commands manage intent, advisory Task Reviews, and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
-Submission executes the fixed Validation Gate against a Candidate.
+Task Submission reviews one exact New Task proposal from a captured Review Base.
+Change Submission executes the fixed Validation Gate against a Candidate.
 
 The source hierarchy follows these owners:
 
-- `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
+- `src/task/` owns Task records, lifecycle rules, identity, advisory Task Reviews, persistence interfaces, files, and composition.
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
 - `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production.
   `implementChange` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`.
@@ -46,6 +47,19 @@ It provides a scoped database capability instead of an Adapter registry or appli
 Each workflow-owned SQLite persistence module implements one owner-defined port and selects only the facts required by that workflow.
 Concrete Adapters use dedicated `adapters/` directories, except SQLite Adapters whose stable boundary is `src/sqlite/`.
 Fallow classifies every maintained TypeScript or JavaScript source file as CLI, owner-specific composition, Task, Change, Repository Runtime, Adapter, shared code, or repository support and applies an explicit dependency rule to every class.
+
+## Task Review workflow
+
+`by task submit <task-id>` captures the selected Task Context, exact direct Task Dependency set, dependency evidence, canonical main checkout branch and commit, and fixed built-in review policy.
+It resolves the required Global default Agent Profile before Review admission.
+One Active Task Review prevents another Submission for the same Task.
+Task mutation and lifecycle operations remain independent, and final persistence prevents a concurrently changed proposal from receiving a passed outcome.
+
+Repository Preparation and one fresh project-owned Pi reviewer run in a native exact disposable workspace at the captured Review Base.
+The Review records passed, blocked by Findings, or tooling failed only after exact workspace cleanup succeeds.
+Interruption, cleanup failure, or final persistence failure leaves the Review active for exact inspection and abandonment.
+Task Review abandonment verifies and cleans only the recorded workspace identity before completing the Review as tooling failed.
+Task Review never approves a Task.
 
 ## Change workflow
 

@@ -3,27 +3,16 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { Effect } from "effect";
 import { executeHostCommandEffect } from "../../command/hostCommand.js";
-import type { DisposableWorkspaceCleanupResult } from "../disposableWorkspace.js";
+import type {
+  DisposableWorktreeInspection,
+  ExactDisposableWorkspaceCleanupInput,
+  ExactDisposableWorkspaceCleanupResult,
+} from "../disposableWorkspace.js";
 import {
   disposableWorkspaceRoot,
   expectedDisposableWorkspacePath,
   isExpectedDisposableWorkspacePath,
 } from "../disposableWorkspacePath.js";
-
-export type DisposableWorktreeInspection =
-  | { readonly state: "absent" }
-  | { readonly state: "matching"; readonly dirty: boolean }
-  | { readonly state: "unproven"; readonly message: string };
-
-export type ExactDisposableWorkspaceCleanupInput = {
-  readonly workspaceId: string;
-  readonly expectedCommitSha: string;
-  readonly recordedWorktreePath?: string;
-};
-
-export type ExactDisposableWorkspaceCleanupResult = DisposableWorkspaceCleanupResult & {
-  readonly errorMessage?: string;
-};
 
 export const prepareDisposableWorkspaceParent = (
   mainCheckoutRoot: string,
@@ -59,7 +48,8 @@ export const inspectDisposableWorktree = (
     if (!isExpectedDisposableWorkspacePath(mainCheckoutRoot, workspaceId, worktreePath)) {
       return {
         state: "unproven",
-        message: "Recorded Snapshot Workspace identity does not match its selected Validation Run.",
+        message:
+          "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
       } as const;
     }
     const records = yield* readWorktreeRecords(mainCheckoutRoot);
@@ -89,14 +79,14 @@ export const inspectDisposableWorktree = (
     ) {
       return {
         state: "unproven",
-        message: "Live Snapshot Workspace identity does not match its selected Validation Run.",
+        message: "Live Snapshot Workspace identity does not match the expected workspace identity.",
       } as const;
     }
     const liveHead = yield* git(worktreePath, ["rev-parse", "HEAD"]);
     if (!liveHead.ok || liveHead.stdout.trim() !== expectedCommitSha) {
       return {
         state: "unproven",
-        message: "Live Snapshot Workspace HEAD does not match its selected Validation Run.",
+        message: "Live Snapshot Workspace HEAD does not match the expected commit.",
       } as const;
     }
     const status = yield* git(worktreePath, ["status", "--porcelain=v1"]);
@@ -167,7 +157,7 @@ export const cleanupExactDisposableWorkspace = (
       )
     ) {
       return cleanupFailed(
-        "Recorded Snapshot Workspace identity does not match its selected Validation Run.",
+        "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
       );
     }
     const parent = yield* inspectSafeWorkspaceContainers(mainCheckoutRoot);
