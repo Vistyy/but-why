@@ -96,9 +96,7 @@ const reviewWithPi = <Output>(
       profile: input.profile,
       commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
       resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
-      ...(input.agentEnvironment === undefined
-        ? {}
-        : { agentEnvironment: input.agentEnvironment }),
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
       ...(input.sessionStorageRoot === undefined
         ? {}
         : { sessionStorageRoot: input.sessionStorageRoot }),
@@ -208,7 +206,8 @@ const resumeReviewerProcess = (
       ? result.resumeEffect(prompt)
       : Effect.tryPromise({
           try: () => {
-            if (result.resume === undefined) throw new Error("Reviewer continuation is unavailable.");
+            if (result.resume === undefined)
+              throw new Error("Reviewer continuation is unavailable.");
             return result.resume(prompt);
           },
           catch: (error) => reviewerProcessExecutionFailed(error),
@@ -234,7 +233,10 @@ const translateProcessFailure = (
 const reviewerProcessExecutionFailed = (error: unknown): ReviewerProcessExecutionFailed =>
   error instanceof ReviewerProcessExecutionFailed
     ? error
-    : new ReviewerProcessExecutionFailed({ message: errorMessage(error), sessionUsability: "unknown" });
+    : new ReviewerProcessExecutionFailed({
+        message: errorMessage(error),
+        sessionUsability: "unknown",
+      });
 
 const reviewerProcessFailure = (
   failure: ReviewerExecutionFailed,

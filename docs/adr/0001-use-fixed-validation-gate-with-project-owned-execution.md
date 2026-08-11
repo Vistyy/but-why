@@ -19,5 +19,5 @@ But Why owns command and reviewer execution contracts, while Sandcastle remains 
 But Why owns Validation Runs, phases, Findings, Artifacts, Reviewer Sessions, temporary Git refs, execution diagnostics, and interruption behavior.
 A Pi Reviewer Adapter launches each reviewer invocation through Effect command execution and preserves bounded same-session output correction.
 Reviewer Sessions belong to one Change and persist independently from disposable Validation Workspaces so successor Candidates can reuse repository orientation.
-Host interruption terminates the reviewer process tree before Validation Workspace cleanup completes.
+Host interruption terminates the reviewer process tree before Validation Workspace cleanup begins.
 Sandcastle remains a private implementation detail of disposable Validation Workspace creation and cleanup and provides no reviewer behavior.

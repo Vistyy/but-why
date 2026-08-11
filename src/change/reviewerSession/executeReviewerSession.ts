@@ -90,32 +90,34 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
     const review = (prompt: string, resumeSession?: string) => {
       reviewCalls += 1;
       const reviewCall = reviewCalls;
-      return input.runtime.review({
-        reviewerExecutor: input.reviewerExecutor,
-        reviewer: input.identity.producer,
-        decodeOutput: (output) => input.decodeOutput(output, reviewCall),
-        prompt,
-        profile: input.identity.agentProfile,
-        commandCwd: input.commandCwd,
-        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-        ...(input.identity.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.identity.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : {
-              sessionStorageRoot: reviewerSessionsPath(
-                input.sessionStorageRoot,
-                input.identity.changeId,
-                input.identity.producer,
-              ),
-            }),
-        ...(resumeSession === undefined ? {} : { resumeSession }),
-      }).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => invocationUsage.push(...(result.invocationUsage ?? [null]))),
-        ),
-      );
+      return input.runtime
+        .review({
+          reviewerExecutor: input.reviewerExecutor,
+          reviewer: input.identity.producer,
+          decodeOutput: (output) => input.decodeOutput(output, reviewCall),
+          prompt,
+          profile: input.identity.agentProfile,
+          commandCwd: input.commandCwd,
+          ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+          ...(input.identity.agentEnvironment === undefined
+            ? {}
+            : { agentEnvironment: input.identity.agentEnvironment }),
+          ...(input.sessionStorageRoot === undefined
+            ? {}
+            : {
+                sessionStorageRoot: reviewerSessionsPath(
+                  input.sessionStorageRoot,
+                  input.identity.changeId,
+                  input.identity.producer,
+                ),
+              }),
+          ...(resumeSession === undefined ? {} : { resumeSession }),
+        })
+        .pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => invocationUsage.push(...(result.invocationUsage ?? [null]))),
+          ),
+        );
     };
 
     let result = yield* review(

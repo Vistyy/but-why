@@ -1,11 +1,4 @@
-import {
-  chmodSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect } from "effect";
@@ -24,9 +17,7 @@ import type {
 } from "./reviewerExecution.js";
 import { ReviewerProcessExecutionFailed } from "./reviewerExecution.js";
 
-type PiCommandExecutor = (
-  input: HostCommandInput,
-) => Effect.Effect<HostCommandResult, unknown>;
+type PiCommandExecutor = (input: HostCommandInput) => Effect.Effect<HostCommandResult, unknown>;
 
 const executePiReviewerProcess = (
   input: ReviewerProcessInput,
@@ -48,9 +39,7 @@ const executePiReviewerProcess = (
       command: invocation.command,
       args: invocation.args,
       cwd: input.commandCwd,
-    }).pipe(
-      Effect.mapError((error) => reviewerProcessExecutionFailed(error)),
-    );
+    }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
     if (commandResult.exitCode !== 0) {
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
         .filter((value) => value.length > 0)
@@ -68,11 +57,22 @@ const executePiReviewerProcess = (
       catch: (error) => reviewerProcessExecutionFailed(error),
     });
 
-    const sessionReference = parsed.sessionReference ?? input.resumeSession;
-    const sessionFilePath =
-      sessionReference === undefined || input.sessionStorageRoot === undefined
+    const sessionStorageRoot = input.sessionStorageRoot;
+    const sessionReference =
+      sessionStorageRoot === undefined
         ? undefined
-        : findSessionFile(input.sessionStorageRoot, sessionReference);
+        : (parsed.sessionReference ?? input.resumeSession);
+    const sessionFilePath =
+      sessionReference === undefined || sessionStorageRoot === undefined
+        ? undefined
+        : findSessionFile(sessionStorageRoot, sessionReference);
+    if (sessionReference !== undefined && sessionFilePath === undefined) {
+      return yield* Effect.fail(
+        reviewerProcessExecutionFailed(
+          `Reviewer Session transcript "${sessionReference}" was not found under ${sessionStorageRoot}.`,
+        ),
+      );
+    }
     const result: ReviewerProcessResult = {
       stdout: parsed.stdout,
       invocationUsage: parsed.usage ?? null,
@@ -174,11 +174,7 @@ const preparePiSession = (input: ReviewerProcessInput): void => {
       if (line === "") return line;
       const entry = parseObject(line, "Reviewer Session JSONL is corrupt.");
       if (entry["type"] !== "session") return line;
-      if (
-        headerFound ||
-        entry["id"] !== input.resumeSession ||
-        typeof entry["cwd"] !== "string"
-      ) {
+      if (headerFound || entry["id"] !== input.resumeSession || typeof entry["cwd"] !== "string") {
         throw new Error("Reviewer Session header is incompatible.");
       }
       headerFound = true;
@@ -246,9 +242,7 @@ const assistantText = (message: Record<string, unknown>): string => {
   return content
     .map((part) => {
       const value = objectValue(part);
-      return value?.["type"] === "text" && typeof value["text"] === "string"
-        ? value["text"]
-        : "";
+      return value?.["type"] === "text" && typeof value["text"] === "string" ? value["text"] : "";
     })
     .join("");
 };
@@ -260,7 +254,12 @@ const piMessageUsage = (value: unknown): TokenUsage | undefined => {
   const output = tokenCount(usage["output"]);
   const cacheRead = tokenCount(usage["cacheRead"]);
   const cacheWrite = tokenCount(usage["cacheWrite"]);
-  if (input === undefined || output === undefined || cacheRead === undefined || cacheWrite === undefined)
+  if (
+    input === undefined ||
+    output === undefined ||
+    cacheRead === undefined ||
+    cacheWrite === undefined
+  )
     return undefined;
   const totalTokens = tokenCount(usage["totalTokens"]);
   return {

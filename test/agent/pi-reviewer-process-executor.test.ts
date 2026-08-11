@@ -33,7 +33,9 @@ const input = {
 describe("Pi reviewer process executor", () => {
   it.effect("runs direct Pi arguments and decodes invocation-local output and usage", () =>
     Effect.gen(function* () {
-      let observed: { readonly command: string; readonly args?: readonly string[]; readonly cwd?: string } | undefined;
+      let observed:
+        | { readonly command: string; readonly args?: readonly string[]; readonly cwd?: string }
+        | undefined;
       const executor = createPiReviewerProcessExecutor((command) => {
         observed = command;
         return Effect.succeed({
@@ -46,11 +48,17 @@ describe("Pi reviewer process executor", () => {
         });
       });
 
-      const result = yield* executor.effect(input);
+      const result = yield* executor.effect({
+        ...input,
+        agentEnvironment: ["nix", "develop", "-c"],
+      });
 
       expect(observed).toEqual({
-        command: "pi",
+        command: "nix",
         args: [
+          "develop",
+          "-c",
+          "pi",
           "-p",
           "--mode",
           "json",
@@ -74,7 +82,6 @@ describe("Pi reviewer process executor", () => {
       });
       expect(result).toMatchObject({
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
-        sessionReference: "session-1",
         invocationUsage: {
           inputTokens: 7,
           cachedInputTokens: 7,
@@ -82,6 +89,42 @@ describe("Pi reviewer process executor", () => {
           totalTokens: 17,
         },
       });
+    }),
+  );
+
+  it.effect("retains a new Reviewer Session transcript", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-transcript-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const sessionId = "123e4567-e89b-42d3-a456-426614174009";
+      const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
+      const executor = createPiReviewerProcessExecutor(() => {
+        writeFileSync(
+          sessionFile,
+          `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+        );
+        return Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n${messageEvent(
+            '<reviewer-output>{"findings":[]}</reviewer-output>',
+            { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
+          )}\n`,
+        });
+      });
+
+      try {
+        const result = yield* executor.effect({ ...input, sessionStorageRoot: sessions });
+        expect(result).toMatchObject({
+          sessionReference: sessionId,
+          sessionFilePath: sessionFile,
+        });
+        expect(result.resumeEffect).toBeTypeOf("function");
+        expect(readFileSync(sessionFile, "utf8")).toContain(sessionId);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }),
   );
 
