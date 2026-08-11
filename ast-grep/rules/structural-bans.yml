@@ -83,6 +83,30 @@ rule:
           - pattern: <unknown>JSON.parse($$$ARGS)
           - pattern: <unknown>(JSON.parse($$$ARGS))
 ---
+# The explicit unknown assertion makes the runtime boundary visible at the parse expression.
+id: json-parse-results-start-unknown
+language: TypeScript
+severity: error
+message: Do not use JSON.parse output before asserting it as unknown because parsed JSON has an unknown runtime shape; write JSON.parse(source) as unknown and use the owning boundary's focused decoder or schema.
+files:
+  - extensions/**/*.ts
+  - scripts/**/*.ts
+  - src/**/*.ts
+ignores:
+  # This serialization transform establishes exactly the StructuredValue representation.
+  - src/output/structuredValue.ts
+  # This immutable migration validates its assigned unknown value before canonicalizing the historical artifact.
+  - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
+rule:
+  all:
+    - pattern: JSON.parse($$$ARGS)
+    - not:
+        inside:
+          any:
+            - pattern: $VALUE as unknown
+            - pattern: <unknown>$VALUE
+          stopBy: end
+---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript

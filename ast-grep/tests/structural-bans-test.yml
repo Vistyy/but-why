@@ -66,6 +66,17 @@ invalid:
   - "<any>JSON.parse(x)"
   - JSON.parse(JSON.stringify(value)) as StructuredValue
 ---
+id: json-parse-results-start-unknown
+valid:
+  - const value = JSON.parse(source) as unknown
+  - const value = <unknown>JSON.parse(source)
+invalid:
+  - const value = JSON.parse(source)
+  - "const value: unknown = JSON.parse(source)"
+  - trusted = JSON.parse(source)
+  - "const parseUnknown = (): unknown => JSON.parse(source)"
+  - acceptUnknown(JSON.parse(source))
+---
 id: process-test-helpers-belong-to-process-boundaries
 valid:
   - runByInProcessEffect(root, ["task", "list"])
