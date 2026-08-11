@@ -100,6 +100,17 @@ const preflightTrustedExtension = async (path: string): Promise<TrustedResourceP
   }
 };
 
+type LaunchPhaseResult<Value> =
+  | { readonly ok: true; readonly value: Value }
+  | { readonly ok: false; readonly result: InteractiveSessionLaunchResult };
+
+const phaseComplete = <Value>(value: Value): LaunchPhaseResult<Value> => ({ ok: true, value });
+
+const phaseStopped = <Value>(result: InteractiveSessionLaunchResult): LaunchPhaseResult<Value> => ({
+  ok: false,
+  result,
+});
+
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
@@ -107,40 +118,94 @@ const launchHerdrSession = async (
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   const options = { ...defaultOptions, ...environment };
+  const preflight = await preflightTrustedResources(input);
+  if (!preflight.ok) return preflight.result;
+
+  const command = boundedExecutor(execute, options.commandTimeoutMs);
+  const sessionName = input.hostSessionName ?? herdrSessionName(input.changeId);
+  const existingSession = await observeExistingSession(
+    command,
+    input,
+    sessionName,
+    signal,
+    options,
+  );
+  if (!existingSession.ok) return existingSession.result;
+
+  const openedWorktree = await openManagedWorktree(command, input, sessionName, signal, options);
+  if (!openedWorktree.ok) return openedWorktree.result;
+
+  const nativeAgent = await startNativeAgent(
+    execute,
+    command,
+    input,
+    sessionName,
+    preflight.value.continuationExtension,
+    openedWorktree.value,
+    signal,
+    options,
+  );
+  if (!nativeAgent.ok) return nativeAgent.result;
+
+  return submitInitialPrompt(command, input, sessionName, signal, options);
+};
+
+const preflightTrustedResources = async (
+  input: InteractiveSessionLaunchInput,
+): Promise<LaunchPhaseResult<{ readonly continuationExtension: string }>> => {
   const continuationExtension = trustedContinuationExtensionPath();
   const extensionPreflight = await preflightTrustedExtension(continuationExtension);
-  if (!extensionPreflight.ok) return launchFailure(extensionPreflight.message);
+  if (!extensionPreflight.ok) return phaseStopped(launchFailure(extensionPreflight.message));
   for (const [index, path] of input.systemPromptPaths.entries()) {
     const promptPreflight = preflightFile(
       path,
       `Required packaged system-prompt resource ${index + 1}`,
     );
-    if (!promptPreflight.ok) return launchFailure(promptPreflight.message);
+    if (!promptPreflight.ok) return phaseStopped(launchFailure(promptPreflight.message));
   }
+  return phaseComplete({ continuationExtension });
+};
 
-  const command = boundedExecutor(execute, options.commandTimeoutMs);
-  const sessionName = input.hostSessionName ?? herdrSessionName(input.changeId);
+const observeExistingSession = async (
+  command: HerdrCommandExecutor,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  signal: AbortSignal | undefined,
+  options: ResolvedOptions,
+): Promise<LaunchPhaseResult<void>> => {
   const existing = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!existing.ok) {
-    return {
+    return phaseStopped({
       ok: false,
       code: "host_unavailable",
       message: `Start Herdr before launching ${sessionName}: ${existing.message}`,
-    };
+    });
   }
   const existingAgents = decodeAgentList(existing.stdout);
-  if (existingAgents === undefined)
-    return launchFailure("Herdr returned malformed agent-list output.");
+  if (existingAgents === undefined) {
+    return phaseStopped(launchFailure("Herdr returned malformed agent-list output."));
+  }
   if (hasActiveSession(existingAgents, input, sessionName)) {
-    return { ok: true, host: "herdr", status: "already_active" };
+    return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
     hasUnknownSession(existingAgents, input, sessionName) ||
     hasUnknownAgentInWorktree(existingAgents, input)
   ) {
-    return launchIndeterminate("Herdr could not determine the existing session state.");
+    return phaseStopped(
+      launchIndeterminate("Herdr could not determine the existing session state."),
+    );
   }
+  return phaseComplete(undefined);
+};
 
+const openManagedWorktree = async (
+  command: HerdrCommandExecutor,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  signal: AbortSignal | undefined,
+  options: ResolvedOptions,
+): Promise<LaunchPhaseResult<OpenedWorktree>> => {
   const worktreeArgs = [
     "worktree",
     "open",
@@ -162,41 +227,61 @@ const launchHerdrSession = async (
     );
     const worktrees = worktreeState.ok ? decodeWorktreeList(worktreeState.stdout) : undefined;
     if (worktrees === undefined || !worktreeMatchesTarget(worktrees, input.worktreePath)) {
-      return launchIndeterminate(
-        `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
+      return phaseStopped(
+        launchIndeterminate(
+          `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
+        ),
       );
     }
     openedResult = await command(worktreeArgs, signal);
   }
   if (!openedResult.ok) {
-    return isUncertainMutationFailure(openedResult.message)
-      ? launchIndeterminate(
-          `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
-        )
-      : launchFailure(openedResult.message);
+    return phaseStopped(
+      isUncertainMutationFailure(openedResult.message)
+        ? launchIndeterminate(
+            `Herdr did not confirm opening the Managed Worktree: ${openedResult.message}`,
+          )
+        : launchFailure(openedResult.message),
+    );
   }
   const opened = decodeOpenedWorktree(openedResult.stdout, input.worktreePath);
-  if (opened === undefined)
-    return launchIndeterminate("Herdr returned malformed worktree-open output.");
+  return opened === undefined
+    ? phaseStopped(launchIndeterminate("Herdr returned malformed worktree-open output."))
+    : phaseComplete(opened);
+};
 
+const startNativeAgent = async (
+  execute: HerdrCommandExecutor,
+  command: HerdrCommandExecutor,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  continuationExtension: string,
+  opened: OpenedWorktree,
+  signal: AbortSignal | undefined,
+  options: ResolvedOptions,
+): Promise<LaunchPhaseResult<void>> => {
   const beforeStart = await observe(command, ["agent", "list"], signal, options.observationRetries);
   const beforeStartAgents = beforeStart.ok ? decodeAgentList(beforeStart.stdout) : undefined;
   if (beforeStartAgents === undefined) {
-    return launchIndeterminate(
-      "Herdr did not provide a trustworthy pre-start session observation.",
+    return phaseStopped(
+      launchIndeterminate("Herdr did not provide a trustworthy pre-start session observation."),
     );
   }
   if (hasActiveSession(beforeStartAgents, input, sessionName)) {
-    return { ok: true, host: "herdr", status: "already_active" };
+    return phaseStopped({ ok: true, host: "herdr", status: "already_active" });
   }
   if (
     hasUnknownSession(beforeStartAgents, input, sessionName) ||
     hasUnknownAgentInWorktree(beforeStartAgents, input)
   ) {
-    return launchIndeterminate("Herdr could not determine the existing session state.");
+    return phaseStopped(
+      launchIndeterminate("Herdr could not determine the existing session state."),
+    );
   }
   if (hasActiveAgentInWorktree(beforeStartAgents, input)) {
-    return launchFailure("Another Interactive Session is already active in this Managed Worktree.");
+    return phaseStopped(
+      launchFailure("Another Interactive Session is already active in this Managed Worktree."),
+    );
   }
 
   const startArgs = [
@@ -219,35 +304,33 @@ const launchHerdrSession = async (
     options.commandTimeoutMs,
     options.readinessTimeoutMs,
   );
-  if (started.paneReadinessTimedOut) return paneNotReady(options.readinessTimeoutMs);
+  if (started.paneReadinessTimedOut) {
+    return phaseStopped(paneNotReady(options.readinessTimeoutMs));
+  }
   const startResult = started.result;
   const startConfirmed = startResult.ok && isConfirmedAgentStart(startResult.stdout);
-  if (!startResult.ok && !isUncertainMutationFailure(startResult.message))
-    return launchFailure(startResult.message);
-  if (!startConfirmed) {
-    const afterStart = await observe(
-      command,
-      ["agent", "list"],
-      signal,
-      options.observationRetries,
-    );
-    const afterStartAgents = afterStart.ok ? decodeAgentList(afterStart.stdout) : undefined;
-    if (afterStartAgents !== undefined) {
-      if (hasActiveSession(afterStartAgents, input, sessionName)) {
-        return submitInitialPrompt(command, input, sessionName, signal, options);
-      }
-      if (hasUnknownSession(afterStartAgents, input, sessionName)) {
-        return launchIndeterminate("Herdr reported an unknown state after native agent start.");
-      }
+  if (!startResult.ok && !isUncertainMutationFailure(startResult.message)) {
+    return phaseStopped(launchFailure(startResult.message));
+  }
+  if (startConfirmed) return phaseComplete(undefined);
+
+  const afterStart = await observe(command, ["agent", "list"], signal, options.observationRetries);
+  const afterStartAgents = afterStart.ok ? decodeAgentList(afterStart.stdout) : undefined;
+  if (afterStartAgents !== undefined) {
+    if (hasActiveSession(afterStartAgents, input, sessionName)) return phaseComplete(undefined);
+    if (hasUnknownSession(afterStartAgents, input, sessionName)) {
+      return phaseStopped(
+        launchIndeterminate("Herdr reported an unknown state after native agent start."),
+      );
     }
-    return launchIndeterminate(
+  }
+  return phaseStopped(
+    launchIndeterminate(
       startResult.ok
         ? "Herdr did not confirm that native Pi startup reached readiness."
         : `Herdr did not confirm whether native Pi startup succeeded: ${startResult.message}`,
-    );
-  }
-
-  return submitInitialPrompt(command, input, sessionName, signal, options);
+    ),
+  );
 };
 
 type NativeAgentStart = {
