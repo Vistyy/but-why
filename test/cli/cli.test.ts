@@ -61,7 +61,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      const help = parseOutput(result.stdout).help;
+      const help = parseOutput(result.stdout)["help"];
       expect(help).toEqual(expect.any(String));
       if (typeof help !== "string") return;
       for (const commandPath of expectedCommandPaths) {
@@ -87,7 +87,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(parseOutput(result.stdout).help).toEqual(
+      expect(parseOutput(result.stdout)["help"]).toEqual(
         expect.stringContaining("This is a long-running command."),
       );
     }),
@@ -103,7 +103,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(parseOutput(result.stdout).help).toEqual(expect.any(String));
+      expect(parseOutput(result.stdout)["help"]).toEqual(expect.any(String));
     }),
   );
 

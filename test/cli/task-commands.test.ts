@@ -22,7 +22,6 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
-const thirdNow = "2026-06-30T12:10:00.000Z";
 
 const taskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
   id: "BY-1",

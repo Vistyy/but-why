@@ -1,5 +1,3 @@
-// fallow-ignore-file unused-export -- dynamically imported by the CLI
-
 import { Effect } from "effect";
 
 import type { CliResult } from "../../cliResults.js";
