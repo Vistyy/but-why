@@ -11,7 +11,10 @@ import type {
   TaskReviewRecord,
   TaskReviewToolingFailure,
 } from "../task/review/taskReview.js";
-import type { TaskReviewPersistence } from "../task/review/taskReviewPersistence.js";
+import type {
+  CompleteTaskReviewSuccess,
+  TaskReviewPersistence,
+} from "../task/review/taskReviewPersistence.js";
 import { RepositorySql } from "./repositorySql.js";
 
 type ReviewRow = {
@@ -165,11 +168,7 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      return {
-        ok: true as const,
-        review: current,
-        taskState: yield* currentTaskState(sql, current.taskId),
-      };
+      return { ok: false as const, code: "task_review_not_active" as const };
     }
     if (current.workspaceCleanup !== "removed") {
       return { ok: false as const, code: "task_review_not_active" as const };
@@ -202,18 +201,62 @@ const completeReview = (
     const completed = yield* getReview(sql, reviewId);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
-    return {
-      ok: true as const,
-      review: completed,
-      taskState: outcome === "passed" ? ("todo" as const) : admission.taskState,
-    };
+    const result = completedTaskReviewResult(completed);
+    if (result === undefined)
+      return yield* invalid("complete Task Review", "Completion facts are inconsistent");
+    return result;
   });
 
-const currentTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
-  Effect.map(
-    sql<{ readonly state: TaskState }>`SELECT state FROM tasks WHERE id = ${taskId}`,
-    (tasks) => tasks[0]?.state ?? null,
-  );
+const completedTaskReviewResult = (
+  review: TaskReviewRecord,
+): CompleteTaskReviewSuccess | undefined => {
+  if (review.state !== "complete") return undefined;
+  switch (review.outcome) {
+    case "passed":
+      if (review.findings.length !== 0 || review.toolingFailure !== null) return undefined;
+      return {
+        ok: true,
+        outcome: review.outcome,
+        review: {
+          ...review,
+          state: "complete",
+          outcome: review.outcome,
+          findings: [],
+          toolingFailure: null,
+        },
+        task: { id: review.taskId, state: "todo" },
+      };
+    case "blocked": {
+      const firstFinding = review.findings[0];
+      if (firstFinding === undefined || review.toolingFailure !== null) return undefined;
+      return {
+        ok: true,
+        outcome: review.outcome,
+        review: {
+          ...review,
+          state: "complete",
+          outcome: review.outcome,
+          findings: [firstFinding, ...review.findings.slice(1)],
+          toolingFailure: null,
+        },
+      };
+    }
+    case "tooling_failed":
+      if (review.toolingFailure === null) return undefined;
+      return {
+        ok: true,
+        outcome: review.outcome,
+        review: {
+          ...review,
+          state: "complete",
+          outcome: review.outcome,
+          toolingFailure: review.toolingFailure,
+        },
+      };
+    case null:
+      return undefined;
+  }
+};
 
 const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
   Effect.gen(function* () {
@@ -228,7 +271,6 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
     if (task === undefined) {
       return {
         ok: false as const,
-        taskState: null,
         failure: {
           operation: "confirm_task_review_task",
           message: "The selected Task no longer exists.",
@@ -238,7 +280,6 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
     if (task.state !== "new") {
       return {
         ok: false as const,
-        taskState: task.state,
         failure: {
           operation: "confirm_task_review_task_state",
           message: `Task state changed from new to ${task.state} during review.`,
@@ -248,7 +289,6 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
     if (task.title !== review.proposal.title || task.description !== review.proposal.description) {
       return {
         ok: false as const,
-        taskState: task.state,
         failure: {
           operation: "confirm_task_review_context",
           message: "Task title or description changed during review.",
@@ -262,14 +302,13 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
     ) {
       return {
         ok: false as const,
-        taskState: task.state,
         failure: {
           operation: "confirm_task_review_dependencies",
           message: "Direct Task Dependencies changed during review.",
         },
       };
     }
-    return { ok: true as const, taskState: task.state };
+    return { ok: true as const };
   });
 
 const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>

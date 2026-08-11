@@ -25,37 +25,38 @@ export const runTaskSubmitCommand = (
         if (result.ok) {
           const review = result.review;
           const reviewCommand = `by task review show ${review.id}`;
-          if (review.outcome === "passed") {
-            return success({
-              review: { id: review.id, outcome: review.outcome },
-              task: { id: review.taskId, state: result.taskState },
-              help: [
-                `Run \`by task show ${review.taskId}\` to inspect its startability and next action.`,
-              ],
-            });
+          switch (result.outcome) {
+            case "passed":
+              return success({
+                review: { id: review.id, outcome: result.outcome },
+                task: result.task,
+                help: [
+                  `Run \`by task show ${review.taskId}\` to inspect its startability and next action.`,
+                ],
+              });
+            case "blocked":
+              return runtimeError({
+                code: "task_review_findings",
+                message: "Task Review is blocked by Findings; the Task remains New.",
+                details: {
+                  review: { id: review.id, outcome: result.outcome, findings: review.findings },
+                },
+                help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
+              });
+            case "tooling_failed":
+              return runtimeError({
+                code: "task_review_tooling_failed",
+                message: "Task Review did not approve the Task.",
+                details: {
+                  review: {
+                    id: review.id,
+                    outcome: result.outcome,
+                    toolingFailure: review.toolingFailure,
+                  },
+                },
+                help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
+              });
           }
-          if (review.outcome === "blocked") {
-            return runtimeError({
-              code: "task_review_findings",
-              message: "Task Review is blocked by Findings; the Task remains New.",
-              details: {
-                review: { id: review.id, outcome: review.outcome, findings: review.findings },
-              },
-              help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
-            });
-          }
-          return runtimeError({
-            code: "task_review_tooling_failed",
-            message: "Task Review did not approve the Task.",
-            details: {
-              review: {
-                id: review.id,
-                outcome: review.outcome,
-                toolingFailure: review.toolingFailure,
-              },
-            },
-            help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
-          });
         }
         switch (result.code) {
           case "task_not_found":

@@ -142,10 +142,14 @@ it.scoped("atomically approves only a passing exact Task Review", () =>
 
       expect(completed).toMatchObject({
         ok: true,
-        taskState: "todo",
+        outcome: "passed",
         review: { outcome: "passed" },
+        task: { id: "BY-1", state: "todo" },
       });
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "todo" });
+      expect(
+        yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later }),
+      ).toEqual({ ok: false, code: "task_review_not_active" });
     }),
   ),
 );
@@ -186,7 +190,10 @@ it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
         });
         yield* reviews.recordCleanup(reviewId, "removed", later);
         const completed = yield* reviews.complete({ reviewId, ...completion, now: later });
-        expect(completed).toMatchObject({ ok: true, taskState: "new" });
+        expect(completed).toMatchObject({
+          ok: true,
+          outcome: reviewId === "review-1" ? "blocked" : "tooling_failed",
+        });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "new" });
       }
     }),
@@ -219,7 +226,7 @@ it.scoped("records the exact non-approval reason when Task state changes during 
 
       expect(completed).toMatchObject({
         ok: true,
-        taskState: "cancelled",
+        outcome: "tooling_failed",
         review: {
           outcome: "tooling_failed",
           toolingFailure: {

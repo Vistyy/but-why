@@ -137,7 +137,7 @@ describe("Task command Adapters", () => {
           files: ["docs/spec.md"],
           artifactRefs: [],
         },
-      ];
+      ] as const;
       let calls = 0;
       const commandEnvironment: TaskCommandEnvironment = {
         ...environment(fakeTaskUseCases()),
@@ -148,25 +148,40 @@ describe("Task command Adapters", () => {
               calls === 1
                 ? {
                     ok: true as const,
-                    review: taskReviewRecord({ outcome: "passed" }),
-                    taskState: "todo" as const,
+                    outcome: "passed" as const,
+                    review: {
+                      ...taskReviewRecord({ outcome: "passed" }),
+                      state: "complete" as const,
+                      outcome: "passed" as const,
+                      findings: [],
+                      toolingFailure: null,
+                    },
+                    task: { id: "BY-1", state: "todo" as const },
                   }
                 : calls === 2
                   ? {
                       ok: true as const,
-                      review: taskReviewRecord({ outcome: "blocked", findings }),
-                      taskState: "new" as const,
+                      outcome: "blocked" as const,
+                      review: {
+                        ...taskReviewRecord({ outcome: "blocked", findings }),
+                        state: "complete" as const,
+                        outcome: "blocked" as const,
+                        findings,
+                        toolingFailure: null,
+                      },
                     }
                   : {
                       ok: true as const,
-                      review: taskReviewRecord({
-                        outcome: "tooling_failed",
+                      outcome: "tooling_failed" as const,
+                      review: {
+                        ...taskReviewRecord({ outcome: "tooling_failed" }),
+                        state: "complete" as const,
+                        outcome: "tooling_failed" as const,
                         toolingFailure: {
                           operation: "confirm_task_review_context",
                           message: "Task title or description changed during review.",
                         },
-                      }),
-                      taskState: "new" as const,
+                      },
                     },
             );
           },

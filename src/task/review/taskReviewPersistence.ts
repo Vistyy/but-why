@@ -1,7 +1,6 @@
 import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
-import type { TaskState } from "../lifecycle.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
@@ -40,12 +39,47 @@ export type CompleteTaskReviewInput = {
   readonly now: string;
 };
 
-export type CompleteTaskReviewResult =
+type CompletedTaskReviewRecord = Omit<TaskReviewRecord, "state" | "outcome"> & {
+  readonly state: "complete";
+};
+
+type PassedTaskReviewRecord = CompletedTaskReviewRecord & {
+  readonly outcome: "passed";
+  readonly findings: readonly [];
+  readonly toolingFailure: null;
+};
+
+type BlockedTaskReviewRecord = CompletedTaskReviewRecord & {
+  readonly outcome: "blocked";
+  readonly findings: readonly [TaskReviewFinding, ...TaskReviewFinding[]];
+  readonly toolingFailure: null;
+};
+
+type ToolingFailedTaskReviewRecord = CompletedTaskReviewRecord & {
+  readonly outcome: "tooling_failed";
+  readonly toolingFailure: TaskReviewToolingFailure;
+};
+
+export type CompleteTaskReviewSuccess =
   | {
       readonly ok: true;
-      readonly review: TaskReviewRecord;
-      readonly taskState: TaskState | null;
+      readonly outcome: "passed";
+      readonly review: PassedTaskReviewRecord;
+      readonly task: { readonly id: string; readonly state: "todo" };
     }
+  | {
+      readonly ok: true;
+      readonly outcome: "blocked";
+      readonly review: BlockedTaskReviewRecord;
+    }
+  | {
+      readonly ok: true;
+      readonly outcome: "tooling_failed";
+      readonly review: ToolingFailedTaskReviewRecord;
+    };
+
+export type CompleteTaskReviewResult =
+  | CompleteTaskReviewSuccess
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {

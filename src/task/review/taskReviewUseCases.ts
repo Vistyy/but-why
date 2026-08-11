@@ -18,18 +18,13 @@ import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/dispo
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import { buildTaskReviewerPrompt } from "../../reviewerPrompts/taskReviewerPrompt.js";
-import type { TaskState } from "../lifecycle.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
-import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
+import type { CompleteTaskReviewSuccess, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
-  | {
-      readonly ok: true;
-      readonly review: TaskReviewRecord;
-      readonly taskState: TaskState | null;
-    }
+  | CompleteTaskReviewSuccess
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
@@ -305,11 +300,7 @@ const submitTaskReview = (
       if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
       return { ok: false, code: "task_review_recovery_required", review: active } as const;
     }
-    return {
-      ok: true,
-      review: completed.review,
-      taskState: completed.taskState,
-    } as const;
+    return completed;
   });
 
 export const inspectTaskReviewIdentity = (
