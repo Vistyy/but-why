@@ -169,6 +169,7 @@ describe("Change cleanup Git adapter", () => {
     const siblingRoot = join(dirname(repository), `${basename(repository)}-worktrees`);
     const worktreePath = join(siblingRoot, "but-why", "feature");
     git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    const branchHead = git(repository, "rev-parse", "refs/heads/feature");
     const externalTarget = createTestWorkspace();
     const externalContainer = join(externalTarget, "but-why");
     mkdirSync(externalContainer);
@@ -206,6 +207,7 @@ process.exit(result.status ?? 1);
 
     expect(result).toEqual({ state: "pending", blockingReason: "worktree_path_unsafe" });
     expect(existsSync(externalContainer)).toBe(true);
+    expect(git(repository, "rev-parse", "refs/heads/feature")).toBe(branchHead);
   });
 
   it("suppresses later mutations after dirty-work inspection blocks cleanup", () => {
