@@ -72,7 +72,7 @@ describe("Candidate Validation Gate", () => {
 
       calls.length = 0;
       const failure = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_agent",
+        operationName: "run_reviewer_process",
         message: "Acceptance Review tooling failed.",
       });
       const failedResult = yield* runCandidateValidationGate({
@@ -96,7 +96,7 @@ describe("Candidate Validation Gate", () => {
   it.effect("translates final passing, blocking, and Tooling Failure results truthfully", () =>
     Effect.gen(function* () {
       const failure = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_agent",
+        operationName: "run_reviewer_process",
         message: "Specialist tooling failed.",
       });
       const run = (
