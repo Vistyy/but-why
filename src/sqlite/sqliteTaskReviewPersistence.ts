@@ -411,7 +411,7 @@ type TaskReviewJsonObject = Record<string, unknown> & {
 };
 
 const parseObject = (source: string): TaskReviewJsonObject => {
-  const value: unknown = JSON.parse(source);
+  const value: unknown = JSON.parse(source) as unknown;
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new Error("Expected object");
   return value as TaskReviewJsonObject;
@@ -443,7 +443,7 @@ const requiredTokenCount = (value: unknown): number => {
   return value;
 };
 const parseStringArray = (source: string): readonly string[] => {
-  const value: unknown = JSON.parse(source);
+  const value: unknown = JSON.parse(source) as unknown;
   if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string"))
     throw new Error("Expected string array");
   return value;
@@ -457,7 +457,7 @@ const parseProposal = (source: string): TaskReviewProposal => {
   };
 };
 const parseDependencies = (source: string): readonly TaskReviewDependencyEvidence[] => {
-  const value: unknown = JSON.parse(source);
+  const value: unknown = JSON.parse(source) as unknown;
   if (!Array.isArray(value)) throw new Error("Expected dependencies");
   return value.map((entry) => {
     const item = parseObject(JSON.stringify(entry));

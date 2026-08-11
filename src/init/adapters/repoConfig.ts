@@ -42,7 +42,7 @@ export const readConfigDocument = <Config, Failure>(
   let value: unknown;
 
   try {
-    value = JSON.parse(source);
+    value = JSON.parse(source) as unknown;
   } catch (error) {
     return configReadFailure(path, jsonErrorMessage(error), "valid JSON", source, failure);
   }
@@ -73,7 +73,7 @@ export const decodeRepoConfigSource = (
 ): ConfigReadResult<RepoConfig, RepoConfigValidationFailed> => {
   let value: unknown;
   try {
-    value = JSON.parse(source);
+    value = JSON.parse(source) as unknown;
   } catch (error) {
     return configReadFailure(
       path,
