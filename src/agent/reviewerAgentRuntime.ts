@@ -152,21 +152,21 @@ export const piReviewerAgentRuntime = {
 
 const successfulResult = <Output>(
   report: Output,
-  process: ReviewerProcessResult,
+  processResult: ReviewerProcessResult,
   attempts: number,
   invocationUsage: readonly (TokenUsage | null)[],
 ): ReviewerAgentResult<Output> => ({
   ok: true,
   report,
   attempts,
-  stdout: process.stdout,
+  stdout: processResult.stdout,
   invocationUsage,
-  ...processMetadata(process),
+  ...processMetadata(processResult),
 });
 
 const failedOutputResult = (
   failure: ReviewerExecutionFailed,
-  process: ReviewerProcessResult,
+  processResult: ReviewerProcessResult,
   attempts: number,
   invocationUsage: readonly (TokenUsage | null)[],
 ): ReviewerAgentResult<never> => ({
@@ -174,9 +174,9 @@ const failedOutputResult = (
   failure,
   sessionUsability: "unknown",
   attempts,
-  stdout: process.stdout,
+  stdout: processResult.stdout,
   invocationUsage,
-  ...processMetadata(process),
+  ...processMetadata(processResult),
 });
 
 const validateRunResult = <Output>(
