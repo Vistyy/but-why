@@ -199,7 +199,7 @@ describe("GitHub pull request gateway", () => {
           stdout:
             args[1] === "graphql"
               ? remoteHeadResponse("candidate-sha")
-              : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
+              : '{"number":42,"url":"https://github.com/acme/widgets/pull/42","title":"Revised Candidate","body":"Complete decision log","state":"open","merged":false,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -219,7 +219,14 @@ describe("GitHub pull request gateway", () => {
         title: "Revised Candidate",
         body: "Complete decision log",
       }),
-    ).toMatchObject({ ok: true, pullRequest: { headSha: "candidate-sha" } });
+    ).toMatchObject({
+      ok: true,
+      pullRequest: {
+        headSha: "candidate-sha",
+        title: "Revised Candidate",
+        body: "Complete decision log",
+      },
+    });
     expect(gitCalls).toEqual([["rev-parse", "--verify", "refs/heads/feature^{commit}"]]);
     expect(ghCalls).toEqual([
       expect.arrayContaining(["graphql", "qualifiedName=refs/heads/feature"]),
@@ -370,7 +377,7 @@ describe("GitHub pull request gateway", () => {
       runGh: () => ({
         ok: true,
         stdout:
-          '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":null,"state":"closed","merged":true,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
+          '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":null,"title":"Published Candidate","body":null,"state":"closed","merged":true,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
       }),
     });
 
@@ -390,6 +397,8 @@ describe("GitHub pull request gateway", () => {
         baseBranch: "main",
         headBranch: "feature",
         headSha: "candidate-sha",
+        title: "Published Candidate",
+        body: "",
       },
     });
   });

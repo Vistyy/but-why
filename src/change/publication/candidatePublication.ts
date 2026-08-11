@@ -618,13 +618,36 @@ const executePullRequestUpdate = (
     expectedCurrentHeadSha: owned.expectedHeadSha,
     ...(allowExistingRemoteHead ? { allowExistingRemoteHead: true } : {}),
   });
+  const confirmationMetadata = allowExistingRemoteHead ? metadata : undefined;
   if (!updated.ok) {
-    return updateFailure(dependencies, input, owned, headBranch, expectedHeadSha, updated);
+    return updateFailure(
+      dependencies,
+      input,
+      owned,
+      headBranch,
+      expectedHeadSha,
+      updated,
+      confirmationMetadata,
+    );
   }
   if (
-    !isExpectedUpdatedPullRequest(updated.pullRequest, owned, input, headBranch, expectedHeadSha)
+    !isExpectedUpdatedPullRequest(
+      updated.pullRequest,
+      owned,
+      input,
+      headBranch,
+      expectedHeadSha,
+      confirmationMetadata,
+    )
   ) {
-    return confirmUpdatedPullRequest(dependencies, input, owned, headBranch, expectedHeadSha);
+    return confirmUpdatedPullRequest(
+      dependencies,
+      input,
+      owned,
+      headBranch,
+      expectedHeadSha,
+      confirmationMetadata,
+    );
   }
   return record(dependencies, input, headBranch, expectedHeadSha, updated.pullRequest, owned);
 };
@@ -635,6 +658,7 @@ const confirmUpdatedPullRequest = (
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
+  metadata?: Metadata,
 ): PublicationEffect =>
   readBackUpdatedPullRequest(
     dependencies,
@@ -644,6 +668,7 @@ const confirmUpdatedPullRequest = (
     expectedHeadSha,
     conflictingMutationEvidence("pull_request_update"),
     true,
+    metadata,
   );
 
 const isExpectedUpdatedPullRequest = (
@@ -652,6 +677,7 @@ const isExpectedUpdatedPullRequest = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
+  metadata?: Metadata,
 ): boolean =>
   isExpectedPullRequest(
     pullRequest,
@@ -659,7 +685,9 @@ const isExpectedUpdatedPullRequest = (
     input.target,
     headBranch,
     expectedHeadSha,
-  );
+  ) &&
+  (metadata === undefined ||
+    (pullRequest.title === metadata.title && pullRequest.body === metadata.body));
 
 const isExpectedPullRequest = (
   pullRequest: GitHubPullRequest,
@@ -678,6 +706,7 @@ const updateFailure = (
   headBranch: string,
   expectedHeadSha: string,
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
+  metadata?: Metadata,
 ): PublicationEffect => {
   if (failure.code === "local_head_mismatch") {
     return Effect.succeed({
@@ -706,6 +735,7 @@ const updateFailure = (
         expectedHeadSha,
         failure.evidence,
         false,
+        metadata,
       )
     : Effect.succeed({
         ok: false,
@@ -730,6 +760,7 @@ const readBackUpdatedPullRequest = (
   expectedHeadSha: string,
   failureEvidence: PublicationFailureEvidence | undefined,
   delayBeforeRead: boolean,
+  metadata?: Metadata,
 ): PublicationEffect =>
   Effect.gen(function* () {
     if (delayBeforeRead) {
@@ -753,6 +784,7 @@ const readBackUpdatedPullRequest = (
       input,
       headBranch,
       expectedHeadSha,
+      metadata,
     )
       ? yield* record(
           dependencies,

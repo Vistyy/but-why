@@ -728,7 +728,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates.push(request);
-              return { ok: true, pullRequest: remote };
+              return {
+                ok: true,
+                pullRequest: { ...remote, title: request.title, body: request.body },
+              };
             },
           },
         });

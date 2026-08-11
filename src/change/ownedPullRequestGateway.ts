@@ -5,6 +5,8 @@ export type GitHubPullRequest = ChangeOwnedPullRequest & {
   readonly baseBranch: string;
   readonly headBranch: string;
   readonly headSha: string;
+  readonly title?: string;
+  readonly body?: string;
   readonly state: "open" | "closed";
   readonly merged: boolean;
 };

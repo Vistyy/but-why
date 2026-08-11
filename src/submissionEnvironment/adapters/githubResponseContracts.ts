@@ -19,6 +19,8 @@ const httpUrlSchema = Schema.String.pipe(
 
 const pullRequestFactsSchema = Schema.Struct({
   number: safePositiveIntegerSchema,
+  title: Schema.optional(Schema.String),
+  body: Schema.optional(Schema.NullOr(Schema.String)),
   state: Schema.Literal("open", "closed"),
   base: Schema.Struct({
     ref: nonEmptyStringSchema,
@@ -134,6 +136,8 @@ const toGitHubPullRequest = (response: PullRequestResponse): GitHubPullRequest =
     baseBranch: response.base.ref,
     headBranch: response.head.ref,
     headSha: response.head.sha,
+    ...(response.title === undefined ? {} : { title: response.title }),
+    ...(response.body === undefined ? {} : { body: response.body ?? "" }),
   };
 };
 
