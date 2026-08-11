@@ -10,7 +10,7 @@ export const reviewerExecutionInstructions = [
   "You must not modify the Candidate. Candidate integrity verification by But Why is authoritative.",
 ].join("\n");
 
-export const continuedReviewerJudgmentInstructions = [
+const continuedReviewerJudgmentInstructions = [
   "Re-anchor the review to the exact current subject and supplied current authority.",
   "If your most recent completed judgment passed and the applicable authority remains unchanged, use that judgment as the baseline.",
   "Focus on the current subject delta and how it affects your prior conclusions instead of repeating unaffected investigation.",
