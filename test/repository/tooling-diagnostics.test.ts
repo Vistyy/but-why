@@ -7,6 +7,7 @@ import { runTestProcess } from "../support/testProcess.js";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");
 const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
+const biomePluginPath = join(repositoryRoot, "biome-plugins/no-inline-import-types.grit");
 const fallowRulePath = join(repositoryRoot, "fallow-rules/architecture.json");
 const temporaryPaths: string[] = [];
 
@@ -105,6 +106,48 @@ describe("repository-authored blocking diagnostics", () => {
     );
 
     expect(result.status).not.toBe(0);
+    expectActionablePolicyDiagnostic(result.output);
+  });
+
+  test("Biome rejects import type expressions without rejecting dynamic imports", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-biome-"));
+    temporaryPaths.push(fixtureRoot);
+    mkdirSync(join(fixtureRoot, "src"));
+    copyFileSync(biomePluginPath, join(fixtureRoot, "no-inline-import-types.grit"));
+    writeFileSync(
+      join(fixtureRoot, "biome.json"),
+      JSON.stringify({
+        plugins: ["./no-inline-import-types.grit"],
+        files: { includes: ["src/**/*.ts"] },
+      }),
+    );
+    writeFileSync(
+      join(fixtureRoot, "src/inline-import-fixture.ts"),
+      'export type Fixture = import("./dependency.js").Dependency;\n',
+    );
+    writeFileSync(
+      join(fixtureRoot, "src/dynamic-import-fixture.ts"),
+      'export const load = () => import("./dependency.js");\n',
+    );
+
+    const result = run(
+      "pnpm",
+      [
+        "--dir",
+        repositoryRoot,
+        "exec",
+        "biome",
+        "lint",
+        "--config-path",
+        join(fixtureRoot, "biome.json"),
+        join(fixtureRoot, "src"),
+      ],
+      fixtureRoot,
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.output).toContain("inline-import-fixture.ts");
+    expect(result.output).not.toContain("dynamic-import-fixture.ts");
     expectActionablePolicyDiagnostic(result.output);
   });
 

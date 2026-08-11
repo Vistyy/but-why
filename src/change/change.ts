@@ -1,4 +1,5 @@
 import type { PublicTaskId } from "../task/taskId.js";
+import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
@@ -80,7 +81,7 @@ export type ChangeRecord = {
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
   readonly state: ChangeState;
-  readonly activeBlocker?: import("./implementationBlocker.js").ImplementationBlocker | null;
+  readonly activeBlocker?: ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
   readonly createdAt: string;

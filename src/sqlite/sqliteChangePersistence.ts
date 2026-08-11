@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { type Context, Effect } from "effect";
 
 import {
   type ChangeCleanup,
@@ -74,7 +74,7 @@ import {
 } from "./sqliteTaskReadModel.js";
 
 const makeSqliteChangeAdapter = (
-  repository: import("effect").Context.Tag.Service<typeof RepositorySql>,
+  repository: Context.Tag.Service<typeof RepositorySql>,
 ): ChangeAuthorityPort &
   ChangeReadPort &
   ChangeDeliveryPort &

@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript)
+
+TsImportType() as $type where {
+  register_diagnostic(
+    span = $type,
+    message = "Do not use a TypeScript import type expression because top-level type imports keep dependencies visible; use an import type declaration.",
+    severity = "error"
+  )
+}

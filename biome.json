@@ -1,5 +1,6 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "plugins": ["./biome-plugins/no-inline-import-types.grit"],
   "files": {
     "includes": [
       "*.md",

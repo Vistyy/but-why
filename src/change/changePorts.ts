@@ -19,7 +19,10 @@ import type {
   ReplacePendingChangePublicationInput,
   ReplacePendingChangePublicationResult,
 } from "./changeStore.js";
-import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
+import type {
+  ImplementationBlocker,
+  ImplementationBlockerHistory,
+} from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type { ReviewerTranscript } from "./reviewerSession/reviewerTranscript.js";
@@ -61,7 +64,7 @@ export type ImplementationBlockerMutationResult =
   | {
       readonly ok: true;
       readonly change: ChangeRecord;
-      readonly blocker: import("./implementationBlocker.js").ImplementationBlocker;
+      readonly blocker: ImplementationBlocker;
     }
   | {
       readonly ok: false;

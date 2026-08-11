@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { Effect } from "effect";
 
+import type { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
   RepositoryIdentityConflict,
@@ -69,7 +70,7 @@ export type InitRepoError =
     }
   | {
       readonly code: "invalid_repo_config";
-      readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
+      readonly error: RepoConfigValidationFailed;
     }
   | {
       readonly code: "task_prefix_conflict";
@@ -115,7 +116,7 @@ export type LoadRepoLocalContextError =
     }
   | {
       readonly code: "invalid_repo_config";
-      readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
+      readonly error: RepoConfigValidationFailed;
     }
   | {
       readonly code: "shared_state_identity_conflict";

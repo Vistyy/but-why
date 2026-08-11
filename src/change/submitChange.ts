@@ -32,7 +32,10 @@ import {
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequestReader } from "./ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequestReader,
+  PublicationFailureEvidence,
+} from "./ownedPullRequestGateway.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
@@ -119,8 +122,8 @@ export type ChangeSubmitResult =
   | {
       readonly ok: false;
       readonly code: PublishCandidateFailureCode;
-      readonly evidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
-      readonly recoveryEvidence?: import("./ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
       readonly observedRemoteHeadSha?: string;
     }

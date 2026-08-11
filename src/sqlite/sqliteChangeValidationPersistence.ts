@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { type Context, Effect } from "effect";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
@@ -60,7 +60,7 @@ import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted, decodeStoredString } from "./sqliteTaskReadModel.js";
 
 const makeSqliteChangeValidationAdapter = (
-  repository: import("effect").Context.Tag.Service<typeof RepositorySql>,
+  repository: Context.Tag.Service<typeof RepositorySql>,
 ): CandidateValidationExecutionPort &
   ChangeValidationReadPort &
   ActiveValidationRunPort &

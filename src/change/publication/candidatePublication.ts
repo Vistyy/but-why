@@ -23,6 +23,7 @@ import type {
   GitHubPullRequestMutationResult,
   GitHubPullRequestReadResult,
   GitHubPullRequestRequest,
+  PublicationFailureEvidence,
 } from "../ownedPullRequestGateway.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
@@ -72,8 +73,8 @@ export type PublishCandidateResult =
         | "publication_remote_mismatch"
         | "publication_state_conflict"
         | "publication_tooling_failed";
-      readonly evidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
-      readonly recoveryEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
+      readonly evidence?: PublicationFailureEvidence;
+      readonly recoveryEvidence?: PublicationFailureEvidence;
       readonly expectedRemoteHeadSha?: string;
       readonly observedRemoteHeadSha?: string;
     };
@@ -232,7 +233,7 @@ const releaseWithEvidence = (
   dependencies: Dependencies,
   pending: Parameters<CandidatePublicationPort["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
-  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
+  failureEvidence?: PublicationFailureEvidence,
 ): PublicationEffect =>
   Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
     released.ok
@@ -390,7 +391,7 @@ const confirmCreation = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
-  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
+  failureEvidence?: PublicationFailureEvidence,
 ): PublicationEffect => {
   const found = readPullRequestList(dependencies.github, input.target, headBranch);
   const selected = selectRecoveredPullRequest(
@@ -702,7 +703,7 @@ const readBackUpdatedPullRequest = (
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
-  failureEvidence: import("../ownedPullRequestGateway.js").PublicationFailureEvidence | undefined,
+  failureEvidence: PublicationFailureEvidence | undefined,
   delayBeforeRead: boolean,
 ): PublicationEffect =>
   Effect.gen(function* () {
