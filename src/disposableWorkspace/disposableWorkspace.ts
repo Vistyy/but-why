@@ -9,8 +9,7 @@ export type DisposableWorkspaceCleanupResult = {
 export type DisposableWorkspaceOperationName =
   | "create_disposable_workspace"
   | "cleanup_disposable_workspace"
-  | "copy_allowlisted_file"
-  | "disposable_workspace_interrupted";
+  | "copy_allowlisted_file";
 
 export type DisposableWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;

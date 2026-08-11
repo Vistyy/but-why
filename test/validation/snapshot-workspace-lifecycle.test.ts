@@ -185,16 +185,16 @@ describe("Snapshot Workspace lifecycle", () => {
       const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
       const evidenceRoot = createTestWorkspace();
       const processIdPath = join(evidenceRoot, "child-pid");
-      const interrupted: unknown[] = [];
+      const cleanupResults: unknown[] = [];
       const fiber = yield* Effect.fork(
         createSnapshotWorkspace({
           repoRoot: repository,
           validationRunId,
           submittedSha: commitSha,
           copyFiles: [],
-          recordInterruptedCleanupResult: (error) =>
+          recordWorkspaceCleanup: (cleanupResult) =>
             Effect.sync(() => {
-              interrupted.push(error.cleanupResult);
+              cleanupResults.push(cleanupResult);
             }),
           runInWorkspace: (workspace) =>
             workspace
@@ -226,7 +226,7 @@ describe("Snapshot Workspace lifecycle", () => {
       const childProcessId = readFileSync(processIdPath, "utf8");
       yield* Fiber.interrupt(fiber);
 
-      expect(interrupted).toEqual([{ workspace: "removed" }]);
+      expect(cleanupResults).toEqual([{ workspace: "removed" }]);
       expect(existsSync(worktreePath)).toBe(false);
       expect(runTestProcess("kill", ["-0", childProcessId], { cwd: repository }).status).not.toBe(
         0,

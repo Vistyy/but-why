@@ -26,9 +26,6 @@ export type CreateSnapshotWorkspaceInput = {
   readonly recordWorkspaceCleanup?: (
     cleanupResult: SnapshotWorkspaceCleanupResult,
   ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly recordInterruptedCleanupResult?: (
-    toolingError: SnapshotWorkspaceToolingError,
-  ) => Effect.Effect<void>;
   readonly runInWorkspace?: (
     workspace: ActiveSnapshotWorkspace,
   ) => Effect.Effect<
@@ -87,10 +84,10 @@ const createSnapshotWorkspaceAdapter = (
 ): Effect.Effect<
   CreateSnapshotWorkspaceResult,
   ValidationToolingFailure | RepositoryStorageError
-> => {
-  let activeWorkspaceResult: ActiveSnapshotWorkspaceResult | undefined;
-  return Effect.gen(function* () {
+> =>
+  Effect.gen(function* () {
     const workspaceInput: RunDisposableExactCommitWorkspaceInput<
+      ActiveSnapshotWorkspaceResult,
       ValidationToolingFailure | RepositoryStorageError
     > = {
       repoRoot: input.repoRoot,
@@ -101,37 +98,17 @@ const createSnapshotWorkspaceAdapter = (
         Effect.sync(() => observeCleanup(cleanupResult)).pipe(
           Effect.zipRight(input.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void),
         ),
-      ...(input.recordInterruptedCleanupResult === undefined
-        ? {}
-        : {
-            recordInterruptedCleanupResult: (error: DisposableWorkspaceError) =>
-              input.recordInterruptedCleanupResult?.(validationError(error)) ?? Effect.void,
-          }),
-      ...(input.runInWorkspace === undefined
-        ? {}
-        : {
-            runInWorkspace: (workspace) => {
-              const runInWorkspace = input.runInWorkspace;
-              if (runInWorkspace === undefined) return Effect.void;
-              return runInWorkspace(workspace).pipe(
-                Effect.tap((result) =>
-                  Effect.sync(() => {
-                    activeWorkspaceResult = result;
-                  }),
-                ),
-                Effect.asVoid,
-              );
-            },
-          }),
+      ...(input.runInWorkspace === undefined ? {} : { runInWorkspace: input.runInWorkspace }),
     };
     const result = yield* runDisposableExactCommitWorkspace(workspaceInput);
     if (!result.ok) return { ok: false, toolingError: validationError(result.toolingError) };
     return {
       ok: true,
-      ...(activeWorkspaceResult === undefined ? {} : { activeWorkspaceResult }),
+      ...(result.workspaceResult === undefined
+        ? {}
+        : { activeWorkspaceResult: result.workspaceResult }),
     };
   });
-};
 
 const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
   operationName: snapshotWorkspaceOperation(error.operationName),
@@ -152,8 +129,6 @@ const snapshotWorkspaceOperation = (
       return "cleanup_snapshot_workspace";
     case "copy_allowlisted_file":
       return "copy_allowlisted_file";
-    case "disposable_workspace_interrupted":
-      return "snapshot_workspace_interrupted";
   }
 };
 

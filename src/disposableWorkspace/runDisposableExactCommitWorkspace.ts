@@ -19,7 +19,7 @@ import {
 } from "./disposableWorkspaceGit.js";
 import { expectedDisposableWorkspacePath } from "./disposableWorkspacePath.js";
 
-export type RunDisposableExactCommitWorkspaceInput<Error> = {
+export type RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error> = {
   readonly repoRoot: string;
   readonly workspaceId: string;
   readonly commitSha: string;
@@ -27,34 +27,35 @@ export type RunDisposableExactCommitWorkspaceInput<Error> = {
   readonly recordWorkspaceCleanup?: (
     cleanupResult: DisposableWorkspaceCleanupResult,
   ) => Effect.Effect<void, Error>;
-  readonly recordInterruptedCleanupResult?: (
-    toolingError: DisposableWorkspaceError,
-  ) => Effect.Effect<void>;
-  readonly runInWorkspace?: (workspace: DisposableWorkspace) => Effect.Effect<void, Error>;
+  readonly runInWorkspace?: (
+    workspace: DisposableWorkspace,
+  ) => Effect.Effect<WorkspaceResult, Error>;
 };
 
-export type RunDisposableExactCommitWorkspaceResult =
-  | { readonly ok: true }
+export type RunDisposableExactCommitWorkspaceResult<WorkspaceResult> =
+  | { readonly ok: true; readonly workspaceResult?: WorkspaceResult }
   | { readonly ok: false; readonly toolingError: DisposableWorkspaceError };
 
-export type RunDisposableExactCommitWorkspace = <Error>(
-  input: RunDisposableExactCommitWorkspaceInput<Error>,
-) => Effect.Effect<RunDisposableExactCommitWorkspaceResult, Error>;
+export type RunDisposableExactCommitWorkspace = <WorkspaceResult, Error>(
+  input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
+) => Effect.Effect<RunDisposableExactCommitWorkspaceResult<WorkspaceResult>, Error>;
 
-type SetupAttempt =
-  | { readonly ok: true }
-  | {
-      readonly ok: false;
-      readonly operationName: DisposableWorkspaceOperationName;
-      readonly errorMessage: string;
-    };
+type SetupAttempt<WorkspaceResult> =
+  | { readonly ok: true; readonly workspaceResult?: WorkspaceResult }
+  | SetupFailure;
+
+type SetupFailure = {
+  readonly ok: false;
+  readonly operationName: DisposableWorkspaceOperationName;
+  readonly errorMessage: string;
+};
 
 const cleanupStepTimeoutMs = 30_000;
 const initialCleanupResult: DisposableWorkspaceCleanupResult = { workspace: "not_created" };
 
-export const runDisposableExactCommitWorkspace = <Error>(
-  input: RunDisposableExactCommitWorkspaceInput<Error>,
-): Effect.Effect<RunDisposableExactCommitWorkspaceResult, Error> =>
+export const runDisposableExactCommitWorkspace = <WorkspaceResult, Error>(
+  input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
+): Effect.Effect<RunDisposableExactCommitWorkspaceResult<WorkspaceResult>, Error> =>
   Effect.gen(function* () {
     const worktreePath = expectedDisposableWorkspacePath(input.repoRoot, input.workspaceId);
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
@@ -62,8 +63,7 @@ export const runDisposableExactCommitWorkspace = <Error>(
     const workspaceExit = yield* Effect.exit(
       withInterruptedCleanupRecording(
         Effect.scoped(runWorkspaceScope(input, worktreePath, cleanupResult)),
-        input,
-        worktreePath,
+        input.recordWorkspaceCleanup,
         cleanupResult,
       ),
     );
@@ -100,14 +100,14 @@ export const runDisposableExactCommitWorkspace = <Error>(
         },
       };
     }
-    return { ok: true };
+    return attempt;
   });
 
-const runWorkspaceScope = <Error>(
-  input: RunDisposableExactCommitWorkspaceInput<Error>,
+const runWorkspaceScope = <WorkspaceResult, Error>(
+  input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
   worktreePath: string,
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
-): Effect.Effect<SetupAttempt, Error, Scope.Scope> =>
+): Effect.Effect<SetupAttempt<WorkspaceResult>, Error, Scope.Scope> =>
   Effect.gen(function* () {
     const parent = yield* prepareDisposableWorkspaceParent(input.repoRoot);
     if (!parent.ok) return setupFailed("create_disposable_workspace", parent.message);
@@ -187,39 +187,32 @@ const runWorkspaceScope = <Error>(
     );
     if (!copied.ok) return setupFailed("copy_allowlisted_file", copied.message);
 
-    if (input.runInWorkspace !== undefined) {
-      yield* input.runInWorkspace({
-        worktreePath,
-        commandExecutor: workspaceCommandExecutor(worktreePath),
-      });
-    }
-    return { ok: true } as const;
+    if (input.runInWorkspace === undefined) return { ok: true } as const;
+    const workspaceResult = yield* input.runInWorkspace({
+      worktreePath,
+      commandExecutor: workspaceCommandExecutor(worktreePath),
+    });
+    return { ok: true, workspaceResult } as const;
   });
 
-const withInterruptedCleanupRecording = <Error>(
-  scoped: Effect.Effect<SetupAttempt, Error>,
-  input: RunDisposableExactCommitWorkspaceInput<Error>,
-  worktreePath: string,
+const withInterruptedCleanupRecording = <WorkspaceResult, Error>(
+  scoped: Effect.Effect<SetupAttempt<WorkspaceResult>, Error>,
+  recordWorkspaceCleanup: RunDisposableExactCommitWorkspaceInput<
+    WorkspaceResult,
+    Error
+  >["recordWorkspaceCleanup"],
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
-): Effect.Effect<SetupAttempt, Error> => {
-  if (input.recordInterruptedCleanupResult === undefined) return scoped;
+): Effect.Effect<SetupAttempt<WorkspaceResult>, Error> => {
+  if (recordWorkspaceCleanup === undefined) return scoped;
   return Effect.onInterrupt(scoped, () =>
     Effect.gen(function* () {
       const cleanup = yield* Ref.get(cleanupResult);
-      yield* input
-        .recordInterruptedCleanupResult?.({
-          operationName: "disposable_workspace_interrupted",
-          workspaceId: input.workspaceId,
-          commitSha: input.commitSha,
-          worktreePath,
-          errorMessage: "Snapshot Workspace use was interrupted.",
-          cleanupResult: cleanup,
-        })
-        .pipe(
-          Effect.catchAllDefect(() => Effect.void),
-          Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
-          Effect.ignore,
-        ) ?? Effect.void;
+      yield* recordWorkspaceCleanup(cleanup).pipe(
+        Effect.catchAll(() => Effect.void),
+        Effect.catchAllDefect(() => Effect.void),
+        Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
+        Effect.ignore,
+      );
     }),
   );
 };
@@ -238,7 +231,7 @@ const workspaceCommandExecutor =
 const setupFailed = (
   operationName: DisposableWorkspaceOperationName,
   errorMessage: string,
-): SetupAttempt => ({
+): SetupFailure => ({
   ok: false,
   operationName,
   errorMessage,
