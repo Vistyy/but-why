@@ -445,11 +445,17 @@ describe("SQLite Change decoding", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE implementation_decisions SET choice = 7 WHERE change_id = ${captured.changeId}`;
             yield* sql`UPDATE implementation_blockers SET content = x'01' WHERE id = ${raised.blocker.id}`;
+            yield* sql`UPDATE changes SET acceptance_context = x'03' WHERE id = ${captured.changeId}`;
           }),
         );
         expect(
           yield* changes.authority.getCurrentPassingEvidence(captured.changeId),
         ).toBeUndefined();
+        yield* repository.operation(
+          "restore Acceptance Context",
+          (sql) =>
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${captured.changeId}`,
+        );
         expect(
           yield* changes.authority.recordImplementationDecision({
             changeId: captured.changeId,

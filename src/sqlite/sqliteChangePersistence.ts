@@ -723,25 +723,14 @@ const getPassingEvidence = (
     const authorityRows = yield* sql<{
       readonly id: unknown;
       readonly state: unknown;
-      readonly acceptanceContext: unknown;
-    }>`SELECT id, state, acceptance_context AS acceptanceContext
-       FROM changes WHERE id = ${changeId}`;
+    }>`SELECT id, state FROM changes WHERE id = ${changeId}`;
     const authority = yield* decodePersisted(operationName, () => {
       const row = authorityRows[0];
       if (row === undefined) return undefined;
       const id = decodeStoredString(row.id, "Change ID");
       if (id !== changeId) throw new Error("Change identity does not match evidence lookup");
-      if (decodeStoredString(row.state, "Change state") !== "open") return undefined;
-      if (row.acceptanceContext !== null && typeof row.acceptanceContext !== "string") {
-        throw new Error("Change Acceptance Context must be stored as text or null");
-      }
-      return {
-        id,
-        acceptanceContext:
-          row.acceptanceContext === null
-            ? null
-            : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-      };
+      if (decodeChangeState(row.state) !== changeState.open) return undefined;
+      return { id };
     });
     if (authority === undefined) return undefined;
     const candidatePredicate =
@@ -773,11 +762,26 @@ const getPassingEvidence = (
       parameters,
     );
     if (rows.length === 0) return undefined;
+    const acceptanceContextRows = yield* sql<{
+      readonly id: unknown;
+      readonly acceptanceContext: unknown;
+    }>`SELECT id, acceptance_context AS acceptanceContext
+       FROM changes WHERE id = ${authority.id}`;
+    const acceptanceContext = yield* decodePersisted(operationName, () => {
+      const row = acceptanceContextRows[0];
+      const id = decodeStoredString(row?.id, "Change ID");
+      if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
+      const encoded = decodeStoredNullableString(
+        row?.acceptanceContext,
+        "Change Acceptance Context",
+      );
+      return encoded === null ? null : decodeSqliteAcceptanceContextSnapshot(encoded);
+    });
     const implementationDecisions = yield* listDecisions(sql, authority.id);
     const blockerHistory = yield* readBlockers(sql, authority.id, operationName);
     const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
-    const expectedAcceptanceContext = authority.acceptanceContext ?? undefined;
+    const expectedAcceptanceContext = acceptanceContext ?? undefined;
     let current: PassingPublicationEvidence | undefined;
     for (const row of rows) {
       const evidence = yield* decodePersisted(operationName, (): PassingPublicationEvidence => {
