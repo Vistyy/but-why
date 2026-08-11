@@ -275,6 +275,27 @@ it.scoped("returns the exact abandonment reason to a stale Task Submission compl
         },
       });
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
+
+      yield* tasks.createTask({ title: "Completed first", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-completed-first",
+        taskId: publicTaskId("BY-2"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-completed-first",
+        now,
+      });
+      yield* reviews.recordCleanup("review-completed-first", "removed", later);
+      yield* reviews.complete({
+        reviewId: "review-completed-first",
+        findings: [],
+        toolingFailure: { operation: "run_task_review", message: "Reviewer failed" },
+        now: later,
+      });
+      expect(
+        yield* reviews.abandon("review-completed-first", "Too late to abandon", later),
+      ).toEqual({ ok: false, code: "task_review_not_active" });
     }),
   ),
 );

@@ -168,7 +168,7 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      if (current.outcome !== "tooling_failed") {
+      if (abandonReason !== undefined || current.outcome !== "tooling_failed") {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
       const completed = completedTaskReviewResult(current);
