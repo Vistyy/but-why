@@ -29,7 +29,7 @@ describe("host command Adapter", () => {
     );
   });
 
-  effectIt.effect("interrupts a command and its ordinary descendant", () =>
+  effectIt.effect("interrupts a command and a descendant that ignores SIGTERM", () =>
     Effect.gen(function* () {
       const directory = mkdtempSync(join(tmpdir(), "but-why-host-command-"));
       const pidFile = join(directory, "pid");
@@ -37,7 +37,10 @@ describe("host command Adapter", () => {
         const fiber = yield* Effect.fork(
           executeHostCommandEffect({
             command: "sh",
-            args: ["-c", `sleep 30 & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`],
+            args: [
+              "-c",
+              `sh -c 'trap "" TERM; exec sleep 30' & child=$!; printf '%s' "$child" > '${pidFile}'; wait "$child"`,
+            ],
           }),
         );
         yield* Effect.promise(() => waitForFile(pidFile));
