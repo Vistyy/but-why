@@ -125,7 +125,13 @@ it.scoped("finalizes a concurrently changed proposal as tooling failed and retai
       const completed = yield* reviews.complete({
         reviewId: "review-stale",
         findings: [
-          { title: "Finding", description: "Description", evidence: "Evidence", files: [] },
+          {
+            title: "Finding",
+            description: "Description",
+            evidence: "Evidence",
+            files: [],
+            artifactRefs: [],
+          },
         ],
         now: later,
       });
@@ -134,7 +140,7 @@ it.scoped("finalizes a concurrently changed proposal as tooling failed and retai
         review: {
           state: "complete",
           outcome: "tooling_failed",
-          findings: [{ title: "Finding" }],
+          findings: [{ title: "Finding", artifactRefs: [] }],
           toolingFailure: { operation: "confirm_task_review_proposal" },
         },
       });

@@ -1,9 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type {
   TaskReviewDependencyEvidence,
+  TaskReviewFinding,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
   TaskReviewRecord,
@@ -30,7 +30,9 @@ type ReviewRow = {
   readonly updatedAt: string;
 };
 
-type FindingRow = Omit<ReviewerFindingCore, "files"> & { readonly files: string };
+type FindingRow = Omit<TaskReviewFinding, "artifactRefs" | "files"> & {
+  readonly files: string;
+};
 
 export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   TaskReviewPersistence,
@@ -150,7 +152,7 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>
 const completeReview = (
   sql: SqlClient.SqlClient,
   reviewId: string,
-  findings: readonly ReviewerFindingCore[],
+  findings: readonly TaskReviewFinding[],
   toolingFailure: TaskReviewToolingFailure | undefined,
   abandonReason: string | undefined,
   now: string,
@@ -252,6 +254,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           description: finding.description,
           evidence: finding.evidence,
           files: parseStringArray(finding.files),
+          artifactRefs: [],
         })),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,

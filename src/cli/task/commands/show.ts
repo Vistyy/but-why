@@ -60,6 +60,7 @@ export const runTaskShowCommand = (
                         description: finding.description,
                         evidence: finding.evidence,
                         files: finding.files,
+                        artifactRefs: finding.artifactRefs,
                       })),
                       workspaceCleanup: review.workspaceCleanup,
                       toolingFailure:

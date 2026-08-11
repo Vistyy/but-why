@@ -31,6 +31,10 @@ export type TaskReviewToolingFailure = {
   readonly message: string;
 };
 
+export type TaskReviewFinding = ReviewerFindingCore & {
+  readonly artifactRefs: readonly string[];
+};
+
 export type TaskReviewRecord = {
   readonly id: string;
   readonly taskId: string;
@@ -45,7 +49,7 @@ export type TaskReviewRecord = {
   readonly workspaceCleanup: DisposableWorkspaceCleanupState;
   readonly toolingFailure: TaskReviewToolingFailure | null;
   readonly abandonReason: string | null;
-  readonly findings: readonly ReviewerFindingCore[];
+  readonly findings: readonly TaskReviewFinding[];
   readonly createdAt: string;
   readonly updatedAt: string;
 };

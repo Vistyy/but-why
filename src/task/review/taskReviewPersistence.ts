@@ -1,10 +1,10 @@
 import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
+  TaskReviewFinding,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
   TaskReviewRecord,
@@ -34,7 +34,7 @@ export type AdmitTaskReviewResult =
 
 export type CompleteTaskReviewInput = {
   readonly reviewId: string;
-  readonly findings: readonly ReviewerFindingCore[];
+  readonly findings: readonly TaskReviewFinding[];
   readonly toolingFailure?: TaskReviewToolingFailure;
   readonly now: string;
 };
