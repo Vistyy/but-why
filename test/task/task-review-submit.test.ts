@@ -543,8 +543,9 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     });
     const shown = yield* runByInProcessEffect(root, ["task", "review", "show", output.review.id]);
     const shownOutput = JSON.parse(shown.stdout) as {
-      review: { workspace: { path: string; cleanup: string } };
+      review: { proposalCurrent: boolean; workspace: { path: string; cleanup: string } };
     };
+    expect(shownOutput.review.proposalCurrent).toBe(true);
     expect(shownOutput.review.workspace.cleanup).toBe("removed");
     expect(existsSync(shownOutput.review.workspace.path)).toBe(false);
     const task = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);

@@ -273,7 +273,20 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
   });
 
 const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
-  Effect.map(inspectCurrentAdmission(sql, review), (admission) => admission.ok);
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly title: string; readonly description: string }>`
+      SELECT title, description FROM tasks WHERE id = ${review.taskId}
+    `;
+    const task = rows[0];
+    if (task === undefined) return false;
+    const dependencies = yield* dependencyEvidence(sql, review.taskId);
+    return (
+      task.title === review.proposal.title &&
+      task.description === review.proposal.description &&
+      JSON.stringify(dependencies.map((dependency) => dependency.id)) ===
+        JSON.stringify(review.proposal.dependencyIds)
+    );
+  });
 
 const getReview = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.gen(function* () {
