@@ -32,6 +32,7 @@ import { enforceStableStorageConstraintsMigration as enforceStableStorageConstra
 import { nativeSnapshotWorkspacesMigration as nativeSnapshotWorkspaces } from "./migrations/0030_native_snapshot_workspaces.js";
 import { preNativeSnapshotWorkspaceCleanupMigration as preNativeSnapshotWorkspaceCleanup } from "./migrations/0031_pre_native_snapshot_workspace_cleanup.js";
 import { backfillPreNativeSnapshotWorkspaceCleanupMigration as backfillPreNativeSnapshotWorkspaceCleanup } from "./migrations/0032_backfill_pre_native_snapshot_workspace_cleanup.js";
+import { removePreNativeSnapshotWorkspaceCleanupMigration as removePreNativeSnapshotWorkspaceCleanup } from "./migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -66,6 +67,7 @@ const migrations = {
   "0030_native_snapshot_workspaces": nativeSnapshotWorkspaces,
   "0031_pre_native_snapshot_workspace_cleanup": preNativeSnapshotWorkspaceCleanup,
   "0032_backfill_pre_native_snapshot_workspace_cleanup": backfillPreNativeSnapshotWorkspaceCleanup,
+  "0033_remove_pre_native_snapshot_workspace_cleanup": removePreNativeSnapshotWorkspaceCleanup,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

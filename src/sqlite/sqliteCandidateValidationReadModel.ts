@@ -214,9 +214,6 @@ export type StoredAbandonmentContextRow = {
   readonly setupExpectedCommitSha: string | null;
   readonly worktreePath: string | null;
   readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
-  readonly preNativeRefName: string | null;
-  readonly preNativeWorkspacePath: string | null;
-  readonly preNativeExpectedCommitSha: string | null;
 };
 
 export const decodeAbandonmentContext = (
@@ -251,26 +248,12 @@ export const decodeAbandonmentContext = (
   if (setupValidationRunId !== null && (worktreePath === null || cleanupWorkspace === null)) {
     throw new Error("Snapshot Workspace Setup is incomplete");
   }
-  const preNativeIdentityParts = [
-    row.preNativeRefName,
-    row.preNativeWorkspacePath,
-    row.preNativeExpectedCommitSha,
-  ].filter((value) => value !== null).length;
-  if (
-    (preNativeIdentityParts !== 0 && preNativeIdentityParts !== 3) ||
-    (row.preNativeRefName !== null &&
-      (row.preNativeWorkspacePath !== worktreePath ||
-        row.preNativeExpectedCommitSha !== submittedSha))
-  ) {
-    throw new Error("Pre-native Snapshot Workspace cleanup identity is inconsistent");
-  }
   return {
     validationRunId,
     changeId,
     candidateId,
     submittedSha,
     ...(worktreePath === null ? {} : { worktreePath }),
-    ...(row.preNativeRefName === null ? {} : { preNativeRefName: row.preNativeRefName }),
     cleanupWorkspace,
   };
 };
