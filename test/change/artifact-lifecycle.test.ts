@@ -1,11 +1,11 @@
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
+
 import type { GitHubPullRequestGateway } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
@@ -38,6 +38,16 @@ import {
 } from "../support/testWorkspace.js";
 
 const now = "2026-08-05T10:00:00.000Z";
+
+const openArtifactLifecycleForTest = (
+  dependencies: Parameters<typeof openArtifactLifecycle>[0],
+) => {
+  const lifecycle = openArtifactLifecycle(dependencies);
+  return {
+    removeContent: (changeId: string) =>
+      lifecycle.removeContent(changeId).pipe(Effect.provide(NodeFileSystem.layer)),
+  };
+};
 
 const policy = {
   prepare: { command: "true", timeoutSeconds: 10 },
@@ -95,89 +105,88 @@ afterAll(() => {
   releaseTestWorkspace(candidateValidationRepoTemplate);
 });
 
-it.layer(NodeFileSystem.layer)((it) => {
-  describe("Artifact Content removal through Terminal Cleanup", () => {
-    it.effect(
-      "removes all and only the exact Closed Change's Validation Run content while metadata and another Change's content remain",
-      () =>
-        withArtifactLifecycleFixture((fixture) =>
-          Effect.gen(function* () {
-            const closed = yield* fixture.changes.delivery.cancelChange({
-              changeId: fixture.first.changeId,
-              reason: "Stop",
-              now,
-            });
-            if (!closed.ok) throw new Error(closed.code);
+describe("Artifact Content removal through Terminal Cleanup", () => {
+  it.effect(
+    "removes all and only the exact Closed Change's Validation Run content while metadata and another Change's content remain",
+    () =>
+      withArtifactLifecycleFixture((fixture) =>
+        Effect.gen(function* () {
+          const closed = yield* fixture.changes.delivery.cancelChange({
+            changeId: fixture.first.changeId,
+            reason: "Stop",
+            now,
+          });
+          if (!closed.ok) throw new Error(closed.code);
 
-            const cleanup = openTerminalCleanup({
-              ...noOpTerminalCleanupDependencies,
-              persistence: {
-                recordCleanup: fixture.changes.delivery.recordCleanup,
-                removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
-              },
-              cleanup: () => ({ state: "complete", blockingReason: null }),
-              artifactLifecycle: openArtifactLifecycle({
-                persistence: fixture.validation.artifacts,
-                artifactsRoot: fixture.artifactsRoot,
-              }),
-            });
-            const result = yield* cleanup(closed.change, now);
+          const cleanup = openTerminalCleanup({
+            ...noOpTerminalCleanupDependencies,
+            persistence: {
+              recordCleanup: fixture.changes.delivery.recordCleanup,
+              removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
+            },
+            cleanup: () => ({ state: "complete", blockingReason: null }),
+            artifactLifecycle: openArtifactLifecycleForTest({
+              persistence: fixture.validation.artifacts,
+              artifactsRoot: fixture.artifactsRoot,
+            }),
+          });
+          const result = yield* cleanup(closed.change, now);
 
-            expect(result).toMatchObject({
-              ok: true,
-              cleanup: { state: "complete", blockingReason: null },
-            });
-            expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
-              false,
-            );
-            expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(
-              true,
-            );
-            expect(
-              existsSync(
-                join(
-                  fixture.artifactsRoot,
-                  fixture.second.validationRunId,
-                  "checks",
-                  "check",
-                  "two.txt",
-                ),
+          expect(result).toMatchObject({
+            ok: true,
+            cleanup: { state: "complete", blockingReason: null },
+          });
+          expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
+            false,
+          );
+          expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(
+            true,
+          );
+          expect(
+            existsSync(
+              join(
+                fixture.artifactsRoot,
+                fixture.second.validationRunId,
+                "checks",
+                "check",
+                "two.txt",
               ),
-            ).toBe(true);
+            ),
+          ).toBe(true);
 
-            const firstArtifacts = yield* fixture.validation.reads.listArtifacts(
-              fixture.first.validationRunId,
-            );
-            const secondArtifacts = yield* fixture.validation.reads.listArtifacts(
-              fixture.second.validationRunId,
-            );
-            expect(firstArtifacts.map((artifact) => artifact.ref)).toEqual([
-              `artifact:${fixture.first.validationRunId}/checks/check/one.txt`,
-            ]);
-            expect(secondArtifacts.map((artifact) => artifact.ref)).toEqual([
-              `artifact:${fixture.second.validationRunId}/checks/check/two.txt`,
-            ]);
-          }),
-        ),
-    );
+          const firstArtifacts = yield* fixture.validation.reads.listArtifacts(
+            fixture.first.validationRunId,
+          );
+          const secondArtifacts = yield* fixture.validation.reads.listArtifacts(
+            fixture.second.validationRunId,
+          );
+          expect(firstArtifacts.map((artifact) => artifact.ref)).toEqual([
+            `artifact:${fixture.first.validationRunId}/checks/check/one.txt`,
+          ]);
+          expect(secondArtifacts.map((artifact) => artifact.ref)).toEqual([
+            `artifact:${fixture.second.validationRunId}/checks/check/two.txt`,
+          ]);
+        }),
+      ),
+  );
 
-    it.effect(
-      "reconciles discard cleanup for an exact Closed Change with an unsupported Validation Policy Snapshot and removes only its Artifact Content",
-      () =>
-        withArtifactLifecycleFixture((fixture) =>
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
+  it.effect(
+    "reconciles discard cleanup for an exact Closed Change with an unsupported Validation Policy Snapshot and removes only its Artifact Content",
+    () =>
+      withArtifactLifecycleFixture((fixture) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
 
-            // Install one extra Validation Run under the selected Change whose stored
-            // Validation Policy Snapshot is unsupported by the strict current decoder.
-            // Its Artifact Content and metadata are real rows on disk and in SQLite.
-            const unsupportedRunId = "run-unsupported";
-            const unsupportedSnapshot =
-              '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceReview":{"ok":true,"instructions":"Review.","instructionsSource":"built_in","profile":{"agentProfile":"acceptance","scope":"global","profile":{"agentRuntime":"pi"}}}}';
-            yield* repository.operation(
-              "install unsupported Validation Policy Snapshot",
-              (sql) =>
-                sql`
+          // Install one extra Validation Run under the selected Change whose stored
+          // Validation Policy Snapshot is unsupported by the strict current decoder.
+          // Its Artifact Content and metadata are real rows on disk and in SQLite.
+          const unsupportedRunId = "run-unsupported";
+          const unsupportedSnapshot =
+            '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceReview":{"ok":true,"instructions":"Review.","instructionsSource":"built_in","profile":{"agentProfile":"acceptance","scope":"global","profile":{"agentRuntime":"pi"}}}}';
+          yield* repository.operation(
+            "install unsupported Validation Policy Snapshot",
+            (sql) =>
+              sql`
               INSERT INTO candidate_validation_runs (
                 id, candidate_id, policy_snapshot, implementation_decisions,
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
@@ -186,37 +195,37 @@ it.layer(NodeFileSystem.layer)((it) => {
                 NULL, 'complete', 'passed', ${now}, ${now}
               )
             `,
-            );
-            const unsupportedPath = join(unsupportedRunId, "checks", "check", "retired.txt");
-            mkdirSync(join(fixture.artifactsRoot, unsupportedRunId, "checks", "check"), {
-              recursive: true,
-            });
-            writeFileSync(join(fixture.artifactsRoot, unsupportedPath), "retired content\n");
-            yield* fixture.validation.execution.recordCheckRound({
-              validationRunId: unsupportedRunId,
-              producer: "check",
-              roundNumber: 1,
-              roundStatus: "passed",
-              artifactRecords: [
-                {
-                  ref: `artifact:${unsupportedRunId}/checks/check/retired.txt`,
-                  validationRunId: unsupportedRunId,
-                  phase: "checks",
-                  producer: "check",
-                  path: unsupportedPath,
-                  originalBytes: Buffer.byteLength("retired content\n"),
-                  storedBytes: Buffer.byteLength("retired content\n"),
-                  truncated: false,
-                },
-              ],
-              now,
-            });
+          );
+          const unsupportedPath = join(unsupportedRunId, "checks", "check", "retired.txt");
+          mkdirSync(join(fixture.artifactsRoot, unsupportedRunId, "checks", "check"), {
+            recursive: true,
+          });
+          writeFileSync(join(fixture.artifactsRoot, unsupportedPath), "retired content\n");
+          yield* fixture.validation.execution.recordCheckRound({
+            validationRunId: unsupportedRunId,
+            producer: "check",
+            roundNumber: 1,
+            roundStatus: "passed",
+            artifactRecords: [
+              {
+                ref: `artifact:${unsupportedRunId}/checks/check/retired.txt`,
+                validationRunId: unsupportedRunId,
+                phase: "checks",
+                producer: "check",
+                path: unsupportedPath,
+                originalBytes: Buffer.byteLength("retired content\n"),
+                storedBytes: Buffer.byteLength("retired content\n"),
+                truncated: false,
+              },
+            ],
+            now,
+          });
 
-            const readRawRuns = () =>
-              repository.operation(
-                "read raw Validation Run rows",
-                (sql) =>
-                  sql<RawRunRow>`
+          const readRawRuns = () =>
+            repository.operation(
+              "read raw Validation Run rows",
+              (sql) =>
+                sql<RawRunRow>`
                 SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
                   implementation_decisions AS implementationDecisions,
                   latest_resolved_blocker_id AS latestResolvedBlockerId,
@@ -224,295 +233,286 @@ it.layer(NodeFileSystem.layer)((it) => {
                 FROM candidate_validation_runs
                 ORDER BY id
               `,
-              );
-            const readRawArtifacts = () =>
-              repository.operation(
-                "read raw Artifact metadata rows",
-                (sql) =>
-                  sql<RawArtifactRow>`
+            );
+          const readRawArtifacts = () =>
+            repository.operation(
+              "read raw Artifact metadata rows",
+              (sql) =>
+                sql<RawArtifactRow>`
                 SELECT ref, validation_run_id AS validationRunId, phase, producer, path,
                   original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated,
                   created_at AS createdAt
                 FROM candidate_validation_artifacts
                 ORDER BY ref
               `,
-              );
-            const rawRunsBefore = yield* readRawRuns();
-            const rawArtifactsBefore = yield* readRawArtifacts();
+            );
+          const rawRunsBefore = yield* readRawRuns();
+          const rawArtifactsBefore = yield* readRawArtifacts();
 
-            const closed = yield* fixture.changes.delivery.cancelChange({
-              changeId: fixture.first.changeId,
-              reason: "Stop",
-              now,
-            });
-            if (!closed.ok) throw new Error(closed.code);
+          const closed = yield* fixture.changes.delivery.cancelChange({
+            changeId: fixture.first.changeId,
+            reason: "Stop",
+            now,
+          });
+          if (!closed.ok) throw new Error(closed.code);
 
-            const reconciliation = openChangeReconciliation({
+          const reconciliation = openChangeReconciliation({
+            persistence: {
+              getChangeById: fixture.changes.delivery.getChangeById,
+              listChangesForReconciliation: fixture.changes.delivery.listChangesForReconciliation,
+              completeMergedChange: fixture.changes.delivery.completeMergedChange,
+            },
+            github: unusedGitHubGateway,
+            cleanupTerminal: openTerminalCleanup({
+              ...noOpTerminalCleanupDependencies,
               persistence: {
-                getChangeById: fixture.changes.delivery.getChangeById,
-                listChangesForReconciliation: fixture.changes.delivery.listChangesForReconciliation,
-                completeMergedChange: fixture.changes.delivery.completeMergedChange,
+                recordCleanup: fixture.changes.delivery.recordCleanup,
+                removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
               },
-              github: unusedGitHubGateway,
-              cleanupTerminal: openTerminalCleanup({
-                ...noOpTerminalCleanupDependencies,
-                persistence: {
-                  recordCleanup: fixture.changes.delivery.recordCleanup,
-                  removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
-                },
-                cleanup: () => ({ state: "complete" }),
-                artifactLifecycle: openArtifactLifecycle({
-                  persistence: fixture.validation.artifacts,
-                  artifactsRoot: fixture.artifactsRoot,
-                }),
+              cleanup: () => ({ state: "complete" }),
+              artifactLifecycle: openArtifactLifecycleForTest({
+                persistence: fixture.validation.artifacts,
+                artifactsRoot: fixture.artifactsRoot,
               }),
-            });
-
-            const result = yield* reconciliation.reconcile({
-              repositoryCommonDirectory: fixture.commonDirectory,
-              changeId: fixture.first.changeId,
-              now,
-              discardWork: true,
-            });
-
-            expect(result).toEqual({
-              rejected: false,
-              changes: [
-                {
-                  changeId: fixture.first.changeId,
-                  status: "cleanup_complete",
-                  cleanup: { state: "complete", blockingReason: null },
-                },
-              ],
-            });
-
-            // All and only the selected Change's Validation Run content is removed.
-            expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
-              false,
-            );
-            expect(existsSync(join(fixture.artifactsRoot, unsupportedRunId))).toBe(false);
-            expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(
-              true,
-            );
-            expect(
-              existsSync(
-                join(
-                  fixture.artifactsRoot,
-                  fixture.second.validationRunId,
-                  "checks",
-                  "check",
-                  "two.txt",
-                ),
-              ),
-            ).toBe(true);
-
-            // Validation Run rows and Artifact metadata are unchanged by cleanup.
-            expect(yield* readRawRuns()).toEqual(rawRunsBefore);
-            expect(yield* readRawArtifacts()).toEqual(rawArtifactsBefore);
-
-            // The unsupported Run stays rejected through both full read paths.
-            const runError = yield* fixture.validation.reads
-              .getRunById(unsupportedRunId)
-              .pipe(Effect.flip);
-            expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-            const historyError = yield* fixture.validation.reads
-              .listRunsForCandidate(fixture.first.candidateId)
-              .pipe(Effect.flip);
-            expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-
-            // The retained Change's Run and metadata remain readable.
-            expect(
-              yield* fixture.validation.reads.getRunById(fixture.second.validationRunId),
-            ).toBeDefined();
-            expect(
-              (yield* fixture.validation.reads.listRunsForCandidate(fixture.second.candidateId))
-                .length,
-            ).toBe(1);
-            expect(
-              (yield* fixture.validation.reads.listArtifacts(fixture.second.validationRunId)).map(
-                (artifact) => artifact.ref,
-              ),
-            ).toEqual([`artifact:${fixture.second.validationRunId}/checks/check/two.txt`]);
-
-            const recorded = yield* fixture.changes.reads.getChangeById(fixture.first.changeId);
-            expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });
-          }),
-        ),
-      30_000,
-    );
-
-    it.effect("treats already-removed Artifact Content as success on retry", () =>
-      withArtifactLifecycleFixture((fixture) =>
-        Effect.gen(function* () {
-          const lifecycle = openArtifactLifecycle({
-            persistence: fixture.validation.artifacts,
-            artifactsRoot: fixture.artifactsRoot,
+            }),
           });
 
-          expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
-          expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
-            false,
-          );
+          const result = yield* reconciliation.reconcile({
+            repositoryCommonDirectory: fixture.commonDirectory,
+            changeId: fixture.first.changeId,
+            now,
+            discardWork: true,
+          });
 
-          expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
+          expect(result).toEqual({
+            rejected: false,
+            changes: [
+              {
+                changeId: fixture.first.changeId,
+                status: "cleanup_complete",
+                cleanup: { state: "complete", blockingReason: null },
+              },
+            ],
+          });
+
+          // All and only the selected Change's Validation Run content is removed.
           expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(
             false,
           );
+          expect(existsSync(join(fixture.artifactsRoot, unsupportedRunId))).toBe(false);
           expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(
             true,
           );
+          expect(
+            existsSync(
+              join(
+                fixture.artifactsRoot,
+                fixture.second.validationRunId,
+                "checks",
+                "check",
+                "two.txt",
+              ),
+            ),
+          ).toBe(true);
+
+          // Validation Run rows and Artifact metadata are unchanged by cleanup.
+          expect(yield* readRawRuns()).toEqual(rawRunsBefore);
+          expect(yield* readRawArtifacts()).toEqual(rawArtifactsBefore);
+
+          // The unsupported Run stays rejected through both full read paths.
+          const runError = yield* fixture.validation.reads
+            .getRunById(unsupportedRunId)
+            .pipe(Effect.flip);
+          expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          const historyError = yield* fixture.validation.reads
+            .listRunsForCandidate(fixture.first.candidateId)
+            .pipe(Effect.flip);
+          expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+          // The retained Change's Run and metadata remain readable.
+          expect(
+            yield* fixture.validation.reads.getRunById(fixture.second.validationRunId),
+          ).toBeDefined();
+          expect(
+            (yield* fixture.validation.reads.listRunsForCandidate(fixture.second.candidateId))
+              .length,
+          ).toBe(1);
+          expect(
+            (yield* fixture.validation.reads.listArtifacts(fixture.second.validationRunId)).map(
+              (artifact) => artifact.ref,
+            ),
+          ).toEqual([`artifact:${fixture.second.validationRunId}/checks/check/two.txt`]);
+
+          const recorded = yield* fixture.changes.reads.getChangeById(fixture.first.changeId);
+          expect(recorded?.cleanup).toEqual({ state: "complete", blockingReason: null });
         }),
       ),
-    );
+    30_000,
+  );
 
-    it.effect.skipIf(process.getuid?.() === 0)(
-      "reports failure when Artifact Content removal cannot complete and succeeds after repair",
-      () =>
-        withArtifactLifecycleFixture((fixture) =>
-          Effect.gen(function* () {
-            const lifecycle = openArtifactLifecycle({
-              persistence: fixture.validation.artifacts,
-              artifactsRoot: fixture.artifactsRoot,
-            });
-            const runDirectory = join(fixture.artifactsRoot, fixture.first.validationRunId);
-
-            // A directory without write permission makes the removal fail deterministically.
-            chmodSync(runDirectory, 0o500);
-            expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: false });
-            chmodSync(runDirectory, 0o700);
-
-            expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
-            expect(existsSync(runDirectory)).toBe(false);
-            expect(
-              yield* fixture.validation.reads.listArtifacts(fixture.first.validationRunId),
-            ).toHaveLength(1);
-          }),
-        ),
-    );
-  });
-
-  describe("Artifact Content removal safety", () => {
-    it.effect(
-      "refuses to delete a Validation Run content directory outside the Artifact root",
-      () =>
-        Effect.gen(function* () {
-          const root = createTestWorkspace();
-          const artifactsRoot = join(root, "artifacts");
-          mkdirSync(artifactsRoot, { recursive: true });
-          const outside = join(artifactsRoot, "..", "outside");
-          mkdirSync(outside, { recursive: true });
-          const keptPath = join(outside, "keep.txt");
-          writeFileSync(keptPath, "preserve this file\n");
-
-          const lifecycle = openArtifactLifecycle({
-            persistence: {
-              listRunIdsForChange: () => Effect.succeed(["../outside"]),
-            },
-            artifactsRoot,
-          });
-
-          expect(yield* lifecycle.removeContent("change-1")).toEqual({ ok: false });
-          expect(existsSync(keptPath)).toBe(true);
-        }),
-    );
-  });
-
-  const withArtifactLifecycleFixture = <A, E>(
-    use: (fixture: {
-      readonly root: string;
-      readonly commonDirectory: string;
-      readonly artifactsRoot: string;
-      readonly changes: ChangeTestDependencies;
-      readonly validation: ChangeValidationTestDependencies;
-      readonly first: {
-        readonly changeId: string;
-        readonly candidateId: string;
-        readonly validationRunId: string;
-        readonly path: string;
-      };
-      readonly second: {
-        readonly changeId: string;
-        readonly candidateId: string;
-        readonly validationRunId: string;
-        readonly path: string;
-      };
-    }) => Effect.Effect<A, E, RepositorySql | FileSystem.FileSystem>,
-  ): Effect.Effect<A, E | RepositoryStorageError, FileSystem.FileSystem> =>
-    Effect.gen(function* () {
-      const root = yield* cloneInitializedTestRepository(candidateValidationRepoTemplate);
-      const commonDirectory = join(root, ".git");
-      const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
-      const repositoryLayer = repositorySqlLayer({
-        statePath: join(commonDirectory, "but-why", "state.sqlite"),
-        commonDirectory,
-      });
-      return yield* Effect.gen(function* () {
-        const capture = yield* openSqliteCandidateCapturePersistence();
-        const changes = yield* openSqliteChangeTestDependencies();
-        const validation = yield* openSqliteChangeValidationTestDependencies();
-
-        const createChangeWithRun = (branchRef: string, marker: string) =>
-          Effect.gen(function* () {
-            const captured = yield* capture.commitCapture({
-              repositoryCommonDirectory: commonDirectory,
-              branchRef,
-              baseRef: "refs/remotes/origin/main",
-              changeBaseSha: "target-sha",
-              headSha: `head-${marker}`,
-              now,
-            });
-            if (!captured.ok) throw new Error(captured.code);
-            const started = yield* validation.execution.startOrReuse({
-              candidateId: captured.candidateId,
-              headSha: `head-${marker}`,
-              policy,
-              now,
-            });
-            if (started.reused || "blocked" in started)
-              throw new Error("Expected a new Validation Run");
-            const path = join(started.validationRunId, "checks", "check", `${marker}.txt`);
-            mkdirSync(join(artifactsRoot, started.validationRunId, "checks", "check"), {
-              recursive: true,
-            });
-            writeFileSync(join(artifactsRoot, path), `content-${marker}\n`);
-            yield* validation.execution.recordCheckRound({
-              validationRunId: started.validationRunId,
-              producer: "check",
-              roundNumber: 1,
-              roundStatus: "passed",
-              artifactRecords: [
-                {
-                  ref: `artifact:${started.validationRunId}/checks/check/${marker}.txt`,
-                  validationRunId: started.validationRunId,
-                  phase: "checks",
-                  producer: "check",
-                  path,
-                  originalBytes: Buffer.byteLength(`content-${marker}\n`),
-                  storedBytes: Buffer.byteLength(`content-${marker}\n`),
-                  truncated: false,
-                },
-              ],
-              now,
-            });
-            return {
-              changeId: captured.changeId,
-              candidateId: captured.candidateId,
-              validationRunId: started.validationRunId,
-              path,
-            };
-          });
-
-        const first = yield* createChangeWithRun("refs/heads/feature-one", "one");
-        const second = yield* createChangeWithRun("refs/heads/feature-two", "two");
-        return yield* use({
-          root,
-          commonDirectory,
-          artifactsRoot,
-          changes,
-          validation,
-          first,
-          second,
+  it.effect("treats already-removed Artifact Content as success on retry", () =>
+    withArtifactLifecycleFixture((fixture) =>
+      Effect.gen(function* () {
+        const lifecycle = openArtifactLifecycleForTest({
+          persistence: fixture.validation.artifacts,
+          artifactsRoot: fixture.artifactsRoot,
         });
-      }).pipe(Effect.provide(repositoryLayer));
-    });
+
+        expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
+        expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(false);
+
+        expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
+        expect(existsSync(join(fixture.artifactsRoot, fixture.first.validationRunId))).toBe(false);
+        expect(existsSync(join(fixture.artifactsRoot, fixture.second.validationRunId))).toBe(true);
+      }),
+    ),
+  );
+
+  it.effect.skipIf(process.getuid?.() === 0)(
+    "reports failure when Artifact Content removal cannot complete and succeeds after repair",
+    () =>
+      withArtifactLifecycleFixture((fixture) =>
+        Effect.gen(function* () {
+          const lifecycle = openArtifactLifecycleForTest({
+            persistence: fixture.validation.artifacts,
+            artifactsRoot: fixture.artifactsRoot,
+          });
+          const runDirectory = join(fixture.artifactsRoot, fixture.first.validationRunId);
+
+          // A directory without write permission makes the removal fail deterministically.
+          chmodSync(runDirectory, 0o500);
+          expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: false });
+          chmodSync(runDirectory, 0o700);
+
+          expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
+          expect(existsSync(runDirectory)).toBe(false);
+          expect(
+            yield* fixture.validation.reads.listArtifacts(fixture.first.validationRunId),
+          ).toHaveLength(1);
+        }),
+      ),
+  );
 });
+
+describe("Artifact Content removal safety", () => {
+  it.effect("refuses to delete a Validation Run content directory outside the Artifact root", () =>
+    Effect.gen(function* () {
+      const root = createTestWorkspace();
+      const artifactsRoot = join(root, "artifacts");
+      mkdirSync(artifactsRoot, { recursive: true });
+      const outside = join(artifactsRoot, "..", "outside");
+      mkdirSync(outside, { recursive: true });
+      const keptPath = join(outside, "keep.txt");
+      writeFileSync(keptPath, "preserve this file\n");
+
+      const lifecycle = openArtifactLifecycleForTest({
+        persistence: {
+          listRunIdsForChange: () => Effect.succeed(["../outside"]),
+        },
+        artifactsRoot,
+      });
+
+      expect(yield* lifecycle.removeContent("change-1")).toEqual({ ok: false });
+      expect(existsSync(keptPath)).toBe(true);
+    }),
+  );
+});
+
+const withArtifactLifecycleFixture = <A, E>(
+  use: (fixture: {
+    readonly root: string;
+    readonly commonDirectory: string;
+    readonly artifactsRoot: string;
+    readonly changes: ChangeTestDependencies;
+    readonly validation: ChangeValidationTestDependencies;
+    readonly first: {
+      readonly changeId: string;
+      readonly candidateId: string;
+      readonly validationRunId: string;
+      readonly path: string;
+    };
+    readonly second: {
+      readonly changeId: string;
+      readonly candidateId: string;
+      readonly validationRunId: string;
+      readonly path: string;
+    };
+  }) => Effect.Effect<A, E, RepositorySql>,
+): Effect.Effect<A, E | RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const root = yield* cloneInitializedTestRepository(candidateValidationRepoTemplate);
+    const commonDirectory = join(root, ".git");
+    const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
+    const repositoryLayer = repositorySqlLayer({
+      statePath: join(commonDirectory, "but-why", "state.sqlite"),
+      commonDirectory,
+    });
+    return yield* Effect.gen(function* () {
+      const capture = yield* openSqliteCandidateCapturePersistence();
+      const changes = yield* openSqliteChangeTestDependencies();
+      const validation = yield* openSqliteChangeValidationTestDependencies();
+
+      const createChangeWithRun = (branchRef: string, marker: string) =>
+        Effect.gen(function* () {
+          const captured = yield* capture.commitCapture({
+            repositoryCommonDirectory: commonDirectory,
+            branchRef,
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "target-sha",
+            headSha: `head-${marker}`,
+            now,
+          });
+          if (!captured.ok) throw new Error(captured.code);
+          const started = yield* validation.execution.startOrReuse({
+            candidateId: captured.candidateId,
+            headSha: `head-${marker}`,
+            policy,
+            now,
+          });
+          if (started.reused || "blocked" in started)
+            throw new Error("Expected a new Validation Run");
+          const path = join(started.validationRunId, "checks", "check", `${marker}.txt`);
+          mkdirSync(join(artifactsRoot, started.validationRunId, "checks", "check"), {
+            recursive: true,
+          });
+          writeFileSync(join(artifactsRoot, path), `content-${marker}\n`);
+          yield* validation.execution.recordCheckRound({
+            validationRunId: started.validationRunId,
+            producer: "check",
+            roundNumber: 1,
+            roundStatus: "passed",
+            artifactRecords: [
+              {
+                ref: `artifact:${started.validationRunId}/checks/check/${marker}.txt`,
+                validationRunId: started.validationRunId,
+                phase: "checks",
+                producer: "check",
+                path,
+                originalBytes: Buffer.byteLength(`content-${marker}\n`),
+                storedBytes: Buffer.byteLength(`content-${marker}\n`),
+                truncated: false,
+              },
+            ],
+            now,
+          });
+          return {
+            changeId: captured.changeId,
+            candidateId: captured.candidateId,
+            validationRunId: started.validationRunId,
+            path,
+          };
+        });
+
+      const first = yield* createChangeWithRun("refs/heads/feature-one", "one");
+      const second = yield* createChangeWithRun("refs/heads/feature-two", "two");
+      return yield* use({
+        root,
+        commonDirectory,
+        artifactsRoot,
+        changes,
+        validation,
+        first,
+        second,
+      });
+    }).pipe(Effect.provide(repositoryLayer));
+  });
