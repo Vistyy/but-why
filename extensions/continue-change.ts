@@ -1315,8 +1315,15 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       if (persisted?.paused) {
-        pauseGeneration += 1;
         const reassessment = persisted.submissionReassessment;
+        if (reassessment?.state === "awaiting-restart" && !ctx.isIdle()) {
+          ctx.ui.notify(
+            "But Why cannot restart the reassessment while an agent run is active.",
+            "warning",
+          );
+          return;
+        }
+        pauseGeneration += 1;
         saveState({ ...persisted, paused: false, unchangedRestarts: 0 });
         if (reassessment?.state === "awaiting-restart") {
           startSubmissionReassessment(ctx, reassessment);

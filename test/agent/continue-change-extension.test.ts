@@ -347,6 +347,14 @@ describe("packaged Change Implement continuation extension", () => {
     expect(
       await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-abort" }),
     ).toMatchObject({ block: true });
+
+    harness.setIdle(false);
+    const messageCountBeforeBusyRestart = harness.sent.length;
+    await harness.runCommand("continue-change");
+    expect(harness.sent).toHaveLength(messageCountBeforeBusyRestart);
+    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
+
+    harness.setIdle(true);
     await harness.runCommand("continue-change");
     expect(harness.sent.at(-1)).toContain("required separate reassessment run");
 
