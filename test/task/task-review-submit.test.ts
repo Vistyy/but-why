@@ -470,7 +470,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       },
     });
     expect(observed?.prompt).toContain("Repository guidance");
-    expect(observed?.prompt).toContain("cannot remove, weaken, or override");
+    expect(observed?.prompt).toContain("remain controlling if the guidance conflicts");
     expect(JSON.parse(submitted.stdout)).toMatchObject({
       review: {
         policy: {

@@ -32,6 +32,7 @@ pnpx but-why --help
 
 Use `npx -y but-why --help` only when `pnpx` is unavailable.
 Resolve one command prefix before running But Why commands.
+Let `<but-why>` represent that prefix below.
 
 ## Install the Pi package
 
@@ -71,10 +72,10 @@ The package directory contains the references and Implementer instructions that 
 In the target repository, initialize But Why with a repository-specific uppercase Task prefix:
 
 ```bash
-by init --task-prefix BY
+<but-why> init --task-prefix BY
 ```
 
-`by init` creates `.but-why/config.json` and `.but-why/reviewers/`.
+The command creates `.but-why/config.json` and `.but-why/reviewers/`.
 It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so linked worktrees share them.
 
 But Why creates each disposable Snapshot Workspace in the Local Repository sibling worktree root under `<main-checkout-name>-worktrees/but-why/validation-runs/`.

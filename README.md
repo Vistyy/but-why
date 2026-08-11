@@ -8,4 +8,4 @@ A Change can link to an approved Task or remain taskless.
 
 But Why prepares Managed Worktrees, validates committed Candidates, and publishes eligible Changes through GitHub pull requests.
 
-Follow [Agent-Assisted Setup and Manual Change Workflow](docs/public/setup.md) to install and configure But Why.
+Follow [Set Up But Why](docs/public/setup.md) to install and configure But Why.

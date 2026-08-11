@@ -4,7 +4,8 @@ Resolve one But Why command prefix before you run a But Why command.
 Use `just by` in the But Why source repository.
 After But Why is published, use `pnpx but-why` or `npx -y but-why` from the published package.
 Do not use the published-package prefixes for an unreleased Candidate.
-Use the resolved prefix for every But Why command in the session.
+Let `<but-why>` represent the resolved prefix in packaged instructions.
+Use that prefix for every But Why command in the session.
 
 Every But Why command returns one compact JSON document on stdout.
 Decode the JSON before using result fields in a program.

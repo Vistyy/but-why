@@ -21,7 +21,9 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
-Treat the Task Context captured at Change Start as the accepted implementation intent.
+Treat the returned Task Context and approved Resolutions as the Change's Acceptance Context and accepted implementation intent.
+For a taskless Change, no Acceptance Context exists.
+In a fresh taskless Interactive Session, use the authorized outcome in the initial Implementer Prompt as current implementation direction without treating it as durable intent.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
 This step is complete when the Change, accepted intent, and Managed Worktree are known.
@@ -35,7 +37,7 @@ Before selecting or adding verification evidence, read [Task verification](task-
 Select proportionate evidence after the implementation shape is known.
 When multiple approaches remain compliant with accepted intent, select one.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
-Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
+Use `<but-why> change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
 The Choice names the selected approach.
 The Rationale explains why that approach was selected and its material trade-off.
 Do not record routine coding choices.
@@ -64,10 +66,10 @@ If implementation is blocked, complete this step by raising the blocker and wait
 
 ## Implementation Blockers
 
-Raise a blocker with `by change blocker raise <change-id> --file <path|->`.
+Raise a blocker with `<but-why> change blocker raise <change-id> --file <path|->`.
 The UTF-8 text report must state the unresolved issue, why continuing is unsafe, and the external decision or action required.
 The report is non-authoritative evidence and does not amend Acceptance Context.
-The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path|->`.
+The main operator inspects the blocker with `<but-why> change blocker list <change-id>` and records an approved Resolution with `<but-why> change blocker resolve <change-id> --file <path|->`.
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 For a Task-backed Change, the Resolution appends to the current Acceptance Context.
 For a taskless Change, the Resolution remains Change history and creates no Acceptance Context.

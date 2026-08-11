@@ -20,7 +20,7 @@ init:
     fi
     pnpm install --frozen-lockfile
 
-# Check Just formatting plus Biome formatting, lint rules, and the organizeImports assist without modifying files.
+# Run focused source-style checks without modifying files.
 check:
     @just --unstable --fmt --check
     @pnpm exec biome check .
@@ -30,7 +30,7 @@ fix:
     @just --unstable --fmt
     @pnpm exec biome check --write .
 
-# Run the blocking static checks, build, and maintained tests.
+# Run the only required repository-wide check workflow.
 quality:
     @exec ./scripts/run-quality-workload.sh
 
@@ -49,7 +49,7 @@ _quality-static:
     done
     exit "$status"
 
-# Validate links and anchors in tracked and non-ignored untracked Markdown files.
+# Run focused link and anchor checks for repository Markdown files.
 docs-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -60,18 +60,13 @@ docs-check:
     done
     pnpm --silent run docs-check -- "${markdown_files[@]}"
 
-# Check structural code rules.
+# Run focused structural TypeScript contract checks.
 ast-grep-check:
     @pnpm run ast-grep-check
 
-# Check dead code, dependencies, and named architecture seams.
+# Run focused Fallow dead-code, dependency, and architecture checks.
 fallow-check:
-    just coverage
-    just _fallow-check
-
-_fallow-check:
     just _fallow-static-check
-    just _fallow-coverage-check
 
 _fallow-static-check:
     #!/usr/bin/env bash
@@ -80,27 +75,24 @@ _fallow-static-check:
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
     exit "$status"
 
-_fallow-coverage-check:
-    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --report-only
-
-# Report actionable advisory code-health, duplication, and Effect findings.
+# Run optional advisory analysis after rerunning all tests with coverage.
 health:
     just coverage
     node scripts/run-health-report.mjs coverage/coverage-final.json
 
-# Lint the codebase.
+# Run focused Biome lint diagnostics.
 lint:
     pnpm run lint
 
-# Type-check the codebase.
+# Run focused TypeScript and Effect diagnostics.
 typecheck:
     @pnpm run typecheck
 
-# Run tests, forwarding any arguments.
+# Run selected tests, or all maintained tests when no selection is given.
 test *args:
     @./scripts/run-test-workload.sh test "$@"
 
-# Run tests with measured production coverage.
+# Run selected tests with coverage, or all maintained tests when no selection is given.
 coverage *args:
     @./scripts/run-test-workload.sh coverage "$@"
 
@@ -117,7 +109,7 @@ pack:
 format:
     pnpm run format
 
-# Check code and Just formatting.
+# Run focused code and Just formatting checks.
 format-check:
     just --unstable --fmt --check
     pnpm run format-check

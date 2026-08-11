@@ -2,6 +2,7 @@
 
 This reference is for a user or agent configuring one But Why repository.
 It answers which settings belong in tracked Repo Config, which settings belong in Global Config, and how validation uses them.
+Let `<but-why>` represent the command prefix resolved during setup.
 
 ## Config files
 
@@ -13,13 +14,10 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
-Task Submit reads Repo Config from the exact captured Review Base for Repository Preparation, copied local files, the Agent Environment, and Task Review policy.
-Its Agent Profile resolves from Repo Config, then Global Config, then the Global default Agent Profile.
-Its optional guidance file resolves from Repo Config before Global Config.
-The mandatory built-in Task Review instructions always apply.
-Change Submit reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, captures a Candidate, then reads the Candidate's tracked Repo Config for reviewer policy and Repo Agent Profiles.
-The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
-Global Config remains resolved from the configured user path.
+Task Submit reads Repo Config from the exact captured Review Base.
+Change Submit reads non-review policy from the exact fetched Change Base and reviewer policy and Repo Agent Profiles from the Candidate.
+The caller checkout's Repo Config does not supply submission policy.
+Global Config resolves from the configured user path.
 
 ## Repo Config
 
@@ -77,12 +75,7 @@ A complete example is:
 `snapshotWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
 `review` selects Task Review policy, Acceptance Review policy, and Specialists.
 `reviewers` supplies Specialist instruction files.
-Each configured Specialist instruction file must positively define exactly one concern.
-It must state the concern's applicable authority, review lenses, materiality, and concern-specific exclusions.
-It must not duplicate or override But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, or output contract.
 `agentProfiles` supplies Repo Agent Profiles.
-
-Change Implement sessions always load the packaged `continue-change` extension once.
 
 But Why detects Git facts at runtime.
 Repo Config does not define the default branch, publication remote, GitHub repository, or current head.
@@ -103,10 +96,10 @@ Change Submit runs it before Checks in the Snapshot Workspace.
 Retry it with:
 
 ```bash
-by change prepare <change-id>
+<but-why> change prepare <change-id>
 ```
 
-A Change Start or `by change prepare` failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
+A Change Start or Change Prepare failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
 A successful retry clears the current preparation failure.
 During Change Submit, a nonzero exit or timeout creates a Finding.
 An execution or Candidate-integrity failure during Change Submit is a Validation Tooling Failure.
@@ -150,7 +143,7 @@ Repo paths and Repo Agent Profile resources resolve from the exact captured Revi
 Global paths and Global Agent Profile resources resolve from the Global Config directory.
 A missing, empty, or unreadable selected file rejects Task Submission before a Task Review is created.
 
-The configured guidance supplements the mandatory built-in Task Review instructions and cannot remove or override them.
+The configured guidance supplements the mandatory built-in Task Review instructions, which remain controlling.
 Task Submission captures the resolved Agent Profile configuration, mandatory instructions, optional guidance content, and guidance source as immutable Review policy before reviewer execution.
 Later configuration changes do not alter a captured policy.
 
@@ -173,7 +166,8 @@ For a Task-backed Change, But Why supplies the exact immutable Acceptance Contex
 The Specialist uses it only to constrain Findings and required corrections.
 For a taskless Change, But Why supplies no Acceptance Context block or explanation of its absence.
 The same conditional behavior applies to initial and continuation Specialist prompts.
-Configured instructions define the concern, but cannot override these common boundaries.
+Each configured Specialist instruction file must positively define exactly one concern and state its applicable authority, review lenses, materiality, and concern-specific exclusions.
+But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, and output contract remain controlling.
 
 ## Agent Environment
 
@@ -192,7 +186,7 @@ The Agent Environment does not alter Repository Preparation or Checks.
 
 ## Global Config and Agent Profiles
 
-Global review settings
+### Global review settings
 
 Global Config may define Task Review, Acceptance Review, and Specialist settings:
 
@@ -223,14 +217,11 @@ Global Config may define Task Review, Acceptance Review, and Specialist settings
 `review.acceptance.agentProfile` selects the Global Acceptance Review profile.
 `review.acceptance.instructionsFile` selects Global Acceptance Review instructions relative to the Global Config directory.
 `review.specialists` is the ordered Global Specialist list.
-A Repo Config Specialist list replaces this list, and an empty Repo Config list disables inherited Specialists.
 `reviewers` maps Specialist names to definitions.
 Each Global definition requires `instructionsFile` relative to the Global Config directory and may select an Agent Profile.
-A Repo Config definition takes precedence for a Specialist with the same name.
 Each Agent Profile reference resolves only within its declared scope.
 A `repo` reference must be defined in Repo Config, and a `global` reference must be defined in Global Config.
 Global review settings may reference a Repo Config profile when that repository supplies the matching definition.
-Acceptance Review and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Global Config may define reusable profiles and role selections:
 
@@ -284,9 +275,10 @@ An explicit selection resolves only the declared scope.
 Acceptance Review and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
-Configured resource arrays are exact allowlists.
-An empty array disables that resource type.
+Configured resource arrays are exact allowlists for user-configured resources.
+An empty array disables that user-configured resource type.
 An omitted field preserves normal Pi behavior.
+Trusted host resources required by But Why remain active independently of these arrays.
 Acceptance Review and Specialist Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
 Global relative paths resolve from the Global Config directory.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
@@ -294,5 +286,3 @@ Supported absolute paths and Pi package sources may be used by Global Profiles.
 The old flat `agentModel` and `thinking` fields are invalid.
 Non-Pi runtimes and unknown configuration keys are invalid.
 No compatibility parser or automatic migration is provided.
-
-Change Implement sessions automatically load the packaged `continue-change` extension. Agent Profile extension settings continue to control only user-configured extensions.
