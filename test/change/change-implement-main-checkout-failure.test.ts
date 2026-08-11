@@ -65,6 +65,7 @@ describe("Change Implement canonical main checkout failures", () => {
 
         try {
           const result = runTestProcessOrThrowResult(
+            "just",
             ["by", "change", "implement", change.change.id],
             linkedCheckout,
           );
@@ -95,8 +96,8 @@ describe("Change Implement canonical main checkout failures", () => {
   );
 });
 
-const runTestProcessOrThrowResult = (args: readonly string[], cwd: string) => {
-  const result = runTestProcess("just", args, {
+const runTestProcessOrThrowResult = (command: string, args: readonly string[], cwd: string) => {
+  const result = runTestProcess(command, args, {
     cwd,
     timeout: mainCheckoutFailureProcessTimeoutMs,
   });

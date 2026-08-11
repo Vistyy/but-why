@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": [
     ".remarkrc.mjs",
+    "*.mjs",
     "extensions/**/*.ts",
     "scripts/**/*.mjs",
     "scripts/**/*.ts",

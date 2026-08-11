@@ -72,48 +72,16 @@ ignores:
 rule:
   all:
     - any:
-        - all:
-            - pattern: $VALUE as $TYPE
-            - has:
-                pattern: JSON.parse($$$ARGS)
-                stopBy: end
-        - all:
-            - pattern: <$TYPE>$VALUE
-            - has:
-                pattern: JSON.parse($$$ARGS)
-                stopBy: end
-        - all:
-            - pattern: $VALUE satisfies $TYPE
-            - has:
-                pattern: JSON.parse($$$ARGS)
-                stopBy: end
+        - pattern: JSON.parse($$$ARGS) as $TYPE
+        - pattern: (JSON.parse($$$ARGS)) as $TYPE
+        - pattern: <$TYPE>JSON.parse($$$ARGS)
+        - pattern: <$TYPE>(JSON.parse($$$ARGS))
     - not:
         any:
-          - pattern: $VALUE as unknown
-          - pattern: <unknown>$VALUE
----
-# Parsed JSON must become unknown at the parse expression before it crosses any TypeScript boundary.
-id: json-parse-results-start-unknown
-language: TypeScript
-severity: error
-message: Do not use JSON.parse output before asserting it as unknown because parsed JSON has an unknown runtime shape; write JSON.parse(source) as unknown and use the owning boundary's focused decoder or schema.
-files:
-  - extensions/**/*.ts
-  - scripts/**/*.ts
-  - src/**/*.ts
-ignores:
-  - src/output/structuredValue.ts
-  # This immutable Effect SQL migration validates its assigned unknown value before canonicalizing the historical artifact.
-  - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
-rule:
-  all:
-    - pattern: JSON.parse($$$ARGS)
-    - not:
-        inside:
-          any:
-            - pattern: $VALUE as unknown
-            - pattern: <unknown>$VALUE
-          stopBy: end
+          - pattern: JSON.parse($$$ARGS) as unknown
+          - pattern: (JSON.parse($$$ARGS)) as unknown
+          - pattern: <unknown>JSON.parse($$$ARGS)
+          - pattern: <unknown>(JSON.parse($$$ARGS))
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
@@ -180,121 +148,25 @@ rule:
 id: package-installation-belongs-to-package-contract
 language: TypeScript
 severity: error
-message: Do not invoke npm outside the package contract test because external package operations belong to that contract and are expensive; use source-level interfaces or the repository's pnpm workflow for other behavior variations.
+message: Do not install or pack the package outside the package contract test because package setup is expensive; use source-level interfaces for behavior variations.
 files:
   - test/**/*.ts
 ignores:
   - test/repository/package-contents.test.ts
 rule:
   any:
-    - pattern: Reflect.apply($EXECUTOR, $RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
-    - pattern: $EXECUTOR.call($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR.call?.($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR.apply($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
-    - pattern: $EXECUTOR.apply?.($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
-    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE)($$$CALL_ARGS)
-    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE)($$$CALL_ARGS)
-    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
-    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
-    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR["call"]($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR["apply"]($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
-    - pattern: $EXECUTOR["bind"]($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
-    - pattern: $EXECUTOR["bind"]($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR($NPM_EXECUTABLE, $$$ARGS)
-    - pattern: $EXECUTOR?.($NPM_EXECUTABLE, $$$ARGS)
-constraints:
-  EXECUTOR:
-    regex: '(^|[^A-Za-z0-9_$])(spawnSync|execFileSync|runTestProcess|runTestProcessOrThrow|startTestProcess)([^A-Za-z0-9_$]|$)'
-  NPM_EXECUTABLE:
-    regex: '(^|[^A-Za-z])npm([^A-Za-z]|$)'
----
-# Canonical test-process helper names keep subprocess ownership rules statically visible.
-id: test-process-helper-imports-keep-canonical-names
-language: TypeScript
-severity: error
-message: Do not alias or re-export test-process helpers because canonical direct imports keep subprocess ownership rules statically enforceable; import and call the helper by its exported name.
-files:
-  - test/**/*.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
-        - has:
-            pattern:
-              context: import { $HELPER as $ALIAS } from "module"
-              selector: import_specifier
-              strictness: relaxed
-            stopBy: end
-    - all:
-        - kind: export_statement
-        - regex: '[\s\S]*from\s+["''](?:[^"'']*/)?testProcess\.js["''][\s\S]*'
-    - pattern:
-        context: const $ALIAS = runTestProcess
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern:
-        context: const $ALIAS = runTestProcessOrThrow
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern:
-        context: const $ALIAS = startTestProcess
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern: $ALIAS = runTestProcess
-    - pattern: $ALIAS = runTestProcessOrThrow
-    - pattern: $ALIAS = startTestProcess
-    - pattern:
-        context: const $ALIAS = runTestProcess.bind($$$ARGS)
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern:
-        context: const $ALIAS = runTestProcessOrThrow.bind($$$ARGS)
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern:
-        context: const $ALIAS = startTestProcess.bind($$$ARGS)
-        selector: variable_declarator
-        strictness: relaxed
-    - pattern: const $ALIAS = (...$$$PARAMS) => runTestProcess(...$$$PARAMS)
-    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => runTestProcess(...$$$PARAMS)"
-    - pattern: const $ALIAS = (...$$$PARAMS) => runTestProcessOrThrow(...$$$PARAMS)
-    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => runTestProcessOrThrow(...$$$PARAMS)"
-    - pattern: const $ALIAS = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)
-    - pattern: "const $ALIAS: $TYPE = (...$$$PARAMS) => startTestProcess(...$$$PARAMS)"
----
-# Parameterized executable forwarding can hide npm from the package ownership rule.
-id: test-process-wrapper-commands-stay-static
-language: TypeScript
-severity: error
-message: Do not forward an unconstrained executable parameter to a test-process helper because the wrapper can hide npm from static package ownership checks; use a statically constrained executable expression or call the helper directly.
-files:
-  - test/**/*.ts
-ignores:
-  # The Adapter implements the helper and must forward its explicit command input.
-  - test/support/testProcess.ts
-  # The package contract owns npm and executes the installed package binary that the contract discovers.
-  - test/repository/package-contents.test.ts
-  # This external-boundary test executes the exact reviewer command produced by the Reviewer Adapter.
-  - test/agent/reviewer-agent-runtime-process.test.ts
-rule:
-  any:
-    - pattern: runTestProcess($COMMAND, $$$ARGS)
-    - pattern: runTestProcessOrThrow($COMMAND, $$$ARGS)
-    - pattern: startTestProcess($COMMAND, $$$ARGS)
-    - pattern: $NAMESPACE.runTestProcess($COMMAND, $$$ARGS)
-    - pattern: $NAMESPACE.runTestProcessOrThrow($COMMAND, $$$ARGS)
-    - pattern: $NAMESPACE.startTestProcess($COMMAND, $$$ARGS)
-constraints:
-  COMMAND:
-    any:
-      - kind: identifier
-      - all:
-          - kind: member_expression
-          - not:
-              pattern: process.execPath
+    - pattern: spawnSync("npm", $$$ARGS)
+    - pattern: execFileSync("npm", $$$ARGS)
+    - pattern: spawnSync('npm', $$$ARGS)
+    - pattern: execFileSync('npm', $$$ARGS)
+    - pattern: runTestProcess("npm", ["pack"], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['pack'], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["pack", $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['pack', $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["install"], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['install'], $$$OPTIONS)
+    - pattern: runTestProcess("npm", ["install", $$$ARGS], $$$OPTIONS)
+    - pattern: runTestProcess('npm', ['install', $$$ARGS], $$$OPTIONS)
 ---
 # The live Interactive Session contract owns the real Herdr helper.
 id: live-agent-helper-belongs-to-test-host

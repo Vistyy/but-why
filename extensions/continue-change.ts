@@ -811,10 +811,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     let snapshotValue: unknown;
     let blockerValue: unknown;
     try {
-      const parsedSnapshot: unknown = JSON.parse(changeResult.stdout) as unknown;
-      const parsedBlocker: unknown = JSON.parse(blockerResult.stdout) as unknown;
-      snapshotValue = parsedSnapshot;
-      blockerValue = parsedBlocker;
+      snapshotValue = JSON.parse(changeResult.stdout);
+      blockerValue = JSON.parse(blockerResult.stdout);
     } catch {
       return { ok: false, transient: false, message: "But Why inspection returned malformed JSON" };
     }
@@ -877,8 +875,7 @@ export default function continueChange(pi: ExtensionAPI): void {
 
     let snapshotValue: unknown;
     try {
-      const parsedSnapshot: unknown = JSON.parse(changeResult.stdout) as unknown;
-      snapshotValue = parsedSnapshot;
+      snapshotValue = JSON.parse(changeResult.stdout);
     } catch {
       return { ok: false, message: "But Why Change inspection returned malformed JSON" };
     }
@@ -907,8 +904,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     let blockerValue: unknown;
     try {
-      const parsedBlocker: unknown = JSON.parse(blockerResult.stdout) as unknown;
-      blockerValue = parsedBlocker;
+      blockerValue = JSON.parse(blockerResult.stdout);
     } catch {
       return { ok: false, message: "But Why blocker inspection returned malformed JSON" };
     }

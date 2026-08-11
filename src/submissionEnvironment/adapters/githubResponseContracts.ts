@@ -111,8 +111,7 @@ export type PublicationRemoteBranchQueryResponse = Schema.Schema.Type<
 
 const parseJson = (source: string): unknown => {
   try {
-    const parsed: unknown = JSON.parse(source) as unknown;
-    return parsed;
+    return JSON.parse(source);
   } catch {
     return undefined;
   }
