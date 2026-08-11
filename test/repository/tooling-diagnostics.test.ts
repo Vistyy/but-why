@@ -169,6 +169,10 @@ describe("repository-authored tooling diagnostics", () => {
       'const result = runTestProcess!("npm", ["install"], { cwd });',
     ],
     [
+      "package-installation-belongs-to-package-contract",
+      'const result = runTestProcess.apply(undefined, ["npm", ["install"], { cwd }]);',
+    ],
+    [
       "test-process-helper-imports-keep-canonical-names",
       'import { "runTestProcess" as execute } from "../support/testProcess.js";\nexecute("npm", ["i", "package"], { cwd });',
     ],

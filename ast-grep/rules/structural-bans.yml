@@ -164,6 +164,20 @@ ignores:
   - test/repository/package-contents.test.ts
 rule:
   any:
+    - pattern: $EXECUTOR.call($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $EXECUTOR.call?.($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $EXECUTOR.apply($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
+    - pattern: $EXECUTOR.apply?.($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
+    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE)($$$CALL_ARGS)
+    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE)($$$CALL_ARGS)
+    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
+    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
+    - pattern: $EXECUTOR.bind($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $EXECUTOR.bind?.($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $EXECUTOR["call"]($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
+    - pattern: $EXECUTOR["apply"]($RECEIVER, [$NPM_EXECUTABLE, $$$ARGS])
+    - pattern: $EXECUTOR["bind"]($RECEIVER, $NPM_EXECUTABLE, $$$BOUND_ARGS)($$$CALL_ARGS)
+    - pattern: $EXECUTOR["bind"]($RECEIVER, $NPM_EXECUTABLE, $$$ARGS)
     - pattern: $EXECUTOR($NPM_EXECUTABLE, $$$ARGS)
     - pattern: $EXECUTOR?.($NPM_EXECUTABLE, $$$ARGS)
 constraints:

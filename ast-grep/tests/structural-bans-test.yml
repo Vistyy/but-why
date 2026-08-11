@@ -123,6 +123,10 @@ invalid:
   - (runTestProcess)("npm", ["install"], { cwd })
   - runTestProcess!("npm", ["install"], { cwd })
   - runTestProcess?.("npm", ["install"], { cwd })
+  - runTestProcess.call(undefined, "npm", ["install"], { cwd })
+  - runTestProcess.apply(undefined, ["npm", ["install"], { cwd }])
+  - runTestProcess.bind(undefined, "npm")(["install"], { cwd })
+  - runTestProcess["call"](undefined, "npm", ["install"], { cwd })
 ---
 id: test-process-helper-imports-keep-canonical-names
 valid:
