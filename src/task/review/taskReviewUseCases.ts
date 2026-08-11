@@ -24,7 +24,7 @@ import {
   type TaskReviewToolingFailure,
   taskReviewInstructions,
 } from "./taskReview.js";
-import { readCanonicalMainReviewBase } from "./taskReviewGit.js";
+import { readCanonicalMainReviewBase, verifyRecordedTaskReviewBase } from "./taskReviewGit.js";
 import type { AdmitTaskReviewResult, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
@@ -289,6 +289,18 @@ export const abandonTaskReview = (
     const review = yield* input.persistence.getById(reviewId);
     if (review === undefined) return { ok: false, code: "task_review_not_found" } as const;
     if (review.state !== "running") return { ok: false, code: "task_review_not_active" } as const;
+    const base = verifyRecordedTaskReviewBase(input.mainCheckoutRoot, {
+      ref: review.baseRef,
+      commit: review.baseCommit,
+    });
+    if (!base.ok) {
+      return {
+        ok: false,
+        code: "task_review_cleanup_failed",
+        review,
+        message: base.message,
+      } as const;
+    }
     const cleanup = yield* cleanupExactDisposableWorkspace(input.mainCheckoutRoot, {
       workspaceId: review.id,
       expectedCommitSha: review.baseCommit,

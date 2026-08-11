@@ -10,6 +10,10 @@ import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskRevi
 import { publicTaskId } from "../../src/task/taskId.js";
 import { taskReviewInstructions } from "../../src/task/review/taskReview.js";
 import {
+  readCanonicalMainReviewBase,
+  verifyRecordedTaskReviewBase,
+} from "../../src/task/review/taskReviewGit.js";
+import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runByInProcessEffect,
@@ -25,6 +29,33 @@ const passingReviewer: ReviewerAgentRuntime<ReviewerOutput> = {
       stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
     }),
 };
+
+it("verifies the recorded Task Review Base without requiring its branch tip to remain fixed", () => {
+  const root = createGitRepo();
+  expect(runTestProcess("git", ["config", "user.name", "But Why Test"], { cwd: root }).status).toBe(
+    0,
+  );
+  expect(
+    runTestProcess("git", ["config", "user.email", "but-why@example.test"], { cwd: root }).status,
+  ).toBe(0);
+  expect(runTestProcess("git", ["branch", "-M", "main"], { cwd: root }).status).toBe(0);
+  writeFileSync(join(root, "initial.txt"), "initial\n");
+  expect(runTestProcess("git", ["add", "initial.txt"], { cwd: root }).status).toBe(0);
+  expect(runTestProcess("git", ["commit", "-m", "Initial"], { cwd: root }).status).toBe(0);
+  const base = readCanonicalMainReviewBase(root);
+  expect(base.ok).toBe(true);
+  if (!base.ok) return;
+  writeFileSync(join(root, "advance.txt"), "advance\n");
+  expect(runTestProcess("git", ["add", "advance.txt"], { cwd: root }).status).toBe(0);
+  expect(runTestProcess("git", ["commit", "-m", "Advance main"], { cwd: root }).status).toBe(0);
+  expect(verifyRecordedTaskReviewBase(root, base.base)).toEqual({ ok: true });
+  expect(
+    verifyRecordedTaskReviewBase(root, { ...base.base, ref: "refs/heads/not-main" }),
+  ).toMatchObject({ ok: false, message: expect.stringContaining("ref") });
+  expect(
+    verifyRecordedTaskReviewBase(root, { ...base.base, commit: "f".repeat(40) }),
+  ).toMatchObject({ ok: false, message: expect.stringContaining("commit") });
+});
 
 it.effect("rejects a missing required default Agent Profile before Task Review admission", () =>
   Effect.gen(function* () {
