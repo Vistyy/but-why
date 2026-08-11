@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as Migrator from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -8,62 +7,14 @@ import { describe } from "vitest";
 
 import { isTaskPrefix } from "../../src/contracts/taskPrefix.js";
 import { initializeRepositoryRuntime } from "../../src/repositoryRuntime/repositoryContext.js";
-import { baselineMigration } from "../../src/sqlite/migrations/0001_baseline.js";
-import { reviewerSessionsMigration } from "../../src/sqlite/migrations/0002_reviewer_sessions.js";
-import { implementationDecisionsMigration } from "../../src/sqlite/migrations/0003_implementation_decisions.js";
-import { implementationBlockersMigration } from "../../src/sqlite/migrations/0004_implementation_blockers.js";
-import { acceptanceContextVersionsMigration } from "../../src/sqlite/migrations/0005_acceptance_context_versions.js";
-import { reconcileImplementationBlockerStorageMigration } from "../../src/sqlite/migrations/0006_reconcile_implementation_blocker_storage.js";
-import { specialistReviewerSessionsMigration } from "../../src/sqlite/migrations/0007_reviewer_sessions_per_producer.js";
-import { recoverPublishedRemoteBranchCleanupMigration } from "../../src/sqlite/migrations/0008_recover_published_remote_branch_cleanup.js";
-import { activeValidationRunsMigration } from "../../src/sqlite/migrations/0009_active_validation_runs.js";
-import { validationWorkspacePathsMigration } from "../../src/sqlite/migrations/0010_validation_workspace_paths.js";
-import { candidatePublicationsMigration } from "../../src/sqlite/migrations/0011_candidate_publications.js";
-import { structuredImplementationDecisionsMigration } from "../../src/sqlite/migrations/0012_structured_implementation_decisions.js";
-import { removeNoChangeCompletionMigration } from "../../src/sqlite/migrations/0013_remove_no_change_completion.js";
-import { removeChangeReadinessMigration } from "../../src/sqlite/migrations/0014_remove_change_readiness.js";
-import { removeAcceptanceContextVersionsMigration } from "../../src/sqlite/migrations/0015_remove_acceptance_context_versions.js";
-import { removeImplementationDecisionContentMigration } from "../../src/sqlite/migrations/0016_remove_implementation_decision_content.js";
-import { validationRunBlockerIdentityMigration } from "../../src/sqlite/migrations/0017_validation_run_blocker_identity.js";
-import { removeFindingSeverityMigration } from "../../src/sqlite/migrations/0018_remove_finding_severity.js";
-import { simplifyReviewerSessionsMigration } from "../../src/sqlite/migrations/0019_simplify_reviewer_sessions.js";
-import { removeCandidatePublicationsMigration } from "../../src/sqlite/migrations/0020_remove_candidate_publications.js";
-import { reviewerTranscriptsMigration } from "../../src/sqlite/migrations/0021_reviewer_transcripts.js";
-import { changeCancelReasonMigration } from "../../src/sqlite/migrations/0022_change_cancel_reason.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
+import { migrateTestRepositoryThrough } from "../support/repositoryMigrations.js";
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };
-
-const migrateThrough22 = Migrator.make({})({
-  loader: Migrator.fromRecord({
-    "0001_baseline": baselineMigration,
-    "0002_reviewer_sessions": reviewerSessionsMigration,
-    "0003_implementation_decisions": implementationDecisionsMigration,
-    "0004_implementation_blockers": implementationBlockersMigration,
-    "0005_acceptance_context_versions": acceptanceContextVersionsMigration,
-    "0006_reconcile_implementation_blocker_storage": reconcileImplementationBlockerStorageMigration,
-    "0007_reviewer_sessions_per_producer": specialistReviewerSessionsMigration,
-    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanupMigration,
-    "0009_active_validation_runs": activeValidationRunsMigration,
-    "0010_validation_workspace_paths": validationWorkspacePathsMigration,
-    "0011_candidate_publications": candidatePublicationsMigration,
-    "0012_structured_implementation_decisions": structuredImplementationDecisionsMigration,
-    "0013_remove_no_change_completion": removeNoChangeCompletionMigration,
-    "0014_remove_change_readiness": removeChangeReadinessMigration,
-    "0015_remove_acceptance_context_versions": removeAcceptanceContextVersionsMigration,
-    "0016_remove_implementation_decision_content": removeImplementationDecisionContentMigration,
-    "0017_validation_run_blocker_identity": validationRunBlockerIdentityMigration,
-    "0018_remove_finding_severity": removeFindingSeverityMigration,
-    "0019_simplify_reviewer_sessions": simplifyReviewerSessionsMigration,
-    "0020_remove_candidate_publications": removeCandidatePublicationsMigration,
-    "0021_reviewer_transcripts": reviewerTranscriptsMigration,
-    "0022_change_cancel_reason": changeCancelReasonMigration,
-  }),
-});
 
 describe("by init edge cases", () => {
   it.each([
@@ -161,7 +112,7 @@ describe("by init edge cases", () => {
       yield* Effect.scoped(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
-          yield* migrateThrough22;
+          yield* migrateTestRepositoryThrough(22);
           yield* sql`INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at) VALUES ('BY-1', 1, 'Restored Task', 'Retired state.', 'implementing', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z')`;
         }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
       );
