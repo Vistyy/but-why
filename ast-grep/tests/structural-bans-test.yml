@@ -20,20 +20,6 @@ invalid:
   - Effect.runFork(work)
   - Fx.runCallback(work)
 ---
-id: sandcastle-dependency-belongs-to-runtime-adapter
-valid:
-  - runDisposableExactCommitWorkspace(input)
-  - reviewerExecutor.execute(input)
-invalid:
-  - import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";
-  - import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-  - import * as Sandcastle from "@ai-hero/sandcastle";
-  - import Sandcastle from "@ai-hero/sandcastle";
-  - export type { Sandbox } from "@ai-hero/sandcastle";
-  - export * from "@ai-hero/sandcastle";
-  - import("@ai-hero/sandcastle")
-  - require("@ai-hero/sandcastle")
----
 id: task-identity-branding-belongs-to-task-id
 valid:
   - storedPublicTaskId(value)

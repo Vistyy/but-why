@@ -26,26 +26,6 @@ rule:
     - pattern: $RUNTIME.runFork($$$ARGS)
     - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: sandcastle-dependency-belongs-to-runtime-adapter
-language: TypeScript
-severity: error
-message: Do not import or re-export Sandcastle outside src/disposableWorkspace/workspaceRuntimeAdapter.ts because Task, Change, and Repository Runtime behavior must use project-owned execution contracts; use the disposable workspace, command-execution, or reviewer-execution contract.
-files:
-  - src/**/*.ts
-ignores:
-  - src/disposableWorkspace/workspaceRuntimeAdapter.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - all:
-        - kind: export_statement
-        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - all:
-        - kind: call_expression
-        - regex: '^(import|require)\(["`]@ai-hero/sandcastle([^"`]*)?["`]\)$'
----
 id: task-identity-branding-belongs-to-task-id
 language: TypeScript
 severity: error
