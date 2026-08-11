@@ -579,7 +579,10 @@ describe("Change cancellation", () => {
         getPullRequest: () => {
           events.push("read-pr");
           reads += 1;
-          return reads === 1 ? pullRequest("open", false) : pullRequest("closed", false);
+          return {
+            ok: true as const,
+            pullRequest: reads === 1 ? pullRequest("open", false) : pullRequest("closed", false),
+          };
         },
       },
     };
@@ -823,7 +826,7 @@ const cancellationDependencies = (input: {
     github: {
       getPullRequest: () => {
         input.events.push("read-pr");
-        return input.pullRequest;
+        return { ok: true, pullRequest: input.pullRequest };
       },
       closePullRequest: (closeInput) => {
         input.events.push("close-pr");

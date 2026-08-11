@@ -652,7 +652,7 @@ const cancellationDependencies = (input: {
     },
     changes,
     github: {
-      getPullRequest: () => pullRequest("closed", false),
+      getPullRequest: () => ({ ok: true, pullRequest: pullRequest("closed", false) }),
       closePullRequest: () => ({ ok: true, pullRequest: pullRequest("closed", false) }),
     },
     validation: { getActiveForChange: () => Effect.succeed(undefined) },

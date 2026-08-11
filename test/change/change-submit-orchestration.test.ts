@@ -1600,13 +1600,15 @@ const pullRequestGateway = (
 ): GitHubPullRequestGateway => ({
   getPullRequest: () => {
     events.push("observe_pull_request");
-    if (input.observedPullRequest !== undefined) return input.observedPullRequest;
+    if (input.observedPullRequest !== undefined) {
+      return { ok: true, pullRequest: input.observedPullRequest };
+    }
     const publication = input.change.publication;
     if (publication === null || publication === undefined || publication.pullRequest === null) {
-      return undefined;
+      return unavailablePullRequestRead;
     }
     const observation = observations.shift() ?? input.pullRequestObservation ?? "exact_open";
-    if (observation === "unavailable") return undefined;
+    if (observation === "unavailable") return unavailablePullRequestRead;
     const base = {
       number: publication.pullRequest.number,
       url: publication.pullRequest.url,
@@ -1614,33 +1616,25 @@ const pullRequestGateway = (
       baseBranch: publication.target.baseBranch,
       headBranch: publication.headBranch,
     };
-    if (observation === "exact_closed_unmerged") {
-      return {
-        ...base,
-        state: "closed" as const,
-        merged: false,
-        headSha: publication.expectedHeadSha,
-      };
-    }
-    if (observation === "exact_merged") {
-      return {
-        ...base,
-        state: "closed" as const,
-        merged: true,
-        headSha: publication.expectedHeadSha,
-      };
-    }
     return {
-      ...base,
-      state: "open" as const,
-      merged: false,
-      headSha: publication.expectedHeadSha,
+      ok: true,
+      pullRequest: {
+        ...base,
+        state: observation === "exact_open" ? ("open" as const) : ("closed" as const),
+        merged: observation === "exact_merged",
+        headSha: publication.expectedHeadSha,
+      },
     };
   },
-  findPullRequests: () => [],
+  findPullRequests: () => ({ ok: true, pullRequests: [] }),
   createPullRequest: () => ({ ok: false, code: "remote_rejected" }),
   updatePullRequest: () => ({ ok: false, code: "remote_rejected" }),
 });
+
+const unavailablePullRequestRead = {
+  ok: false,
+  evidence: { operation: "remote_lookup", classification: "unavailable" },
+} as const;
 
 const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   id: "change-1",

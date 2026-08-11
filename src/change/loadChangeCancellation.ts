@@ -17,7 +17,7 @@ import {
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import {
-  githubChangeCleanupRemote,
+  localGitHubChangeCleanupRemote,
   localGitHubPullRequestGateway,
 } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../task/repoTaskIds.js";
@@ -84,7 +84,9 @@ export const withCancellation = <A, R>(
             github,
             cleanupTerminal: openTerminalCleanup({
               persistence: terminalCleanup,
-              cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              cleanup: cleanupChangeResourcesWithRemote(
+                localGitHubChangeCleanupRemote({ cwd: context.context.root }),
+              ),
               indexTranscripts: openReviewerTranscriptIndex({
                 persistence: reviewerTranscripts,
               }),

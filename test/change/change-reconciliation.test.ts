@@ -15,6 +15,8 @@ import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { noOpTerminalCleanupDependencies } from "../support/terminalCleanup.js";
 
+const pullRequestRead = <T>(pullRequest: T) => ({ ok: true as const, pullRequest });
+
 const now = "2026-07-24T10:00:00.000Z";
 
 const installPublicationIdentity = (changeId: string) =>
@@ -85,23 +87,17 @@ describe("by change reconcile", () => {
               completeMergedChange: changes.delivery.completeMergedChange,
             },
             github: {
-              findPullRequests: () => [],
-              getPullRequest: () => ({
-                number: 42,
-                url: "https://github.com/acme/widgets/pull/42",
-                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-                state: "closed",
-                merged: false,
-                baseBranch: publicationTarget.baseBranch,
-                headBranch: "change-1",
-                headSha: "head",
-              }),
-              createPullRequest: () => {
-                throw new Error("Reconciliation must not create a pull request");
-              },
-              updatePullRequest: () => {
-                throw new Error("Reconciliation must not update a pull request");
-              },
+              getPullRequest: () =>
+                pullRequestRead({
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                  state: "closed",
+                  merged: false,
+                  baseBranch: publicationTarget.baseBranch,
+                  headBranch: "change-1",
+                  headSha: "head",
+                }),
             },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
@@ -210,14 +206,7 @@ describe("by change reconcile", () => {
                 completeMergedChange: changes.delivery.completeMergedChange,
               },
               github: {
-                findPullRequests: () => [],
-                getPullRequest: () => pullRequest,
-                createPullRequest: () => {
-                  throw new Error("Reconciliation must not create a pull request");
-                },
-                updatePullRequest: () => {
-                  throw new Error("Reconciliation must not update a pull request");
-                },
+                getPullRequest: () => pullRequestRead(pullRequest),
               },
               cleanupTerminal: openTerminalCleanup({
                 ...noOpTerminalCleanupDependencies,
@@ -313,23 +302,17 @@ describe("by change reconcile", () => {
             completeMergedChange: changes.delivery.completeMergedChange,
           },
           github: {
-            findPullRequests: () => [],
-            getPullRequest: () => ({
-              number: 42,
-              url: "https://github.com/acme/widgets/pull/42",
-              repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-              state: "closed",
-              merged: true,
-              baseBranch: publicationTarget.baseBranch,
-              headBranch: "but-why/change-1",
-              headSha: mergedHead,
-            }),
-            createPullRequest: () => {
-              throw new Error("Reconciliation must not create a pull request");
-            },
-            updatePullRequest: () => {
-              throw new Error("Reconciliation must not update a pull request");
-            },
+            getPullRequest: () =>
+              pullRequestRead({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                state: "closed",
+                merged: true,
+                baseBranch: publicationTarget.baseBranch,
+                headBranch: "but-why/change-1",
+                headSha: mergedHead,
+              }),
           },
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
@@ -443,23 +426,17 @@ describe("by change reconcile", () => {
               completeMergedChange: changes.delivery.completeMergedChange,
             },
             github: {
-              findPullRequests: () => [],
-              getPullRequest: () => ({
-                number: 42,
-                url: "https://github.com/acme/widgets/pull/42",
-                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-                state: "closed",
-                merged: true,
-                baseBranch: publicationTarget.baseBranch,
-                headBranch: "but-why/change-taskless",
-                headSha: "head",
-              }),
-              createPullRequest: () => {
-                throw new Error("Reconciliation must not create a pull request");
-              },
-              updatePullRequest: () => {
-                throw new Error("Reconciliation must not update a pull request");
-              },
+              getPullRequest: () =>
+                pullRequestRead({
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                  state: "closed",
+                  merged: true,
+                  baseBranch: publicationTarget.baseBranch,
+                  headBranch: "but-why/change-taskless",
+                  headSha: "head",
+                }),
             },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
@@ -561,23 +538,17 @@ describe("by change reconcile", () => {
               completeMergedChange: changes.delivery.completeMergedChange,
             },
             github: {
-              findPullRequests: () => [],
-              getPullRequest: () => ({
-                number: 42,
-                url: "https://github.com/acme/widgets/pull/42",
-                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-                state: "closed",
-                merged: true,
-                baseBranch: publicationTarget.baseBranch,
-                headBranch: "but-why/change-blocked-merged",
-                headSha: "head",
-              }),
-              createPullRequest: () => {
-                throw new Error("Reconciliation must not create a pull request");
-              },
-              updatePullRequest: () => {
-                throw new Error("Reconciliation must not update a pull request");
-              },
+              getPullRequest: () =>
+                pullRequestRead({
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                  state: "closed",
+                  merged: true,
+                  baseBranch: publicationTarget.baseBranch,
+                  headBranch: "but-why/change-blocked-merged",
+                  headSha: "head",
+                }),
             },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
@@ -686,10 +657,9 @@ describe("by change reconcile", () => {
           const reconciliation = openChangeReconciliation({
             persistence,
             github: {
-              findPullRequests: () => [],
               getPullRequest: () => {
                 pullRequestObservations += 1;
-                return {
+                return pullRequestRead({
                   number: 42,
                   url: "https://github.com/acme/widgets/pull/42",
                   repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
@@ -698,13 +668,7 @@ describe("by change reconcile", () => {
                   baseBranch: publicationTarget.baseBranch,
                   headBranch: "but-why/change-single-observation",
                   headSha: "head",
-                };
-              },
-              createPullRequest: () => {
-                throw new Error("Reconciliation must not create a pull request");
-              },
-              updatePullRequest: () => {
-                throw new Error("Reconciliation must not update a pull request");
+                });
               },
             },
             cleanupTerminal: openTerminalCleanup({

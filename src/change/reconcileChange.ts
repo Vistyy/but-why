@@ -8,7 +8,7 @@ import {
   observedMergedChangeEvidence,
   observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { GitHubPullRequestReader } from "./ownedPullRequestGateway.js";
 
 export type ReconciledChange = {
   readonly changeId: string;
@@ -42,7 +42,7 @@ export type ChangeReconciliation = {
 
 export const openChangeReconciliation = (input: {
   readonly persistence: ChangeReconciliationPort;
-  readonly github: GitHubPullRequestGateway;
+  readonly github: GitHubPullRequestReader;
   readonly cleanupTerminal: TerminalCleanupOperation;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),

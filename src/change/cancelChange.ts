@@ -16,7 +16,7 @@ import {
 } from "./ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
-  GitHubPullRequestGateway,
+  GitHubPullRequestCloser,
   PublicationFailureEvidence,
 } from "./ownedPullRequestGateway.js";
 import type { ActiveValidationRunPort } from "./validation/changeValidationPorts.js";
@@ -39,7 +39,7 @@ export type CancellationDependencies = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
   readonly changes: ChangeCancellationPort;
-  readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
+  readonly github: GitHubPullRequestCloser;
   readonly validation: ActiveValidationRunPort;
   readonly executionLock: ExecutionLock;
   readonly cleanupTerminal: TerminalCleanupOperation;
@@ -352,26 +352,22 @@ const closeOwnedPullRequest = (
   const publication = ownedPublication(change);
   if (publication === undefined) return { ok: true, status: "closed", pullRequest: null };
   let evidence: PublicationFailureEvidence | undefined;
-  if (dependencies.github.closePullRequest !== undefined) {
-    try {
-      const result = dependencies.github.closePullRequest({
-        target: publication.target,
-        number: publication.pullRequest.number,
-      });
-      if (result.ok) {
-        const classified = classifyOwnedPullRequest(publication, result.pullRequest);
-        if (classified.kind === "exact_closed_unmerged")
-          return { ok: true, status: "closed", pullRequest: null };
-        if (classified.kind === "exact_merged")
-          return { ok: true, status: "merged", pullRequest: classified.pullRequest };
-        evidence = conflictingCloseEvidence;
-      } else {
-        evidence = result.evidence;
-      }
-    } catch {
-      evidence = unavailableCloseEvidence;
+  try {
+    const result = dependencies.github.closePullRequest({
+      target: publication.target,
+      number: publication.pullRequest.number,
+    });
+    if (result.ok) {
+      const classified = classifyOwnedPullRequest(publication, result.pullRequest);
+      if (classified.kind === "exact_closed_unmerged")
+        return { ok: true, status: "closed", pullRequest: null };
+      if (classified.kind === "exact_merged")
+        return { ok: true, status: "merged", pullRequest: classified.pullRequest };
+      evidence = conflictingCloseEvidence;
+    } else {
+      evidence = result.evidence;
     }
-  } else {
+  } catch {
     evidence = unavailableCloseEvidence;
   }
 
