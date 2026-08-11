@@ -134,6 +134,11 @@ describe("Change Implement continuation policy", () => {
   it.each([
     "git status",
     "just by change show change-123",
+    "just by change submit --help",
+    "just by change submit -h",
+    "just by change submit --version",
+    "just by change submit --completions bash",
+    "npx -y but-why change submit change-123 --help",
     'printf "just by change submit change-123"',
     "printf 'line one\\njust by change submit change-123\\n'",
     "printf 'line one\njust by change submit change-123\n'",

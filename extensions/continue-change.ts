@@ -36,6 +36,7 @@ export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
     readonly closeReason: ChangeCloseReason | null;
+    readonly taskId?: string | null;
   };
   readonly currentCandidate: CurrentCandidate | null;
   readonly currentValidationRun: CurrentValidationRun | null;
@@ -66,11 +67,18 @@ export type RetryState = {
   readonly unchangedRestarts: number;
 };
 
+type SubmissionReassessment = {
+  readonly state: "awaiting-settle" | "running" | "complete" | "not-required";
+  readonly taskId: string | null;
+  readonly hasResolutions: boolean;
+};
+
 type PersistedContinuationState = RetryState & {
   readonly changeId: string;
   readonly paused: boolean;
   readonly resolutionId?: string | null;
   readonly pendingResolutionId?: string | null;
+  readonly submissionReassessment?: SubmissionReassessment;
 };
 
 type WatcherDisplay =
@@ -360,22 +368,52 @@ const findCommandSubstitutionEnd = (command: string, start: number): number | un
   return undefined;
 };
 
-export const countVisibleChangeSubmits = (command: string): number =>
-  [...visibleShellText(command).matchAll(submitCommandPattern)].length;
+const shellCommandEndPattern = /[\n;|&{}]/u;
+const nonExecutingArgumentPattern = /(?:^|\s)(?:-h|--help|--version|--completions)(?=\s|=|$)/u;
+
+export const countVisibleChangeSubmits = (command: string): number => {
+  const visible = visibleShellText(command);
+  return [...visible.matchAll(submitCommandPattern)].filter((match) => {
+    const tail = visible.slice((match.index ?? 0) + match[0].length);
+    const commandEnd = tail.search(shellCommandEndPattern);
+    const argumentsText = commandEnd === -1 ? tail : tail.slice(0, commandEnd);
+    return !nonExecutingArgumentPattern.test(argumentsText);
+  }).length;
+};
 
 export const containsVisibleChangeSubmit = (command: string): boolean =>
   countVisibleChangeSubmits(command) > 0;
 
-const submissionReassessmentMessage = [
-  "But Why blocked the complete Bash tool call before any part of it executed.",
-  "Do not retry Change Submission until you complete this reassessment:",
-  "1. Inspect the Change and read the complete current Acceptance Context, including the linked Task Context and approved Implementation Blocker Resolutions when present.",
-  "2. Inspect the Managed Worktree status and the complete Candidate diff against the current Change Base.",
-  "3. Evaluate the Candidate against every accepted outcome, acceptance criterion, constraint, and verification requirement, and identify each unsatisfied or unsupported item.",
-  "4. Correct and commit every discrepancy you find.",
-  "5. Rerun all required pre-Submission commands.",
-  "6. Retry the blocked Change Submit command.",
-].join(" ");
+const interruptedSubmissionMessage =
+  "But Why blocked the complete Bash tool call before any part of it executed. The required reassessment starts after this agent run settles. Do not retry Change Submission in this run.";
+
+const pendingReassessmentMessage =
+  "But Why blocked Change Submission because the required separate reassessment run has not settled.";
+
+const inspectionFailureMessage = (message: string): string =>
+  `But Why blocked Change Submission because it could not classify reassessment eligibility from trusted Change inspection: ${message}`;
+
+const submissionReassessmentMessage = (
+  changeId: string,
+  taskId: string,
+  commandPrefix: ButWhyCommandPrefix,
+  hasResolutions: boolean,
+): string =>
+  [
+    `But Why started the required separate reassessment run for Change ${changeId}.`,
+    "Do not call Change Submit during this run.",
+    `Inspect the Change with \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and read the complete current Acceptance Context with \`${butWhyCommand(commandPrefix, "task", "context", taskId)}\`.`,
+    ...(hasResolutions
+      ? [
+          `Inspection shows approved Implementation Blocker Resolutions. Read them with \`${butWhyCommand(commandPrefix, "change", "blocker", "list", changeId)}\` and include them in the current Acceptance Context.`,
+        ]
+      : []),
+    "Inspect the Managed Worktree status and compare the complete committed implementation and complete Candidate diff against the current Change Base with every accepted outcome, criterion, constraint, and verification requirement.",
+    "Correct and commit each material discrepancy.",
+    "Run focused verification for any corrections.",
+    "Do not run configured blocking Checks or reviews, a repository-wide quality command, or an unfiltered test or coverage workload.",
+    "When the reassessment is complete, end this run without submitting. The extension will complete the reassessment boundary after this run settles and will permit later Submission attempts.",
+  ].join(" ");
 
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   for (const entry of entries) {
@@ -471,20 +509,6 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
-  let submitAllowed = false;
-
-  pi.on("tool_call", (event) => {
-    if (!isToolCallEventType("bash", event)) return;
-    const submitCount = countVisibleChangeSubmits(event.input.command);
-    if (submitCount === 0) return;
-    if (submitAllowed && submitCount === 1) {
-      submitAllowed = false;
-      return;
-    }
-    submitAllowed = true;
-    pi.sendUserMessage(submissionReassessmentMessage, { deliverAs: "steer" });
-    return { block: true, reason: submissionReassessmentMessage };
-  });
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
@@ -750,6 +774,106 @@ export default function continueChange(pi: ExtensionAPI): void {
     };
   };
 
+  const inspectReassessmentEligibility = async (
+    ctx: ExtensionContext,
+    id: string,
+  ): Promise<
+    | {
+        readonly ok: true;
+        readonly taskId: string | null;
+        readonly hasResolutions: boolean;
+      }
+    | { readonly ok: false; readonly message: string }
+  > => {
+    const [changeResult, blockerResult] = await Promise.all([
+      inspectCommand(["change", "show", id], ctx.cwd),
+      inspectCommand(["change", "blocker", "list", id], ctx.cwd),
+    ]);
+    const failures = [changeResult, blockerResult].filter(
+      (result): result is Extract<RunResult, { readonly ok: false }> => !result.ok,
+    );
+    if (failures.length > 0) {
+      return {
+        ok: false,
+        message: failures
+          .map((failure) =>
+            failure.stdout.trim() === ""
+              ? failure.message
+              : `${failure.message}: ${failure.stdout.trim().slice(0, 500)}`,
+          )
+          .join("; "),
+      };
+    }
+
+    let snapshotValue: unknown;
+    let blockerValue: unknown;
+    try {
+      snapshotValue = JSON.parse(changeResult.stdout);
+      blockerValue = JSON.parse(blockerResult.stdout);
+    } catch {
+      return { ok: false, message: "But Why inspection returned malformed JSON" };
+    }
+    if (!isSnapshot(snapshotValue) || snapshotValue.change.taskId === undefined) {
+      return { ok: false, message: "But Why inspection returned an unsupported Change state shape" };
+    }
+    if (!isBlockerHistory(blockerValue)) {
+      return { ok: false, message: "But Why inspection returned an unsupported blocker history shape" };
+    }
+    return {
+      ok: true,
+      taskId: snapshotValue.change.taskId,
+      hasResolutions: blockerValue.resolutions.length > 0,
+    };
+  };
+
+  const saveSubmissionReassessment = (state: SubmissionReassessment): void => {
+    if (changeId === undefined) return;
+    const previous = persisted ?? {
+      changeId,
+      fingerprint: "inspection-unavailable",
+      unchangedRestarts: 0,
+      paused: false,
+      resolutionId: null,
+    };
+    saveState({ ...previous, submissionReassessment: state });
+  };
+
+  pi.on("tool_call", async (event, ctx) => {
+    if (!isToolCallEventType("bash", event) || !containsVisibleChangeSubmit(event.input.command)) {
+      return;
+    }
+    const reassessment = persisted?.submissionReassessment;
+    if (reassessment?.state === "complete" || reassessment?.state === "not-required") return;
+    if (reassessment?.state === "awaiting-settle" || reassessment?.state === "running") {
+      return { block: true, reason: pendingReassessmentMessage };
+    }
+    if (changeId === undefined) {
+      return {
+        block: true,
+        reason: inspectionFailureMessage("this Implementer session has no bound Change identity"),
+      };
+    }
+
+    const eligibility = await inspectReassessmentEligibility(ctx, changeId);
+    if (!eligibility.ok) {
+      return { block: true, reason: inspectionFailureMessage(eligibility.message) };
+    }
+    if (eligibility.taskId === null) {
+      saveSubmissionReassessment({
+        state: "not-required",
+        taskId: null,
+        hasResolutions: false,
+      });
+      return;
+    }
+    saveSubmissionReassessment({
+      state: "awaiting-settle",
+      taskId: eligibility.taskId,
+      hasResolutions: eligibility.hasResolutions,
+    });
+    return { block: true, reason: interruptedSubmissionMessage };
+  });
+
   const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
     const latest = history.resolutions.at(-1);
     return latest !== undefined && isResolution(latest) ? latest : null;
@@ -820,6 +944,9 @@ export default function continueChange(pi: ExtensionAPI): void {
       paused: false,
       resolutionId: latest,
       pendingResolutionId: pendingResolution,
+      ...(persisted?.submissionReassessment === undefined
+        ? {}
+        : { submissionReassessment: persisted.submissionReassessment }),
     });
     showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
   };
@@ -1058,6 +1185,24 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
+    const reassessment = persisted?.submissionReassessment;
+    if (reassessment?.state === "awaiting-settle" && reassessment.taskId !== null) {
+      saveSubmissionReassessment({ ...reassessment, state: "running" });
+      if (changeId !== undefined) {
+        pi.sendUserMessage(
+          submissionReassessmentMessage(
+            changeId,
+            reassessment.taskId,
+            commandPrefixFor(ctx.cwd),
+            reassessment.hasResolutions,
+          ),
+        );
+      }
+      return;
+    }
+    if (reassessment?.state === "running") {
+      saveSubmissionReassessment({ ...reassessment, state: "complete" });
+    }
     await continueWatching(ctx, false);
   });
 }
@@ -1068,6 +1213,15 @@ const isNonNegativeInteger = (value: unknown): value is number =>
 const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
   value === undefined || value === null || typeof value === "string";
 
+const isSubmissionReassessment = (value: unknown): value is SubmissionReassessment =>
+  isRecord(value) &&
+  (recordValue(value, "state") === "awaiting-settle" ||
+    recordValue(value, "state") === "running" ||
+    recordValue(value, "state") === "complete" ||
+    recordValue(value, "state") === "not-required") &&
+  (recordValue(value, "taskId") === null || typeof recordValue(value, "taskId") === "string") &&
+  typeof recordValue(value, "hasResolutions") === "boolean";
+
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
   typeof recordValue(value, "changeId") === "string" &&
@@ -1075,7 +1229,9 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
   isNonNegativeInteger(recordValue(value, "unchangedRestarts")) &&
   typeof recordValue(value, "paused") === "boolean" &&
   isOptionalNullableString(recordValue(value, "resolutionId")) &&
-  isOptionalNullableString(recordValue(value, "pendingResolutionId"));
+  isOptionalNullableString(recordValue(value, "pendingResolutionId")) &&
+  (recordValue(value, "submissionReassessment") === undefined ||
+    isSubmissionReassessment(recordValue(value, "submissionReassessment")));
 
 const isCandidate = (value: unknown): value is CurrentCandidate =>
   isRecord(value) &&
@@ -1098,6 +1254,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (recordValue(change, "closeReason") === "completed" ||
       recordValue(change, "closeReason") === "cancelled" ||
       recordValue(change, "closeReason") === null) &&
+    (recordValue(change, "taskId") === null || typeof recordValue(change, "taskId") === "string") &&
     (candidate === null || isCandidate(candidate)) &&
     (validationRun === null || isValidationRun(validationRun)) &&
     isNonNegativeInteger(recordValue(value, "findingCount")) &&
