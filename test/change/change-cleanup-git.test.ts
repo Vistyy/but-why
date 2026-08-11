@@ -161,7 +161,7 @@ describe("Change cleanup Git adapter", () => {
   it("suppresses later mutations after dirty-work inspection blocks cleanup", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "feature-worktree");
-    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    git(repository, "worktree", "add", "-b", "but-why/feature", worktreePath, "main");
     writeFileSync(join(worktreePath, "uncommitted.txt"), "preserve this work\n");
     const remoteCalls: string[] = [];
 
@@ -175,13 +175,13 @@ describe("Change cleanup Git adapter", () => {
             "--git-common-dir",
           ),
           worktreePath,
-          branchRef: "refs/heads/feature",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
             targetBranch: "main",
             expectedHeadSha: "candidate-head",
           },
@@ -202,7 +202,7 @@ describe("Change cleanup Git adapter", () => {
       blockingReason: "worktree_has_uncommitted_changes",
     });
     expect(existsSync(worktreePath)).toBe(true);
-    expect(git(repository, "rev-parse", "refs/heads/feature")).not.toBe("");
+    expect(git(repository, "rev-parse", "refs/heads/but-why/feature")).not.toBe("");
     expect(remoteCalls).toEqual([]);
   });
 
