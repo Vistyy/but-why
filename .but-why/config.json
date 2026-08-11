@@ -22,7 +22,7 @@
   "reviewers": {
     "standards": {
       "instructionsFile": ".but-why/reviewers/standards.md",
-      "agentProfile": { "scope": "global", "name": "standards-reviewer" }
+      "agentProfile": { "scope": "global", "name": "reviewer" }
     }
   }
 }
