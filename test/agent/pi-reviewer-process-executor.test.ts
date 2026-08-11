@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 
 import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";

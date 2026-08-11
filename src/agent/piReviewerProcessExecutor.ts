@@ -1,4 +1,4 @@
-import { chmodSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect } from "effect";

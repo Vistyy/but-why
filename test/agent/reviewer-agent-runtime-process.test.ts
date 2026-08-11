@@ -4,12 +4,11 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
-
+import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import { createPiReviewerProcessExecutor } from "../../src/agent/piReviewerProcessExecutor.js";
 import { buildReviewerOutputCorrectionPrompt } from "../../src/agent/reviewerPrompts.js";
 import { decodeReviewerOutputContract } from "../../src/contracts/reviewerOutput.js";
 
