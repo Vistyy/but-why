@@ -144,7 +144,7 @@ describe("repository-authored tooling diagnostics", () => {
       'const result = runTestProcess("npm", ["install"], { cwd });',
     ],
     ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
-  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory) => {
+  ])("ast-grep rule %s explains the supported path", (ruleId, source, configuredDirectory?: string) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
     const fixtureDirectory =
