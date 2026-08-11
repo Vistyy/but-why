@@ -774,9 +774,13 @@ const getPassingEvidence = (
       parameters,
     );
     const blockerHistory = yield* readBlockers(sql, authority.id, operationName);
-    const decoded = yield* decodePersisted(operationName, () =>
-      rows.map((row) => {
-        const evidence = {
+    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
+    const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
+    const expectedAcceptanceContext = authority.acceptanceContext ?? undefined;
+    let current: PassingPublicationEvidence | undefined;
+    for (const row of rows) {
+      const evidence = yield* decodePersisted(operationName, (): PassingPublicationEvidence => {
+        const decoded = {
           publicationCandidateId: decodeStoredString(
             row.publicationCandidateId,
             "evidence Candidate ID",
@@ -785,15 +789,10 @@ const getPassingEvidence = (
           headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
           run: decodeValidationRun(row),
         };
-        validateValidationRunAuthorityRelationships(evidence.run, authority.id, blockerHistory);
-        return evidence;
-      }),
-    );
-    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
-    const expectedDecisionsSnapshot = JSON.stringify(implementationDecisions);
-    const expectedAcceptanceContext = authority.acceptanceContext ?? undefined;
-    const current = decoded.find(
-      (evidence) =>
+        validateValidationRunAuthorityRelationships(decoded.run, authority.id, blockerHistory);
+        return decoded;
+      });
+      if (
         evidence.run.record.candidateId === evidence.publicationCandidateId &&
         evidence.run.latestResolvedBlockerId === currentLatestResolvedBlockerId &&
         evidence.run.implementationDecisionsSnapshot === expectedDecisionsSnapshot &&
@@ -804,9 +803,12 @@ const getPassingEvidence = (
         (query?.candidateId === undefined ||
           evidence.publicationCandidateId === query.candidateId) &&
         (query?.changeBaseSha === undefined || evidence.changeBaseSha === query.changeBaseSha) &&
-        (query?.policy === undefined ||
-          isDeepStrictEqual(evidence.run.record.policy, query.policy)),
-    );
+        (query?.policy === undefined || isDeepStrictEqual(evidence.run.record.policy, query.policy))
+      ) {
+        current = evidence;
+        break;
+      }
+    }
     if (current === undefined) return undefined;
     return {
       candidateId: current.publicationCandidateId,
@@ -1208,4 +1210,11 @@ type PassingPublicationEvidenceRow = UnknownValidationRunRow & {
   readonly publicationCandidateId: unknown;
   readonly changeBaseSha: unknown;
   readonly headSha: unknown;
+};
+
+type PassingPublicationEvidence = {
+  readonly publicationCandidateId: string;
+  readonly changeBaseSha: string;
+  readonly headSha: string;
+  readonly run: ReturnType<typeof decodeValidationRun>;
 };

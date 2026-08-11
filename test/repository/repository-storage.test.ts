@@ -1517,8 +1517,27 @@ describe("repository SQL storage", () => {
             changeBaseSha: "base-sha",
             headSha: "head-sha",
           };
+          yield* repository.operation(
+            "install malformed older passing Run",
+            (sql) =>
+              sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-older-malformed-passing', ${captured.candidateId}, 'malformed',
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T16:10:00.000Z', '2026-07-25T16:10:00.000Z'
+                )
+              `,
+          );
           expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
             currentEvidence,
+          );
+          yield* repository.operation(
+            "remove malformed older passing Run",
+            (sql) =>
+              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-older-malformed-passing'`,
           );
           yield* repository.operation(
             "make the later policy-distinct Run malformed and tooling-failed",
