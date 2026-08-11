@@ -85,6 +85,39 @@ const installPublicationIdentity = (
     );
   });
 
+const rollbackNativeSnapshotWorkspaceMigration = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN expected_commit_sha TO submitted_sha
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN workspace_path TO worktree_path
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME COLUMN cleanup_workspace TO cleanup_worktree
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN worktree_head TEXT NOT NULL DEFAULT ''
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN temp_ref_name TEXT NOT NULL DEFAULT ''
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      ADD COLUMN cleanup_temp_ref TEXT NOT NULL DEFAULT 'not_created'
+    `);
+    yield* sql.unsafe(`
+      ALTER TABLE candidate_snapshot_workspaces
+      RENAME TO candidate_validation_workspace_setups
+    `);
+    yield* sql.unsafe("DROP TABLE IF EXISTS pre_native_snapshot_workspace_cleanups");
+  });
+
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
   const rows = yield* repositorySql.operation(
@@ -2012,7 +2045,9 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 29`;
+              yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 11 AND 32`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -2313,6 +2348,9 @@ describe("repository SQL storage", () => {
           { migration_id: 27, name: "remove_candidate_validation_admissions" },
           { migration_id: 28, name: "project_runtime_failure_names" },
           { migration_id: 29, name: "enforce_stable_storage_constraints" },
+          { migration_id: 30, name: "native_snapshot_workspaces" },
+          { migration_id: 31, name: "pre_native_snapshot_workspace_cleanup" },
+          { migration_id: 32, name: "backfill_pre_native_snapshot_workspace_cleanup" },
         ]);
         expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -2582,7 +2620,9 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2850,7 +2890,9 @@ describe("repository SQL storage", () => {
               FROM changes`);
             yield* sql.unsafe("DROP TABLE changes");
             yield* sql.unsafe("ALTER TABLE changes_pre_cancel_reason RENAME TO changes");
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 29`;
+            yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 22 AND 32`;
             yield* sql.unsafe("PRAGMA foreign_keys = ON");
           }),
         );
@@ -2960,7 +3002,9 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 18 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3036,7 +3080,9 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 19 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3110,7 +3156,9 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 21 AND 32`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -3381,7 +3429,9 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 13 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3464,7 +3514,9 @@ describe("repository SQL storage", () => {
                     WHERE id = 'change-with-failure'
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 14 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3575,7 +3627,9 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 29`;
+                    yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 15 AND 32`;
                   }),
                 );
               }).pipe(
@@ -3681,7 +3735,9 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3767,7 +3823,9 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 29`;
+                  yield* rollbackNativeSnapshotWorkspaceMigration(sql);
+
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 16 AND 32`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -4010,8 +4068,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(29);
-          expect(yield* readMigrationCount).toBe(29);
+          expect(yield* readMigrationCount).toBe(32);
+          expect(yield* readMigrationCount).toBe(32);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -4111,9 +4169,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(29);
+              expect(migrations.length).toBe(32);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 29 }, (_, index) => index + 1),
+                Array.from({ length: 32 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -4212,7 +4270,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 29,
+              migrationCount: 32,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

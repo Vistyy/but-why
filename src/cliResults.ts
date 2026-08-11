@@ -34,7 +34,7 @@ export type RepoStateLoadError =
 
 /**
  * CLI routes should construct serializer-facing results here.
- * Keep JSON serialization outside domain modules and future validation workspace code.
+ * Keep JSON serialization outside domain modules and future Snapshot Workspace code.
  */
 export const success = (stdout: StructuredObject): CliSuccessResult => ({
   exitCode: 0,

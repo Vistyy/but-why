@@ -29,9 +29,7 @@ The source hierarchy follows these owners:
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
-- `src/disposableWorkspace/` owns disposable exact-commit workspace creation, identity verification, project-owned command execution, interruption cleanup registration, and cleanup.
-  Sandcastle is private to Validation Workspace creation, command execution, and cleanup.
-  Reviewer execution does not use Sandcastle.
+- `src/disposableWorkspace/` owns native Git Snapshot Workspace creation, exact identity verification, Effect command execution, interruption handling, and cleanup.
 - `src/sqlite/` owns SQLite persistence Adapters.
 - `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 
@@ -70,12 +68,12 @@ A new or revised Submission selects the Change from Shared Repository State, rea
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
 Submission reads the Candidate's tracked Repo Config after Candidate capture for reviewer policy and Repo Agent Profiles.
-The Change Base Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, and the Agent Environment.
+The Change Base Repo Config supplies Repository Preparation, Checks, Snapshot Workspace inputs, and the Agent Environment.
 The Candidate Repo Config supplies reviewer selections and Repo reviewer profiles.
 It resolves the complete Validation Policy from the baseline and Candidate reviewer configuration before validation starts.
 The fetch updates only the remote-tracking ref.
 It does not modify the Managed Worktree or Repository Branch.
-Repo reviewer profiles and resources are resolved from the exact Candidate Validation Workspace during reviewer execution.
+Repo reviewer profiles and resources are resolved from the exact Candidate Snapshot Workspace during reviewer execution.
 
 A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
 Tracked-tree equality with the fetched Change Base returns `nothing_to_submit` after the ancestry check passes.
@@ -135,7 +133,7 @@ The public CLI is `by`.
 It returns each structured result as one compact JSON document on stdout.
 The output ownership and expansion rules are defined in [CLI output](cli-output.md).
 
-Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.
+Repo Config owns Repository Preparation, Checks, Snapshot Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.
 Global Config owns Global Agent Profiles, reviewer defaults, and Interactive Session preferences.
 Change Submit resolves the non-review Repo Config baseline from the Change Base and reviewer Repo Config from the Candidate, then resolves Global Config from the configured user path.
 It constructs one resolved Validation Policy before validation and reuses that policy for Validation Policy Snapshot evidence and eligible publication.

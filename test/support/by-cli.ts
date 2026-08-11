@@ -166,7 +166,7 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
   runGit(root, "config", "user.name", "But Why Test");
   runGit(root, "config", "user.email", "but-why@example.test");
   runGit(root, "branch", "-M", "main");
-  runGit(root, "add", ".but-why/config.json", ".gitignore");
+  runGit(root, "add", ".but-why/config.json");
   runGit(root, "commit", "-m", "Initialize But Why");
   const publicationUrl = "https://github.com/acme/repo.git";
   runGit(root, "config", `url.${root}.insteadOf`, publicationUrl);

@@ -25,9 +25,3 @@ coverage/
 
 # Local review artifacts
 .lavish/
-
-# But Why?
-.sandcastle/worktrees/
-.sandcastle/logs/
-.sandcastle/patches/
-.sandcastle/.env

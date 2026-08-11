@@ -143,7 +143,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
             changeBaseSha: "base",
             headSha: "current",
             policy,
-            workspaceSetup: { tempRefName: "refs/but-why/current", worktreePath: "/tmp/current" },
+            workspaceSetup: { worktreePath: "/tmp/current" },
             now: "2026-08-10T00:05:00.000Z",
           });
           if (active.reused || "blocked" in active) throw new Error("Expected an Active Run");
@@ -171,9 +171,8 @@ describe("SQLite Candidate and Validation read decoding", () => {
           ).toMatchObject({
             validationRunId: active.validationRunId,
             candidateId: current.candidateId,
-            tempRefName: "refs/but-why/current",
-            cleanupWorktree: "not_created",
-            cleanupTempRef: "not_created",
+            worktreePath: "/tmp/current",
+            cleanupWorkspace: "not_created",
           });
           expect(
             (yield* validation.reads.listRounds(priorRun.validationRunId)).map(

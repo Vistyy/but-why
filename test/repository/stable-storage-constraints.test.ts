@@ -15,7 +15,8 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           SELECT name, sql FROM sqlite_schema
           WHERE type = 'table' AND name IN (
             'tasks', 'changes', 'candidates', 'candidate_validation_runs',
-            'task_dependencies', 'candidate_validation_workspace_setups',
+            'task_dependencies', 'candidate_snapshot_workspaces',
+            'pre_native_snapshot_workspace_cleanups',
             'candidate_validation_tooling_failures', 'candidate_validation_rounds',
             'candidate_validation_findings', 'candidate_validation_artifacts',
             'active_validation_runs', 'implementation_decisions',
@@ -24,8 +25,10 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           )
         `,
       );
-      expect(schemas).toHaveLength(16);
-      expect(schemas.every(({ sql }) => sql.endsWith("STRICT"))).toBe(true);
+      expect(schemas).toHaveLength(17);
+      expect(schemas.filter(({ sql }) => !sql.endsWith("STRICT")).map(({ name }) => name)).toEqual(
+        [],
+      );
 
       yield* expectSqlRejection(
         repository.operation("reject a wrong Task storage class", (sql) =>

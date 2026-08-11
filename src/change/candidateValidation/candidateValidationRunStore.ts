@@ -40,7 +40,6 @@ export type StartCandidateValidationRunInput = {
   readonly policy: Omit<CandidateValidationPolicySnapshot, "acceptanceContext">;
   readonly validationRunId?: string;
   readonly workspaceSetup?: {
-    readonly tempRefName: string;
     readonly worktreePath: string;
   };
   readonly now: string;
@@ -89,15 +88,9 @@ export type RecordCandidateSpecialistRoundInput = Omit<
   readonly findings: NonNullable<RecordCandidateValidationCommandRoundInput["findings"]>;
 };
 
-export type RecordCandidateWorkspaceSetupInput = {
+export type RecordCandidateWorkspaceCleanupInput = {
   readonly validationRunId: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreeHead: string;
-  readonly worktreePath?: string;
-  readonly cleanupWorktree: string;
-  readonly cleanupTempRef: string;
-  readonly now: string;
+  readonly cleanupWorkspace: "removed" | "not_created" | "failed";
 };
 
 export type AbandonCandidateValidationRunInput = {
@@ -123,10 +116,9 @@ export type CandidateValidationRunAbandonmentContext = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly submittedSha: string;
-  readonly tempRefName?: string;
   readonly worktreePath?: string;
-  readonly cleanupWorktree: "removed" | "not_created" | "failed" | null;
-  readonly cleanupTempRef: "removed" | "not_created" | "failed" | null;
+  readonly preNativeRefName?: string;
+  readonly cleanupWorkspace: "removed" | "not_created" | "failed" | null;
 };
 
 export type CandidateValidationRunRecord = {

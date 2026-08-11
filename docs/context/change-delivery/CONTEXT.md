@@ -130,7 +130,7 @@ _Avoid_: Mutable current config, raw config hash, retroactive policy
 
 **Reviewer Session**:
 A continuing reviewer conversation owned by one Change and one Reviewer Session identity.
-It can resume across that Change's Candidates and disposable Validation Workspaces so a reviewer can reuse repository orientation.
+It can resume across that Change's Candidates and disposable Snapshot Workspaces so a reviewer can reuse repository orientation.
 _Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
 
 **Reviewer Transcript**:
@@ -194,7 +194,7 @@ _Avoid_: Task Approval, Task Recording Authorization, inferred permission to imp
 
 **Managed Worktree**:
 The persistent But Why-owned Git branch and linked worktree belonging to one open Change.
-_Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task Worktree
+_Avoid_: Snapshot Workspace, caller checkout, temporary agent worktree, Task Worktree
 
 **Interactive Session**:
 An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the current v1 integration.
@@ -274,11 +274,16 @@ When supplied Acceptance Context, it uses that context only as an authoritative 
 It may judge whether available verification evidence is defective within its concern, but it requires a particular verification mechanism only when approved intent or the concern's owning boundary requires it.
 _Avoid_: Acceptance Reviewer, Final Reviewer
 
-**Validation Workspace**:
-An isolated disposable workspace in which one Validation Run judges the exact Candidate without changing it.
-A later Validation Run uses a different Validation Workspace.
-Recovery may reuse only the same Validation Run's matching clean Validation Workspace.
-_Avoid_: Task Worktree, Interactive Session
+**Snapshot Workspace**:
+A disposable detached Git worktree in which one Validation Run judges the exact Candidate without changing it.
+Each Snapshot Workspace uses the Local Repository's sibling But Why worktree root and belongs to one Validation Run, expected commit, and exact path persisted before acquisition.
+Cleanup requires that persisted identity, a safe But Why-owned path, the exact Local Repository worktree registration, and the exact live HEAD.
+A later Validation Run uses a different Snapshot Workspace.
+Recovery may reuse only the same Validation Run's matching clean Snapshot Workspace.
+An active Validation Run migrated from the pre-native implementation retains cleanup-only identity until explicit abandonment removes its exact resources.
+New Snapshot Workspaces do not use that identity.
+Snapshot Workspaces provide no security isolation.
+_Avoid_: Managed Worktree, Task Worktree, Interactive Session
 
 **Validation Tooling Failure**:
 A failure in But Why or its validation tooling that prevents a trustworthy judgment of the Candidate.

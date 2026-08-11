@@ -121,18 +121,19 @@ const runPrepareCommand = (
   allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       if (expectedHeadSha !== undefined) {
         await ensureCandidateIntegrity({
           commandExecutor,
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+          signal,
         });
       }
       const result = await runRepositoryPreparation({
         prepare,
-        exec: (command, options) => commandExecutor(command, options),
+        exec: (command, options) => commandExecutor(command, { ...(options ?? {}), signal }),
         ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
       });
       if (expectedHeadSha !== undefined) {
@@ -141,6 +142,7 @@ const runPrepareCommand = (
           ...(commandCwd === undefined ? {} : { commandCwd }),
           expectedHeadSha,
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+          signal,
         });
       }
 

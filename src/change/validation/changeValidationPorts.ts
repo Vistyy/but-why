@@ -16,7 +16,7 @@ import type {
   RecordCandidateToolingFailureInput,
   RecordCandidateValidationCheckRoundInput,
   RecordCandidateValidationPrepareRoundInput,
-  RecordCandidateWorkspaceSetupInput,
+  RecordCandidateWorkspaceCleanupInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
@@ -29,7 +29,9 @@ export type CandidateValidationExecutionPort = {
     input: StartCandidateValidationRunInput,
   ) => StorageEffect<StartCandidateValidationRunResult>;
   readonly complete: (input: CompleteCandidateValidationRunInput) => StorageEffect<void>;
-  readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => StorageEffect<void>;
+  readonly recordWorkspaceCleanup: (
+    input: RecordCandidateWorkspaceCleanupInput,
+  ) => StorageEffect<void>;
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => StorageEffect<void>;
   readonly recordPrepareRound: (
     input: RecordCandidateValidationPrepareRoundInput,

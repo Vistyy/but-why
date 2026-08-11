@@ -8,13 +8,11 @@ import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome } from "../../src/cli/cliPath.js";
 import { mapRuntimeError } from "../../src/cli.js";
-import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
-const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 const expectedCommandPaths = [
   "init",
@@ -156,7 +154,6 @@ describe("by CLI", () => {
           "<git-common-dir>/but-why/state.sqlite",
           ".but-why/reviewers/",
         ],
-        updated: [".gitignore"],
         validationSetup: {
           policyFile: ".but-why/config.json",
           policy: "tracked repo policy",
@@ -181,7 +178,7 @@ describe("by CLI", () => {
       });
       expect(existsSync(sharedStatePath(root))).toBe(true);
       expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
-      expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
+      expect(existsSync(join(root, ".gitignore"))).toBe(false);
     }),
   );
 
@@ -205,7 +202,6 @@ describe("by CLI", () => {
       const root = createGitRepo();
       expect((yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
       rmSync(sharedStatePath(root));
-      rmSync(join(root, ".gitignore"));
       rmSync(join(root, ".but-why/reviewers"), { recursive: true });
 
       const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -214,7 +210,6 @@ describe("by CLI", () => {
       expect(parseOutput(result.stdout)).toMatchObject({
         init: { status: "repaired", root, taskPrefix: "BY" },
         created: ["<git-common-dir>/but-why/state.sqlite", ".but-why/reviewers/"],
-        updated: [".gitignore"],
       });
     }),
   );

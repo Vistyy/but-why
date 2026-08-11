@@ -57,7 +57,7 @@ describe("Pi reviewer agent runtime process boundary", () => {
       Effect.gen(function* () {
         const home = mkdtempSync(join(tmpdir(), "but-why-reviewer-pi-"));
         const workspaceParent = mkdtempSync(join(tmpdir(), "but-why-reviewer-workspace-parent-"));
-        const workspace = join(workspaceParent, "validation-workspace");
+        const workspace = join(workspaceParent, "snapshot-workspace");
         mkdirSync(workspace, { recursive: true });
         const extensionDir = join(home, ".pi", "agent", "extensions");
         const curatedPolicyDir = join(extensionDir, "package-manager-policy");

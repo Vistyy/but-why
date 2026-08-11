@@ -26,26 +26,6 @@ rule:
     - pattern: $RUNTIME.runFork($$$ARGS)
     - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: sandcastle-dependency-belongs-to-runtime-adapter
-language: TypeScript
-severity: error
-message: Do not import or re-export Sandcastle outside src/disposableWorkspace/workspaceRuntimeAdapter.ts because Task, Change, and Repository Runtime behavior must use project-owned execution contracts; use the disposable workspace, command-execution, or reviewer-execution contract.
-files:
-  - src/**/*.ts
-ignores:
-  - src/disposableWorkspace/workspaceRuntimeAdapter.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - all:
-        - kind: export_statement
-        - regex: '[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - all:
-        - kind: call_expression
-        - regex: '^(import|require)\(["`]@ai-hero/sandcastle([^"`]*)?["`]\)$'
----
 id: task-identity-branding-belongs-to-task-id
 language: TypeScript
 severity: error
@@ -184,18 +164,3 @@ ignores:
 rule:
   any:
     - pattern: openHerdrInteractiveSessionHost($$$ARGS)
----
-# The disposable workspace Adapter owns direct Sandcastle factories.
-id: direct-sandcastle-helpers-belong-to-disposable-workspace
-language: TypeScript
-severity: error
-message: Do not use Sandcastle factories in tests because the disposable workspace Adapter owns Sandcastle setup; use runDisposableExactCommitWorkspace with test inputs for behavior variations.
-files:
-  - test/**/*.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
-    - pattern: createSandbox($$$ARGS)
-    - pattern: noSandbox($$$ARGS)

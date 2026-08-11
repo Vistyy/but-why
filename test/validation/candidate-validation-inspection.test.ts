@@ -5,10 +5,8 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import {
-  expectedValidationWorkspacePath,
-  validationTempRefName,
-} from "../../src/change/validation/validationWorkspacePath.js";
+import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -50,16 +48,9 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("abandons an interrupted Validation Run and is idempotent", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      const tempRefName = validationTempRefName(fixture.validationRunId);
-      yield* fixture.runStore.recordWorkspaceSetup({
+      yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
-        tempRefName,
-        submittedSha: "head-sha",
-        worktreeHead: "head-sha",
-        worktreePath: expectedValidationWorkspacePath(fixture.root, tempRefName),
-        cleanupWorktree: "not_created",
-        cleanupTempRef: "not_created",
-        now,
+        cleanupWorkspace: "not_created",
       });
       const abandoned = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
@@ -91,19 +82,47 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("retains the exact Validation Workspace path for abandonment", () =>
+  it.effect("keeps failed cleanup recoverable until abandonment succeeds", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      const worktreePath = join(fixture.root, "linked-worktree", ".sandcastle", "validation");
-      yield* fixture.runStore.recordWorkspaceSetup({
+      yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
-        tempRefName: "refs/but-why/validation-runs/run/validation",
-        submittedSha: "head-sha",
-        worktreeHead: "head-sha",
-        worktreePath,
-        cleanupWorktree: "not_created",
-        cleanupTempRef: "not_created",
+        cleanupWorkspace: "failed",
+      });
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
         now,
+      });
+
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "running",
+        outcome: null,
+      });
+
+      const abandoned = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "abandon",
+        fixture.validationRunId,
+        "--reason",
+        "Retry failed cleanup.",
+      ]);
+      expect(abandoned.status).toBe(0);
+      expect(JSON.parse(abandoned.stdout).status).toBe("abandoned");
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "tooling_failed",
+      });
+    }),
+  );
+
+  it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const worktreePath = expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId);
+      yield* fixture.runStore.recordWorkspaceCleanup({
+        validationRunId: fixture.validationRunId,
+        cleanupWorkspace: "not_created",
       });
 
       expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toMatchObject({
@@ -113,7 +132,35 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("records the initial Validation Workspace with the Active relation", () =>
+  it.effect("rejects cleanup evidence without persisted Snapshot Workspace identity", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
+      const started = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        validationRunId: "run-without-workspace",
+        now: later,
+      });
+      if (started.reused || "blocked" in started) throw new Error("Expected a new Validation Run");
+
+      const error = yield* fixture.runStore
+        .recordWorkspaceCleanup({
+          validationRunId: started.validationRunId,
+          cleanupWorkspace: "removed",
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+    }),
+  );
+
+  it.effect("records the initial Snapshot Workspace with the Active relation", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.runStore.complete({
@@ -122,8 +169,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now,
       });
       const workspace = {
-        tempRefName: "refs/but-why/validation-runs/atomic/validation",
-        worktreePath: join(fixture.root, ".sandcastle", "atomic-validation"),
+        worktreePath: expectedSnapshotWorkspacePath(fixture.root, "run-with-atomic-workspace"),
       };
       const started = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
@@ -307,8 +353,8 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
       yield* fixture.runStore.recordToolingFailure({
         validationRunId: fixture.validationRunId,
-        errorKind: "validation_workspace_setup_failed",
-        operationName: "cleanup_validation_worktree",
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "cleanup_snapshot_workspace",
         errorMessage: "Could not remove worktree.",
         now: later,
       });
@@ -407,8 +453,8 @@ describe("Candidate-owned Validation Run inspection", () => {
           {
             sequence: 1,
             validationRunId: fixture.validationRunId,
-            errorKind: "validation_workspace_setup_failed",
-            operationName: "cleanup_validation_worktree",
+            errorKind: "snapshot_workspace_setup_failed",
+            operationName: "cleanup_snapshot_workspace",
             errorMessage: "Could not remove worktree.",
             createdAt: later,
           },
@@ -706,6 +752,10 @@ const candidateValidationFixture = () =>
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
+        validationRunId: "fixture-validation-run",
+        workspaceSetup: {
+          worktreePath: expectedSnapshotWorkspacePath(root, "fixture-validation-run"),
+        },
         now,
       }),
     );
@@ -767,9 +817,11 @@ const candidateValidationFixture = () =>
       recordToolingFailure: (
         input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
-      recordWorkspaceSetup: (
-        input: Parameters<ChangeValidationTestDependencies["execution"]["recordWorkspaceSetup"]>[0],
-      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceSetup(input)),
+      recordWorkspaceCleanup: (
+        input: Parameters<
+          ChangeValidationTestDependencies["execution"]["recordWorkspaceCleanup"]
+        >[0],
+      ) => withPersistence((persistence) => persistence.execution.recordWorkspaceCleanup(input)),
       getAbandonmentContext: (runId: string) =>
         withPersistence((persistence) => persistence.abandonment.getAbandonmentContext(runId)),
       complete: (input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0]) =>

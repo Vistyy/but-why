@@ -77,8 +77,7 @@ by init --task-prefix BY
 `by init` creates `.but-why/config.json` and `.but-why/reviewers/`.
 It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so linked worktrees share them.
 
-Configure recursive formatter, linter, test, and analysis tools to exclude `.sandcastle/**`.
-But Why creates disposable Validation Workspaces below that directory.
+But Why creates each disposable Snapshot Workspace in the Local Repository sibling worktree root under `<main-checkout-name>-worktrees/but-why/validation-runs/`.
 
 Inspect repository tooling before editing `.but-why/config.json`.
 Add at least one `validation.checks` entry.

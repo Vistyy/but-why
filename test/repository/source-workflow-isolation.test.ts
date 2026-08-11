@@ -34,7 +34,7 @@ const prepareSourceRepository = () => {
     cwd: main,
   });
   expect(initialized.status).toBe(0);
-  git(main, "add", "bin", "src", "package.json", "justfile", ".but-why", ".gitignore");
+  git(main, "add", "bin", "src", "package.json", "justfile", ".but-why");
   git(main, "commit", "-m", "source repository");
   git(main, "worktree", "add", "-b", "candidate", candidate, "main");
   symlinkSync(join(repoRoot, "node_modules"), join(candidate, "node_modules"), "dir");

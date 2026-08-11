@@ -114,27 +114,28 @@ const makeSqliteChangeValidationAdapter = (
     repository.transaction("list Candidate Validation Runs", (sql) =>
       listRunsForCandidate(sql, candidateId),
     ),
-  recordWorkspaceSetup: (input) =>
-    repository.operation("record Candidate validation workspace setup", (sql) =>
-      Effect.asVoid(sql`
-          INSERT INTO candidate_validation_workspace_setups (
-            validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-            cleanup_worktree, cleanup_temp_ref, created_at
-          ) VALUES (
-            ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-            ${input.worktreeHead}, ${input.worktreePath ?? null},
-            ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
-          )
-          ON CONFLICT (validation_run_id) DO UPDATE SET
-            temp_ref_name = excluded.temp_ref_name,
-            submitted_sha = excluded.submitted_sha,
-            worktree_head = excluded.worktree_head,
-            worktree_path = excluded.worktree_path,
-            cleanup_worktree = excluded.cleanup_worktree,
-            cleanup_temp_ref = excluded.cleanup_temp_ref,
-            created_at = excluded.created_at
-        `),
-    ),
+  recordWorkspaceCleanup: (input) =>
+    repository
+      .operation(
+        "record Candidate Snapshot Workspace cleanup",
+        (sql) =>
+          sql<{ readonly validationRunId: string }>`
+          UPDATE candidate_snapshot_workspaces
+          SET cleanup_workspace = ${input.cleanupWorkspace}
+          WHERE validation_run_id = ${input.validationRunId}
+          RETURNING validation_run_id AS validationRunId
+        `,
+      )
+      .pipe(
+        Effect.flatMap((updated) =>
+          updated.length === 1 && updated[0]?.validationRunId === input.validationRunId
+            ? Effect.void
+            : invalidData(
+                "record Candidate Snapshot Workspace cleanup",
+                "Snapshot Workspace cleanup requires its persisted Validation Run identity.",
+              ),
+        ),
+      ),
   recordToolingFailure: (input) =>
     repository.operation("record Candidate validation Tooling Failure", (sql) =>
       Effect.asVoid(sql`
@@ -194,7 +195,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
     return {
       startOrReuse: adapter.startOrReuse,
       complete: adapter.complete,
-      recordWorkspaceSetup: adapter.recordWorkspaceSetup,
+      recordWorkspaceCleanup: adapter.recordWorkspaceCleanup,
       recordToolingFailure: adapter.recordToolingFailure,
       recordPrepareRound: adapter.recordPrepareRound,
       recordCheckRound: adapter.recordCheckRound,
@@ -523,12 +524,11 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     `;
     if (input.workspaceSetup !== undefined) {
       yield* sql`
-        INSERT INTO candidate_validation_workspace_setups (
-          validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-          cleanup_worktree, cleanup_temp_ref, created_at
+        INSERT INTO candidate_snapshot_workspaces (
+          validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
         ) VALUES (
-          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${candidate.headSha}, ${candidate.headSha},
-          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
+          ${validationRunId}, ${candidate.headSha}, ${input.workspaceSetup.worktreePath},
+          'not_created', ${input.now}
         )
       `;
     }
@@ -543,14 +543,23 @@ const complete = (
   sql: SqlClient.SqlClient,
   input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
 ) =>
-  Effect.zipRight(
-    sql`
+  Effect.gen(function* () {
+    const completed = yield* sql<{ readonly validationRunId: string }>`
       UPDATE candidate_validation_runs
       SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
       WHERE id = ${input.validationRunId}
-    `,
-    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
-  ).pipe(Effect.asVoid);
+        AND NOT EXISTS (
+          SELECT 1 FROM candidate_snapshot_workspaces
+          WHERE validation_run_id = ${input.validationRunId} AND cleanup_workspace = 'failed'
+        )
+      RETURNING id AS validationRunId
+    `;
+    if (completed.length === 1 && completed[0]?.validationRunId === input.validationRunId) {
+      yield* sql`
+        DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}
+      `;
+    }
+  }).pipe(Effect.asVoid);
 
 const getActiveForChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
@@ -581,13 +590,17 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
         candidate.change_id AS changeId, change_row.id AS storedChangeId,
         candidate.id AS candidateId, candidate.head_sha AS submittedSha,
         setup.validation_run_id AS setupValidationRunId,
-        setup.submitted_sha AS setupSubmittedSha, setup.worktree_head AS setupWorktreeHead,
-        setup.temp_ref_name AS tempRefName, setup.worktree_path AS worktreePath,
-        setup.cleanup_worktree AS cleanupWorktree, setup.cleanup_temp_ref AS cleanupTempRef
+        setup.expected_commit_sha AS setupExpectedCommitSha,
+        setup.workspace_path AS worktreePath, setup.cleanup_workspace AS cleanupWorkspace,
+        pre_native.retired_ref_name AS preNativeRefName,
+        pre_native.workspace_path AS preNativeWorkspacePath,
+        pre_native.expected_commit_sha AS preNativeExpectedCommitSha
       FROM candidate_validation_runs AS run
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      LEFT JOIN candidate_validation_workspace_setups AS setup ON setup.validation_run_id = run.id
+      LEFT JOIN candidate_snapshot_workspaces AS setup ON setup.validation_run_id = run.id
+      LEFT JOIN pre_native_snapshot_workspace_cleanups AS pre_native
+        ON pre_native.validation_run_id = run.id
       WHERE run.id = ${validationRunId}
     `;
     const row = rows[0];
@@ -608,21 +621,30 @@ const abandon = (
     readonly now: string;
   },
 ) =>
-  Effect.zipRight(
-    sql`
+  Effect.gen(function* () {
+    yield* sql`
+      UPDATE candidate_snapshot_workspaces
+      SET cleanup_workspace = 'removed'
+      WHERE validation_run_id = ${input.validationRunId}
+    `;
+    yield* sql`
       INSERT INTO candidate_validation_tooling_failures (
         validation_run_id, error_kind, operation_name, error_message, created_at
       ) VALUES (
         ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
         ${input.errorMessage}, ${input.now}
       )
-    `,
-    complete(sql, {
+    `;
+    yield* complete(sql, {
       validationRunId: input.validationRunId,
       outcome: "tooling_failed",
       now: input.now,
-    }),
-  ).pipe(Effect.asVoid);
+    });
+    yield* sql`
+      DELETE FROM pre_native_snapshot_workspace_cleanups
+      WHERE validation_run_id = ${input.validationRunId}
+    `;
+  }).pipe(Effect.asVoid);
 
 const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
   Effect.gen(function* () {
