@@ -1462,6 +1462,31 @@ describe("repository SQL storage", () => {
             validationRunId: first.validationRunId,
           });
 
+          yield* repository.operation("install incomplete Task authority relationship", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`
+                INSERT INTO tasks (
+                  id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                ) VALUES (
+                  'BY-904', 904, 'Incomplete evidence authority',
+                  'Require the Task Acceptance Context relationship.', 'todo', NULL,
+                  '2026-07-25T16:12:00.000Z', '2026-07-25T16:12:00.000Z'
+                )
+              `;
+              yield* sql`PRAGMA ignore_check_constraints = ON`;
+              yield* sql`UPDATE changes SET task_id = 'BY-904' WHERE id = ${captured.changeId}`;
+              yield* sql`PRAGMA ignore_check_constraints = OFF`;
+            }),
+          );
+          const incompleteAuthorityError = yield* changes.authority
+            .getCurrentPassingEvidence(captured.changeId)
+            .pipe(Effect.flip);
+          expect(incompleteAuthorityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* repository.operation(
+            "restore taskless evidence authority",
+            (sql) => sql`UPDATE changes SET task_id = NULL WHERE id = ${captured.changeId}`,
+          );
+
           yield* repository.operation(
             "corrupt Run authority outside a policy-mismatched query",
             (sql) =>
@@ -1708,6 +1733,25 @@ describe("repository SQL storage", () => {
           });
           const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
           expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
+
+          yield* repository.operation("corrupt selected Resolution relationship", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`PRAGMA ignore_check_constraints = ON`;
+              yield* sql`UPDATE implementation_blockers SET resolution_content = NULL
+                          WHERE id = ${secondResolved.blocker.id}`;
+              yield* sql`PRAGMA ignore_check_constraints = OFF`;
+            }),
+          );
+          const incompleteResolutionError = yield* changes.authority
+            .getCurrentPassingEvidence(captured.changeId)
+            .pipe(Effect.flip);
+          expect(incompleteResolutionError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          yield* repository.operation(
+            "restore selected Resolution relationship",
+            (sql) =>
+              sql`UPDATE implementation_blockers SET resolution_content = 'Proceed after the second decision.'
+                  WHERE id = ${secondResolved.blocker.id}`,
+          );
 
           yield* repository.operation(
             "corrupt obsolete Blocker content",

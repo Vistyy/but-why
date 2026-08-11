@@ -451,9 +451,14 @@ const readLatestResolvedBlockerId = (
       readonly sequence: unknown;
       readonly sequenceType: unknown;
       readonly resolvedAt: unknown;
+      readonly resolutionId: unknown;
+      readonly resolutionRecordedAt: unknown;
+      readonly resolutionContent: unknown;
     }>(
       `SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
-        typeof(sequence) AS sequenceType, resolved_at AS resolvedAt
+        typeof(sequence) AS sequenceType, resolved_at AS resolvedAt,
+        resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
+        resolution_content AS resolutionContent
        FROM implementation_blockers
        WHERE change_id = ? AND resolved_at IS NOT NULL ${upperBound}
        ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
@@ -470,6 +475,9 @@ const readLatestResolvedBlockerId = (
         "Implementation Blocker sequence",
       );
       decodeStoredString(row.resolvedAt, "Implementation Blocker resolution time");
+      decodeStoredString(row.resolutionId, "Resolution ID");
+      decodeStoredString(row.resolutionRecordedAt, "Resolution recorded time");
+      decodeStoredString(row.resolutionContent, "Resolution content");
       return decodeStoredString(row.id, "Implementation Blocker ID");
     });
   });
@@ -857,17 +865,22 @@ const getPassingEvidence = (
       if (!authorityHistoryLoaded) {
         const acceptanceContextRows = yield* sql<{
           readonly id: unknown;
+          readonly taskId: unknown;
           readonly acceptanceContext: unknown;
-        }>`SELECT id, acceptance_context AS acceptanceContext
+        }>`SELECT id, task_id AS taskId, acceptance_context AS acceptanceContext
            FROM changes WHERE id = ${authority.id}`;
         expectedAcceptanceContext = yield* decodePersisted(operationName, () => {
           const authorityRow = acceptanceContextRows[0];
           const id = decodeStoredString(authorityRow?.id, "Change ID");
           if (id !== authority.id) throw new Error("Change disappeared during evidence lookup");
+          const taskId = decodeStoredNullableString(authorityRow?.taskId, "Change Task ID");
           const encoded = decodeStoredNullableString(
             authorityRow?.acceptanceContext,
             "Change Acceptance Context",
           );
+          if ((taskId === null) !== (encoded === null)) {
+            throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
+          }
           return encoded === null ? undefined : decodeSqliteAcceptanceContextSnapshot(encoded);
         });
         expectedDecisionsSnapshot = JSON.stringify(yield* listDecisions(sql, authority.id));
