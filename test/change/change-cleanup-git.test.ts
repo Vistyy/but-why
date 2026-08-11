@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -278,6 +278,62 @@ describe("Change cleanup Git adapter", () => {
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
+  });
+
+  it("preserves a local Repository Branch that moves after reachability verification", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    const movedHead = git(
+      repository,
+      "commit-tree",
+      "HEAD^{tree}",
+      "-p",
+      "HEAD",
+      "-m",
+      "Moved branch head",
+    );
+    const realGit = runTestProcessOrThrow("sh", ["-c", "command -v git"], { cwd: repository });
+    const commandDirectory = createTestWorkspace();
+    const gitWrapper = join(commandDirectory, "git");
+    writeFileSync(
+      gitWrapper,
+      `#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+const args = process.argv.slice(2);
+const deletesBranch =
+  (args.includes("branch") && args.includes("-D")) ||
+  (args.includes("update-ref") && args.includes("-d") && args.includes("refs/heads/feature"));
+if (deletesBranch) {
+  spawnSync(${JSON.stringify(realGit)}, [${JSON.stringify(`--git-dir=${commonDirectory}`)}, "update-ref", "refs/heads/feature", ${JSON.stringify(movedHead)}]);
+}
+const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: "inherit" });
+process.exit(result.status ?? 1);
+`,
+    );
+    chmodSync(gitWrapper, 0o755);
+    const previousPath = process.env["PATH"];
+
+    let result: ReturnType<typeof cleanupChangeResources>;
+    try {
+      process.env["PATH"] = `${commandDirectory}:${previousPath ?? ""}`;
+      result = cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath,
+        branchRef: "refs/heads/feature",
+      });
+    } finally {
+      process.env["PATH"] = previousPath;
+    }
+
+    expect(result).toEqual({ state: "pending", blockingReason: "branch_deletion_failed" });
+    expect(git(repository, "rev-parse", "refs/heads/feature")).toBe(movedHead);
   });
 
   it("removes a stale Managed Worktree registration when its path is absent", () => {

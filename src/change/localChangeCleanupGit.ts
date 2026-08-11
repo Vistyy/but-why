@@ -129,8 +129,9 @@ const removeWorktreeContainers: CleanupStage = (input) =>
     : undefined;
 
 const cleanupLocalBranch: CleanupStage = (input) => {
-  const branchName = branchNameForRef(input.branchRef);
-  if (branchName === undefined) return { state: "pending", blockingReason: "branch_ref_invalid" };
+  if (branchNameForRef(input.branchRef) === undefined) {
+    return { state: "pending", blockingReason: "branch_ref_invalid" };
+  }
   const branchHead = git(input.repositoryCommonDirectory, [
     "rev-parse",
     "--verify",
@@ -163,7 +164,12 @@ const cleanupLocalBranch: CleanupStage = (input) => {
   if (!reachableElsewhere && input.discardWork !== true) {
     return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
   }
-  return git(input.repositoryCommonDirectory, ["branch", "-D", "--", branchName]).ok
+  return git(input.repositoryCommonDirectory, [
+    "update-ref",
+    "-d",
+    input.branchRef,
+    branchHead.stdout.trim(),
+  ]).ok
     ? undefined
     : { state: "pending", blockingReason: "branch_deletion_failed" };
 };
