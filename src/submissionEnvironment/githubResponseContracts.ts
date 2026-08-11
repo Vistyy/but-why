@@ -44,6 +44,11 @@ const pullRequestMergedSchema = Schema.Union(
   Schema.Struct({ merged_at: nonEmptyStringSchema }),
 );
 
+const pullRequestResponseSchema = pullRequestFactsSchema.pipe(
+  Schema.extend(pullRequestUrlSchema),
+  Schema.extend(pullRequestMergedSchema),
+);
+
 const graphqlErrorsSchema = Schema.Array(Schema.Struct({}));
 
 const remoteBranchQuerySchema = Schema.Struct({
@@ -115,36 +120,33 @@ const decode = <A, I>(schema: Schema.Schema<A, I, never>, value: unknown): A | u
   return result._tag === "Right" ? result.right : undefined;
 };
 
-const decodePullRequest = (value: unknown): GitHubPullRequest | undefined => {
-  const facts = decode(pullRequestFactsSchema, value);
-  const urlValue = decode(pullRequestUrlSchema, value);
-  const mergedValue = decode(pullRequestMergedSchema, value);
-  if (facts === undefined || urlValue === undefined || mergedValue === undefined) return undefined;
+type PullRequestResponse = Schema.Schema.Type<typeof pullRequestResponseSchema>;
 
-  const url = "html_url" in urlValue ? urlValue.html_url : urlValue.url;
-  const merged = "merged" in mergedValue ? mergedValue.merged : mergedValue.merged_at !== null;
+const toGitHubPullRequest = (response: PullRequestResponse): GitHubPullRequest => {
+  const url = "html_url" in response ? response.html_url : response.url;
+  const merged = "merged" in response ? response.merged : response.merged_at !== null;
   return {
-    number: facts.number,
+    number: response.number,
     url,
-    repository: { owner: facts.base.repo.owner.login, repo: facts.base.repo.name },
-    state: facts.state,
+    repository: { owner: response.base.repo.owner.login, repo: response.base.repo.name },
+    state: response.state,
     merged,
-    baseBranch: facts.base.ref,
-    headBranch: facts.head.ref,
-    headSha: facts.head.sha,
+    baseBranch: response.base.ref,
+    headBranch: response.head.ref,
+    headSha: response.head.sha,
   };
 };
 
-export const decodeGitHubPullRequest = (source: string): GitHubPullRequest | undefined =>
-  decodePullRequest(parseJson(source));
+export const decodeGitHubPullRequest = (source: string): GitHubPullRequest | undefined => {
+  const response = decode(pullRequestResponseSchema, parseJson(source));
+  return response === undefined ? undefined : toGitHubPullRequest(response);
+};
 
 export const decodeGitHubPullRequestList = (
   source: string,
 ): readonly GitHubPullRequest[] | undefined => {
-  const values = decode(Schema.Array(Schema.Unknown), parseJson(source));
-  if (values === undefined) return undefined;
-  const pullRequests = values.map(decodePullRequest);
-  return pullRequests.every((pullRequest) => pullRequest !== undefined) ? pullRequests : undefined;
+  const responses = decode(Schema.Array(pullRequestResponseSchema), parseJson(source));
+  return responses?.map(toGitHubPullRequest);
 };
 
 export const decodeRemoteBranchQuery = (source: string): RemoteBranchQueryResponse | undefined =>

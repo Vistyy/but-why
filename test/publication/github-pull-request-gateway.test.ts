@@ -9,12 +9,20 @@ const remoteHeadResponse = (sha?: string): string =>
   JSON.stringify({
     data: {
       repository: {
+        unknown: true,
         ref:
           sha === undefined
             ? null
-            : { name: "feature", prefix: "refs/heads/", target: { oid: sha } },
+            : {
+                name: "feature",
+                prefix: "refs/heads/",
+                target: { oid: sha, unknown: true },
+                unknown: true,
+              },
       },
+      unknown: true,
     },
+    unknown: true,
   });
 
 describe("GitHub pull request gateway", () => {
@@ -822,7 +830,11 @@ describe("GitHub pull request gateway", () => {
       runGh: (args) => {
         ghCalls.push(args);
         return args.some((arg) => arg.includes("updateRefs"))
-          ? { ok: true, stdout: '{"data":{"updateRefs":{"clientMutationId":null}}}' }
+          ? {
+              ok: true,
+              stdout:
+                '{"data":{"updateRefs":{"clientMutationId":null,"unknown":true},"unknown":true},"unknown":true}',
+            }
           : {
               ok: true,
               stdout:
