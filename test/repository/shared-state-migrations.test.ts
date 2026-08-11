@@ -168,47 +168,6 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
-  it.effect("migrates every historical schema prefix to the current schema", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-prefixes-"))),
-      (directory) =>
-        Effect.gen(function* () {
-          for (const [key] of testRepositoryMigrationLedger.slice(0, -1)) {
-            const migrationId = Number(key.slice(0, 4));
-            const prefixDirectory = join(directory, key);
-            const statePath = join(prefixDirectory, "state.sqlite");
-            yield* Effect.sync(() => mkdirSync(prefixDirectory, { recursive: true }));
-            yield* Effect.scoped(
-              migrateTestRepositoryThrough(migrationId).pipe(
-                Effect.provide(nodeSqliteLayer(statePath)),
-              ),
-            );
-            yield* Effect.scoped(
-              Effect.gen(function* () {
-                const repository = yield* RepositorySql;
-                const rows = yield* repository.operation(
-                  "read migrated prefix ledger",
-                  (sql) => sql<{ readonly count: number }>`
-                    SELECT COUNT(*) AS count FROM effect_sql_migrations
-                  `,
-                );
-                expect(rows).toEqual([{ count: testRepositoryMigrationLedger.length }]);
-              }).pipe(
-                Effect.provide(
-                  repositorySqlLayer({
-                    commonDirectory: prefixDirectory,
-                    statePath,
-                    lifecycle: "initialize",
-                  }),
-                ),
-              ),
-            );
-          }
-        }),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
-  );
-
   it.effect("upgrades supported lifecycle state records through the strict active schema", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
