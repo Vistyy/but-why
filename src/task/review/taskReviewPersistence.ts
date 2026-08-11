@@ -83,10 +83,13 @@ export type TaskReviewPersistence = {
     taskId: string,
     producer: string,
   ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly recordExecutionAndTranscripts: (input: {
+  readonly recordExecution: (input: {
+    readonly reviewId: string;
+    readonly execution: TaskReviewExecution;
+  }) => Effect.Effect<void, RepositoryStorageError>;
+  readonly recordTranscripts: (input: {
     readonly reviewId: string;
     readonly taskId: string;
-    readonly execution?: TaskReviewExecution;
     readonly transcripts: readonly ObservedReviewerTranscript[];
   }) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordActiveFailure: (

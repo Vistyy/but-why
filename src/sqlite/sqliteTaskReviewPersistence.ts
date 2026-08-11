@@ -168,23 +168,24 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("remove Task Reviewer Session", (sql) =>
         Effect.asVoid(sql`DELETE FROM task_reviewer_sessions WHERE task_id = ${taskId}`),
       ),
-    recordExecutionAndTranscripts: (input) =>
+    recordExecution: (input) =>
       repository.transactionImmediate("record Task Review execution", (sql) =>
+        Effect.asVoid(sql`
+          INSERT INTO task_review_executions (
+            review_id, continuity, identity_fingerprint, restart_reason, duration_ms,
+            review_calls, invocation_usage, session_reference
+          ) VALUES (
+            ${input.reviewId}, ${input.execution.continuity},
+            ${input.execution.identityFingerprint}, ${input.execution.restartReason ?? null},
+            ${input.execution.durationMs}, ${input.execution.reviewCalls},
+            ${JSON.stringify(input.execution.invocationUsage)},
+            ${input.execution.sessionReference}
+          ) ON CONFLICT(review_id) DO NOTHING
+        `),
+      ),
+    recordTranscripts: (input) =>
+      repository.transactionImmediate("record Task Review transcripts", (sql) =>
         Effect.gen(function* () {
-          if (input.execution !== undefined) {
-            yield* sql`
-              INSERT INTO task_review_executions (
-                review_id, continuity, identity_fingerprint, restart_reason, duration_ms,
-                review_calls, invocation_usage, session_reference
-              ) VALUES (
-                ${input.reviewId}, ${input.execution.continuity},
-                ${input.execution.identityFingerprint}, ${input.execution.restartReason ?? null},
-                ${input.execution.durationMs}, ${input.execution.reviewCalls},
-                ${JSON.stringify(input.execution.invocationUsage)},
-                ${input.execution.sessionReference}
-              )
-            `;
-          }
           for (const transcript of input.transcripts) {
             yield* sql`
               INSERT INTO task_reviewer_transcripts (

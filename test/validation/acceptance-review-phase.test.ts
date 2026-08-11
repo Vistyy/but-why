@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -299,6 +300,19 @@ describe("Acceptance Review phase", () => {
         const first = acceptancePhaseFixture({ review: firstReview }, { sessionStore });
         const firstResult = yield* first.run();
         expect(firstResult.reviewerEvidence).toMatchObject({ continuity: "fresh", reviewCalls: 1 });
+        const persistedFingerprint = createHash("sha256")
+          .update(
+            JSON.stringify({
+              changeId: "change-1",
+              producer: "acceptance",
+              agentProfile: policy.profile,
+              instructions: policy.instructions,
+              agentEnvironment: ["nix", "develop", "-c"],
+              resources: {},
+            }),
+          )
+          .digest("hex");
+        expect(sessions.get("change-1/acceptance")?.fingerprint).toBe(persistedFingerprint);
 
         const temporaryFailure = new ReviewerExecutionFailed({
           kind: "process_execution",

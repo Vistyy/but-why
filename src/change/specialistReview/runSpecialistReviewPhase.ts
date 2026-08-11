@@ -223,6 +223,7 @@ const runSpecialist = (
     );
     const identity = {
       ownerId: input.changeId,
+      fingerprintOwnerKey: "changeId",
       producer: policy.id,
       agentProfile: policy.profile,
       instructions: policy.instructions,

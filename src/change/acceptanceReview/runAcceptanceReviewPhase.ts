@@ -191,6 +191,7 @@ const runAcceptanceReviewPhaseImpl = (
     });
     const identity = {
       ownerId: input.changeId,
+      fingerprintOwnerKey: "changeId" as const,
       producer: "acceptance" as const,
       agentProfile: input.policy.profile,
       instructions: input.policy.instructions,

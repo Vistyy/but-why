@@ -353,6 +353,28 @@ const submitTaskReview = (
       execution = { ok: false, failure: tooling };
     }
 
+    if (execution.evidence !== undefined) {
+      const recordedExecution = yield* Effect.either(
+        input.persistence.recordExecution({
+          reviewId,
+          execution: {
+            ...execution.evidence,
+            sessionReference: execution.sessionReference ?? null,
+          },
+        }),
+      );
+      if (recordedExecution._tag === "Left") {
+        const failure = {
+          operation: "record_task_review_execution",
+          message: repositoryStorageErrorMessage(recordedExecution.left),
+        };
+        yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+        const active = yield* input.persistence.getById(reviewId);
+        if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+        return { ok: false, code: "task_review_recovery_required", review: active } as const;
+      }
+    }
+
     const transcriptDiscovery = discoverObservedReviewerTranscripts(
       reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, taskId),
       taskId,
@@ -368,17 +390,9 @@ const submitTaskReview = (
       return { ok: false, code: "task_review_recovery_required", review: active } as const;
     }
     const indexed = yield* Effect.either(
-      input.persistence.recordExecutionAndTranscripts({
+      input.persistence.recordTranscripts({
         reviewId,
         taskId,
-        ...(execution.evidence === undefined
-          ? {}
-          : {
-              execution: {
-                ...execution.evidence,
-                sessionReference: execution.sessionReference ?? null,
-              },
-            }),
         transcripts: transcriptDiscovery.transcripts,
       }),
     );
@@ -508,7 +522,7 @@ export const abandonTaskReview = (
       } as const;
     }
     const indexed = yield* Effect.either(
-      input.persistence.recordExecutionAndTranscripts({
+      input.persistence.recordTranscripts({
         reviewId: review.id,
         taskId: review.taskId,
         transcripts: transcriptDiscovery.transcripts,

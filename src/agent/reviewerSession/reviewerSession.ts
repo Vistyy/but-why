@@ -9,6 +9,7 @@ import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
 
 export type ReviewerSessionIdentity = {
   readonly ownerId: string;
+  readonly fingerprintOwnerKey?: "changeId";
   readonly producer: string;
   readonly agentProfile: ResolvedPiAgentProfile;
   readonly instructions: string;
@@ -42,8 +43,14 @@ export type ReviewerSessionStore = {
 
 export type ReviewerContinuity = "fresh" | "resumed" | "restarted";
 
-export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): string =>
-  createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): string => {
+  const { ownerId, fingerprintOwnerKey, ...remainder } = identity;
+  const persistedIdentity =
+    fingerprintOwnerKey === "changeId"
+      ? { changeId: ownerId, ...remainder }
+      : { ownerId, ...remainder };
+  return createHash("sha256").update(JSON.stringify(persistedIdentity)).digest("hex");
+};
 
 export const reviewerSessionsPath = (
   sessionStorageRoot: string,

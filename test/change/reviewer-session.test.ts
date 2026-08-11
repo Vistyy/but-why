@@ -13,6 +13,7 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const identity = (changeId: string, producer: string): ReviewerSessionIdentity => ({
   ownerId: changeId,
+  fingerprintOwnerKey: "changeId",
   producer,
   agentProfile: {
     agentProfile: "strict",
@@ -56,6 +57,7 @@ describe("Reviewer Session storage", () => {
     const otherProducer = reviewerSessionFingerprint(identity("change-1", "standards"));
     const otherChange = reviewerSessionFingerprint(identity("change-2", "acceptance"));
 
+    expect(first).toBe("4dc33727b47c71e5c5b5d453288d20206fa8752de0c716880f6ec762574911f3");
     expect(same).toBe(first);
     expect(changedInstructions).not.toBe(first);
     expect(otherProducer).not.toBe(first);

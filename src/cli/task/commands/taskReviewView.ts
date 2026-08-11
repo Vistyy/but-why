@@ -6,6 +6,21 @@ import type {
 } from "../../../task/review/taskReview.js";
 import type { TaskReviewIdentityInspection } from "../../../task/review/taskReviewUseCases.js";
 
+export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
+  id: review.id,
+  state: review.state,
+  outcome: review.outcome,
+  findingCount: review.findings.length,
+  toolingFailure:
+    review.toolingFailure === null ? null : { operation: review.toolingFailure.operation },
+  workspaceCleanup: review.workspaceCleanup,
+  sessionCount: review.sessions.length,
+  transcriptCount: review.transcripts.length,
+  createdAt: review.createdAt,
+  updatedAt: review.updatedAt,
+  nextActions: [`Run \`by task-review show ${review.id}\` to inspect this Review.`],
+});
+
 export const taskReviewView = (
   review: TaskReviewRecord,
   proposalCurrent?: boolean,

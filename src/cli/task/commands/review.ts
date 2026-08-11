@@ -9,7 +9,7 @@ import {
   withTaskReviewRecovery,
   withTasks,
 } from "../taskCliSupport.js";
-import { taskReviewView } from "./taskReviewView.js";
+import { taskReviewHistoryView, taskReviewView } from "./taskReviewView.js";
 
 export type TaskReviewCommand =
   | { readonly action: "show"; readonly reviewId: string }
@@ -30,7 +30,7 @@ export const runTaskReviewCommand = (
         Effect.map(reviews.listForTask(resolved.taskId), (history) =>
           success({
             taskId: resolved.taskId,
-            reviews: history.map((review) => taskReviewView(review)),
+            reviews: history.map(taskReviewHistoryView),
             reviewCount: history.length,
             help:
               history.length === 0

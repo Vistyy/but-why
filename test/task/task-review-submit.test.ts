@@ -596,6 +596,7 @@ it.effect(
         reviewerAgentRuntime: reviewer,
       });
       expect(first.status, first.stdout).toBe(0);
+      const firstId = (JSON.parse(first.stdout) as { review: { id: string } }).review.id;
 
       const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draftPath = (JSON.parse(drafted.stdout) as { draft: { path: string } }).draft.path;
@@ -613,20 +614,42 @@ it.effect(
       expect(observed[1]?.prompt).toContain("Changed proposal");
       expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
 
+      const secondId = (JSON.parse(second.stdout) as { review: { id: string } }).review.id;
       const history = yield* runByInProcessEffect(root, ["task", "reviews", "BY-1"]);
       expect(history.status, history.stdout).toBe(0);
-      expect(JSON.parse(history.stdout)).toMatchObject({
+      expect(JSON.parse(history.stdout)).toEqual({
         taskId: "BY-1",
         reviewCount: 2,
         reviews: [
-          { sessions: [{ continuity: "fresh" }], transcripts: [{ piSessionId: "task-session-1" }] },
           {
-            sessions: [{ continuity: "resumed" }],
-            transcripts: [{ piSessionId: "task-session-1" }],
+            id: firstId,
+            state: "complete",
+            outcome: "passed",
+            findingCount: 0,
+            toolingFailure: null,
+            workspaceCleanup: "removed",
+            sessionCount: 1,
+            transcriptCount: 1,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            nextActions: [`Run \`by task-review show ${firstId}\` to inspect this Review.`],
+          },
+          {
+            id: secondId,
+            state: "complete",
+            outcome: "passed",
+            findingCount: 0,
+            toolingFailure: null,
+            workspaceCleanup: "removed",
+            sessionCount: 1,
+            transcriptCount: 1,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            nextActions: [`Run \`by task-review show ${secondId}\` to inspect this Review.`],
           },
         ],
+        help: ["Run `by task-review show <review-id>` to inspect one Review."],
       });
-      const secondId = (JSON.parse(second.stdout) as { review: { id: string } }).review.id;
       const shown = yield* runByInProcessEffect(root, ["task-review", "show", secondId]);
       expect(shown.status, shown.stdout).toBe(0);
       expect(JSON.parse(shown.stdout)).toMatchObject({
@@ -652,6 +675,7 @@ it.effect(
           review: {
             state: "running",
             toolingFailure: { operation: "index_task_reviewer_transcripts" },
+            sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
           },
         },
       });
@@ -675,6 +699,7 @@ it.effect(
           id: failedReviewId,
           state: "complete",
           outcome: "tooling_failed",
+          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
           transcripts: [{ piSessionId: "task-session-1" }],
         },
       });
