@@ -486,7 +486,7 @@ const herdrErrorResponseSchema = Schema.Struct({
 
 type HerdrAgentStatus = Schema.Schema.Type<typeof herdrAgentStatusSchema>;
 type HerdrAgent = Schema.Schema.Type<typeof herdrAgentSchema>;
-type HerdrWorktree = Schema.Schema.Type<typeof herdrWorktreeSchema>;
+type HerdrWorktree = { readonly paths: readonly string[] };
 type OpenedWorktree = { readonly rootPaneId: string };
 
 const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A | undefined => {
@@ -503,8 +503,14 @@ const decodeHerdrJson = <A, I>(source: string, schema: Schema.Schema<A, I>): A |
 const decodeAgentList = (source: string): readonly HerdrAgent[] | undefined =>
   decodeHerdrJson(source, herdrAgentListResponseSchema)?.result.agents;
 
-const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefined =>
-  decodeHerdrJson(source, herdrWorktreeListResponseSchema)?.result.worktrees;
+const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefined => {
+  const response = decodeHerdrJson(source, herdrWorktreeListResponseSchema);
+  return response?.result.worktrees.map((worktree) => ({
+    paths: [worktree.path, worktree.worktree_path].filter(
+      (path): path is string => path !== undefined,
+    ),
+  }));
+};
 
 const decodeOpenedWorktree = (
   source: string,
@@ -581,9 +587,7 @@ const isActiveAgentStatus = (status: HerdrAgentStatus): boolean =>
   status === "idle" || status === "working" || status === "blocked";
 
 const worktreeMatchesTarget = (worktrees: readonly HerdrWorktree[], targetPath: string): boolean =>
-  worktrees.some(
-    (worktree) => worktree.path === targetPath || worktree.worktree_path === targetPath,
-  );
+  worktrees.some((worktree) => worktree.paths.includes(targetPath));
 
 const executeHerdr: HerdrCommandExecutor = async (args, signal) => {
   try {

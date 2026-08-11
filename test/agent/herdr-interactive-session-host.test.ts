@@ -240,7 +240,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":"other"},{"path":"/workspace/change-123","branch":null,"future_field":true}],"future_field":true}}',
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":"other"},{"path":"/different-representation","worktree_path":"/workspace/change-123","branch":null,"future_field":true}],"future_field":true}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
