@@ -197,11 +197,11 @@ process.exit(result.status ?? 1);
 `,
     );
     chmodSync(gitWrapper, 0o755);
-    const previousPath = process.env["PATH"];
+    const { PATH: previousPath } = process.env;
 
     let result: ReturnType<typeof cleanupChangeResources>;
     try {
-      process.env["PATH"] = `${commandDirectory}:${previousPath ?? ""}`;
+      Object.assign(process.env, { PATH: `${commandDirectory}:${previousPath ?? ""}` });
       result = cleanupChangeResources({
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
@@ -209,7 +209,7 @@ process.exit(result.status ?? 1);
         remoteChangeBranch: null,
       });
     } finally {
-      process.env["PATH"] = previousPath;
+      Object.assign(process.env, { PATH: previousPath });
     }
 
     expect(result).toEqual({ state: "pending", blockingReason: "worktree_path_unsafe" });
@@ -403,11 +403,11 @@ process.exit(result.status ?? 1);
 `,
     );
     chmodSync(gitWrapper, 0o755);
-    const previousPath = process.env["PATH"];
+    const { PATH: previousPath } = process.env;
 
     let result: ReturnType<typeof cleanupChangeResources>;
     try {
-      process.env["PATH"] = `${commandDirectory}:${previousPath ?? ""}`;
+      Object.assign(process.env, { PATH: `${commandDirectory}:${previousPath ?? ""}` });
       result = cleanupChangeResources({
         repositoryCommonDirectory: commonDirectory,
         worktreePath,
@@ -415,7 +415,7 @@ process.exit(result.status ?? 1);
         remoteChangeBranch: null,
       });
     } finally {
-      process.env["PATH"] = previousPath;
+      Object.assign(process.env, { PATH: previousPath });
     }
 
     expect(result).toEqual({ state: "pending", blockingReason: "branch_deletion_failed" });

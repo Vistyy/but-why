@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
-
+import { reviewerSessionsOwnerRoot } from "../../agent/reviewerSession/reviewerSession.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { openSqliteChangeReviewerTranscriptPort } from "../../sqlite/sqliteChangeReviewerTranscriptPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../sqlite/sqliteTerminalChangeCleanupPersistence.js";
@@ -8,7 +8,6 @@ import { openSqliteValidationArtifactLifecyclePort } from "../../sqlite/sqliteVa
 import { localGitHubChangeCleanupRemote } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { cleanupChangeResourcesWithRemote } from "../adapters/localChangeCleanupGit.js";
 import { openTerminalCleanup } from "../cleanupTerminalChange.js";
-import { reviewerSessionsChangeRoot } from "../reviewerSession/reviewerSession.js";
 import { openReviewerTranscriptIndex } from "../reviewerSession/reviewerTranscript.js";
 import { openArtifactLifecycle } from "../validationRun/artifactLifecycle.js";
 
@@ -26,7 +25,7 @@ export const composeTerminalCleanup = (context: LocalRepositoryContext) =>
         ),
         indexTranscripts: openReviewerTranscriptIndex({ persistence: reviewerTranscripts }),
         reviewerSessionPathFor: (changeId) =>
-          reviewerSessionsChangeRoot(context.paths.operationalDir, changeId),
+          reviewerSessionsOwnerRoot(context.paths.operationalDir, changeId),
         artifactLifecycle: openArtifactLifecycle({
           persistence: artifactLifecyclePersistence,
           artifactsRoot: context.paths.artifactsPath,

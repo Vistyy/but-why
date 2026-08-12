@@ -2096,7 +2096,7 @@ describe("repository SQL storage", () => {
           }),
         );
         yield* changes.reviewerSessions.saveReviewerSession({
-          changeId: "change-transcript-retained",
+          ownerId: "change-transcript-retained",
           producer: "acceptance",
           fingerprint: "fingerprint",
           sessionReference: "session-live",
@@ -2211,11 +2211,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(34);
+          expect(yield* initializeMigrationCount).toBe(35);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(34);
+          expect(yield* readMigrationCount).toBe(35);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2315,9 +2315,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(34);
+              expect(migrations.length).toBe(35);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 34 }, (_, index) => index + 1),
+                Array.from({ length: 35 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2416,7 +2416,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 34,
+              migrationCount: 35,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

@@ -36,6 +36,7 @@ import { preNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/mig
 import { backfillPreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0032_backfill_pre_native_snapshot_workspace_cleanup.js";
 import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 import { taskReviewsMigration } from "../../src/sqlite/migrations/0034_task_reviews.js";
+import { taskReviewerSessionsMigration } from "../../src/sqlite/migrations/0035_task_reviewer_sessions.js";
 
 export const testRepositoryMigrationLedger = [
   ["0001_baseline", baselineMigration],
@@ -81,6 +82,7 @@ export const testRepositoryMigrationLedger = [
     removePreNativeSnapshotWorkspaceCleanupMigration,
   ],
   ["0034_task_reviews", taskReviewsMigration],
+  ["0035_task_reviewer_sessions", taskReviewerSessionsMigration],
 ] as const;
 
 export const migrateTestRepositoryThrough = (lastMigrationId: number) => {

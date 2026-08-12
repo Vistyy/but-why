@@ -1,14 +1,14 @@
 import { chmodSync, readdirSync, statSync } from "node:fs";
 
 import { Clock, Effect } from "effect";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
   ReviewerOutputDecoder,
-} from "../../agent/reviewerAgentRuntime.js";
-import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
-import type { TokenUsage } from "../../agent/tokenUsage.js";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+} from "../reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
+import type { TokenUsage } from "../tokenUsage.js";
 import {
   type ReviewerContinuity,
   type ReviewerSessionIdentity,
@@ -66,7 +66,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
     const stored =
       input.sessionStore === undefined
         ? undefined
-        : yield* input.sessionStore.get(input.identity.changeId, input.identity.producer);
+        : yield* input.sessionStore.get(input.identity.owner.id, input.identity.producer);
     const compatible =
       stored !== undefined &&
       stored.fingerprint === fingerprint &&
@@ -107,7 +107,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
             : {
                 sessionStorageRoot: reviewerSessionsPath(
                   input.sessionStorageRoot,
-                  input.identity.changeId,
+                  input.identity.owner.id,
                   input.identity.producer,
                 ),
               }),
@@ -128,7 +128,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
       continuity = "restarted";
       restartReason = "session_unusable";
       if (input.sessionStore !== undefined)
-        yield* input.sessionStore.remove(input.identity.changeId, input.identity.producer);
+        yield* input.sessionStore.remove(input.identity.owner.id, input.identity.producer);
       result = yield* review(input.prompt);
     }
     result = yield* input.completeReview({ initialResult: result, review });
@@ -148,7 +148,7 @@ export const executeReviewerSession = <Output, ReviewBoundaryError>(
       sessionPermissionsOk
     ) {
       yield* input.sessionStore.save({
-        changeId: input.identity.changeId,
+        ownerId: input.identity.owner.id,
         producer: input.identity.producer,
         fingerprint,
         sessionReference: result.sessionReference,

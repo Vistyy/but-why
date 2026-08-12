@@ -1,4 +1,5 @@
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 
@@ -43,10 +44,21 @@ export type TaskReviewPolicySnapshot = TaskReviewPolicySnapshotV1 | TaskReviewPo
 export type TaskReviewToolingFailure = {
   readonly operation: string;
   readonly message: string;
+  readonly pendingExecution?: TaskReviewExecution;
 };
 
 export type TaskReviewFinding = ReviewerFindingCore & {
   readonly artifactRefs: readonly string[];
+};
+
+export type TaskReviewerTranscript = {
+  readonly producer: string;
+  readonly piSessionId: string;
+  readonly filePath: string;
+};
+
+export type TaskReviewExecution = ReviewerExecutionEvidence & {
+  readonly sessionReference: string | null;
 };
 
 export type TaskReviewRecord = {
@@ -64,6 +76,8 @@ export type TaskReviewRecord = {
   readonly toolingFailure: TaskReviewToolingFailure | null;
   readonly abandonReason: string | null;
   readonly findings: readonly TaskReviewFinding[];
+  readonly sessions: readonly TaskReviewExecution[];
+  readonly transcripts: readonly TaskReviewerTranscript[];
   readonly createdAt: string;
   readonly updatedAt: string;
 };

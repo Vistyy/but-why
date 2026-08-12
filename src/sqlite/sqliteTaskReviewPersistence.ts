@@ -1,9 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
+import type { TokenUsage } from "../agent/tokenUsage.js";
 import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type {
   TaskReviewDependencyEvidence,
+  TaskReviewExecution,
   TaskReviewFinding,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
@@ -33,6 +35,21 @@ type ReviewRow = {
 
 type FindingRow = Omit<TaskReviewFinding, "artifactRefs" | "files"> & {
   readonly files: string;
+};
+
+type ExecutionRow = Omit<
+  TaskReviewExecution,
+  "invocationUsage" | "restartReason" | "sessionReference"
+> & {
+  readonly restartReason: string | null;
+  readonly invocationUsage: string;
+  readonly sessionReference: string | null;
+};
+
+type TranscriptRow = {
+  readonly producer: string;
+  readonly piSessionId: string;
+  readonly filePath: string;
 };
 
 export const openSqliteTaskReviewPersistence = (): Effect.Effect<
@@ -118,6 +135,83 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
     getById: (reviewId) =>
       repository.transaction("read Task Review", (sql) => getReview(sql, reviewId)),
+    listForTask: (taskId) =>
+      repository.transaction("list Task Reviews", (sql) =>
+        Effect.gen(function* () {
+          const rows = yield* readReviewRows(sql, taskId);
+          return yield* Effect.forEach(rows, (row) => decodeReview(sql, row));
+        }),
+      ),
+    getReviewerSession: (taskId, producer) =>
+      repository.transaction("read Task Reviewer Session", (sql) =>
+        Effect.map(
+          sql<{ readonly fingerprint: string; readonly sessionReference: string }>`
+            SELECT fingerprint, session_reference AS sessionReference
+            FROM task_reviewer_sessions WHERE task_id = ${taskId}
+          `,
+          (rows) => {
+            const row = rows[0];
+            return row === undefined ? undefined : { ownerId: taskId, producer, ...row };
+          },
+        ),
+      ),
+    saveReviewerSession: (session) =>
+      repository.transactionImmediate("save Task Reviewer Session", (sql) =>
+        Effect.asVoid(sql`
+          INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
+          VALUES (${session.ownerId}, ${session.fingerprint}, ${session.sessionReference})
+          ON CONFLICT(task_id) DO UPDATE SET fingerprint = excluded.fingerprint,
+            session_reference = excluded.session_reference
+        `),
+      ),
+    removeReviewerSession: (taskId) =>
+      repository.transactionImmediate("remove Task Reviewer Session", (sql) =>
+        Effect.asVoid(sql`DELETE FROM task_reviewer_sessions WHERE task_id = ${taskId}`),
+      ),
+    recordExecution: (input) =>
+      repository.transactionImmediate("record Task Review execution", (sql) =>
+        Effect.asVoid(sql`
+          INSERT INTO task_review_executions (
+            review_id, continuity, identity_fingerprint, restart_reason, duration_ms,
+            review_calls, invocation_usage, session_reference
+          ) VALUES (
+            ${input.reviewId}, ${input.execution.continuity},
+            ${input.execution.identityFingerprint}, ${input.execution.restartReason ?? null},
+            ${input.execution.durationMs}, ${input.execution.reviewCalls},
+            ${JSON.stringify(input.execution.invocationUsage)},
+            ${input.execution.sessionReference}
+          ) ON CONFLICT(review_id) DO NOTHING
+        `),
+      ),
+    recordTranscripts: (input) =>
+      repository.transactionImmediate("record Task Review transcripts", (sql) =>
+        Effect.gen(function* () {
+          for (const transcript of input.transcripts) {
+            yield* sql`
+              INSERT INTO task_reviewer_transcripts (
+                task_id, producer, pi_session_id, file_path
+              ) VALUES (
+                ${input.taskId}, ${transcript.producer}, ${transcript.piSessionId},
+                ${transcript.filePath}
+              ) ON CONFLICT(task_id, producer, file_path) DO NOTHING
+            `;
+            yield* sql`
+              INSERT INTO task_review_transcript_observations (review_id, transcript_sequence)
+              SELECT ${input.reviewId}, sequence FROM task_reviewer_transcripts
+              WHERE task_id = ${input.taskId} AND producer = ${transcript.producer}
+                AND file_path = ${transcript.filePath}
+              ON CONFLICT(review_id, transcript_sequence) DO NOTHING
+            `;
+          }
+        }),
+      ),
+    recordActiveFailure: (reviewId, failure, now) =>
+      repository.transactionImmediate("record active Task Review failure", (sql) =>
+        Effect.asVoid(sql`
+          UPDATE task_reviews SET tooling_failure = ${JSON.stringify(failure)}, updated_at = ${now}
+          WHERE id = ${reviewId} AND state = 'running'
+        `),
+      ),
     getLatestForTask: (taskId) =>
       repository.transaction("read current Task Review", (sql) =>
         Effect.gen(function* () {
@@ -140,6 +234,16 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         currentProposalMatches(sql, review),
       ),
   }));
+
+const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewRow>`
+  SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
+    dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
+    base_ref AS baseRef, base_commit AS baseCommit, workspace_path AS workspacePath,
+    state, outcome, workspace_cleanup AS workspaceCleanup,
+    tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
+    created_at AS createdAt, updated_at AS updatedAt
+  FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence ASC
+`;
 
 const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>
   sql<TaskReviewDependencyEvidence>`
@@ -235,6 +339,22 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
       SELECT title, description, evidence, files FROM task_review_findings
       WHERE review_id = ${row.id} ORDER BY sequence ASC
     `;
+    const executions = yield* sql<ExecutionRow>`
+      SELECT continuity, identity_fingerprint AS identityFingerprint,
+        restart_reason AS restartReason, duration_ms AS durationMs,
+        review_calls AS reviewCalls, invocation_usage AS invocationUsage,
+        session_reference AS sessionReference
+      FROM task_review_executions WHERE review_id = ${row.id}
+    `;
+    const transcripts = yield* sql<TranscriptRow>`
+      SELECT transcript.producer, transcript.pi_session_id AS piSessionId,
+        transcript.file_path AS filePath
+      FROM task_review_transcript_observations observation
+      JOIN task_reviewer_transcripts transcript
+        ON transcript.sequence = observation.transcript_sequence
+      WHERE observation.review_id = ${row.id}
+      ORDER BY transcript.sequence ASC
+    `;
     return yield* Effect.try({
       try: (): TaskReviewRecord => ({
         id: row.id,
@@ -257,6 +377,12 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           files: parseStringArray(finding.files),
           artifactRefs: [],
         })),
+        sessions: executions.map(({ restartReason, ...execution }) => ({
+          ...execution,
+          ...(restartReason === null ? {} : { restartReason }),
+          invocationUsage: parseInvocationUsage(execution.invocationUsage),
+        })),
+        transcripts,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }),
@@ -283,6 +409,14 @@ type TaskReviewJsonObject = Record<string, unknown> & {
   readonly source?: unknown;
   readonly operation?: unknown;
   readonly message?: unknown;
+  readonly pendingExecution?: unknown;
+  readonly continuity?: unknown;
+  readonly identityFingerprint?: unknown;
+  readonly restartReason?: unknown;
+  readonly durationMs?: unknown;
+  readonly reviewCalls?: unknown;
+  readonly invocationUsage?: unknown;
+  readonly sessionReference?: unknown;
 };
 
 const parseObject = (source: string): TaskReviewJsonObject => {
@@ -293,6 +427,33 @@ const parseObject = (source: string): TaskReviewJsonObject => {
 };
 const requiredString = (value: unknown): string => {
   if (typeof value !== "string") throw new Error("Expected string");
+  return value;
+};
+const parseInvocationUsage = (source: string): readonly (TokenUsage | null)[] => {
+  const value: unknown = JSON.parse(source) as unknown;
+  if (!Array.isArray(value)) throw new Error("Expected invocation usage array");
+  return value.map((entry) => {
+    if (entry === null) return null;
+    if (typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("Expected invocation usage object");
+    }
+    const {
+      inputTokens: inputTokenValue,
+      cachedInputTokens: cachedInputTokenValue,
+      outputTokens: outputTokenValue,
+      totalTokens: totalTokenValue,
+    } = entry as Record<string, unknown>;
+    const inputTokens = requiredTokenCount(inputTokenValue);
+    const cachedInputTokens = requiredTokenCount(cachedInputTokenValue);
+    const outputTokens = requiredTokenCount(outputTokenValue);
+    const totalTokens = requiredTokenCount(totalTokenValue);
+    return { inputTokens, cachedInputTokens, outputTokens, totalTokens };
+  });
+};
+const requiredTokenCount = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("Expected non-negative integer token count");
+  }
   return value;
 };
 const parseStringArray = (source: string): readonly string[] => {
@@ -385,6 +546,34 @@ const parseFailure = (source: string): TaskReviewToolingFailure => {
   return {
     operation: requiredString(value.operation),
     message: requiredString(value.message),
+    ...(value.pendingExecution === undefined
+      ? {}
+      : { pendingExecution: parseExecution(value.pendingExecution) }),
+  };
+};
+const parseExecution = (source: unknown): TaskReviewExecution => {
+  const value = parseObject(JSON.stringify(source));
+  if (
+    value.continuity !== "fresh" &&
+    value.continuity !== "resumed" &&
+    value.continuity !== "restarted"
+  ) {
+    throw new Error("Invalid Task Review execution continuity");
+  }
+  if (value.restartReason !== undefined && typeof value.restartReason !== "string") {
+    throw new Error("Invalid Task Review execution restart reason");
+  }
+  if (value.sessionReference !== null && typeof value.sessionReference !== "string") {
+    throw new Error("Invalid Task Review execution session reference");
+  }
+  return {
+    continuity: value.continuity,
+    identityFingerprint: requiredString(value.identityFingerprint),
+    ...(value.restartReason === undefined ? {} : { restartReason: value.restartReason }),
+    durationMs: requiredTokenCount(value.durationMs),
+    reviewCalls: requiredTokenCount(value.reviewCalls),
+    invocationUsage: parseInvocationUsage(JSON.stringify(value.invocationUsage)),
+    sessionReference: value.sessionReference,
   };
 };
 const invalid = (operationName: string, message: string) =>

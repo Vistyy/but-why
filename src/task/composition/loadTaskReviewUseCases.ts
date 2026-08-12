@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
 import {
@@ -60,6 +61,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
         use({
           getById: persistence.getById,
           getLatestForTask: persistence.getLatestForTask,
+          listForTask: persistence.listForTask,
           proposalIsCurrent: persistence.proposalIsCurrent,
           inspectIdentity: (review) =>
             inspectTaskReviewIdentity(
@@ -97,6 +99,10 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
             abandonTaskReview(
               {
                 mainCheckoutRoot: context.mainCheckoutRoot,
+                reviewerSessionStorageRoot: join(
+                  context.paths.operationalDir,
+                  "task-review-sessions",
+                ),
                 persistence,
                 verifyReviewBase: verifyRecordedTaskReviewBase,
                 cleanupWorkspace: cleanupExactDisposableWorkspace,
@@ -141,6 +147,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
         use(
           openTaskReviewUseCases({
             mainCheckoutRoot: context.mainCheckoutRoot,
+            reviewerSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
             loadRepoConfig: (commit) => {
               const source = readRepositoryFileAtCommit(
                 context.mainCheckoutRoot,

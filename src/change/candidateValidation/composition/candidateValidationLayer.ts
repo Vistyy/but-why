@@ -6,8 +6,8 @@ import {
   type ReviewerAgentRuntime,
 } from "../../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
+import type { ReviewerSessionStore } from "../../../agent/reviewerSession/reviewerSession.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
-import type { ReviewerSessionStore } from "../../reviewerSession/reviewerSession.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
 import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";
 import {

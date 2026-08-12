@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
+import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
@@ -12,6 +14,12 @@ import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
+import type { TaskReviewExecution, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
+import {
+  openTaskReviewUseCases,
+  recordTaskReviewExecutionWithRetry,
+} from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -19,6 +27,177 @@ import {
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
+
+it.effect("retries an idempotent Task Review execution record after an uncertain SQL failure", () =>
+  Effect.gen(function* () {
+    let attempts = 0;
+    yield* recordTaskReviewExecutionWithRetry(
+      () => {
+        attempts += 1;
+        return attempts === 1
+          ? Effect.fail(
+              new RepositorySqlOperationFailed({
+                operationName: "record Task Review execution",
+                cause: new Error("commit outcome unavailable"),
+              }),
+            )
+          : Effect.void;
+      },
+      {
+        reviewId: "review-1",
+        execution: {
+          continuity: "fresh",
+          identityFingerprint: "fingerprint",
+          durationMs: 1,
+          reviewCalls: 1,
+          invocationUsage: [null],
+          sessionReference: "session-1",
+        },
+      },
+    );
+
+    expect(attempts).toBe(2);
+  }),
+);
+
+it.effect("retains exact execution evidence when Task Review submit cannot record it", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const profile = {
+      agentProfile: "review",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const },
+    };
+    const policy = {
+      id: "task_advisory_review" as const,
+      version: 2 as const,
+      profile,
+      builtInInstructions: taskReviewBuiltInInstructions,
+      guidance: null,
+    };
+    let active: TaskReviewRecord | undefined;
+    let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
+    const executionAttempts: TaskReviewExecution[] = [];
+    const persistence: TaskReviewPersistence = {
+      admit: (input) => {
+        const proposal = { title: "Review me", description: "Exact proposal", dependencyIds: [] };
+        active = {
+          id: input.reviewId,
+          taskId,
+          proposal,
+          dependencyEvidence: [],
+          policy,
+          baseRef: input.baseRef,
+          baseCommit: input.baseCommit,
+          workspacePath: input.workspacePath,
+          state: "running",
+          outcome: null,
+          workspaceCleanup: "not_created",
+          toolingFailure: null,
+          abandonReason: null,
+          findings: [],
+          sessions: [],
+          transcripts: [],
+          createdAt: input.now,
+          updatedAt: input.now,
+        };
+        return Effect.succeed({
+          ok: true as const,
+          review: active,
+          proposal,
+          dependencyEvidence: [],
+        });
+      },
+      recordCleanup: (_reviewId, cleanup, now) =>
+        Effect.sync(() => {
+          if (active !== undefined)
+            active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
+        }),
+      complete: () =>
+        Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
+      abandon: () =>
+        Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
+      getById: () => Effect.succeed(active),
+      getLatestForTask: () => Effect.succeed(active),
+      listForTask: () => Effect.succeed(active === undefined ? [] : [active]),
+      getReviewerSession: () => Effect.succeed(session),
+      saveReviewerSession: (record) =>
+        Effect.sync(() => {
+          session = record;
+        }),
+      removeReviewerSession: () =>
+        Effect.sync(() => {
+          session = undefined;
+        }),
+      recordExecution: (input) => {
+        executionAttempts.push(input.execution);
+        return Effect.fail(
+          new RepositorySqlOperationFailed({
+            operationName: "record Task Review execution",
+            cause: new Error("commit outcome unavailable"),
+          }),
+        );
+      },
+      recordTranscripts: () => Effect.void,
+      recordActiveFailure: (_reviewId, failure, now) =>
+        Effect.sync(() => {
+          if (active !== undefined) active = { ...active, toolingFailure: failure, updatedAt: now };
+        }),
+      proposalIsCurrent: () => Effect.succeed(true),
+    };
+    const runWorkspace: RunDisposableExactCommitWorkspace = (input) =>
+      Effect.gen(function* () {
+        const workspaceResult =
+          input.runInWorkspace === undefined
+            ? undefined
+            : yield* input.runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: createTestWorkspace(),
+              });
+        if (input.recordWorkspaceCleanup !== undefined) {
+          yield* input.recordWorkspaceCleanup({ workspace: "removed" });
+        }
+        return { ok: true as const, ...(workspaceResult === undefined ? {} : { workspaceResult }) };
+      });
+    const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+      review: () =>
+        Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+          sessionReference: "session-1",
+        }),
+    };
+    const reviews = openTaskReviewUseCases({
+      mainCheckoutRoot: createTestWorkspace(),
+      loadRepoConfig: () => ({ ok: true, config: { taskPrefix: "BY" } }),
+      resolvePolicy: () => ({ ok: true, policy: { profile, snapshot: policy } }),
+      persistence,
+      reviewerSessionStorageRoot: createTestWorkspace(),
+      reviewerRuntime: reviewer,
+      reviewerExecutor: { execute: () => Effect.die("Reviewer Runtime must not use executor") },
+      readReviewBase: () =>
+        Effect.succeed({ ok: true, base: { ref: "refs/heads/main", commit: "a".repeat(40) } }),
+      verifyReviewBase: () => Effect.succeed({ ok: true }),
+      runWorkspace,
+      cleanupWorkspace: () => Effect.succeed({ workspace: "removed" }),
+      inspectWorkspace: () => Effect.succeed({ state: "absent" }),
+    });
+
+    const result = yield* reviews.submit(taskId, "2026-08-11T12:00:00.000Z");
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: { toolingFailure: { operation: "record_task_review_execution" } },
+    });
+    expect(executionAttempts).toHaveLength(2);
+    if (result.ok || result.code !== "task_review_recovery_required") return;
+    expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
+  }),
+);
 
 const passingReviewer: ReviewerAgentRuntime<ReviewerOutput> = {
   review: () =>
@@ -296,20 +475,38 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
       loaded.runtime.provide(
         openSqliteTaskReviewPersistence().pipe(
           Effect.flatMap((reviews) =>
-            reviews.admit({
-              reviewId,
-              taskId: publicTaskId("BY-1"),
-              policy: {
-                id: "task_advisory_review",
-                version: 1,
-                agentProfile: "review",
-                profileScope: "global",
-                instructions: taskReviewBuiltInInstructions,
-              },
-              baseRef: "refs/heads/main",
-              baseCommit: commit,
-              workspacePath,
-              now: "2026-08-11T12:00:00.000Z",
+            Effect.gen(function* () {
+              yield* reviews.admit({
+                reviewId,
+                taskId: publicTaskId("BY-1"),
+                policy: {
+                  id: "task_advisory_review",
+                  version: 1,
+                  agentProfile: "review",
+                  profileScope: "global",
+                  instructions: taskReviewBuiltInInstructions,
+                },
+                baseRef: "refs/heads/main",
+                baseCommit: commit,
+                workspacePath,
+                now: "2026-08-11T12:00:00.000Z",
+              });
+              yield* reviews.recordActiveFailure(
+                reviewId,
+                {
+                  operation: "record_task_review_execution",
+                  message: "Task Review execution persistence failed twice.",
+                  pendingExecution: {
+                    continuity: "fresh",
+                    identityFingerprint: "fingerprint",
+                    durationMs: 5,
+                    reviewCalls: 1,
+                    invocationUsage: [null],
+                    sessionReference: "session-1",
+                  },
+                },
+                "2026-08-11T12:00:01.000Z",
+              );
             }),
           ),
         ),
@@ -323,6 +520,10 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
         id: reviewId,
         state: "running",
         workspace: { path: workspacePath },
+        toolingFailure: {
+          operation: "record_task_review_execution",
+          pendingExecution: { sessionReference: "session-1" },
+        },
         identity: { verified: true, workspace: { state: "matching" } },
       },
     });
@@ -336,7 +537,12 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
     ]);
     expect(abandoned.status, abandoned.stdout).toBe(0);
     expect(JSON.parse(abandoned.stdout)).toMatchObject({
-      review: { state: "complete", outcome: "tooling_failed", workspace: { cleanup: "removed" } },
+      review: {
+        state: "complete",
+        outcome: "tooling_failed",
+        workspace: { cleanup: "removed" },
+        sessions: [{ continuity: "fresh", sessionReference: "session-1" }],
+      },
     });
     expect(existsSync(workspacePath)).toBe(false);
 
@@ -537,4 +743,171 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     const review = (output as { review: { workspace: { path: string } } }).review;
     expect(existsSync(review.workspace.path)).toBe(false);
   }),
+);
+
+it.effect(
+  "continues a compatible Task Reviewer Session with the current proposal diff and exposes transcripts",
+  () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const globalConfigPath = join(root, "global.json");
+      yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      commitButWhyConfigAndRecordDefault(root);
+      writeFileSync(
+        globalConfigPath,
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "review" },
+          agentProfiles: {
+            review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+          },
+        }),
+      );
+      const proposalPath = join(root, "proposal.txt");
+      writeFileSync(proposalPath, "Initial proposal");
+      yield* runByInProcessEffect(root, [
+        "task",
+        "create",
+        "--title",
+        "Review continuity",
+        "--file",
+        proposalPath,
+      ]);
+
+      const observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0][] = [];
+      const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+        review: (input) => {
+          observed.push(input);
+          const storageRoot = input.sessionStorageRoot;
+          if (storageRoot === undefined) throw new Error("Expected Task Reviewer Session storage");
+          const sessionId = input.resumeSession ?? "task-session-1";
+          mkdirSync(storageRoot, { recursive: true });
+          const sessionFilePath = join(storageRoot, `review_${sessionId}.jsonl`);
+          writeFileSync(
+            sessionFilePath,
+            `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+          );
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+            sessionReference: sessionId,
+            sessionFilePath,
+          });
+        },
+      };
+
+      const first = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(first.status, first.stdout).toBe(0);
+      const firstId = (JSON.parse(first.stdout) as { review: { id: string } }).review.id;
+
+      const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
+      const draftPath = (JSON.parse(drafted.stdout) as { draft: { path: string } }).draft.path;
+      writeFileSync(draftPath, "Changed proposal\n");
+      const applied = yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"]);
+      expect(applied.status, applied.stdout).toBe(0);
+
+      const second = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(second.status, second.stdout).toBe(0);
+      expect(observed).toHaveLength(2);
+      expect(observed[1]?.resumeSession).toBe("task-session-1");
+      expect(observed[1]?.prompt).toContain("Changed proposal");
+      expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
+
+      const secondId = (JSON.parse(second.stdout) as { review: { id: string } }).review.id;
+      const history = yield* runByInProcessEffect(root, ["task", "reviews", "BY-1"]);
+      expect(history.status, history.stdout).toBe(0);
+      expect(JSON.parse(history.stdout)).toEqual({
+        taskId: "BY-1",
+        reviewCount: 2,
+        reviews: [
+          {
+            id: firstId,
+            state: "complete",
+            outcome: "passed",
+            findingCount: 0,
+            toolingFailure: null,
+            workspaceCleanup: "removed",
+            sessionCount: 1,
+            transcriptCount: 1,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            nextActions: [`Run \`by task-review show ${firstId}\` to inspect this Review.`],
+          },
+          {
+            id: secondId,
+            state: "complete",
+            outcome: "passed",
+            findingCount: 0,
+            toolingFailure: null,
+            workspaceCleanup: "removed",
+            sessionCount: 1,
+            transcriptCount: 1,
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            nextActions: [`Run \`by task-review show ${secondId}\` to inspect this Review.`],
+          },
+        ],
+        help: ["Run `by task-review show <review-id>` to inspect one Review."],
+      });
+      const shown = yield* runByInProcessEffect(root, ["task-review", "show", secondId]);
+      expect(shown.status, shown.stdout).toBe(0);
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        review: {
+          proposal: { description: "Changed proposal\n" },
+          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+          transcripts: [{ piSessionId: "task-session-1" }],
+        },
+      });
+
+      const sessionStorageRoot = observed[1]?.sessionStorageRoot;
+      if (sessionStorageRoot === undefined) throw new Error("Expected session storage root");
+      const invalidTranscript = join(sessionStorageRoot, "invalid.jsonl");
+      writeFileSync(invalidTranscript, "{}\n");
+      const failedIndex = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(failedIndex.status).toBe(1);
+      expect(JSON.parse(failedIndex.stdout)).toMatchObject({
+        error: {
+          code: "task_review_recovery_required",
+          review: {
+            state: "running",
+            toolingFailure: { operation: "index_task_reviewer_transcripts" },
+            sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+          },
+        },
+      });
+      const failedReviewId = (
+        JSON.parse(failedIndex.stdout) as {
+          error: { review: { id: string } };
+        }
+      ).error.review.id;
+      rmSync(invalidTranscript);
+      const abandoned = yield* runByInProcessEffect(root, [
+        "task",
+        "review",
+        "abandon",
+        failedReviewId,
+        "--reason",
+        "Indexing interrupted completion",
+      ]);
+      expect(abandoned.status, abandoned.stdout).toBe(0);
+      expect(JSON.parse(abandoned.stdout)).toMatchObject({
+        review: {
+          id: failedReviewId,
+          state: "complete",
+          outcome: "tooling_failed",
+          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+          transcripts: [{ piSessionId: "task-session-1" }],
+        },
+      });
+    }),
 );
