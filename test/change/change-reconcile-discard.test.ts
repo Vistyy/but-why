@@ -114,6 +114,7 @@ describe("Change reconciliation discard boundary", () => {
               completeMergedChange: changes.delivery.completeMergedChange,
             },
             github: noPullRequestGateway,
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {
@@ -174,6 +175,7 @@ describe("Change reconciliation discard boundary", () => {
             completeMergedChange: changes.delivery.completeMergedChange,
           },
           github: noPullRequestGateway,
+          executionLock: { withLock: ({ effect }) => effect },
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
             persistence: {
@@ -247,6 +249,7 @@ describe("Change reconciliation discard boundary", () => {
             completeMergedChange: changes.delivery.completeMergedChange,
           },
           github: noPullRequestGateway,
+          executionLock: { withLock: ({ effect }) => effect },
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
             persistence: {
@@ -312,6 +315,7 @@ describe("Change reconciliation discard boundary", () => {
             completeMergedChange: changes.delivery.completeMergedChange,
           },
           github: noPullRequestGateway,
+          executionLock: { withLock: ({ effect }) => effect },
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
             persistence: {

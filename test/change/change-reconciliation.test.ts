@@ -101,6 +101,7 @@ describe("by change reconcile", () => {
                   headSha: "head",
                 }),
             },
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {
@@ -210,6 +211,7 @@ describe("by change reconcile", () => {
               github: {
                 getPullRequest: () => pullRequestRead(pullRequest),
               },
+              executionLock: { withLock: ({ effect }) => effect },
               cleanupTerminal: openTerminalCleanup({
                 ...noOpTerminalCleanupDependencies,
                 persistence: {
@@ -315,6 +317,7 @@ describe("by change reconcile", () => {
                 headSha: mergedHead,
               }),
           },
+          executionLock: { withLock: ({ effect }) => effect },
           cleanupTerminal: openTerminalCleanup({
             ...noOpTerminalCleanupDependencies,
             persistence: {
@@ -439,6 +442,7 @@ describe("by change reconcile", () => {
                   headSha: "head",
                 }),
             },
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {
@@ -550,6 +554,7 @@ describe("by change reconcile", () => {
                   headSha: "head",
                 }),
             },
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {
@@ -670,6 +675,7 @@ describe("by change reconcile", () => {
                 });
               },
             },
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {

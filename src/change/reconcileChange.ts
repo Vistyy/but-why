@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeCleanup, ChangeOwnedPullRequest } from "./change.js";
 import type { ChangeReconciliationPort, ReconciliationChange } from "./changePorts.js";
@@ -20,6 +21,7 @@ export type ReconciledChange = {
     | "cleanup_pending"
     | "not_owned"
     | "rejected"
+    | "submission_in_progress"
     | "unavailable";
   readonly pullRequest?: ChangeOwnedPullRequest;
   readonly cleanup?: ChangeCleanup;
@@ -44,6 +46,7 @@ export const openChangeReconciliation = (input: {
   readonly persistence: ChangeReconciliationPort;
   readonly github: GitHubPullRequestReader;
   readonly cleanupTerminal: TerminalCleanupOperation;
+  readonly executionLock: ExecutionLock;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),
 });
@@ -62,14 +65,36 @@ const reconcile = (
         : [yield* dependencies.persistence.getChangeById(input.changeId)].filter(
             (change): change is ReconciliationChange => change !== undefined,
           );
-    const reconciled = yield* Effect.forEach(changes, (change) =>
-      reconcileOne(dependencies, change, input.now, discardWork),
+    const reconciled = yield* Effect.forEach(changes, (selected) =>
+      reconcileSelected(dependencies, selected.id, input.now, discardWork),
     );
     return {
       changes: reconciled,
       rejected: reconciled.some((change) => change.status === "rejected"),
     };
   });
+
+const reconcileSelected = (
+  dependencies: Parameters<typeof openChangeReconciliation>[0],
+  changeId: string,
+  now: string,
+  discardWork: boolean,
+): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
+  dependencies.executionLock
+    .withLock({
+      owner: "change_submission",
+      key: changeId,
+      effect: Effect.gen(function* () {
+        const change = yield* dependencies.persistence.getChangeById(changeId);
+        if (change === undefined) return rejected(changeId, "change_not_found");
+        return yield* reconcileOne(dependencies, change, now, discardWork);
+      }),
+    })
+    .pipe(
+      Effect.catchTag("ExecutionLockUnavailable", () =>
+        Effect.succeed({ changeId, status: "submission_in_progress" } as const),
+      ),
+    );
 
 const reconcileOne = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],

@@ -263,6 +263,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
               completeMergedChange: fixture.changes.delivery.completeMergedChange,
             },
             github: unusedGitHubGateway,
+            executionLock: { withLock: ({ effect }) => effect },
             cleanupTerminal: openTerminalCleanup({
               ...noOpTerminalCleanupDependencies,
               persistence: {

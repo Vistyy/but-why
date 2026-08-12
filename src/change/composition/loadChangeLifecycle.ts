@@ -5,6 +5,7 @@ import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/reposi
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import {
   provisionChangeWorktree,
@@ -164,6 +165,7 @@ export const withChangeReconciliation = <A, E, R>(
           persistence: reconciliationStore,
           github,
           cleanupTerminal,
+          executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
         });
         return use((changeId, now, discardWork) =>
           reconciliation.reconcile({

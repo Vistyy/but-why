@@ -13,6 +13,14 @@ export const reconcileResult = (
       help: ["Use a Change ID returned by `by change start`."],
     });
   }
+  if (result.changes.some((change) => change.status === "submission_in_progress")) {
+    return runtimeError({
+      code: "submission_in_progress",
+      message: "Another operation owns the Change execution lock.",
+      details: { changes: result.changes },
+      help: ["Wait for the current Change operation to finish, then retry reconciliation."],
+    });
+  }
   if (result.changes.some((change) => change.status === "unavailable")) {
     return runtimeError({
       code: "reconciliation_unavailable",
