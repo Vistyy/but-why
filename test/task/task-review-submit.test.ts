@@ -78,6 +78,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
     let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
     const executionAttempts: TaskReviewExecution[] = [];
     const persistence: TaskReviewPersistence = {
+      reuseJudgment: () => Effect.succeed(undefined),
       admit: (input) => {
         const proposal = { title: "Review me", description: "Exact proposal", dependencyIds: [] };
         active = {
@@ -194,6 +195,135 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
     expect(executionAttempts).toHaveLength(2);
     if (result.ok || result.code !== "task_review_recovery_required") return;
     expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
+  }),
+);
+
+it.effect("returns a reused judgment before every repository and reviewer collaborator", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const calls = {
+      reviewBase: 0,
+      repoConfig: 0,
+      policy: 0,
+      workspace: 0,
+      reviewer: 0,
+    };
+    const finding = {
+      title: "Retained Finding",
+      description: "Retained description",
+      evidence: "Retained evidence",
+      files: [],
+      artifactRefs: [],
+    };
+    const retainedFindings = [finding] as const;
+    const review: TaskReviewRecord = {
+      id: "review-reused",
+      taskId,
+      proposal: { title: "Review me", description: "Exact", dependencyIds: [] },
+      dependencyEvidence: [],
+      policy: {
+        profile: {
+          agentProfile: "review",
+          scope: "global",
+          profile: { agentRuntime: "pi" },
+        },
+        builtInInstructions: taskReviewBuiltInInstructions,
+        guidance: null,
+      },
+      baseRef: "refs/heads/recorded",
+      baseCommit: "b".repeat(40),
+      workspacePath: "/tmp/review-reused",
+      state: "complete",
+      outcome: "blocked",
+      workspaceCleanup: "removed",
+      toolingFailure: null,
+      abandonReason: null,
+      findings: retainedFindings,
+      sessions: [],
+      transcripts: [],
+      createdAt: "2026-08-11T12:00:00.000Z",
+      updatedAt: "2026-08-11T12:01:00.000Z",
+    };
+    const unused = () => Effect.die("Unexpected persistence operation");
+    const persistence: TaskReviewPersistence = {
+      reuseJudgment: () =>
+        Effect.succeed({
+          ok: true,
+          outcome: "blocked",
+          review: {
+            ...review,
+            state: "complete",
+            outcome: "blocked",
+            toolingFailure: null,
+            findings: retainedFindings,
+          },
+        }),
+      admit: unused,
+      recordCleanup: unused,
+      complete: unused,
+      abandon: unused,
+      getById: unused,
+      getLatestForTask: unused,
+      listForTask: unused,
+      getReviewerSession: unused,
+      saveReviewerSession: unused,
+      removeReviewerSession: unused,
+      recordExecution: unused,
+      recordTranscripts: unused,
+      recordActiveFailure: unused,
+      proposalIsCurrent: unused,
+    };
+    const reviews = openTaskReviewUseCases({
+      mainCheckoutRoot: createTestWorkspace(),
+      loadRepoConfig: () => {
+        calls.repoConfig += 1;
+        return { ok: true, config: { taskPrefix: "BY" } };
+      },
+      resolvePolicy: () => {
+        calls.policy += 1;
+        return { ok: false, message: "must not resolve" };
+      },
+      persistence,
+      reviewerSessionStorageRoot: createTestWorkspace(),
+      reviewerRuntime: {
+        review: () => {
+          calls.reviewer += 1;
+          return Effect.die("must not review");
+        },
+      },
+      reviewerExecutor: { execute: () => Effect.die("must not execute") },
+      readReviewBase: () => {
+        calls.reviewBase += 1;
+        return Effect.succeed({
+          ok: true,
+          base: { ref: "refs/heads/main", commit: "a".repeat(40) },
+        });
+      },
+      verifyReviewBase: () => Effect.succeed({ ok: true }),
+      runWorkspace: () => {
+        calls.workspace += 1;
+        return Effect.die("must not create workspace");
+      },
+      cleanupWorkspace: () => Effect.die("must not clean workspace"),
+      inspectWorkspace: () => Effect.die("must not inspect workspace"),
+    });
+
+    expect(yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z")).toMatchObject({
+      ok: true,
+      outcome: "blocked",
+      review: {
+        id: "review-reused",
+        baseCommit: "b".repeat(40),
+        findings: [{ title: "Retained Finding" }],
+      },
+    });
+    expect(calls).toEqual({
+      reviewBase: 0,
+      repoConfig: 0,
+      policy: 0,
+      workspace: 0,
+      reviewer: 0,
+    });
   }),
 );
 
@@ -893,6 +1023,13 @@ it.effect(
       if (sessionStorageRoot === undefined) throw new Error("Expected session storage root");
       const invalidTranscript = join(sessionStorageRoot, "invalid.jsonl");
       writeFileSync(invalidTranscript, "{}\n");
+      const nextDrafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
+      const nextDraftPath = (JSON.parse(nextDrafted.stdout) as { draft: { path: string } }).draft
+        .path;
+      writeFileSync(nextDraftPath, "Another changed proposal\n");
+      expect((yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"])).status).toBe(
+        0,
+      );
       const failedIndex = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
         reviewerAgentRuntime: reviewer,

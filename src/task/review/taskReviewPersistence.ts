@@ -86,6 +86,10 @@ export type CompleteTaskReviewResult =
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" };
 
 export type TaskReviewPersistence = {
+  readonly reuseJudgment: (
+    taskId: PublicTaskId,
+    now: string,
+  ) => Effect.Effect<CompleteTaskReviewSuccess | undefined, RepositoryStorageError>;
   readonly admit: (
     input: AdmitTaskReviewInput,
   ) => Effect.Effect<AdmitTaskReviewResult, RepositoryStorageError>;

@@ -35,8 +35,10 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 
 ## Workflow boundaries
 
-Task Submission reviews one exact New Task proposal under its captured effective policy.
-Passing completion records the Review outcome and moves that exact Task from New to Todo in one transaction.
+Task Submission first selects the newest completed passed or Finding-blocked Review for the exact unchanged Task Context and direct Task Dependency set.
+A reusable judgment returns before repository and reviewer preparation.
+When no reusable judgment exists, Task Submission reviews one exact New Task proposal under its captured effective policy.
+Passing fresh completion or reuse records the Task Approval transition from New to Todo in the applicable transaction.
 Direct Task Approval remains a separate Operator action when no Task Review is active.
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.

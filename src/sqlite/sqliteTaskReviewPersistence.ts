@@ -62,6 +62,10 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
+    reuseJudgment: (taskId, now) =>
+      repository.transactionImmediate("reuse Task Review judgment", (sql) =>
+        reuseTaskReviewJudgment(sql, taskId, now),
+      ),
     admit: (input) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.gen(function* () {
@@ -239,6 +243,57 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
   }));
 
+const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
+  Effect.gen(function* () {
+    const tasks = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+      readonly state: string;
+    }>`SELECT title, description, state FROM tasks WHERE id = ${taskId}`;
+    const task = tasks[0];
+    if (task === undefined || task.state !== "new") return undefined;
+
+    const active = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+    `;
+    if (active[0] !== undefined) return undefined;
+
+    const dependencyIds = yield* directDependencyIds(sql, taskId);
+    const rows = yield* sql<ReviewRow>`
+      SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
+        dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
+        base_ref AS baseRef, base_commit AS baseCommit, workspace_path AS workspacePath,
+        state, outcome, workspace_cleanup AS workspaceCleanup,
+        tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
+        created_at AS createdAt, updated_at AS updatedAt
+      FROM task_reviews
+      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
+      ORDER BY sequence DESC
+    `;
+    for (const row of rows) {
+      const review = yield* decodeReview(sql, row);
+      if (
+        review.proposal.title !== task.title ||
+        review.proposal.description !== task.description ||
+        JSON.stringify(review.proposal.dependencyIds) !== JSON.stringify(dependencyIds)
+      ) {
+        continue;
+      }
+      const judgment = completedTaskReviewResult(review);
+      if (judgment === undefined || judgment.outcome === "tooling_failed") {
+        return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
+      }
+      if (judgment.outcome === "passed") {
+        yield* sql`
+          UPDATE tasks SET state = 'todo', updated_at = ${now}
+          WHERE id = ${taskId} AND state = 'new'
+        `;
+      }
+      return judgment;
+    }
+    return undefined;
+  });
+
 const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewRow>`
   SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
     dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
@@ -248,6 +303,15 @@ const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewR
     created_at AS createdAt, updated_at AS updatedAt
   FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence ASC
 `;
+
+const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string) =>
+  Effect.map(
+    sql<{ readonly id: string }>`
+      SELECT prerequisite_task_id AS id FROM task_dependencies
+      WHERE dependent_task_id = ${taskId} ORDER BY prerequisite_task_id ASC
+    `,
+    (dependencies) => dependencies.map((dependency) => dependency.id),
+  );
 
 const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>
   sql<TaskReviewDependencyEvidence>`

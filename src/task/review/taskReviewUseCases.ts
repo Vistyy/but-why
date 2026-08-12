@@ -166,6 +166,9 @@ const submitTaskReview = (
   now: string,
 ): Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
+    const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
+    if (reusableJudgment !== undefined) return reusableJudgment;
+
     const base = yield* input.readReviewBase(input.mainCheckoutRoot);
     if (!base.ok)
       return { ok: false, code: "review_base_unavailable", message: base.message } as const;
