@@ -133,13 +133,6 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
 > => {
   const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
-  const global = readGlobalConfig(input.globalConfigPath);
-  if (!global.ok) {
-    return Effect.succeed({
-      ok: false,
-      error: { code: "task_review_config_invalid", message: global.error.message },
-    });
-  }
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
     openSqliteTaskReviewPersistence().pipe(
@@ -165,8 +158,10 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
                     message: `Repo Config taskPrefix at Review Base is ${decoded.config.taskPrefix}; expected ${context.taskPrefix}.`,
                   };
             },
-            resolvePolicy: (repoConfig, commit) =>
-              resolveTaskReviewPolicy({
+            resolvePolicy: (repoConfig, commit) => {
+              const global = readGlobalConfig(input.globalConfigPath);
+              if (!global.ok) return { ok: false, message: global.error.message };
+              return resolveTaskReviewPolicy({
                 repoConfig,
                 globalConfig: global.config,
                 globalConfigPath: input.globalConfigPath,
@@ -192,7 +187,8 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
                 },
                 repoResourceExists: (path) =>
                   repositoryPathExistsAtCommit(context.mainCheckoutRoot, commit, path),
-              }),
+              });
+            },
             persistence,
             reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
             reviewerExecutor: piReviewerProcessExecutor,

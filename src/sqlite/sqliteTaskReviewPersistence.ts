@@ -266,12 +266,16 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         state, outcome, workspace_cleanup AS workspaceCleanup,
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
-      FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
-      ORDER BY sequence DESC
+      FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence DESC
     `;
     for (const row of rows) {
       const review = yield* decodeReview(sql, row);
+      if (
+        review.state !== "complete" ||
+        (review.outcome !== "passed" && review.outcome !== "blocked")
+      ) {
+        continue;
+      }
       if (
         review.proposal.title !== task.title ||
         review.proposal.description !== task.description ||

@@ -897,15 +897,13 @@ it.effect(
       const globalConfigPath = join(root, "global.json");
       yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
       commitButWhyConfigAndRecordDefault(root);
-      writeFileSync(
-        globalConfigPath,
-        JSON.stringify({
-          defaultAgentProfile: { scope: "global", name: "review" },
-          agentProfiles: {
-            review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
-          },
-        }),
-      );
+      const globalConfig = JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: {
+          review: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+        },
+      });
+      writeFileSync(globalConfigPath, globalConfig);
       const proposalPath = join(root, "proposal.txt");
       writeFileSync(proposalPath, "Initial proposal");
       yield* runByInProcessEffect(root, [
@@ -955,6 +953,21 @@ it.effect(
       expect(first.status, first.stdout).toBe(1);
       const firstId = (JSON.parse(first.stdout) as { error: { review: { id: string } } }).error
         .review.id;
+
+      writeFileSync(globalConfigPath, "{");
+      const reused = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+        globalConfigPath,
+        reviewerAgentRuntime: reviewer,
+      });
+      expect(reused.status, reused.stdout).toBe(1);
+      expect(JSON.parse(reused.stdout)).toMatchObject({
+        error: {
+          code: "task_review_findings",
+          review: { id: firstId, outcome: "blocked", findings: [{ title: finding.title }] },
+        },
+      });
+      expect(observed).toHaveLength(1);
+      writeFileSync(globalConfigPath, globalConfig);
 
       const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draftPath = (JSON.parse(drafted.stdout) as { draft: { path: string } }).draft.path;
