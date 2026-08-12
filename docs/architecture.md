@@ -43,7 +43,7 @@ Finding-blocked and tooling-failed Reviews remain history and are not reusable j
 A later authorized submission of an unchanged New Task proposal runs a new Task Review.
 Passing fresh completion or reuse moves the Task from New to Todo in the applicable Task Submission transaction.
 Task Submission is the only supported operation that can approve an unlinked New Task.
-Task Revision atomically returns an unlinked Todo Task without an Active Task Review to New while preserving its Context, dependencies, and Review history.
+Task Revision atomically returns an unlinked Todo Task to New while preserving its Context, dependencies, and Review history.
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.
 Submission returns without validation when there is no changed Candidate.

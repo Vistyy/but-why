@@ -68,7 +68,6 @@ _Avoid_: Task Review outcome, Finding, retention-limited Artifact
 **Active Task Review**:
 The sole running Task Review for one Task until it completes or the Operator abandons it.
 It prevents another Task Submission for that Task.
-An Active Task Review of a Todo Task also prevents Task Context mutation, Task Dependency mutation, cancellation, Task Revision, and Change Start.
 A New Task proposal can change while its ordinary Review runs, but the changed proposal prevents that Review from approving the Task.
 _Avoid_: Task state, process lock, Active Validation Run
 
@@ -86,7 +85,7 @@ _Avoid_: Change Base, caller checkout HEAD, Candidate
 The transition that returns an unlinked Todo Task to New before the Operator changes its approved intent.
 It preserves Task Context, direct Task Dependencies, and historical Task Review evidence.
 Revision of an unlinked New Task without an Active Task Review is an idempotent no-op.
-A Change-linked Task, an Active Task Review, or a terminal Task state prevents revision.
+A Change-linked Task, an Active Task Review of a New Task, or a terminal Task state prevents revision.
 _Avoid_: proposal identity change, Revision record
 
 **Task Lifecycle**:
