@@ -1378,32 +1378,6 @@ describe("repository SQL storage", () => {
                 )
               `,
         );
-        yield* repository.operation(
-          "install later tooling-failed Validation Run history",
-          (sql) =>
-            sql`
-                INSERT INTO candidate_validation_runs (
-                  id, candidate_id, policy_snapshot, implementation_decisions,
-                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
-                ) VALUES (
-                  'run-later-tooling-failed', ${captured.candidateId},
-                  '{"checks":[],"copyFiles":[],"specialistReviews":[]}',
-                  '[]', NULL, 'complete', 'tooling_failed',
-                  '2026-07-25T16:13:00.000Z', '2026-07-25T16:13:00.000Z'
-                )
-              `,
-        );
-        const simplifiedCurrent = yield* validation.execution.startOrReuse({
-          candidateId: captured.candidateId,
-          changeBaseSha: "base-sha",
-          headSha: "head-sha",
-          policy: simplifiedReviewPolicy,
-          now: "2026-07-25T16:12:40.000Z",
-        });
-        expect(simplifiedCurrent).toMatchObject({
-          reused: true,
-          validationRunId: "run-duplicate-representation",
-        });
         const currentEvidence = {
           candidateId: captured.candidateId,
           validationRunId: "run-duplicate-representation",
@@ -1533,8 +1507,6 @@ describe("repository SQL storage", () => {
         });
         const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
         expect(history.map((run) => run.id)).toContain(first.validationRunId);
-        expect(history.map((run) => run.id)).toContain("run-later-tooling-failed");
-
         expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-duplicate-representation",
@@ -1548,7 +1520,9 @@ describe("repository SQL storage", () => {
   it.scoped("does not reuse Finding-blocked or tooling-failed Validation Runs", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
+        const repository = yield* RepositorySql;
         const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangeTestDependencies();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -1573,11 +1547,50 @@ describe("repository SQL storage", () => {
           throw new Error("Expected a new Validation Run");
         yield* validation.execution.complete({
           validationRunId: first.validationRunId,
-          outcome: "blocked",
+          outcome: "passed",
           now: "2026-07-25T16:32:00.000Z",
         });
+        expect(
+          yield* validation.execution.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy: { checks: [], copyFiles: [], specialistReviews: [] },
+            now: "2026-07-25T16:32:30.000Z",
+          }),
+        ).toMatchObject({
+          reused: true,
+          validationRunId: first.validationRunId,
+        });
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: first.validationRunId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+        yield* repository.operation(
+          "install later Finding-blocked Validation Run history",
+          (sql) =>
+            sql`
+            INSERT INTO candidate_validation_runs (
+              id, candidate_id, policy_snapshot, implementation_decisions,
+              latest_resolved_blocker_id, state, outcome, created_at, updated_at
+            ) VALUES (
+              'run-later-blocked', ${captured.candidateId},
+              '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+              'complete', 'blocked',
+              '2026-07-25T16:33:00.000Z', '2026-07-25T16:33:00.000Z'
+            )
+          `,
+        );
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: first.validationRunId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
 
-        const afterFinding = yield* start("2026-07-25T16:33:00.000Z");
+        const afterFinding = yield* start("2026-07-25T16:34:00.000Z");
         if (afterFinding.reused || "blocked" in afterFinding || "active" in afterFinding)
           throw new Error("Expected a new Validation Run after Findings");
         expect(afterFinding.validationRunId).not.toBe(first.validationRunId);
@@ -1591,8 +1604,19 @@ describe("repository SQL storage", () => {
         if (afterTooling.reused || "blocked" in afterTooling || "active" in afterTooling)
           throw new Error("Expected a new Validation Run after tooling failure");
         expect(afterTooling.validationRunId).not.toBe(afterFinding.validationRunId);
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: first.validationRunId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
         const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
-        expect(history.map((run) => run.outcome)).toEqual(["blocked", "tooling_failed", null]);
+        expect(history.map((run) => run.outcome)).toEqual([
+          "passed",
+          "blocked",
+          "tooling_failed",
+          null,
+        ]);
       }),
     ),
   );

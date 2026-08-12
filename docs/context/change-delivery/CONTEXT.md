@@ -101,6 +101,7 @@ Reuse and publication use a complete passed Run for the exact Current Candidate.
 Current passing evidence is the newest eligible passed Run in immutable Validation Run History.
 Change inspection uses that passing judgment for the Current Candidate rather than the newest Run of any outcome.
 A later failed or tooling-failed Run does not hide eligible passing evidence, and neither outcome is reused as a passed judgment.
+When a later Submission follows such a Run for the unchanged Current Candidate, it starts Validation again rather than reusing an earlier pass.
 Acceptance Context, Validation Policy Snapshot, Implementation Decisions, and resolved Implementation Blocker history remain immutable Run provenance rather than reuse invalidators.
 A changed Current Candidate requires eligible evidence for the new Candidate without deleting historical evidence.
 For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.

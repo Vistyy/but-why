@@ -245,9 +245,18 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
 
     const reusableRows = yield* sql.unsafe<StoredValidationRunRow>(
       `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs
-       WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
-       ORDER BY created_at DESC, id DESC LIMIT 1`,
+       FROM candidate_validation_runs AS passed_run
+       WHERE passed_run.candidate_id = ?
+         AND passed_run.state = 'complete' AND passed_run.outcome = 'passed'
+         AND NOT EXISTS (
+           SELECT 1 FROM candidate_validation_runs AS later_run
+           WHERE later_run.candidate_id = passed_run.candidate_id
+             AND (
+               later_run.created_at > passed_run.created_at OR
+               (later_run.created_at = passed_run.created_at AND later_run.id > passed_run.id)
+             )
+         )
+       ORDER BY passed_run.created_at DESC, passed_run.id DESC LIMIT 1`,
       [candidate.id],
     );
     const reusableRow = reusableRows[0];
