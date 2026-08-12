@@ -184,10 +184,10 @@ describe("SQLite Change decoding", () => {
           }),
         );
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-        const publicationAuthority = {
+        const publicationEvidenceQuery = {
+          candidateId: "owned-candidate",
+          validationRunId: "owned-run",
           changeBaseSha: "base-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
-          implementationDecisions: [],
         };
         yield* repository.operation(
           "inject malformed publication snapshots",
@@ -200,7 +200,7 @@ describe("SQLite Change decoding", () => {
         expect(
           yield* changes.authority.getCurrentPassingEvidence(
             "change-malformed",
-            publicationAuthority,
+            publicationEvidenceQuery,
           ),
         ).toBeUndefined();
         yield* repository.operation(
@@ -215,7 +215,7 @@ describe("SQLite Change decoding", () => {
         expect(
           yield* changes.authority.getCurrentPassingEvidence(
             "change-malformed",
-            publicationAuthority,
+            publicationEvidenceQuery,
           ),
         ).toBeUndefined();
         yield* repository.operation(
@@ -229,7 +229,7 @@ describe("SQLite Change decoding", () => {
         expect(
           yield* changes.authority.getCurrentPassingEvidence(
             "change-malformed",
-            publicationAuthority,
+            publicationEvidenceQuery,
           ),
         ).toBeUndefined();
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
@@ -256,7 +256,7 @@ describe("SQLite Change decoding", () => {
         expect(
           yield* changes.authority.getCurrentPassingEvidence(
             "change-malformed",
-            publicationAuthority,
+            publicationEvidenceQuery,
           ),
         ).toBeUndefined();
         yield* repository.operation(

@@ -450,14 +450,6 @@ const observeBeforeSubmission = (
     }
   });
 
-const publicationPolicySnapshot = (
-  change: SubmissionChange,
-  policy: ResolvedCandidateValidationPolicy,
-) => ({
-  ...policy.policy,
-  ...(change.acceptanceContext === null ? {} : { acceptanceContext: change.acceptanceContext }),
-});
-
 const completedPublicationEvidence = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
@@ -557,7 +549,6 @@ const validateAndPublish = (
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
       changeBaseSha: candidate.changeBaseSha,
-      policy: publicationPolicySnapshot(change, policy),
       target,
       now,
     });
@@ -650,6 +641,7 @@ const selectOpenChange = (
     const change = yield* persistence.getChangeById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
+    if (change.activeBlocker !== null) return { ok: false, code: "change_blocked" };
     if (change.worktreePath === null || change.baseRef === null || change.baseRemoteUrl === null) {
       return { ok: false, code: "change_not_open" };
     }

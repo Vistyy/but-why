@@ -104,14 +104,16 @@ const loadChangeDetailOperation = <A>(
       context.provide(
         Effect.all({
           changes: openSqliteChangeReadPort(),
+          authority: openSqliteChangeAuthorityPort(),
           validation: openSqliteChangeValidationReadPort(),
         }).pipe(
-          Effect.flatMap(({ changes, validation }) =>
+          Effect.flatMap(({ changes, authority, validation }) =>
             query(
               {
                 getChangeById: changes.getChangeById,
                 getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
-                getLatestRunForCandidate: validation.getLatestRunForCandidate,
+                getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
+                getRunById: validation.getRunById,
                 listFindings: validation.listFindings,
                 listToolingFailures: validation.listToolingFailures,
               },

@@ -38,6 +38,7 @@ import { taskReviewerSessionsMigration as taskReviewerSessions } from "./migrati
 import { unversionTaskReviewPolicySnapshotsMigration as unversionTaskReviewPolicySnapshots } from "./migrations/0036_unversion_task_review_policy_snapshots.js";
 import { requirePassingReviewForUnlinkedTodoTasksMigration as requirePassingReviewForUnlinkedTodoTasks } from "./migrations/0037_require_passing_review_for_unlinked_todo_tasks.js";
 import { currentCandidateSelectionMigration as currentCandidateSelection } from "./migrations/0038_current_candidate_selection.js";
+import { candidateValidationReuseMigration as candidateValidationReuse } from "./migrations/0039_candidate_validation_reuse.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -78,6 +79,7 @@ const migrations = {
   "0036_unversion_task_review_policy_snapshots": unversionTaskReviewPolicySnapshots,
   "0037_require_passing_review_for_unlinked_todo_tasks": requirePassingReviewForUnlinkedTodoTasks,
   "0038_current_candidate_selection": currentCandidateSelection,
+  "0039_candidate_validation_reuse": candidateValidationReuse,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

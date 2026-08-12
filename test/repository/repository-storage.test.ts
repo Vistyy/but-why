@@ -1081,7 +1081,6 @@ describe("repository SQL storage", () => {
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
-          policy: simplifiedReviewPolicy,
         } satisfies CurrentChangeEvidenceQuery;
         yield* repository.operation("install passing publication evidence", (sql) =>
           Effect.gen(function* () {
@@ -1144,7 +1143,6 @@ describe("repository SQL storage", () => {
             candidateId: captured.candidateId,
             validationRunId: "run-repaired-publication",
             changeBaseSha: "base-sha",
-            policy: repairedAcceptancePolicy,
           }),
         ).toEqual({
           candidateId: captured.candidateId,
@@ -1194,15 +1192,8 @@ describe("repository SQL storage", () => {
           }),
         ).toBeUndefined();
         expect(
-          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
-            ...authority,
-            policy: {
-              checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
-              copyFiles: [],
-              specialistReviews: [],
-            },
-          }),
-        ).toBeUndefined();
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
+        ).toEqual(exactPublicationEvidence);
         yield* repository.operation(
           "install duplicate-representation publication evidence",
           (sql) =>
@@ -1213,7 +1204,7 @@ describe("repository SQL storage", () => {
                   latest_resolved_blocker_id, state, outcome, created_at, updated_at
                 ) VALUES (
                   'run-duplicate-representation', ${captured.candidateId},
-                  '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","agentProfile":"standards","profileScope":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                  ${encodeSqliteCandidateValidationPolicy(repairedAcceptancePolicy)},
                   '[]', NULL, 'complete', 'passed',
                   '2026-07-25T15:01:30.000Z', '2026-07-25T15:01:30.000Z'
                 )
@@ -1225,11 +1216,9 @@ describe("repository SQL storage", () => {
               `;
             }),
         );
-        expect(
-          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
-        ).toEqual({
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
           candidateId: captured.candidateId,
-          validationRunId: "run-1",
+          validationRunId: "run-repaired-publication",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
         });
@@ -1266,7 +1255,7 @@ describe("repository SQL storage", () => {
         yield* changes.authority.recordImplementationDecision({
           changeId: captured.changeId,
           choice: "Choose the passing path",
-          rationale: "Prove that decisions are part of current evidence identity.",
+          rationale: "Prove that decisions remain Run provenance.",
           now: "2026-07-25T15:01:00.000Z",
         });
         expect(
@@ -1310,136 +1299,121 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped(
-    "reuses only an exact complete passing Validation Run across authority differences",
-    () =>
-      withTemporaryState((input) =>
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          const capture = yield* openSqliteCandidateCapturePersistence();
-          const changes = yield* openSqliteChangeTestDependencies();
-          const validation = yield* openSqliteChangeValidationTestDependencies();
-          const captured = yield* capture.commitCapture({
-            repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/feature",
-            baseRef: "refs/remotes/origin/main",
-            changeBaseSha: "base-sha",
-            headSha: "head-sha",
-            now: "2026-07-25T16:10:00.000Z",
-          });
-          if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-          const recordedDecision = yield* changes.authority.recordImplementationDecision({
+  it.scoped("reuses a complete passing Validation Run by exact Candidate identity", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangeTestDependencies();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T16:10:00.000Z",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const recordedDecision = yield* changes.authority.recordImplementationDecision({
+          changeId: captured.changeId,
+          choice: "Choose the passing path",
+          rationale: "Prove that decisions remain Validation Run provenance.",
+          now: "2026-07-25T16:10:00.000Z",
+        });
+        if (!recordedDecision.ok) throw new Error(recordedDecision.code);
+        const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+        const exact = {
+          candidateId: captured.candidateId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          policy,
+          now: "2026-07-25T16:11:00.000Z",
+        };
+        const first = yield* validation.execution.startOrReuse(exact);
+        if (first.reused || "blocked" in first || "active" in first)
+          throw new Error("Expected a new Validation Run");
+        expect(first.authority).toMatchObject({
+          candidate: {
+            id: captured.candidateId,
             changeId: captured.changeId,
-            choice: "Choose the passing path",
-            rationale: "Prove that decisions are part of Validation Run identity.",
-            now: "2026-07-25T16:10:00.000Z",
-          });
-          if (!recordedDecision.ok) throw new Error(recordedDecision.code);
-          const policy = { checks: [], copyFiles: [], specialistReviews: [] };
-          const exact = {
-            candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
-            policy,
-            now: "2026-07-25T16:11:00.000Z",
-          };
-          const first = yield* validation.execution.startOrReuse(exact);
-          if (first.reused || "blocked" in first || "active" in first)
-            throw new Error("Expected a new Validation Run");
-          expect(first.authority).toMatchObject({
-            candidate: {
-              id: captured.candidateId,
-              changeId: captured.changeId,
-              changeBaseSha: "base-sha",
-              headSha: "head-sha",
-            },
-            policy,
-            implementationDecisions: [recordedDecision.decision],
-            blockerHistory: { active: null, blockers: [], resolutions: [] },
-            latestResolvedBlockerId: null,
-          });
-          yield* validation.execution.complete({
-            validationRunId: first.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:12:00.000Z",
-          });
+          },
+          policy,
+          implementationDecisions: [recordedDecision.decision],
+          blockerHistory: { active: null, blockers: [], resolutions: [] },
+          latestResolvedBlockerId: null,
+        });
+        yield* validation.execution.complete({
+          validationRunId: first.validationRunId,
+          outcome: "passed",
+          now: "2026-07-25T16:12:00.000Z",
+        });
 
-          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
-            reused: true,
-            validationRunId: first.validationRunId,
-          });
+        expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
+          reused: true,
+          validationRunId: first.validationRunId,
+        });
 
-          yield* repository.operation(
-            "corrupt Run authority outside a policy-mismatched query",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET implementation_decisions = '{}'
-                  WHERE id = ${first.validationRunId}`,
-          );
-          expect(
-            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
-              policy: {
-                checks: [{ id: "other", command: "true", timeoutSeconds: 30 }],
-                copyFiles: [],
-                specialistReviews: [],
-              },
-            }),
-          ).toBeUndefined();
-          yield* repository.operation(
-            "restore Run authority after policy-mismatched query",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET implementation_decisions = ${JSON.stringify([recordedDecision.decision])}
-                  WHERE id = ${first.validationRunId}`,
-          );
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: first.validationRunId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
 
-          yield* repository.operation(
-            "install duplicate-representation Validation Run evidence",
-            (sql) =>
-              sql`
+        yield* repository.operation(
+          "install duplicate-representation Validation Run evidence",
+          (sql) =>
+            sql`
                 INSERT INTO candidate_validation_runs (
                   id, candidate_id, policy_snapshot, implementation_decisions,
                   latest_resolved_blocker_id, state, outcome, created_at, updated_at
                 ) VALUES (
                   'run-duplicate-representation', ${captured.candidateId},
-                  '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","agentProfile":"standards","profileScope":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                  ${encodeSqliteCandidateValidationPolicy(simplifiedReviewPolicy)},
                   '[]', NULL, 'complete', 'passed',
                   '2026-07-25T16:12:30.000Z', '2026-07-25T16:12:30.000Z'
                 )
               `,
-          );
-          const simplifiedCurrent = yield* validation.execution.startOrReuse({
-            candidateId: captured.candidateId,
-            changeBaseSha: "base-sha",
-            headSha: "head-sha",
-            policy: simplifiedReviewPolicy,
-            now: "2026-07-25T16:12:40.000Z",
-          });
-          yield* repository.operation(
-            "remove unrelated malformed Validation Run fixture",
-            (sql) =>
-              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-duplicate-representation'`,
-          );
-          if (simplifiedCurrent.reused || "blocked" in simplifiedCurrent)
-            throw new Error("Expected a policy-distinct Validation Run");
-          yield* validation.execution.complete({
-            validationRunId: simplifiedCurrent.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:12:45.000Z",
-          });
-          yield* repository.operation(
-            "make the current policy-distinct Run non-passing",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${simplifiedCurrent.validationRunId}`,
-          );
-          const currentEvidence = {
-            candidateId: captured.candidateId,
-            validationRunId: first.validationRunId,
-            changeBaseSha: "base-sha",
-            headSha: "head-sha",
-          };
-          yield* repository.operation(
-            "install malformed older passing Run",
-            (sql) =>
-              sql`
+        );
+        yield* repository.operation(
+          "install later tooling-failed Validation Run history",
+          (sql) =>
+            sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-later-tooling-failed', ${captured.candidateId},
+                  '{"checks":[],"copyFiles":[],"specialistReviews":[]}',
+                  '[]', NULL, 'complete', 'tooling_failed',
+                  '2026-07-25T16:13:00.000Z', '2026-07-25T16:13:00.000Z'
+                )
+              `,
+        );
+        const simplifiedCurrent = yield* validation.execution.startOrReuse({
+          candidateId: captured.candidateId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          policy: simplifiedReviewPolicy,
+          now: "2026-07-25T16:12:40.000Z",
+        });
+        expect(simplifiedCurrent).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+        const currentEvidence = {
+          candidateId: captured.candidateId,
+          validationRunId: "run-duplicate-representation",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        };
+        yield* repository.operation(
+          "install malformed older passing Run",
+          (sql) =>
+            sql`
                 INSERT INTO candidate_validation_runs (
                   id, candidate_id, policy_snapshot, implementation_decisions,
                   latest_resolved_blocker_id, state, outcome, created_at, updated_at
@@ -1449,155 +1423,178 @@ describe("repository SQL storage", () => {
                   '2026-07-25T16:10:00.000Z', '2026-07-25T16:10:00.000Z'
                 )
               `,
-          );
-          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
-            currentEvidence,
-          );
-          yield* repository.operation(
-            "remove malformed older passing Run",
-            (sql) =>
-              sql`DELETE FROM candidate_validation_runs WHERE id = 'run-older-malformed-passing'`,
-          );
-          yield* repository.operation(
-            "make the later policy-distinct Run malformed and tooling-failed",
-            (sql) =>
-              sql`UPDATE candidate_validation_runs
-                  SET outcome = 'tooling_failed', policy_snapshot = 'malformed'
-                  WHERE id = ${simplifiedCurrent.validationRunId}`,
-          );
-          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
-            currentEvidence,
-          );
-          expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
-            reused: true,
-            validationRunId: first.validationRunId,
-          });
-          yield* repository.operation(
-            "remove malformed ineligible Validation Run fixture",
-            (sql) =>
-              sql`DELETE FROM candidate_validation_runs WHERE id = ${simplifiedCurrent.validationRunId}`,
-          );
-          expect(
-            yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
-              candidateId: captured.candidateId,
-              validationRunId: first.validationRunId,
-              changeBaseSha: "base-sha",
-              policy,
-            }),
-          ).toEqual(currentEvidence);
-
-          const policyMismatch = yield* validation.execution.startOrReuse({
-            ...exact,
-            policy: {
-              checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
-              copyFiles: [],
-              specialistReviews: [],
-            },
-          });
-          expect(policyMismatch.reused).toBe(false);
-          if (policyMismatch.reused || "blocked" in policyMismatch)
-            throw new Error("Expected a policy-distinct Validation Run");
-          yield* validation.execution.complete({
-            validationRunId: policyMismatch.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:13:00.000Z",
-          });
-
-          const addedDecision = yield* changes.authority.recordImplementationDecision({
-            changeId: captured.changeId,
-            choice: "Add a second authority input",
-            rationale: "A persisted decision requires fresh Validation evidence.",
-            now: "2026-07-25T16:13:30.000Z",
-          });
-          if (!addedDecision.ok) throw new Error(addedDecision.code);
-          const decisionsMismatch = yield* validation.execution.startOrReuse(exact);
-          expect(decisionsMismatch.reused).toBe(false);
-          if (decisionsMismatch.reused || "blocked" in decisionsMismatch)
-            throw new Error("Expected a decision-distinct Validation Run");
-          yield* validation.execution.complete({
-            validationRunId: decisionsMismatch.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:14:00.000Z",
-          });
-
-          const identityError = yield* validation.execution
-            .startOrReuse({ ...exact, headSha: "other-head" })
-            .pipe(Effect.flip);
-          expect(identityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
-
-          const raised = yield* changes.authority.raiseImplementationBlocker({
-            changeId: captured.changeId,
-            content: "Wait for an external decision.",
-            now: "2026-07-25T16:15:00.000Z",
-          });
-          expect(raised.ok).toBe(true);
-          const resolved = yield* changes.authority.resolveImplementationBlocker({
-            changeId: captured.changeId,
-            content: "Proceed without taskless intent.",
-            now: "2026-07-25T16:16:00.000Z",
-          });
-          expect(resolved.ok).toBe(true);
-          if (!resolved.ok) throw new Error(resolved.code);
-          const afterResolution = yield* validation.execution.startOrReuse({
-            ...exact,
-            now: "2026-07-25T16:17:00.000Z",
-          });
-          expect(afterResolution.reused).toBe(false);
-          if (afterResolution.reused || "blocked" in afterResolution || "active" in afterResolution)
-            throw new Error("Expected a fresh Validation Run after Resolution");
-          expect(afterResolution.validationRunId).not.toBe(first.validationRunId);
-          expect(afterResolution.authority).toMatchObject({
-            candidate: { id: captured.candidateId, changeId: captured.changeId },
-            blockerHistory: {
-              active: null,
-              blockers: [{ id: resolved.blocker.id }],
-              resolutions: [{ blockerId: resolved.blocker.id }],
-            },
-            latestResolvedBlockerId: resolved.blocker.id,
-          });
-          yield* validation.execution.complete({
-            validationRunId: afterResolution.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:18:00.000Z",
-          });
-          const secondRaised = yield* changes.authority.raiseImplementationBlocker({
-            changeId: captured.changeId,
-            content: "Wait for a second external decision.",
-            now: "2026-07-25T16:19:00.000Z",
-          });
-          if (!secondRaised.ok) throw new Error(secondRaised.code);
-          const secondResolved = yield* changes.authority.resolveImplementationBlocker({
-            changeId: captured.changeId,
-            content: "Proceed after the second decision.",
-            now: "2026-07-25T16:20:00.000Z",
-          });
-          if (!secondResolved.ok) throw new Error(secondResolved.code);
-          const afterSecondResolution = yield* validation.execution.startOrReuse({
-            ...exact,
-            now: "2026-07-25T16:21:00.000Z",
-          });
-          if (
-            afterSecondResolution.reused ||
-            "blocked" in afterSecondResolution ||
-            "active" in afterSecondResolution
-          )
-            throw new Error("Expected a fresh Validation Run after the second Resolution");
-          yield* validation.execution.complete({
-            validationRunId: afterSecondResolution.validationRunId,
-            outcome: "passed",
-            now: "2026-07-25T16:22:00.000Z",
-          });
-          const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
-          expect(history.map((run) => run.id)).toContain(afterResolution.validationRunId);
-
-          expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+        );
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
+          currentEvidence,
+        );
+        yield* repository.operation(
+          "remove malformed older passing Run",
+          (sql) =>
+            sql`DELETE FROM candidate_validation_runs WHERE id = 'run-older-malformed-passing'`,
+        );
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual(
+          currentEvidence,
+        );
+        expect(yield* validation.execution.startOrReuse(exact)).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+        expect(
+          yield* changes.authority.getCurrentPassingEvidence(captured.changeId, {
             candidateId: captured.candidateId,
-            validationRunId: afterSecondResolution.validationRunId,
+            validationRunId: "run-duplicate-representation",
+            changeBaseSha: "base-sha",
+          }),
+        ).toEqual(currentEvidence);
+
+        const policyMismatch = yield* validation.execution.startOrReuse({
+          ...exact,
+          policy: {
+            checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
+        });
+        expect(policyMismatch).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+
+        const addedDecision = yield* changes.authority.recordImplementationDecision({
+          changeId: captured.changeId,
+          choice: "Add a second authority input",
+          rationale: "A persisted decision remains separate Run provenance.",
+          now: "2026-07-25T16:13:30.000Z",
+        });
+        if (!addedDecision.ok) throw new Error(addedDecision.code);
+        const decisionsMismatch = yield* validation.execution.startOrReuse(exact);
+        expect(decisionsMismatch).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+
+        const identityError = yield* validation.execution
+          .startOrReuse({ ...exact, headSha: "other-head" })
+          .pipe(Effect.flip);
+        expect(identityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const raised = yield* changes.authority.raiseImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Wait for an external decision.",
+          now: "2026-07-25T16:15:00.000Z",
+        });
+        expect(raised.ok).toBe(true);
+        const resolved = yield* changes.authority.resolveImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Proceed without taskless intent.",
+          now: "2026-07-25T16:16:00.000Z",
+        });
+        expect(resolved.ok).toBe(true);
+        if (!resolved.ok) throw new Error(resolved.code);
+        const afterResolution = yield* validation.execution.startOrReuse({
+          ...exact,
+          now: "2026-07-25T16:17:00.000Z",
+        });
+        expect(afterResolution).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+        if ("blocked" in afterResolution || "active" in afterResolution)
+          throw new Error("Expected the passed Candidate judgment to be reused");
+        expect(afterResolution.authority).toMatchObject({
+          candidate: { id: captured.candidateId, changeId: captured.changeId },
+          blockerHistory: {
+            active: null,
+            blockers: [{ id: resolved.blocker.id }],
+            resolutions: [{ blockerId: resolved.blocker.id }],
+          },
+          latestResolvedBlockerId: resolved.blocker.id,
+        });
+
+        const secondRaised = yield* changes.authority.raiseImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Wait for a second external decision.",
+          now: "2026-07-25T16:19:00.000Z",
+        });
+        if (!secondRaised.ok) throw new Error(secondRaised.code);
+        const secondResolved = yield* changes.authority.resolveImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Proceed after the second decision.",
+          now: "2026-07-25T16:20:00.000Z",
+        });
+        if (!secondResolved.ok) throw new Error(secondResolved.code);
+        const afterSecondResolution = yield* validation.execution.startOrReuse({
+          ...exact,
+          now: "2026-07-25T16:21:00.000Z",
+        });
+        expect(afterSecondResolution).toMatchObject({
+          reused: true,
+          validationRunId: "run-duplicate-representation",
+        });
+        const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
+        expect(history.map((run) => run.id)).toContain(first.validationRunId);
+        expect(history.map((run) => run.id)).toContain("run-later-tooling-failed");
+
+        expect(yield* changes.authority.getCurrentPassingEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-duplicate-representation",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+      }),
+    ),
+  );
+
+  it.scoped("does not reuse Finding-blocked or tooling-failed Validation Runs", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/failed-validation",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T16:30:00.000Z",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const start = (at: string) =>
+          validation.execution.startOrReuse({
+            candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
             headSha: "head-sha",
+            policy: { checks: [], copyFiles: [], specialistReviews: [] },
+            now: at,
           });
-        }),
-      ),
+
+        const first = yield* start("2026-07-25T16:31:00.000Z");
+        if (first.reused || "blocked" in first || "active" in first)
+          throw new Error("Expected a new Validation Run");
+        yield* validation.execution.complete({
+          validationRunId: first.validationRunId,
+          outcome: "blocked",
+          now: "2026-07-25T16:32:00.000Z",
+        });
+
+        const afterFinding = yield* start("2026-07-25T16:33:00.000Z");
+        if (afterFinding.reused || "blocked" in afterFinding || "active" in afterFinding)
+          throw new Error("Expected a new Validation Run after Findings");
+        expect(afterFinding.validationRunId).not.toBe(first.validationRunId);
+        yield* validation.execution.complete({
+          validationRunId: afterFinding.validationRunId,
+          outcome: "tooling_failed",
+          now: "2026-07-25T16:34:00.000Z",
+        });
+
+        const afterTooling = yield* start("2026-07-25T16:35:00.000Z");
+        if (afterTooling.reused || "blocked" in afterTooling || "active" in afterTooling)
+          throw new Error("Expected a new Validation Run after tooling failure");
+        expect(afterTooling.validationRunId).not.toBe(afterFinding.validationRunId);
+        const history = yield* validation.reads.listRunsForCandidate(captured.candidateId);
+        expect(history.map((run) => run.outcome)).toEqual(["blocked", "tooling_failed", null]);
+      }),
+    ),
   );
 
   it.scoped(
@@ -2219,11 +2216,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(38);
+          expect(yield* initializeMigrationCount).toBe(39);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(38);
+          expect(yield* readMigrationCount).toBe(39);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2323,9 +2320,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(38);
+              expect(migrations.length).toBe(39);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 38 }, (_, index) => index + 1),
+                Array.from({ length: 39 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2424,7 +2421,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 38,
+              migrationCount: 39,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

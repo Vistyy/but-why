@@ -247,10 +247,8 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       `SELECT ${validationRunReadColumns}
        FROM candidate_validation_runs
        WHERE candidate_id = ? AND state = 'complete' AND outcome = 'passed'
-         AND policy_snapshot = ? AND implementation_decisions = ?
-         AND latest_resolved_blocker_id IS ?
        ORDER BY created_at DESC, id DESC LIMIT 1`,
-      [candidate.id, policySnapshot, decisionsSnapshot, currentLatestResolvedBlockerId],
+      [candidate.id],
     );
     const reusableRow = reusableRows[0];
     const reusable =

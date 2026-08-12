@@ -117,7 +117,7 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
           decodeStoredNullableString(row.acceptanceContext, "Change Acceptance Context"),
         ),
         publication: decodeChangePublication(row),
-      } satisfies SubmissionChange;
+      };
     });
     yield* validateChangePublicationRelationships(
       sql,
@@ -125,7 +125,8 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
       selected.publication,
       operationName,
     );
-    return selected;
+    const activeBlocker = yield* readActiveBlocker(sql, selected.id, operationName);
+    return { ...selected, activeBlocker } satisfies SubmissionChange;
   });
 const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {

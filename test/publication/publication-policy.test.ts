@@ -71,7 +71,7 @@ const publicationTemplateLayer = Layer.effect(
 );
 
 layer(publicationTemplateLayer)("Candidate publication", (it) => {
-  it.scoped("publishes exact taskless metadata only from matching policy evidence", () =>
+  it.scoped("publishes exact taskless metadata from Candidate-based evidence", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const requests: unknown[] = [];
@@ -87,17 +87,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           },
           github: successfulCreation(requests),
         });
-        expect(
-          yield* publication.publish({
-            ...input(fixture),
-            policy: { ...policy, checks: [{ id: "new", command: "true", timeoutSeconds: 1 }] },
-          }),
-        ).toEqual({ ok: false, code: "validation_evidence_invalid" });
-        expect(requests).toEqual([]);
         expect(yield* publication.publish(input(fixture))).toMatchObject({
           ok: true,
           created: true,
         });
+        expect(requests).toHaveLength(1);
         expect(requests).toEqual([
           {
             ...target,
@@ -327,11 +321,6 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         WHERE id = ${fixture.captured.changeId}
       `,
         );
-        const acceptanceContext = {
-          version: 1 as const,
-          title: "Publish exact Candidate",
-          description: "Description",
-        };
         const validationRunId = yield* completeValidation(
           fixture.validation,
           fixture.captured,
@@ -353,7 +342,6 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           yield* publication.publish({
             ...input(fixture),
             validationRunId,
-            policy: { ...policy, acceptanceContext },
           }),
         ).toMatchObject({ ok: true });
         expect(requests).toContainEqual(
@@ -1264,70 +1252,68 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped(
-    "records fresh passing evidence for the same Candidate without artificial republication",
-    () =>
-      withFixture((fixture) =>
-        Effect.gen(function* () {
-          let updates = 0;
-          const publication = openCandidatePublication({
-            changePersistence: fixture.changes.publication,
-            git: {
-              ...publicationGitDefaults,
-              readBranchHead: () => fixture.captured.headSha,
-              readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+  it.scoped("reuses passing evidence for the same Candidate without artificial republication", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let updates = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes.publication,
+          git: {
+            ...publicationGitDefaults,
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => pullRequestList([]),
+            getPullRequest: () => pullRequestRead(pullRequest(fixture.captured.headSha)),
+            createPullRequest: () => ({
+              ok: true as const,
+              pullRequest: pullRequest(fixture.captured.headSha),
+            }),
+            updatePullRequest: () => {
+              updates += 1;
+              return { ok: true as const, pullRequest: pullRequest(fixture.captured.headSha) };
             },
-            github: {
-              findPullRequests: () => pullRequestList([]),
-              getPullRequest: () => pullRequestRead(pullRequest(fixture.captured.headSha)),
-              createPullRequest: () => ({
-                ok: true as const,
-                pullRequest: pullRequest(fixture.captured.headSha),
-              }),
-              updatePullRequest: () => {
-                updates += 1;
-                return { ok: true as const, pullRequest: pullRequest(fixture.captured.headSha) };
-              },
-            },
-          });
-          const first = yield* publication.publish(input(fixture));
-          expect(first).toMatchObject({ ok: true, created: true, pullRequest: { number: 42 } });
+          },
+        });
+        const first = yield* publication.publish(input(fixture));
+        expect(first).toMatchObject({ ok: true, created: true, pullRequest: { number: 42 } });
 
-          const recorded = yield* fixture.changes.authority.recordImplementationDecision({
-            changeId: fixture.captured.changeId,
-            choice: "Revise the implementation",
-            rationale: "Resolution requires fresh Validation evidence.",
-            now: "2026-07-25T15:20:00.000Z",
-          });
-          expect(recorded.ok).toBe(true);
-          const freshRunId = yield* completeValidation(
-            fixture.validation,
-            fixture.captured,
-            "2026-07-25T15:21:00.000Z",
-          );
+        const recorded = yield* fixture.changes.authority.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          choice: "Revise the implementation",
+          rationale: "Implementation Decisions remain Run provenance.",
+          now: "2026-07-25T15:20:00.000Z",
+        });
+        expect(recorded.ok).toBe(true);
+        const freshRunId = yield* completeValidation(
+          fixture.validation,
+          fixture.captured,
+          "2026-07-25T15:21:00.000Z",
+        );
 
-          const refreshed = yield* publication.publish({
-            ...input(fixture),
-            validationRunId: freshRunId,
-            now: "2026-07-25T15:21:00.000Z",
-          });
-          expect(refreshed).toMatchObject({
-            ok: true,
-            created: false,
-            pullRequest: { number: 42 },
-          });
-          expect(updates).toBe(0);
-          expect(
-            yield* fixture.changes.reads.getChangeById(fixture.captured.changeId),
-          ).toMatchObject({
+        const refreshed = yield* publication.publish({
+          ...input(fixture),
+          validationRunId: freshRunId,
+          now: "2026-07-25T15:21:00.000Z",
+        });
+        expect(refreshed).toMatchObject({
+          ok: true,
+          created: false,
+          pullRequest: { number: 42 },
+        });
+        expect(updates).toBe(0);
+        expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
+          {
             publication: {
               candidateId: fixture.captured.candidateId,
               validationRunId: freshRunId,
               pullRequest: { number: 42 },
             },
-          });
-        }),
-      ),
+          },
+        );
+      }),
+    ),
   );
 
   it.scoped("bounds empty recovery creation and final confirmation", () =>
@@ -1515,8 +1501,8 @@ function completeValidation(
       policy,
       now: at,
     });
-    if (run.reused) throw new Error("Expected a new Validation Run");
-    if ("blocked" in run) throw new Error("Expected a new Validation Run");
+    if (run.reused) return run.validationRunId;
+    if ("blocked" in run) throw new Error("Expected a Validation Run");
     yield* validation.execution.complete({
       validationRunId: run.validationRunId,
       outcome: "passed",
