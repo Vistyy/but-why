@@ -69,6 +69,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
   let releaseInspection: (() => void) | undefined;
   let idle = true;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
+  const execSignals: Array<AbortSignal | undefined> = [];
   const api = {
     on(event: string, handler: EventHandler) {
       handlers.set(event, handler);
@@ -90,11 +91,22 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       sent.push(message);
       sendOptions.push(options);
     },
-    async exec(command: string, args: string[]) {
+    async exec(command: string, args: string[], options?: { signal?: AbortSignal }) {
       execCalls.push({ command, args });
+      execSignals.push(options?.signal);
       const sourceCli = command === "just" && args[0] === "by";
       const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
-      if ((sourceCli || publishedCli) && inspectionGate !== undefined) await inspectionGate;
+      if ((sourceCli || publishedCli) && inspectionGate !== undefined) {
+        await Promise.race([
+          inspectionGate,
+          new Promise<void>((resolve) =>
+            options?.signal?.addEventListener("abort", () => resolve()),
+          ),
+        ]);
+        if (options?.signal?.aborted) {
+          return { stdout: "", stderr: "", code: 1, killed: true };
+        }
+      }
       if ((sourceCli || publishedCli) && inspectionFails)
         return { stdout: "", stderr: "", code: 1, killed: true };
       if ((sourceCli || publishedCli) && args.includes("blocker"))
@@ -136,6 +148,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     execCalls,
     getExecCallCount() {
       return execCalls.length;
+    },
+    getAbortedExecCount() {
+      return execSignals.filter((signal) => signal?.aborted).length;
     },
     setSnapshot(next: unknown) {
       currentSnapshot = next;
@@ -483,7 +498,7 @@ describe("packaged Change Implement continuation extension", () => {
     });
     await harness.emit("agent_settled");
 
-    expect(harness.sent[0]).toContain(`change blocker list ${changeId}`);
+    expect(harness.sent.at(-1)).toContain(`change blocker list ${changeId}`);
   });
 
   it("does not credit help, summary, or omitted Resolution inspections", async () => {
@@ -779,6 +794,22 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
   });
 
+  it("handles an existing Resolution when a new bound session starts unpaused", async () => {
+    const harness = createHarness();
+    harness.setBlockerHistory({
+      blockers: [{ id: "blocker-1" }],
+      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      active: null,
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
+    expect(harness.entries.at(-1)).toMatchObject({
+      data: { resolutionId: "resolution-1", pendingResolutionId: null },
+    });
+  });
+
   it("polls a blocked Change every 30 seconds and resumes once for a new Resolution", async () => {
     vi.useFakeTimers();
     try {
@@ -928,8 +959,8 @@ describe("packaged Change Implement continuation extension", () => {
         active: null,
       });
       await inFlight.emit("session_shutdown");
-      inFlight.releaseInspection();
       await Promise.resolve();
+      expect(inFlight.getAbortedExecCount()).toBeGreaterThan(0);
       expect(inFlight.sent).toEqual([]);
     } finally {
       vi.useRealTimers();

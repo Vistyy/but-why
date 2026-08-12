@@ -587,6 +587,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let shutDown = false;
+  let activeInspectionAbortController: AbortController | undefined;
   let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
   const pendingReassessmentEvidence = new Map<string, ReassessmentEvidence>();
@@ -718,10 +719,19 @@ export default function continueChange(pi: ExtensionAPI): void {
     pi.appendEntry(stateEntry, state);
   };
 
-  const run = async (command: string, args: readonly string[], cwd: string): Promise<RunResult> => {
+  const run = async (
+    command: string,
+    args: readonly string[],
+    cwd: string,
+    signal?: AbortSignal,
+  ): Promise<RunResult> => {
     const label = [command, ...args].join(" ");
     try {
-      const result = await pi.exec(command, [...args], { cwd, timeout: 15_000 });
+      const result = await pi.exec(command, [...args], {
+        cwd,
+        timeout: 15_000,
+        ...(signal === undefined ? {} : { signal }),
+      });
       if (result.code === 0) return { ok: true, stdout: result.stdout };
       const stderr = result.stderr.trim();
       return {
@@ -763,13 +773,18 @@ export default function continueChange(pi: ExtensionAPI): void {
   const inspectCommand = async (
     commandArgs: readonly string[],
     cwd: string,
+    signal?: AbortSignal,
   ): Promise<RunResult> => {
     const prefix = commandPrefixFor(cwd);
     const [command, ...args] = cliInvocation(prefix, commandArgs);
-    return run(command, args, cwd);
+    return run(command, args, cwd, signal);
   };
 
-  const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
+  const inspect = async (
+    ctx: ExtensionContext,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<InspectionResult> => {
     const args = ["change", "show", id];
     const blockerArgs = ["change", "blocker", "list", id];
     const [
@@ -781,13 +796,13 @@ export default function continueChange(pi: ExtensionAPI): void {
       stagedResult,
       untrackedResult,
     ] = await Promise.all([
-      inspectCommand(args, ctx.cwd),
-      inspectCommand(blockerArgs, ctx.cwd),
-      run("git", ["rev-parse", "HEAD"], ctx.cwd),
-      run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
-      run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
-      run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
-      run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
+      inspectCommand(args, ctx.cwd, signal),
+      inspectCommand(blockerArgs, ctx.cwd, signal),
+      run("git", ["rev-parse", "HEAD"], ctx.cwd, signal),
+      run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd, signal),
+      run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd, signal),
+      run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd, signal),
+      run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd, signal),
     ]);
     const results = [
       changeResult,
@@ -819,7 +834,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const untrackedHashResult =
       untrackedPaths.length === 0
         ? ({ ok: true, stdout: "" } as const)
-        : await run("git", ["hash-object", "--", ...untrackedPaths], ctx.cwd);
+        : await run("git", ["hash-object", "--", ...untrackedPaths], ctx.cwd, signal);
     if (!untrackedHashResult.ok) {
       return {
         ok: false,
@@ -1116,10 +1131,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     const latest = latestResolution(observed.blockerHistory);
     const latestId = resolutionId(latest);
     const previous = persisted;
-    const resolutionChanged =
-      previous?.resolutionId !== undefined &&
-      latestId !== null &&
-      latestId !== previous.resolutionId;
+    const handledResolutionId = previous?.resolutionId ?? null;
+    const resolutionChanged = latestId !== null && latestId !== handledResolutionId;
     const pendingResolutionId = resolutionChanged
       ? latestId
       : (previous?.pendingResolutionId ?? null);
@@ -1128,7 +1141,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: previous?.resolutionId ?? latestId,
+      resolutionId: handledResolutionId,
       pendingResolutionId,
       ...(previous?.submissionReassessment === undefined
         ? {}
@@ -1175,6 +1188,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     pauseGeneration += 1;
     clearBlockedPolling();
+    activeInspectionAbortController?.abort();
     const state = persisted ?? {
       changeId,
       fingerprint: "inspection-unavailable",
@@ -1206,10 +1220,12 @@ export default function continueChange(pi: ExtensionAPI): void {
     const id = changeId;
     const startedAtPauseGeneration = pauseGeneration;
     const wasBlocked = watcherDisplay.kind === "blocked";
+    const inspectionAbortController = new AbortController();
+    activeInspectionAbortController = inspectionAbortController;
     settling = true;
     showWatcher(ctx, { kind: "checking" });
     try {
-      const observed = await inspect(ctx, id);
+      const observed = await inspect(ctx, id, inspectionAbortController.signal);
       if (shutDown) return;
       if (persisted?.paused || startedAtPauseGeneration !== pauseGeneration) {
         showWatcher(ctx, { kind: "paused" });
@@ -1359,6 +1375,9 @@ export default function continueChange(pi: ExtensionAPI): void {
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
       if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {
+      if (activeInspectionAbortController === inspectionAbortController) {
+        activeInspectionAbortController = undefined;
+      }
       settling = false;
       if (!shutDown && watcherDisplay.kind === "checking") {
         showWatcher(ctx, { kind: "implementing", pullRequestUrl: null });
@@ -1445,6 +1464,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     shutDown = true;
     pauseGeneration += 1;
     clearBlockedPolling();
+    activeInspectionAbortController?.abort();
+    activeInspectionAbortController = undefined;
     pendingReassessmentEvidence.clear();
   });
 
