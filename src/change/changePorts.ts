@@ -3,7 +3,6 @@ import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSes
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
   ChangeCleanup,
   ChangeCloseReason,
@@ -87,7 +86,6 @@ export type CurrentChangeEvidenceQuery = {
   readonly candidateId?: string;
   readonly validationRunId?: string;
   readonly changeBaseSha?: string;
-  readonly policy?: CandidateValidationPolicySnapshot;
 };
 
 export type ChangeAuthorityPort = {
@@ -169,6 +167,7 @@ export type TerminalCleanupChange = {
 export type SubmissionChange = {
   readonly id: string;
   readonly state: ChangeState;
+  readonly activeBlocker: ImplementationBlocker | null;
   readonly branchRef: string;
   readonly baseRef: string | null;
   readonly baseRemoteUrl: string | null;

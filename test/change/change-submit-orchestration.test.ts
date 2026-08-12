@@ -1105,6 +1105,47 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("blocks Submission while an Implementation Blocker is unresolved", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        activeBlocker: {
+          id: "blocker-1",
+          changeId: "change-1",
+          sequence: 1,
+          reportedAt: now,
+          content: "Need an external decision.",
+          resolvedAt: null,
+          resolution: null,
+        },
+        publication: {
+          candidateId: "candidate-1",
+          validationRunId: "run-1",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(dependencies({ events, change }));
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Blocked Submission must not validate"),
+        validateAcceptanceContextCandidate: () =>
+          Effect.die("Blocked Submission must not validate"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({ ok: false, code: "change_blocked" });
+      expect(events).toEqual([]);
+    }),
+  );
+
   it.effect(
     "returns completed publication before fetching the Change Base or resolving configuration",
     () =>

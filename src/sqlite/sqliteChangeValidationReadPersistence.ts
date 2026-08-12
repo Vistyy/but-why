@@ -37,10 +37,6 @@ export const openSqliteChangeValidationReadPort = () =>
         repository.transaction("read Candidate Validation Run", (sql) =>
           readValidationRunById(sql, validationRunId, "decode Candidate Validation Run"),
         ),
-      getLatestRunForCandidate: (candidateId) =>
-        repository.transaction("read latest Candidate Validation Run", (sql) =>
-          getLatestRunForCandidate(sql, candidateId),
-        ),
       listRunsForCandidate: (candidateId) =>
         repository.transaction("list Candidate Validation Runs", (sql) =>
           listRunsForCandidate(sql, candidateId),
@@ -63,25 +59,6 @@ export const openSqliteChangeValidationReadPort = () =>
         ),
     }),
   );
-
-const getLatestRunForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidate_validation_runs
-      WHERE candidate_id = ${candidateId}
-      ORDER BY created_at DESC, id DESC LIMIT 1
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    const run = yield* readValidationRunById(sql, row.id, "decode Candidate Validation Run");
-    if (run === undefined || run.candidateId !== candidateId) {
-      return yield* invalidData(
-        "read latest Candidate Validation Run",
-        "Latest Validation Run belongs to another or unknown Candidate",
-      );
-    }
-    return run;
-  });
 
 const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
   Effect.gen(function* () {

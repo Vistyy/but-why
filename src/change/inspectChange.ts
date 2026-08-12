@@ -72,7 +72,8 @@ export const queryChangeTaskProjection = (
 type ChangeDetailDependencies = {
   readonly getChangeById: ChangeReadPort["getChangeById"];
   readonly getCurrentCandidateForChange: ChangeValidationReadPort["getCurrentCandidateForChange"];
-  readonly getLatestRunForCandidate: ChangeValidationReadPort["getLatestRunForCandidate"];
+  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
+  readonly getRunById: ChangeValidationReadPort["getRunById"];
   readonly listFindings: ChangeValidationReadPort["listFindings"];
   readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
 };
@@ -85,10 +86,14 @@ export const queryChangeDetail = (
     const change = yield* dependencies.getChangeById(changeId);
     if (change === undefined) return undefined;
     const candidate = (yield* dependencies.getCurrentCandidateForChange(changeId)) ?? null;
-    const validationRun =
+    const passingEvidence =
       candidate === null
+        ? undefined
+        : yield* dependencies.getCurrentPassingEvidence(changeId, { candidateId: candidate.id });
+    const validationRun =
+      passingEvidence === undefined
         ? null
-        : ((yield* dependencies.getLatestRunForCandidate(candidate.id)) ?? null);
+        : ((yield* dependencies.getRunById(passingEvidence.validationRunId)) ?? null);
     return {
       change,
       currentCandidate: candidate,

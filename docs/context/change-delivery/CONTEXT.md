@@ -66,14 +66,15 @@ _Avoid_: Latest historical Candidate, dirty workspace
 
 **Candidate Publication**:
 The act of placing one exact Candidate and its passed Validation Run as the head of a Change's owned pull request.
-New or revised publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
-Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
+New or revised publication requires complete, passed evidence for the exact Current Candidate.
+Fresh passing evidence for the same Candidate already on the owned pull request records the Validation Run without artificial republication.
 When an open owned pull request already identifies a revised exact current validated Candidate, publication reconfirms the Remote Change Branch, skips a duplicate push, reapplies the open state and complete current metadata, and confirms the result.
 A Remote Change Branch at the previously published head is updated with the exact force-with-lease safeguard, while any other remote head remains rejected.
 Current publication facts record the exact Candidate, Validation Run, target, head branch, expected head commit, and owned pull request.
-A completed publication remains ready when its persisted Candidate, persisted Validation Run, exact owned pull request, local Repository Branch head, and current durable Change authority still match.
+A completed publication remains ready when its persisted Candidate, persisted Validation Run, exact owned pull request, and local Repository Branch head still match.
 Later Change Base or configuration changes do not alter that completed evidence.
-A changed Candidate or durable Change authority requires eligible evidence for the new facts.
+An unresolved Implementation Blocker still prevents Submission from advancing.
+A changed Current Candidate requires eligible evidence for the new Candidate.
 _Avoid_: Current Candidate, mutable pull request state, Submission
 
 **Exact Merged Candidate**:
@@ -96,10 +97,13 @@ _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Im
 One durable execution and judgment of one Candidate under one resolved validation policy.
 Validation start-or-reuse rejects a Change with an unresolved Implementation Blocker, and validation persistence keeps at most one Active Validation Run per Change.
 Each Validation Run records the exact Candidate, the Validation Policy Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity when the Run starts.
-Reuse and new or revised publication require the exact Candidate, Change Base, current Acceptance Context when present, Validation Policy Snapshot, Implementation Decision input, and latest resolved Implementation Blocker identity, plus Run state `complete` and outcome `passed`.
+Reuse and publication use a complete passed Run for the exact Current Candidate.
 Current passing evidence is the newest eligible passed Run in immutable Validation Run History.
-A later failed or tooling-failed Run does not hide eligible passing evidence.
-A changed Candidate, Resolution, Acceptance Context, policy, or implementation input requires eligible evidence for the new facts without deleting historical evidence.
+Change inspection uses that passing judgment for the Current Candidate rather than the newest Run of any outcome.
+A later failed or tooling-failed Run does not hide eligible passing evidence, and neither outcome is reused as a passed judgment.
+When a later Submission follows such a Run for the unchanged Current Candidate, it starts Validation again rather than reusing an earlier pass.
+Acceptance Context, Validation Policy Snapshot, Implementation Decisions, and resolved Implementation Blocker history remain immutable Run provenance rather than reuse invalidators.
+A changed Current Candidate requires eligible evidence for the new Candidate without deleting historical evidence.
 For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
 _Avoid_: Candidate, retry Attempt, generic job
 
@@ -127,7 +131,7 @@ _Avoid_: Mutable current report
 
 **Validation Policy Snapshot**:
 The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
-Later configuration changes do not alter the snapshot or its historical Validation Run, and Validation Run reuse requires an exact snapshot match.
+Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
 _Avoid_: Mutable current config, raw config hash, retroactive policy
 
 **Reviewer Session**:

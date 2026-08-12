@@ -154,8 +154,9 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           `),
         ),
       );
-      yield* expectSqlRejection(
-        repository.operation("reject duplicate passed Validation Run reuse facts", (sql) =>
+      yield* repository.operation(
+        "allow duplicate passed Validation Run history for one Candidate",
+        (sql) =>
           sql.unsafe(`
             INSERT INTO candidate_validation_runs (
               id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at,
@@ -164,7 +165,6 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
               'run-reuse-2', 'candidate-reuse', '{}', 'complete', 'passed', 'now', 'now', '[]', NULL
             )
           `),
-        ),
       );
     }),
   ),

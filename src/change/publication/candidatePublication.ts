@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { CandidateValidationPolicySnapshot } from "../candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
   ChangeOwnedPullRequest,
   ChangePublication,
@@ -53,7 +52,6 @@ export type PublishCandidateInput = {
   readonly candidateId: string;
   readonly validationRunId: string;
   readonly changeBaseSha: string;
-  readonly policy: CandidateValidationPolicySnapshot;
   readonly target: ChangePublicationTarget;
   readonly now: string;
 };
@@ -105,7 +103,6 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
       candidateId: input.candidateId,
       validationRunId: input.validationRunId,
       changeBaseSha: input.changeBaseSha,
-      policy: input.policy,
     });
     if (evidence === undefined) return { ok: false, code: "validation_evidence_invalid" };
     if (evidence.candidateId !== input.candidateId)
