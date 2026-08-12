@@ -781,9 +781,28 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       writeStderr: (message) => blockedProgress.push(message),
     });
     expect(blocked.status).toBe(1);
-    expect(JSON.parse(blocked.stdout)).toMatchObject({
+    const blockedOutput = JSON.parse(blocked.stdout) as {
+      error: { code: string; review: { id: string } };
+    };
+    expect(blockedOutput).toMatchObject({
       error: { code: "task_review_findings" },
     });
+    const blockedReview = yield* runByInProcessEffect(root, [
+      "task",
+      "review",
+      "show",
+      blockedOutput.error.review.id,
+    ]);
+    expect(
+      (JSON.parse(blockedReview.stdout) as { review: { findings: unknown } }).review.findings,
+    ).toEqual([
+      {
+        title: "Intent gap",
+        description: "The proposal omits one required outcome.",
+        evidence: "The proposal text has no required outcome.",
+        files: [],
+      },
+    ]);
     expect(blockedProgress.at(-1)).toMatch(
       /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
     );
