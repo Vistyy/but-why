@@ -259,6 +259,11 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
     if (active[0] !== undefined) return undefined;
 
     const dependencyIds = yield* directDependencyIds(sql, taskId);
+    const proposalSnapshot = JSON.stringify({
+      title: task.title,
+      description: task.description,
+      dependencyIds,
+    });
     const rows = yield* sql<ReviewRow>`
       SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
         dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
@@ -266,23 +271,14 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         state, outcome, workspace_cleanup AS workspaceCleanup,
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
-      FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence DESC
+      FROM task_reviews
+      WHERE task_id = ${taskId} AND proposal_snapshot = ${proposalSnapshot}
+        AND state = 'complete' AND outcome IN ('passed', 'blocked')
+      ORDER BY sequence DESC LIMIT 1
     `;
-    for (const row of rows) {
+    const row = rows[0];
+    if (row !== undefined) {
       const review = yield* decodeReview(sql, row);
-      if (
-        review.state !== "complete" ||
-        (review.outcome !== "passed" && review.outcome !== "blocked")
-      ) {
-        continue;
-      }
-      if (
-        review.proposal.title !== task.title ||
-        review.proposal.description !== task.description ||
-        JSON.stringify(review.proposal.dependencyIds) !== JSON.stringify(dependencyIds)
-      ) {
-        continue;
-      }
       const judgment = completedTaskReviewResult(review);
       if (judgment === undefined || judgment.outcome === "tooling_failed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");

@@ -1,15 +1,12 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import type { TaskReviewSubmitResult } from "../../../task/review/taskReviewUseCases.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
+import type { TaskReviewRepositorySubmitResult } from "../../../task/composition/loadTaskReviewUseCases.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
-  withReusableTaskReview,
   withTaskReviewSubmission,
-  withTasks,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
 
@@ -20,22 +17,15 @@ export const runTaskSubmitCommand = (
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
   const now = environment.now().toISOString();
-  return withReusableTaskReview(environment, parsed.taskId, now, (judgment) =>
-    judgment === undefined
-      ? withTasks(environment, (tasks) => {
-          const resolved = resolveTaskId(tasks, parsed.taskId);
-          if (!resolved.ok) return Effect.succeed(resolved.result);
-          return withTaskReviewSubmission(environment, (reviews) =>
-            Effect.map(reviews.submit(resolved.taskId, now), (result) =>
-              renderResult(result, resolved.taskId),
-            ),
-          );
-        })
-      : Effect.succeed(renderResult(judgment, parsed.taskId)),
+  return withTaskReviewSubmission(environment, parsed.taskId, now, (result) =>
+    Effect.succeed(renderResult(result, parsed.taskId)),
   );
 };
 
-const renderResult = (result: TaskReviewSubmitResult, taskId: string): CliResult => {
+const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string): CliResult => {
+  if (!result.ok && result.code === "remote_tasks_not_supported") {
+    return taskIdResolutionError(result);
+  }
   if (result.ok) {
     const review = result.review;
     const reviewCommand = `by task-review show ${review.id}`;

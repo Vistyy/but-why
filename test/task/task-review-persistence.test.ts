@@ -161,6 +161,37 @@ it.scoped("reuses the newest exact completed judgment and skips newer Tooling Fa
           now: later,
         });
       }
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Different proposal",
+        now: later,
+      });
+      yield* reviews.admit({
+        reviewId: "review-nonmatching",
+        taskId: publicTaskId("BY-2"),
+        policy,
+        baseRef: "refs/heads/nonmatching",
+        baseCommit: "d".repeat(40),
+        workspacePath: "/tmp/review-nonmatching",
+        now: later,
+      });
+      yield* reviews.recordCleanup("review-nonmatching", "removed", later);
+      yield* reviews.complete({
+        reviewId: "review-nonmatching",
+        findings: [finding("Nonmatching")],
+        now: later,
+      });
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Exact",
+        now: later,
+      });
+      yield* repository.operation(
+        "malform excluded Review evidence",
+        (sql) =>
+          sql`UPDATE task_reviews SET policy_snapshot = '{'
+            WHERE id IN ('review-tooling', 'review-nonmatching')`,
+      );
       yield* repository.operation(
         "change irrelevant dependency evidence",
         (sql) =>

@@ -15,13 +15,12 @@ import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryR
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
-  withReusableTaskReviewJudgment,
+  type TaskReviewRepositorySubmitResult,
   withTaskReviewInspectionUseCases,
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
 import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
-import type { CompleteTaskReviewSuccess } from "../../task/review/taskReviewPersistence.js";
 import type {
   TaskReviewInspectionUseCases,
   TaskReviewRecoveryUseCases,
@@ -97,27 +96,11 @@ export const withTaskReviewRecovery = (
   return catchTaskReviewStorageError(environment, program);
 };
 
-export const withReusableTaskReview = (
+export const withTaskReviewSubmission = (
   environment: TaskCommandEnvironment,
   taskId: PublicTaskId,
   now: string,
-  use: (judgment: CompleteTaskReviewSuccess | undefined) => Effect.Effect<CliResult>,
-): Effect.Effect<CliResult> => {
-  const injected = environment.taskReviewSubmissionUseCases;
-  const program =
-    injected === undefined
-      ? withReusableTaskReviewJudgment({ cwd: environment.cwd, taskId, now }, use).pipe(
-          Effect.map((result) =>
-            result.ok ? result.value : taskReviewLoadErrorResult(result.error),
-          ),
-        )
-      : injected.reuseJudgment(taskId, now).pipe(Effect.flatMap(use));
-  return catchTaskReviewStorageError(environment, program);
-};
-
-export const withTaskReviewSubmission = (
-  environment: TaskCommandEnvironment,
-  use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  use: (result: TaskReviewRepositorySubmitResult) => Effect.Effect<CliResult>,
 ): Effect.Effect<CliResult> => {
   const program =
     environment.taskReviewSubmissionUseCases === undefined
@@ -131,6 +114,8 @@ export const withTaskReviewSubmission = (
             ...(environment.writeStderr === undefined
               ? {}
               : { progress: stderrSubmitProgress(environment.writeStderr) }),
+            taskId,
+            now,
           },
           use,
         ).pipe(
@@ -138,7 +123,7 @@ export const withTaskReviewSubmission = (
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
-      : use(environment.taskReviewSubmissionUseCases);
+      : environment.taskReviewSubmissionUseCases.submit(taskId, now).pipe(Effect.flatMap(use));
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
