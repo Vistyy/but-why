@@ -6,6 +6,7 @@ import type { InteractiveSessionHost } from "./change/interactiveSession/interac
 import type { TextInputStdin } from "./cli/input/textInput.js";
 import { runCommandTree } from "./cliCommandTree.js";
 import { type CliResult, runtimeError } from "./cliResults.js";
+import type { TaskReviewerOutput } from "./task/review/taskReviewerOutput.js";
 import type {
   TaskReviewInspectionUseCases,
   TaskReviewRecoveryUseCases,
@@ -26,6 +27,7 @@ export type CliEnvironment = {
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };

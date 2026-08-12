@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
-import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import type { CliResult } from "../../cliResults.js";
@@ -21,6 +20,7 @@ import {
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
 import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
+import type { TaskReviewerOutput } from "../../task/review/taskReviewerOutput.js";
 import type {
   TaskReviewInspectionUseCases,
   TaskReviewRecoveryUseCases,
@@ -39,7 +39,7 @@ export type TaskCommandEnvironment = {
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly writeStderr?: (message: string) => void;
 };
@@ -108,9 +108,9 @@ export const withTaskReviewSubmission = (
           {
             cwd: environment.cwd,
             globalConfigPath: environment.globalConfigPath ?? "",
-            ...(environment.reviewerAgentRuntime === undefined
+            ...(environment.taskReviewerAgentRuntime === undefined
               ? {}
-              : { reviewerRuntime: environment.reviewerAgentRuntime }),
+              : { reviewerRuntime: environment.taskReviewerAgentRuntime }),
             ...(environment.writeStderr === undefined
               ? {}
               : { progress: stderrSubmitProgress(environment.writeStderr) }),

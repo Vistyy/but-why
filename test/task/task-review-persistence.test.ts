@@ -92,7 +92,6 @@ it.scoped("selects the latest Review deterministically when creation times match
             description: "Description",
             evidence: "Evidence",
             files: [],
-            artifactRefs: [],
           },
         ],
         now,
@@ -133,7 +132,6 @@ it.scoped("reuses the newest exact completed judgment and skips newer Tooling Fa
         description: `${title} description`,
         evidence: `${title} evidence`,
         files: [],
-        artifactRefs: [],
       });
       for (const input of [
         { id: "review-old", findings: [finding("Old")] },
@@ -351,7 +349,6 @@ it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
               description: "Description",
               evidence: "Evidence",
               files: [],
-              artifactRefs: [],
             },
           ],
         },
@@ -514,7 +511,6 @@ it.scoped("finalizes a concurrently changed proposal as tooling failed and retai
             description: "Description",
             evidence: "Evidence",
             files: [],
-            artifactRefs: [],
           },
         ],
         now: later,
@@ -524,7 +520,14 @@ it.scoped("finalizes a concurrently changed proposal as tooling failed and retai
         review: {
           state: "complete",
           outcome: "tooling_failed",
-          findings: [{ title: "Finding", artifactRefs: [] }],
+          findings: [
+            {
+              title: "Finding",
+              description: "Description",
+              evidence: "Evidence",
+              files: [],
+            },
+          ],
           toolingFailure: { operation: "confirm_task_review_context" },
         },
       });

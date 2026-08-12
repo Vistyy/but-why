@@ -165,7 +165,6 @@ describe("Task command Adapters", () => {
           description: "Clarify the expected result.",
           evidence: "The proposal permits two outcomes.",
           files: ["docs/spec.md"],
-          artifactRefs: [],
         },
       ] as const;
       let calls = 0;
@@ -402,7 +401,6 @@ describe("Task command Adapters", () => {
             description: "Clarify the expected result.",
             evidence: "The proposal permits two outcomes.",
             files: ["docs/spec.md"],
-            artifactRefs: [],
           },
         ],
         updatedAt: secondNow,
@@ -446,7 +444,6 @@ describe("Task command Adapters", () => {
                 description: "Clarify the expected result.",
                 evidence: "The proposal permits two outcomes.",
                 files: ["docs/spec.md"],
-                artifactRefs: [],
               },
             ],
             workspaceCleanup: "removed",
