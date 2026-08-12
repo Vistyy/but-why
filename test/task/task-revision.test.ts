@@ -5,7 +5,11 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { setTaskStateFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import {
+  passTaskReviewFixture,
+  setTerminalTaskStateFixture,
+  withTemporaryRepositoryState,
+} from "../support/repository.js";
 
 const now = "2026-08-12T10:00:00.000Z";
 const later = "2026-08-12T10:05:00.000Z";
@@ -42,7 +46,6 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
       });
       yield* reviews.recordCleanup("review-retained", "removed", now);
       yield* reviews.complete({ reviewId: "review-retained", findings: [], now });
-      yield* setTaskStateFixture(publicTaskId("BY-2"), "todo", now);
       const before = yield* tasks.getTaskById(publicTaskId("BY-2"));
 
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
@@ -87,7 +90,7 @@ it.scoped("locks Todo Task mutations while reconsideration is active", () =>
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
-      yield* setTaskStateFixture(publicTaskId("BY-2"), "todo", now);
+      yield* passTaskReviewFixture(publicTaskId("BY-2"), now);
       yield* reviews.admit({
         reviewId: "review-reconsideration",
         taskId: publicTaskId("BY-2"),
@@ -182,7 +185,7 @@ it.scoped(
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
         }
-        yield* setTaskStateFixture(publicTaskId("BY-1"), "todo", now);
+        yield* passTaskReviewFixture(publicTaskId("BY-1"), now);
         yield* repository.operation(
           "link Todo Task fixture to Change",
           (sql) => sql`INSERT INTO changes (
@@ -204,8 +207,8 @@ it.scoped(
           workspacePath: "/tmp/review-active",
           now,
         });
-        yield* setTaskStateFixture(publicTaskId("BY-3"), "done", now);
-        yield* setTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
+        yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
+        yield* setTerminalTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
 
         expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual({
           ok: false,

@@ -35,7 +35,7 @@ export const startResult = (result: ChangeStartResult): CliResult => {
       code: result.code,
       message: `The Task cannot start from state ${result.state}.`,
       details: { state: result.state },
-      help: ["Approve the Task before starting its Change."],
+      help: ["Submit the New Task and obtain a passing Task Review before starting its Change."],
     });
   }
   if (result.code === "requested_base_conflict") {

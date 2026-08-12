@@ -1,6 +1,6 @@
 # Operator Workflow
 
-Use this reference when selecting a Work Route, recording Tasks, approving a Task, authorizing implementation, or starting an Implementer Interactive Session.
+Use this reference when selecting a Work Route, recording or submitting Tasks, authorizing implementation, or starting an Implementer Interactive Session.
 Read target-repository instructions, current repository state, and any repository documentation authority map before acting.
 When no map identifies an artifact's authority, do not infer authority from its name or path.
 Treat historical material only as evidence unless the Operator approves it as a current requirement source.
@@ -10,10 +10,10 @@ Treat historical material only as evidence unless the Operator approves it as a 
 Work Route Selection is the Operator's explicit choice of a Task-backed Change, a taskless Change, or a direct edit.
 Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Submission, Change Start, or implementation.
 Task Submission Authorization permits submission of one selected Task proposal for Task Review toward the intended outcome.
-The intended outcome is approval for a New Task or reconsideration for an unchanged approved unlinked Todo Task.
+The intended outcome is a passing Task Review and transition to Todo for a New Task, or reconsideration for an unchanged approved unlinked Todo Task.
 It is distinct from Task Recording Authorization and Implementation Authorization and is not persisted.
 Each selected Task and intended outcome requires new Task Submission Authorization.
-Task Approval confirms reviewed Task intent without starting a Change or authorizing implementation.
+Task Submission does not start a Change or authorize implementation.
 Implementation Authorization permits implementation of one selected work item through its selected Work Route.
 Do not start a Change or begin implementation without Implementation Authorization for that work item.
 
@@ -57,7 +57,7 @@ This section is complete when the selected work item and Work Route are explicit
 
 This section is complete when the authorized Tasks and Task Dependencies are recorded, unapproved, and unlinked to a Change.
 
-## Review and approve a Task
+## Submit a Task
 
 Obtain Task Submission Authorization for the selected Task and intended outcome before running Task Submission.
 Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
@@ -67,7 +67,7 @@ A rerun bypasses completed-judgment reuse and continues the most recent compatib
 The Task remains Todo while reconsideration is active.
 A passing rerun keeps the Task Todo and makes the new passed Review current.
 A Finding-blocked rerun moves the Task to New and makes the new Findings current.
-A tooling-failed or successfully abandoned rerun keeps the Task Todo, records its actual Review history, and preserves the previous applicable judgment without fabricating one for a legacy Todo Task.
+A tooling-failed or successfully abandoned rerun keeps the Task Todo, records its actual Review history, and preserves the previous applicable judgment.
 Use the returned Submission mode, Review state and outcome, and help to identify the result and valid next action.
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
@@ -77,14 +77,14 @@ Resolve every applicable Finding by updating the New Task proposal before reques
 Use `--rerun` only for explicitly authorized reconsideration of an unchanged approved Todo Task.
 
 Task Submission is the only supported route that can approve an unlinked New Task or reconsider an approved unlinked Todo Task.
-Task Approval does not authorize Change Start or implementation.
+Task Submission does not authorize Change Start or implementation.
 
 This section is complete when the selected Task is approved and no Change has started from this action.
 
 ## Authorize implementation
 
 Implementation Authorization is the Operator's explicit permission to implement one selected work item through its selected Work Route.
-Task Recording Authorization and Task Approval do not grant it.
+Task Recording Authorization and Task Submission do not grant it.
 When the Operator gives Implementation Authorization, confirm the selected work item and Work Route before acting.
 
 For a direct edit, implement only the authorized work in the current repository according to target-repository instructions.

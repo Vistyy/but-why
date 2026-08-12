@@ -4,7 +4,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
-import { setTaskStateFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -92,7 +92,7 @@ it.scoped(
         yield* createTask(tasks, "First");
         yield* createTask(tasks, "Second");
         yield* createTask(tasks, "Dependent", ["BY-1"]);
-        yield* setTaskStateFixture(publicTaskId("BY-3"), "todo", secondNow);
+        yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
 
         for (const operation of ["add", "remove", "replace", "clear"] as const) {
           expect(
@@ -153,8 +153,8 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
       yield* createTask(tasks, "Done prerequisite");
       yield* createTask(tasks, "Open prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
-      yield* setTaskStateFixture(publicTaskId("BY-1"), "todo", secondNow);
-      yield* setTaskStateFixture(publicTaskId("BY-3"), "todo", secondNow);
+      yield* passTaskReviewFixture(publicTaskId("BY-1"), secondNow);
+      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
       yield* repository.operation(
         "set done prerequisite fixture",
         (sql) => sql`

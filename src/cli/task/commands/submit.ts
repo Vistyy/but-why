@@ -52,7 +52,10 @@ const renderResult = (
       case "blocked":
         return runtimeError({
           code: "task_review_findings",
-          message: "Task Review is blocked by Findings; the Task remains New.",
+          message:
+            mode === "rerun"
+              ? "Task Review is blocked by Findings; the Task moved from Todo to New."
+              : "Task Review is blocked by Findings; the Task remains New.",
           details: {
             submission: { mode },
             review: {
@@ -71,7 +74,7 @@ const renderResult = (
           message:
             mode === "rerun"
               ? "Task Review had a Tooling Failure; the Task remains Todo and its previous applicable judgment is preserved."
-              : "Task Review did not approve the Task.",
+              : "Task Review had a Tooling Failure; the Task remains New.",
           details: {
             submission: { mode },
             review: {

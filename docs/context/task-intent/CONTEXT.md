@@ -1,6 +1,6 @@
 # Task Intent Context
 
-This context owns requested intent, approval, dependencies, and user-facing Task progress.
+This context owns requested intent, Task Submission, dependencies, and user-facing Task progress.
 
 ## Language
 
@@ -8,7 +8,7 @@ This context owns requested intent, approval, dependencies, and user-facing Task
 The Operator's explicit choice to handle requested repository work through a Task-backed Change, a taskless Change, or a direct edit outside But Why.
 An agent may recommend a route but must not substitute another route after the Operator decides.
 When the selected route conflicts with a higher-priority instruction, supported interface, safety constraint, or approved Task intent, the agent reports the conflict and requests direction through the applicable authority mechanism.
-_Avoid_: Agent-selected workflow, Task Approval, Change Start
+_Avoid_: Agent-selected workflow, Task Submission, Change Start
 
 **Task Recording Authorization**:
 The Operator's explicit permission to persist agreed Task outcomes and their actual Task Dependencies for selected work.
@@ -18,12 +18,12 @@ _Avoid_: Approval of exact prose, Task Submission Authorization, approval to imp
 
 **Task Submission Authorization**:
 The Operator's explicit permission to submit one selected Task proposal for Task Review toward the intended outcome.
-For a New Task, the intended outcome is approval.
+For a New Task, the intended outcome is a passing Task Review and transition to Todo.
 For an approved unlinked Todo Task, the intended outcome is reconsideration of its unchanged proposal.
 It is not persisted.
 Another submission requires new Task Submission Authorization for the selected Task and intended outcome.
 It does not authorize Change Start or implementation.
-_Avoid_: Task Recording Authorization, Task Approval, reusable judgment
+_Avoid_: Task Recording Authorization, Task Review, reusable judgment
 
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
@@ -44,7 +44,7 @@ The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
 **Task Review**:
-One review of one exact Task proposal for approval or reconsideration.
+One review of one exact Task proposal submitted from New or reconsidered from Todo.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
 A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
@@ -55,11 +55,11 @@ An explicitly authorized Task Review rerun admits another Review of an unchanged
 The Todo Task stays approved while the rerun is active.
 A passing rerun keeps the Task Todo.
 A Finding-blocked rerun moves the Task to New.
-A tooling-failed or successfully abandoned rerun keeps the Task Todo and preserves the previous applicable judgment without fabricating one for a legacy Todo Task.
+A tooling-failed or successfully abandoned rerun keeps the Task Todo and preserves the previous applicable judgment.
 Active and tooling-failed Reviews are not reusable judgments, and a newer tooling failure does not hide an earlier applicable judgment.
 Context and direct Task Dependency identity are the only reuse identity fields.
 Repository state, Review Base, policy, configuration, dependency content, and dependency lifecycle do not affect reuse.
-_Avoid_: Task Approval, Acceptance Review, Validation Run
+_Avoid_: Task Submission, Acceptance Review, Validation Run
 
 **Task Reviewer Session**:
 A continuing reviewer conversation owned by one Task under one compatible resolved Task Review policy.
@@ -87,15 +87,6 @@ _Avoid_: Acceptance Context, dependency evidence, Task revision
 The canonical main checkout branch ref and exact commit captured for one Task Review.
 Repository Preparation and reviewer execution use a disposable exact workspace at that commit.
 _Avoid_: Change Base, caller checkout HEAD, Candidate
-
-**Task Approval**:
-The transition that confirms recorded Task intent can move from New to Todo.
-It occurs only through a passing fresh or reused Task Review judgment selected by ordinary Task Submission.
-Approval remains represented by Todo without a separate approval snapshot.
-An explicit rerun can reconsider the unchanged approved proposal without removing approval before a completed Finding-blocked judgment.
-Task Context and Task Dependencies remain immutable while a Task is Todo.
-Task Revision can return an unlinked Todo Task to New before either is changed.
-_Avoid_: Change Start, Implementation Authorization
 
 **Task Revision**:
 The transition that returns an unlinked Todo Task to New before the Operator changes its approved intent.

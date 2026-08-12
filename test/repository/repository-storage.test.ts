@@ -22,7 +22,7 @@ import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { observeUntil } from "../support/observe.js";
 import {
-  setTaskStateFixture,
+  passTaskReviewFixture,
   withTemporaryRepositoryState as withTemporaryState,
 } from "../support/repository.js";
 import { startTestProcess } from "../support/testProcess.js";
@@ -133,7 +133,7 @@ describe("repository SQL storage", () => {
         });
         if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
         const taskId = storedPublicTaskId(task.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:49:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:49:00.000Z");
 
         const starts = yield* openSqliteChangeStartPersistence();
         const created = yield* starts.create({
@@ -213,7 +213,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-raise-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -266,7 +266,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-duplicate-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -320,7 +320,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-published-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -400,7 +400,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T23:03:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T23:03:00.000Z");
         const started = yield* starts.create({
           id: "change-resolve-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -545,7 +545,7 @@ describe("repository SQL storage", () => {
           });
           if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
           const taskId = storedPublicTaskId(created.task.id);
-          yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
+          yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
           const started = yield* starts.create({
             id: "change-cancel-atomic",
             repositoryCommonDirectory: input.commonDirectory,
@@ -603,7 +603,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-stale-evidence",
           repositoryCommonDirectory: input.commonDirectory,
@@ -713,7 +713,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-newer-publication",
           repositoryCommonDirectory: input.commonDirectory,
@@ -836,7 +836,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
+        yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-atomic-completion",
           repositoryCommonDirectory: input.commonDirectory,
@@ -2214,11 +2214,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(36);
+          expect(yield* initializeMigrationCount).toBe(37);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(36);
+          expect(yield* readMigrationCount).toBe(37);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2318,9 +2318,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(36);
+              expect(migrations.length).toBe(37);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 36 }, (_, index) => index + 1),
+                Array.from({ length: 37 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2419,7 +2419,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 36,
+              migrationCount: 37,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

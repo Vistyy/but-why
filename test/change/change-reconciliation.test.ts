@@ -11,7 +11,7 @@ import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
-import { setTaskStateFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 import {
   noOpTerminalCleanupDependencies,
   openTerminalCleanup,
@@ -253,7 +253,7 @@ describe("by change reconcile", () => {
         });
         if (!createdTask.ok) throw new Error(createdTask.code);
         const taskId = publicTaskId(createdTask.task.id);
-        yield* setTaskStateFixture(taskId, "todo", now);
+        yield* passTaskReviewFixture(taskId, now);
 
         const starts = yield* openSqliteChangeStartPersistence();
         const prepared = yield* starts.prepareTask(taskId);
@@ -492,7 +492,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* setTaskStateFixture(taskId, "todo", now);
+          yield* passTaskReviewFixture(taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
@@ -610,7 +610,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* setTaskStateFixture(taskId, "todo", now);
+          yield* passTaskReviewFixture(taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
