@@ -1128,6 +1128,32 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
   });
 
+  it("shows terminal state and stops polling when a closed Change retains an active blocker", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+      harness.setSnapshot(
+        snapshot({ change: { state: "closed", closeReason: "cancelled", taskId: "BY-236" } }),
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      const terminalInspectionCalls = harness.getExecCallCount();
+
+      expect(harness.sent).toEqual([]);
+      expect(harness.latestWidgetText()).toEqual(["✕ Change was cancelled"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.getExecCallCount()).toBe(terminalInspectionCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not send a continuation message when resumed after the Change is closed", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });

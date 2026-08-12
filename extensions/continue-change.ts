@@ -664,15 +664,13 @@ export default function continueChange(pi: ExtensionAPI): void {
     git: GitInspection,
     blockerHistory: BlockerHistory,
   ): WatcherDisplay => {
-    if (blockerHistory.active !== null) {
-      return { kind: "blocked" };
-    }
     if (snapshot.change.state === "closed") {
       if (snapshot.cleanup?.state === "pending") return { kind: "cleanup-needed" };
       return snapshot.change.closeReason === "cancelled"
         ? { kind: "cancelled" }
         : { kind: "complete" };
     }
+    if (blockerHistory.active !== null) return { kind: "blocked" };
     if (snapshot.toolingFailureCount > 0) return { kind: "stopped" };
     const pullRequestUrl = publicationPullRequestUrl(snapshot);
     if (snapshot.currentValidationRun?.state === "running") {
