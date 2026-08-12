@@ -191,11 +191,19 @@ describe("Shared Repository State migrations", () => {
               base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
               created_at, updated_at
             ) VALUES
-              ('review-passed', 'BY-2', '{}', '[]', '{}', 'refs/heads/main', 'base',
-               ${join(directory, "passed")}, 'complete', 'passed', 'removed',
+              ('review-passed', 'BY-2',
+               '{"title":"Passed Todo","description":"Has passing Review.","dependencyIds":[]}',
+               '[]',
+               '{"profile":{"agentProfile":"review","scope":"global","profile":{"agentRuntime":"pi"}},"builtInInstructions":"Review the Task.","guidance":null}',
+               'refs/heads/main', 'base', ${join(directory, "passed")},
+               'complete', 'passed', 'removed',
                '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
-              ('review-blocked', 'BY-3', '{}', '[]', '{}', 'refs/heads/main', 'base',
-               ${join(directory, "blocked")}, 'complete', 'blocked', 'removed',
+              ('review-blocked', 'BY-3',
+               '{"title":"Blocked Todo","description":"Has only blocked Review.","dependencyIds":[]}',
+               '[]',
+               '{"profile":{"agentProfile":"review","scope":"global","profile":{"agentRuntime":"pi"}},"builtInInstructions":"Review the Task.","guidance":null}',
+               'refs/heads/main', 'base', ${join(directory, "blocked")},
+               'complete', 'blocked', 'removed',
                '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z')`;
             yield* sql`INSERT INTO changes (
               id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at,
