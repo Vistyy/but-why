@@ -73,9 +73,6 @@ export type ChangeValidationReadPort = {
   readonly getRunById: (
     validationRunId: string,
   ) => StorageEffect<CandidateValidationRunRecord | undefined>;
-  readonly getLatestRunForCandidate: (
-    candidateId: string,
-  ) => StorageEffect<CandidateValidationRunRecord | undefined>;
   readonly listRunsForCandidate: (
     candidateId: string,
   ) => StorageEffect<readonly CandidateValidationRunRecord[]>;

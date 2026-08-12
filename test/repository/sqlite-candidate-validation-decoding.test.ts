@@ -211,9 +211,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
           expect(
             yield* validation.reads.listToolingFailures(priorRun.validationRunId),
           ).toMatchObject([{ sequence: 1, errorKind: "infrastructure_tooling_failed" }]);
-          expect(
-            yield* validation.reads.getLatestRunForCandidate(current.candidateId),
-          ).toMatchObject({ id: active.validationRunId, state: "running" });
           const strictError = yield* validation.reads
             .getRunById(priorRun.validationRunId)
             .pipe(Effect.flip);
