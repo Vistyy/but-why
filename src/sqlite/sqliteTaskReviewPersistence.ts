@@ -66,29 +66,21 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
         reuseTaskReviewJudgment(sql, taskId, now),
       ),
+    checkAdmission: (taskId) =>
+      repository.transaction("check Task Review admission", (sql) =>
+        taskReviewAdmissionRejection(sql, taskId),
+      ),
     admit: (input) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.gen(function* () {
+          const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId);
+          if (rejected !== undefined) return rejected;
           const tasks = yield* sql<{
             readonly title: string;
             readonly description: string;
-            readonly state: string;
-          }>`SELECT title, description, state FROM tasks WHERE id = ${input.taskId}`;
+          }>`SELECT title, description FROM tasks WHERE id = ${input.taskId}`;
           const task = tasks[0];
-          if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-          if (task.state !== "new") {
-            return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
-          }
-          const active = yield* sql<{ readonly id: string }>`
-            SELECT id FROM task_reviews WHERE task_id = ${input.taskId} AND state = 'running'
-          `;
-          if (active[0] !== undefined) {
-            return {
-              ok: false as const,
-              code: "active_task_review" as const,
-              reviewId: active[0].id,
-            };
-          }
+          if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
           const dependencies = yield* dependencyEvidence(sql, input.taskId);
           const proposal: TaskReviewProposal = {
             title: task.title,
@@ -242,6 +234,40 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         currentProposalMatches(sql, review),
       ),
   }));
+
+const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) =>
+  Effect.gen(function* () {
+    const tasks = yield* sql<{ readonly state: string }>`
+      SELECT state FROM tasks WHERE id = ${taskId}
+    `;
+    const task = tasks[0];
+    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (task.state !== "new") {
+      return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
+    }
+    const linkedChanges = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
+    `;
+    const linkedChange = linkedChanges[0];
+    if (linkedChange !== undefined) {
+      return {
+        ok: false as const,
+        code: "task_change_linked" as const,
+        changeId: linkedChange.id,
+      };
+    }
+    const active = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+    `;
+    const activeReview = active[0];
+    return activeReview === undefined
+      ? undefined
+      : {
+          ok: false as const,
+          code: "active_task_review" as const,
+          reviewId: activeReview.id,
+        };
+  });
 
 const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
   Effect.gen(function* () {

@@ -24,6 +24,16 @@ export type AdmitTaskReviewInput = {
   readonly now: string;
 };
 
+export type TaskReviewAdmissionRejection =
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
+  | {
+      readonly ok: false;
+      readonly code: "task_change_linked";
+      readonly changeId: string;
+    }
+  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string };
+
 export type AdmitTaskReviewResult =
   | {
       readonly ok: true;
@@ -31,9 +41,7 @@ export type AdmitTaskReviewResult =
       readonly proposal: TaskReviewProposal;
       readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
     }
-  | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string };
+  | TaskReviewAdmissionRejection;
 
 export type CompleteTaskReviewInput = {
   readonly reviewId: string;
@@ -90,6 +98,9 @@ export type TaskReviewPersistence = {
     taskId: PublicTaskId,
     now: string,
   ) => Effect.Effect<CompleteTaskReviewSuccess | undefined, RepositoryStorageError>;
+  readonly checkAdmission: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskReviewAdmissionRejection | undefined, RepositoryStorageError>;
   readonly admit: (
     input: AdmitTaskReviewInput,
   ) => Effect.Effect<AdmitTaskReviewResult, RepositoryStorageError>;

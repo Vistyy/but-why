@@ -100,6 +100,7 @@ export const withTaskReviewSubmission = (
   environment: TaskCommandEnvironment,
   taskId: PublicTaskId,
   now: string,
+  options: { readonly rerun: boolean },
   use: (result: TaskReviewRepositorySubmitResult) => Effect.Effect<CliResult>,
 ): Effect.Effect<CliResult> => {
   const program =
@@ -116,6 +117,7 @@ export const withTaskReviewSubmission = (
               : { progress: stderrSubmitProgress(environment.writeStderr) }),
             taskId,
             now,
+            rerun: options.rerun,
           },
           use,
         ).pipe(
@@ -123,7 +125,9 @@ export const withTaskReviewSubmission = (
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
-      : environment.taskReviewSubmissionUseCases.submit(taskId, now).pipe(Effect.flatMap(use));
+      : environment.taskReviewSubmissionUseCases
+          .submit(taskId, now, options)
+          .pipe(Effect.flatMap(use));
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(

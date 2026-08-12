@@ -233,11 +233,16 @@ const taskShowCommand = withCliHandler(
 const taskSubmitCommand = withCliHandler(
   leaf("submit", "Review and approve one exact New Task proposal when it passes.", {
     taskId: taskIdArgument,
+    rerun: Options.boolean("rerun").pipe(
+      Options.withDescription(
+        "Run another Review of the unchanged unlinked New Task proposal instead of reusing a completed judgment.",
+      ),
+    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
       Effect.flatMap(({ runTaskSubmitCommand }) =>
-        runTaskSubmitCommand({ taskId: values.taskId }, environment),
+        runTaskSubmitCommand({ taskId: values.taskId, rerun: values.rerun }, environment),
       ),
     ),
 );

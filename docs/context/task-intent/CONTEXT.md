@@ -16,6 +16,12 @@ It permits clear Task description wording and dependency encoding within the agr
 It does not authorize Task Approval, Change Start, or Implementation Authorization.
 _Avoid_: Approval of exact prose, Task Approval, approval to implement, automatic Change Start
 
+**Task Submission Authorization**:
+The Operator's explicit permission to submit one selected New Task proposal for Task Review and approval toward the intended outcome.
+Another Review of an unchanged proposal requires new Task Submission Authorization.
+It does not authorize direct Task Approval, Change Start, or implementation.
+_Avoid_: Task Recording Authorization, Task Approval, reusable judgment
+
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
 _Avoid_: Change, issue draft, implementation session
@@ -42,6 +48,7 @@ The effective policy contains the mandatory built-in review core, the resolved A
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Reviewer Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 Ordinary Task Submission reuses the newest completed passed or Finding-blocked Review for the exact unchanged proposal.
+An explicitly authorized Task Review rerun admits another Review of an unchanged unlinked New Task proposal instead of reusing that judgment, and it continues the most recent compatible usable Task Reviewer Session.
 Active and tooling-failed Reviews are not reusable judgments, and a newer tooling failure does not hide an earlier applicable judgment.
 Context and direct Task Dependency identity are the only reuse identity fields.
 Repository state, Review Base, policy, configuration, dependency content, and dependency lifecycle do not affect reuse.

@@ -224,7 +224,8 @@ describe("Task command Adapters", () => {
       expect(passed).toEqual({
         exitCode: 0,
         stdout: {
-          review: { id: "review-1", outcome: "passed" },
+          submission: { mode: "ordinary" },
+          review: { id: "review-1", state: "complete", outcome: "passed" },
           task: { id: "BY-1", state: "todo" },
           help: ["Run `by task show BY-1` to inspect its startability and next action."],
         },
@@ -235,7 +236,8 @@ describe("Task command Adapters", () => {
           error: {
             code: "task_review_findings",
             message: "Task Review is blocked by Findings; the Task remains New.",
-            review: { id: "review-1", outcome: "blocked", findings },
+            submission: { mode: "ordinary" },
+            review: { id: "review-1", state: "complete", outcome: "blocked", findings },
           },
           help: ["Run `by task-review show review-1` to inspect the Task Review."],
         },
@@ -246,8 +248,10 @@ describe("Task command Adapters", () => {
           error: {
             code: "task_review_tooling_failed",
             message: "Task Review did not approve the Task.",
+            submission: { mode: "ordinary" },
             review: {
               id: "review-1",
+              state: "complete",
               outcome: "tooling_failed",
               toolingFailure: {
                 operation: "confirm_task_review_context",
