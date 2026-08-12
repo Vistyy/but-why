@@ -139,6 +139,19 @@ it.scoped("locks Todo Task mutations while reconsideration is active", () =>
         updatedAt: now,
         prerequisites: [{ id: "BY-1" }],
       });
+
+      yield* reviews.recordCleanup("review-reconsideration", "removed", later);
+      yield* reviews.complete({
+        reviewId: "review-reconsideration",
+        findings: [],
+        toolingFailure: { operation: "run_task_review", message: "Reviewer failed." },
+        now: later,
+      });
+      expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
+        ok: true,
+        changed: true,
+        task: { state: "new" },
+      });
     }),
   ),
 );
