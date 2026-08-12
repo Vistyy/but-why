@@ -15,12 +15,9 @@ import type {
   TaskReviewToolingFailure,
 } from "./taskReview.js";
 
-export type TaskReviewSubmissionMode = "ordinary" | "rerun";
-
 export type AdmitTaskReviewInput = {
   readonly reviewId: string;
   readonly taskId: PublicTaskId;
-  readonly submissionMode?: TaskReviewSubmissionMode;
   readonly policy: TaskReviewPolicySnapshot;
   readonly baseRef: string;
   readonly baseCommit: string;
@@ -106,7 +103,6 @@ export type TaskReviewPersistence = {
   ) => Effect.Effect<CompleteTaskReviewSuccess | undefined, RepositoryStorageError>;
   readonly checkAdmission: (
     taskId: PublicTaskId,
-    submissionMode: TaskReviewSubmissionMode,
   ) => Effect.Effect<TaskReviewAdmissionRejection | undefined, RepositoryStorageError>;
   readonly admit: (
     input: AdmitTaskReviewInput,

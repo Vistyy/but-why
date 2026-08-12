@@ -66,18 +66,14 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
         reuseTaskReviewJudgment(sql, taskId, now),
       ),
-    checkAdmission: (taskId, submissionMode) =>
+    checkAdmission: (taskId) =>
       repository.transaction("check Task Review admission", (sql) =>
-        taskReviewAdmissionRejection(sql, taskId, submissionMode),
+        taskReviewAdmissionRejection(sql, taskId),
       ),
     admit: (input) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.gen(function* () {
-          const rejected = yield* taskReviewAdmissionRejection(
-            sql,
-            input.taskId,
-            input.submissionMode ?? "ordinary",
-          );
+          const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId);
           if (rejected !== undefined) return rejected;
           const tasks = yield* sql<{
             readonly title: string;
@@ -239,19 +235,14 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
   }));
 
-const taskReviewAdmissionRejection = (
-  sql: SqlClient.SqlClient,
-  taskId: string,
-  submissionMode: "ordinary" | "rerun",
-) =>
+const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const tasks = yield* sql<{ readonly state: string }>`
       SELECT state FROM tasks WHERE id = ${taskId}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    const requiredState = submissionMode === "rerun" ? "todo" : "new";
-    if (task.state !== requiredState) {
+    if (task.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
     const linkedChanges = yield* sql<{ readonly id: string }>`
@@ -307,7 +298,7 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
+      WHERE task_id = ${taskId} AND state = 'complete' AND outcome = 'passed'
       ORDER BY sequence DESC
     `;
     for (const row of rows) {
@@ -315,7 +306,7 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
       if (JSON.stringify(proposal) !== JSON.stringify(currentProposal)) continue;
       const review = yield* decodeReview(sql, row);
       const judgment = completedTaskReviewResult(review, "new");
-      if (judgment === undefined || judgment.outcome === "tooling_failed") {
+      if (judgment === undefined || judgment.outcome !== "passed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
       }
       if (judgment.outcome === "passed") {
@@ -398,11 +389,6 @@ const completeReview = (
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
         WHERE id = ${current.taskId} AND state = 'new'
-      `;
-    } else if (outcome === "blocked") {
-      yield* sql`
-        UPDATE tasks SET state = 'new', updated_at = ${now}
-        WHERE id = ${current.taskId} AND state = 'todo'
       `;
     }
     yield* Effect.forEach(
@@ -515,7 +501,7 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
         },
       };
     }
-    if (task.state !== "new" && task.state !== "todo") {
+    if (task.state !== "new") {
       return {
         ok: false as const,
         failure: {

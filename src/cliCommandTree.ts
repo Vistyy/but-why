@@ -245,18 +245,13 @@ const taskReviseCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Submit a New Task for review or reconsider an approved Todo Task.", {
+  leaf("submit", "Submit a New Task for review.", {
     taskId: taskIdArgument,
-    rerun: Options.boolean("rerun").pipe(
-      Options.withDescription(
-        "Reconsider the unchanged approved proposal of an unlinked Todo Task without reusing its completed judgment.",
-      ),
-    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
       Effect.flatMap(({ runTaskSubmitCommand }) =>
-        runTaskSubmitCommand({ taskId: values.taskId, rerun: values.rerun }, environment),
+        runTaskSubmitCommand({ taskId: values.taskId }, environment),
       ),
     ),
 );

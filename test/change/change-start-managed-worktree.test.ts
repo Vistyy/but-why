@@ -7,11 +7,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
-import { publicTaskId } from "../../src/task/taskId.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
@@ -143,50 +139,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       });
       const task = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
       expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
-    }),
-  );
-
-  it.effect("rejects Change Start while Todo reconsideration is active", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const taskId = yield* createTask(root, "Reconsidering", "Keep approval during review.\n");
-      yield* passTaskReviewFixture(root, taskId, now);
-      const loaded = openRepositoryRuntime(root);
-      if (!loaded.ok) throw new Error("Expected repository runtime");
-      yield* loaded.runtime.provide(
-        Effect.flatMap(openSqliteTaskReviewPersistence(), (reviews) =>
-          reviews.admit({
-            reviewId: "review-reconsidering",
-            taskId: publicTaskId(taskId),
-            submissionMode: "rerun",
-            policy: {
-              profile: {
-                agentProfile: "review",
-                scope: "global",
-                profile: { agentRuntime: "pi" },
-              },
-              builtInInstructions: taskReviewBuiltInInstructions,
-              guidance: null,
-            },
-            baseRef: "refs/heads/main",
-            baseCommit: "a".repeat(40),
-            workspacePath: "/tmp/review-reconsidering",
-            now,
-          }),
-        ),
-      );
-
-      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
-
-      expect(started.status).toBe(1);
-      expect(JSON.parse(started.stdout)).toEqual({
-        error: {
-          code: "active_task_review",
-          message: "The Task cannot start while its Task Review is active.",
-          reviewId: "review-reconsidering",
-        },
-        help: ["Run `by task-review show review-reconsidering` to inspect it."],
-      });
     }),
   );
 

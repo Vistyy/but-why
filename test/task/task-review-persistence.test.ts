@@ -5,7 +5,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-08-11T12:00:00.000Z";
 const later = "2026-08-11T12:05:00.000Z";
@@ -151,7 +151,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
   ),
 );
 
-it.scoped("reuses the newest exact completed judgment and skips newer Tooling Failures", () =>
+it.scoped("does not reuse Finding-blocked or tooling-failed Reviews", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
@@ -234,15 +234,7 @@ it.scoped("reuses the newest exact completed judgment and skips newer Tooling Fa
               WHERE id = 'BY-1'`,
       );
 
-      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toMatchObject({
-        ok: true,
-        outcome: "blocked",
-        review: {
-          id: "review-new",
-          baseRef: "refs/heads/review-new",
-          findings: [{ title: "New" }],
-        },
-      });
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
 
       yield* tasks.updateTaskContext({
         taskId: publicTaskId("BY-2"),
@@ -364,85 +356,6 @@ it.scoped("atomically moves a Task to Todo only for a passing exact Task Review"
       expect(
         yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later }),
       ).toEqual({ ok: false, code: "task_review_not_active" });
-    }),
-  ),
-);
-
-it.scoped("applies Todo reconsideration outcomes while preserving passing Review history", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      for (const title of ["Pass", "Finding", "Tooling", "Abandon"]) {
-        const created = yield* tasks.createTask({
-          title,
-          description: `${title} approved intent`,
-          now,
-        });
-        if (!created.ok) throw new Error(created.code);
-        yield* passTaskReviewFixture(publicTaskId(created.task.id), now);
-      }
-
-      for (const [sequence, completion] of [
-        { findings: [] },
-        {
-          findings: [
-            {
-              title: "Todo status no longer justified",
-              description: "The approved proposal has a material gap.",
-              evidence: "The proposal omits the required outcome.",
-              files: [],
-            },
-          ],
-        },
-        {
-          findings: [],
-          toolingFailure: { operation: "run_task_review", message: "Reviewer failed." },
-        },
-      ].entries()) {
-        const taskId = publicTaskId(`BY-${sequence + 1}`);
-        const reviewId = `review-rerun-${sequence + 1}`;
-        const admitted = yield* reviews.admit({
-          reviewId,
-          taskId,
-          submissionMode: "rerun",
-          policy,
-          baseRef: "refs/heads/main",
-          baseCommit: "a".repeat(40),
-          workspacePath: `/tmp/${reviewId}`,
-          now,
-        });
-        expect(admitted).toMatchObject({ ok: true });
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
-        yield* reviews.recordCleanup(reviewId, "removed", later);
-        const completed = yield* reviews.complete({ reviewId, ...completion, now: later });
-        expect(completed).toMatchObject({
-          ok: true,
-          outcome: sequence === 0 ? "passed" : sequence === 1 ? "blocked" : "tooling_failed",
-        });
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({
-          state: sequence === 1 ? "new" : "todo",
-        });
-      }
-
-      const abandonedId = "review-rerun-abandoned";
-      yield* reviews.admit({
-        reviewId: abandonedId,
-        taskId: publicTaskId("BY-4"),
-        submissionMode: "rerun",
-        policy,
-        baseRef: "refs/heads/main",
-        baseCommit: "a".repeat(40),
-        workspacePath: `/tmp/${abandonedId}`,
-        now,
-      });
-      yield* reviews.recordCleanup(abandonedId, "removed", later);
-      expect(yield* reviews.abandon(abandonedId, "Stopped", later)).toMatchObject({
-        ok: true,
-        outcome: "tooling_failed",
-      });
-      expect(yield* tasks.getTaskById(publicTaskId("BY-4"))).toMatchObject({ state: "todo" });
-      expect(yield* reviews.listForTask(publicTaskId("BY-4"))).toHaveLength(2);
     }),
   ),
 );

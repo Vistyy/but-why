@@ -296,13 +296,6 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       workspace: 0,
       reviewer: 0,
     };
-    const finding = {
-      title: "Retained Finding",
-      description: "Retained description",
-      evidence: "Retained evidence",
-      files: [],
-    };
-    const retainedFindings = [finding] as const;
     const review: TaskReviewRecord = {
       id: "review-reused",
       taskId,
@@ -321,11 +314,11 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       baseCommit: "b".repeat(40),
       workspacePath: "/tmp/review-reused",
       state: "complete",
-      outcome: "blocked",
+      outcome: "passed",
       workspaceCleanup: "removed",
       toolingFailure: null,
       abandonReason: null,
-      findings: retainedFindings,
+      findings: [],
       sessions: [],
       transcripts: [],
       createdAt: "2026-08-11T12:00:00.000Z",
@@ -336,15 +329,15 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       reuseJudgment: () =>
         Effect.succeed({
           ok: true,
-          outcome: "blocked",
+          outcome: "passed",
           review: {
             ...review,
             state: "complete",
-            outcome: "blocked",
+            outcome: "passed",
             toolingFailure: null,
-            findings: retainedFindings,
+            findings: [],
           },
-          task: { id: taskId, state: "new" },
+          task: { id: taskId, state: "todo" },
         }),
       checkAdmission: unused,
       admit: unused,
@@ -399,11 +392,11 @@ it.effect("returns a reused judgment before every repository and reviewer collab
 
     expect(yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z")).toMatchObject({
       ok: true,
-      outcome: "blocked",
+      outcome: "passed",
       review: {
         id: "review-reused",
         baseCommit: "b".repeat(40),
-        findings: [{ title: "Retained Finding" }],
+        findings: [],
       },
     });
     expect(calls).toEqual({
@@ -997,7 +990,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
   }),
 );
 
-it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session", () =>
+it.effect("reviews an unchanged New proposal again after a Finding-blocked Review", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
@@ -1032,8 +1025,8 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
     const reviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
       review: (input) => {
         observed.push(input);
-        const sessionReference = input.resumeSession ?? "task-session-rerun";
-        const findings = observed.length === 1 ? [] : [finding];
+        const sessionReference = input.resumeSession ?? "task-session-1";
+        const findings = observed.length === 1 ? [finding] : [];
         return Effect.succeed({
           ok: true as const,
           report: { findings },
@@ -1044,60 +1037,32 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
       },
     };
 
-    const newTaskRerun = yield* runByInProcessEffect(
-      root,
-      ["task", "submit", "BY-1", "--rerun"],
-      undefined,
-      { globalConfigPath, taskReviewerAgentRuntime: reviewer },
-    );
-    expect(newTaskRerun.status, newTaskRerun.stdout).toBe(1);
-    expect(JSON.parse(newTaskRerun.stdout)).toMatchObject({
-      error: {
-        code: "invalid_task_state",
-        submission: { mode: "rerun" },
-        taskId: "BY-1",
-        state: "new",
-      },
-    });
-    expect(observed).toHaveLength(0);
-
     const first = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
       taskReviewerAgentRuntime: reviewer,
     });
-    expect(first.status, first.stdout).toBe(0);
+    expect(first.status, first.stdout).toBe(1);
     const firstOutput = JSON.parse(first.stdout) as {
-      review: { id: string };
+      error: { review: { id: string } };
     };
 
-    const rerun = yield* runByInProcessEffect(
-      root,
-      ["task", "submit", "BY-1", "--rerun"],
-      undefined,
-      { globalConfigPath, taskReviewerAgentRuntime: reviewer },
-    );
-    expect(rerun.status, rerun.stdout).toBe(1);
-    const rerunOutput = JSON.parse(rerun.stdout) as {
-      error: {
-        message: string;
-        submission: { mode: string };
-        review: { id: string; state: string; outcome: string };
-      };
-    };
-    expect(rerunOutput).toMatchObject({
-      error: {
-        message: "Task Review is blocked by Findings; the Task moved from Todo to New.",
-        submission: { mode: "rerun" },
-        review: { state: "complete", outcome: "blocked" },
-      },
+    const second = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+      taskReviewerAgentRuntime: reviewer,
     });
-    expect(rerunOutput.error.review.id).not.toBe(firstOutput.review.id);
+    expect(second.status, second.stdout).toBe(0);
+    const secondOutput = JSON.parse(second.stdout) as {
+      review: { id: string; state: string; outcome: string };
+    };
+    expect(secondOutput).toMatchObject({
+      review: { state: "complete", outcome: "passed" },
+      task: { id: "BY-1", state: "todo" },
+    });
+    expect(secondOutput.review.id).not.toBe(firstOutput.error.review.id);
     expect(observed).toHaveLength(2);
-    expect(observed[1]?.resumeSession).toBe("task-session-rerun");
+    expect(observed[1]?.resumeSession).toBe("task-session-1");
     expect(observed[1]?.prompt).toContain("Re-evaluate the current proposal");
     expect(observed[1]?.prompt).toContain('"changed":{"title":null,"description":null');
-    const taskAfterRerun = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
-    expect(JSON.parse(taskAfterRerun.stdout)).toMatchObject({ task: { state: "new" } });
 
     const ordinary = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
@@ -1106,8 +1071,9 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
     expect(ordinary.status, ordinary.stdout).toBe(1);
     expect(JSON.parse(ordinary.stdout)).toMatchObject({
       error: {
-        submission: { mode: "ordinary" },
-        review: { id: rerunOutput.error.review.id, state: "complete", outcome: "blocked" },
+        code: "invalid_task_state",
+        taskId: "BY-1",
+        state: "todo",
       },
     });
     expect(observed).toHaveLength(2);
@@ -1155,7 +1121,6 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     expect(submitted.status, submitted.stdout).toBe(0);
     const output = JSON.parse(submitted.stdout) as { review: { id: string } };
     expect(output).toEqual({
-      submission: { mode: "ordinary" },
       review: { id: output.review.id, state: "complete", outcome: "passed" },
       task: { id: "BY-1", state: "todo" },
       help: ["Run `by task show BY-1` to inspect its startability and next action."],
@@ -1246,10 +1211,7 @@ it.effect(
       });
       expect(reused.status, reused.stdout).toBe(1);
       expect(JSON.parse(reused.stdout)).toMatchObject({
-        error: {
-          code: "task_review_findings",
-          review: { id: firstId, outcome: "blocked", findings: [{ title: finding.title }] },
-        },
+        error: { code: "invalid_repo_config" },
       });
       expect(observed).toHaveLength(1);
       writeFileSync(repoConfigPath, repoConfig);
@@ -1337,7 +1299,6 @@ it.effect(
       expect(JSON.parse(failedIndex.stdout)).toMatchObject({
         error: {
           code: "task_review_recovery_required",
-          submission: { mode: "ordinary" },
           review: {
             id: expect.any(String),
             state: "running",

@@ -36,11 +36,7 @@ import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from 
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
 import { settleTaskReviewEvidence } from "./taskReviewEvidenceSettlement.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
-import type {
-  CompleteTaskReviewSuccess,
-  TaskReviewPersistence,
-  TaskReviewSubmissionMode,
-} from "./taskReviewPersistence.js";
+import type { CompleteTaskReviewSuccess, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
@@ -108,7 +104,6 @@ export type TaskReviewSubmissionUseCases = {
   readonly submit: (
     taskId: PublicTaskId,
     now: string,
-    options?: { readonly rerun?: boolean },
   ) => Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError>;
 };
 
@@ -169,7 +164,7 @@ export const openTaskReviewUseCases = (input: {
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
-  submit: (taskId, now, options) => submitTaskReview(input, taskId, now, options),
+  submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
@@ -182,15 +177,11 @@ const submitTaskReview = (
   input: Parameters<typeof openTaskReviewUseCases>[0],
   taskId: PublicTaskId,
   now: string,
-  options?: { readonly rerun?: boolean },
 ): Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (options?.rerun !== true) {
-      const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
-      if (reusableJudgment !== undefined) return reusableJudgment;
-    }
-    const submissionMode: TaskReviewSubmissionMode = options?.rerun === true ? "rerun" : "ordinary";
-    const rejected = yield* input.persistence.checkAdmission(taskId, submissionMode);
+    const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
+    if (reusableJudgment !== undefined) return reusableJudgment;
+    const rejected = yield* input.persistence.checkAdmission(taskId);
     if (rejected !== undefined) return rejected;
 
     const base = yield* input.readReviewBase(input.mainCheckoutRoot);
@@ -213,7 +204,6 @@ const submitTaskReview = (
     const admitted = yield* input.persistence.admit({
       reviewId,
       taskId,
-      submissionMode,
       policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
