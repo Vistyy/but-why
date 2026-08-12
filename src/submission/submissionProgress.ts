@@ -7,6 +7,8 @@ export type SubmitProgressProfile = {
 };
 
 export type SubmitProgressPhase =
+  | { readonly kind: "repositoryPreparation" }
+  | { readonly kind: "taskReview"; readonly profile: SubmitProgressProfile }
   | { readonly kind: "prepare" }
   | { readonly kind: "check"; readonly id: string }
   | { readonly kind: "acceptance"; readonly profile: SubmitProgressProfile }
@@ -32,6 +34,11 @@ export type SubmitProgress = {
   ) => void;
 };
 
+export type StartedSubmitProgress = {
+  readonly phase: SubmitProgressPhase;
+  readonly startedAt: number;
+};
+
 export const stderrSubmitProgress = (writeStderr: (message: string) => void): SubmitProgress => {
   const write = (message: string): void => {
     try {
@@ -49,6 +56,41 @@ export const stderrSubmitProgress = (writeStderr: (message: string) => void): Su
   };
 };
 
+export const startSubmitProgress = (
+  progress: SubmitProgress | undefined,
+  phase: SubmitProgressPhase,
+): Effect.Effect<StartedSubmitProgress | undefined> =>
+  Effect.gen(function* () {
+    if (progress === undefined) return undefined;
+    const startedAt = yield* Clock.currentTimeMillis;
+    progress.started(phase);
+    return { phase, startedAt };
+  });
+
+export const runAfterSubmitProgressStarted = <A, E, R>(input: {
+  readonly progress: SubmitProgress | undefined;
+  readonly started: () => StartedSubmitProgress | undefined;
+  readonly run: Effect.Effect<A, E, R>;
+  readonly outcome: (result: A) => "passed" | "failed";
+  readonly details?: (result: A) => SubmitProgressCompletion | undefined;
+  readonly failureDetails?: () => SubmitProgressCompletion | undefined;
+}): Effect.Effect<A, E, R> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(input.run);
+    const started = input.started();
+    if (input.progress !== undefined && started !== undefined) {
+      const durationMs = (yield* Clock.currentTimeMillis) - started.startedAt;
+      input.progress.completed(
+        started.phase,
+        result._tag === "Success" ? input.outcome(result.value) : "failed",
+        durationMs,
+        result._tag === "Success" ? input.details?.(result.value) : input.failureDetails?.(),
+      );
+    }
+    if (result._tag === "Failure") return yield* Effect.failCause(result.cause);
+    return result.value;
+  }) as Effect.Effect<A, E, R>;
+
 export const runWithSubmitProgress = <A, E, R>(input: {
   readonly progress: SubmitProgress | undefined;
   readonly phase: SubmitProgressPhase;
@@ -57,22 +99,16 @@ export const runWithSubmitProgress = <A, E, R>(input: {
   readonly details?: (result: A) => SubmitProgressCompletion | undefined;
 }): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
-    const startedAt = yield* Clock.currentTimeMillis;
-    input.progress?.started(input.phase);
-    const result = yield* Effect.exit(input.run);
-    const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
-    input.progress?.completed(
-      input.phase,
-      result._tag === "Success" ? input.outcome(result.value) : "failed",
-      durationMs,
-      result._tag === "Success" ? input.details?.(result.value) : undefined,
-    );
-    if (result._tag === "Failure") return yield* Effect.failCause(result.cause);
-    return result.value;
-  }) as Effect.Effect<A, E, R>;
+    const started = yield* startSubmitProgress(input.progress, input.phase);
+    return yield* runAfterSubmitProgressStarted({ ...input, started: () => started });
+  });
 
 const startLabel = (phase: SubmitProgressPhase): string => {
   switch (phase.kind) {
+    case "repositoryPreparation":
+      return "Repository Preparation started";
+    case "taskReview":
+      return `Task Review started: ${profileFacts(phase.profile)}`;
     case "prepare":
       return "Prepare started";
     case "check":
@@ -86,6 +122,10 @@ const startLabel = (phase: SubmitProgressPhase): string => {
 
 const completionLabel = (phase: SubmitProgressPhase): string => {
   switch (phase.kind) {
+    case "repositoryPreparation":
+      return "Repository Preparation";
+    case "taskReview":
+      return "Task Review";
     case "prepare":
       return "Prepare";
     case "check":

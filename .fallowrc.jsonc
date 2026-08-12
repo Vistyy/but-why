@@ -103,6 +103,7 @@
           "src/init/**",
           "src/output/**",
           "src/repositoryPreparation/**",
+          "src/submission/**",
           "src/submissionEnvironment/**"
         ]
       },

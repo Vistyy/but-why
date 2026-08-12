@@ -123,6 +123,7 @@ type InProcessCliOptions = {
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly writeStderr?: (message: string) => void;
 };
 
 const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
@@ -153,6 +154,7 @@ const runByInProcessEffectRaw = (
     ...(options.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),
+    ...(options.writeStderr === undefined ? {} : { writeStderr: options.writeStderr }),
   }).pipe(Effect.map(cliResultToInProcessResult));
 
 export const runByInProcessEffect = runByInProcessEffectRaw;

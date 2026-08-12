@@ -10,6 +10,7 @@ import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWork
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { stderrSubmitProgress } from "../../src/submission/submissionProgress.js";
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
@@ -61,7 +62,7 @@ it.effect("retries an idempotent Task Review execution record after an uncertain
   }),
 );
 
-it.effect("retains exact execution evidence when Task Review submit cannot record it", () =>
+it.effect("reports failed progress for Task Review persistence failures", () =>
   Effect.gen(function* () {
     const taskId = publicTaskId("BY-1");
     const profile = {
@@ -76,6 +77,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
     };
     let active: TaskReviewRecord | undefined;
     let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
+    let failWorkspaceCleanupPersistence = false;
     const executionAttempts: TaskReviewExecution[] = [];
     const persistence: TaskReviewPersistence = {
       reuseJudgment: () => Effect.succeed(undefined),
@@ -109,10 +111,17 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
         });
       },
       recordCleanup: (_reviewId, cleanup, now) =>
-        Effect.sync(() => {
-          if (active !== undefined)
-            active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
-        }),
+        failWorkspaceCleanupPersistence
+          ? Effect.fail(
+              new RepositorySqlOperationFailed({
+                operationName: "record workspace cleanup",
+                cause: new Error("workspace cleanup persistence unavailable"),
+              }),
+            )
+          : Effect.sync(() => {
+              if (active !== undefined)
+                active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
+            }),
       complete: () =>
         Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
       abandon: () =>
@@ -169,6 +178,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
           sessionReference: "session-1",
         }),
     };
+    const progressOutput: string[] = [];
     const reviews = openTaskReviewUseCases({
       mainCheckoutRoot: createTestWorkspace(),
       loadRepoConfig: () => ({ ok: true, config: { taskPrefix: "BY" } }),
@@ -183,6 +193,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       runWorkspace,
       cleanupWorkspace: () => Effect.succeed({ workspace: "removed" }),
       inspectWorkspace: () => Effect.succeed({ state: "absent" }),
+      progress: stderrSubmitProgress((message) => progressOutput.push(message)),
     });
 
     const result = yield* reviews.submit(taskId, "2026-08-11T12:00:00.000Z");
@@ -193,8 +204,28 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       review: { toolingFailure: { operation: "record_task_review_execution" } },
     });
     expect(executionAttempts).toHaveLength(2);
+    expect(progressOutput).toEqual([
+      "Task Review started: profile=review model=unknown thinking=default\n",
+      expect.stringMatching(
+        /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
+      ),
+    ]);
     if (result.ok || result.code !== "task_review_recovery_required") return;
     expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
+
+    active = undefined;
+    progressOutput.length = 0;
+    failWorkspaceCleanupPersistence = true;
+    const workspaceFailure = yield* Effect.either(
+      reviews.submit(taskId, "2026-08-11T12:01:00.000Z"),
+    );
+    expect(workspaceFailure._tag).toBe("Left");
+    expect(progressOutput).toEqual([
+      "Task Review started: profile=review model=unknown thinking=default\n",
+      expect.stringMatching(
+        /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=resumed reviewCalls=1\n$/,
+      ),
+    ]);
   }),
 );
 
@@ -738,6 +769,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       join(root, ".but-why", "config.json"),
       JSON.stringify({
         taskPrefix: "BY",
+        prepare: { command: "true" },
         review: {
           task: {
             agentProfile: { scope: "repo", name: "task-review" },
@@ -787,6 +819,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       proposalPath,
     ]);
     let observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0] | undefined;
+    const progress: string[] = [];
     const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
       review: (input) => {
         observed = input;
@@ -797,9 +830,18 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
       reviewerAgentRuntime: reviewer,
+      writeStderr: (message) => progress.push(message),
     });
 
     expect(submitted.status, submitted.stdout).toBe(0);
+    expect(progress).toEqual([
+      "Repository Preparation started\n",
+      expect.stringMatching(/^Repository Preparation passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
+      "Task Review started: profile=task-review model=provider/repo-model thinking=high\n",
+      expect.stringMatching(
+        /^Task Review passed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
+      ),
+    ]);
     expect(observed).toMatchObject({
       profile: {
         agentProfile: "task-review",
@@ -832,6 +874,46 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
         },
       },
     });
+
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Blocked review",
+      "--file",
+      proposalPath,
+    ]);
+    const blockedProgress: string[] = [];
+    const blocked = yield* runByInProcessEffect(root, ["task", "submit", "BY-2"], undefined, {
+      globalConfigPath,
+      reviewerAgentRuntime: {
+        review: () =>
+          Effect.succeed({
+            ok: true as const,
+            report: {
+              findings: [
+                {
+                  title: "Intent gap",
+                  description: "The proposal omits one required outcome.",
+                  evidence: "The proposal text has no required outcome.",
+                  files: [],
+                  artifactRefs: [],
+                },
+              ],
+            },
+            attempts: 1,
+            stdout: "<reviewer-output>blocked</reviewer-output>",
+          }),
+      },
+      writeStderr: (message) => blockedProgress.push(message),
+    });
+    expect(blocked.status).toBe(1);
+    expect(JSON.parse(blocked.stdout)).toMatchObject({
+      error: { code: "task_review_findings" },
+    });
+    expect(blockedProgress.at(-1)).toMatch(
+      /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
+    );
   }),
 );
 
@@ -869,6 +951,9 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
       reviewerAgentRuntime: passingReviewer,
+      writeStderr: () => {
+        throw new Error("stderr unavailable");
+      },
     });
     expect(submitted.status, submitted.stdout).toBe(0);
     const output = JSON.parse(submitted.stdout) as { review: { id: string } };

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -27,6 +28,14 @@ import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/dispo
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import { buildTaskReviewerPrompt } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import {
+  runAfterSubmitProgressStarted,
+  runWithSubmitProgress,
+  type StartedSubmitProgress,
+  type SubmitProgress,
+  type SubmitProgressProfile,
+  startSubmitProgress,
+} from "../../submission/submissionProgress.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
@@ -150,6 +159,7 @@ export const openTaskReviewUseCases = (input: {
     expectedCommitSha: string,
     worktreePath: string,
   ) => Effect.Effect<DisposableWorktreeInspection>;
+  readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
@@ -197,234 +207,276 @@ const submitTaskReview = (
     });
     if (!admitted.ok) return admitted;
 
-    const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
-      repoRoot: input.mainCheckoutRoot,
-      workspaceId: reviewId,
-      commitSha: base.base.commit,
-      copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
-      recordWorkspaceCleanup: (cleanup) =>
-        input.persistence.recordCleanup(reviewId, cleanup.workspace, now),
-      runInWorkspace: (active) =>
-        Effect.gen(function* () {
-          const prepare = repoConfig.prepare;
-          if (prepare !== undefined) {
-            const prepared = yield* Effect.either(
-              runRepositoryPreparationEffect({
-                prepare: {
-                  command: prepare.command,
-                  timeoutSeconds: prepare.timeoutSeconds ?? 1200,
-                },
-                exec: active.commandExecutor,
-              }),
-            );
-            if (prepared._tag === "Left") {
-              return {
-                ok: false,
-                failure: {
-                  operation: "run_repository_preparation",
-                  message: prepared.left.message,
-                },
-              } as const;
-            }
-            if (prepared.right.exitCode !== 0) {
-              return {
-                ok: false,
-                failure: {
-                  operation: "run_repository_preparation",
-                  message: prepared.right.timedOut
-                    ? "Repository Preparation timed out."
-                    : `Repository Preparation exited with code ${prepared.right.exitCode}.`,
-                },
-              } as const;
-            }
-          }
-          const agentEnvironment = repoAgentEnvironment(repoConfig);
-          const history = yield* input.persistence.listForTask(taskId);
-          const previous = history.length < 2 ? undefined : history.at(-2);
-          const prompt = buildTaskReviewerPrompt({
-            policy: resolvedPolicy.policy.snapshot,
-            proposal: admitted.proposal,
-            dependencyEvidence: admitted.dependencyEvidence,
-          });
-          const sessionStore: ReviewerSessionStore = {
-            get: input.persistence.getReviewerSession,
-            save: input.persistence.saveReviewerSession,
-            remove: input.persistence.removeReviewerSession,
-          };
-          const execution = yield* executeReviewerSession<ReviewerOutput, never>({
-            identity: {
-              owner: { kind: "task", id: taskId },
-              producer: "task",
-              agentProfile: resolvedPolicy.policy.profile,
-              instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
-              ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-              resources: {
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions === undefined
-                  ? {}
-                  : {
-                      extensions: resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
+    let taskReviewProgress: StartedSubmitProgress | undefined;
+    let taskReviewEvidence: ReviewerExecutionEvidence | undefined;
+    const result = yield* runAfterSubmitProgressStarted({
+      progress: input.progress,
+      started: () => taskReviewProgress,
+      run: Effect.gen(function* () {
+        const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
+          repoRoot: input.mainCheckoutRoot,
+          workspaceId: reviewId,
+          commitSha: base.base.commit,
+          copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
+          recordWorkspaceCleanup: (cleanup) =>
+            input.persistence.recordCleanup(reviewId, cleanup.workspace, now),
+          runInWorkspace: (active) =>
+            Effect.gen(function* () {
+              const prepare = repoConfig.prepare;
+              if (prepare !== undefined) {
+                const prepared = yield* Effect.either(
+                  runWithSubmitProgress({
+                    progress: input.progress,
+                    phase: { kind: "repositoryPreparation" },
+                    run: runRepositoryPreparationEffect({
+                      prepare: {
+                        command: prepare.command,
+                        timeoutSeconds: prepare.timeoutSeconds ?? 1200,
+                      },
+                      exec: active.commandExecutor,
                     }),
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
-                  ? {}
-                  : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
-                  ? {}
-                  : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
-              },
-            },
-            runtime: input.reviewerRuntime,
-            reviewerExecutor: input.reviewerExecutor,
-            decodeOutput: (output, reviewCall) =>
-              decodeReviewerOutputContract({ reviewer: "task", attempts: reviewCall, output }).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new ReviewerExecutionFailed({
-                      kind: "output_contract",
-                      operationName: error.operationName,
-                      message: error.message,
-                      diagnostics: error.diagnostics,
-                    }),
-                ),
-                Effect.flatMap((report) =>
-                  report.findings.every((finding) => finding.artifactRefs.length === 0)
-                    ? Effect.succeed(report)
-                    : Effect.fail(
+                    outcome: (result) => (result.exitCode === 0 ? "passed" : "failed"),
+                  }),
+                );
+                if (prepared._tag === "Left") {
+                  return {
+                    ok: false,
+                    failure: {
+                      operation: "run_repository_preparation",
+                      message: prepared.left.message,
+                    },
+                  } as const;
+                }
+                if (prepared.right.exitCode !== 0) {
+                  return {
+                    ok: false,
+                    failure: {
+                      operation: "run_repository_preparation",
+                      message: prepared.right.timedOut
+                        ? "Repository Preparation timed out."
+                        : `Repository Preparation exited with code ${prepared.right.exitCode}.`,
+                    },
+                  } as const;
+                }
+              }
+              const agentEnvironment = repoAgentEnvironment(repoConfig);
+              const history = yield* input.persistence.listForTask(taskId);
+              const previous = history.length < 2 ? undefined : history.at(-2);
+              const prompt = buildTaskReviewerPrompt({
+                policy: resolvedPolicy.policy.snapshot,
+                proposal: admitted.proposal,
+                dependencyEvidence: admitted.dependencyEvidence,
+              });
+              const sessionStore: ReviewerSessionStore = {
+                get: input.persistence.getReviewerSession,
+                save: input.persistence.saveReviewerSession,
+                remove: input.persistence.removeReviewerSession,
+              };
+              taskReviewProgress = yield* startSubmitProgress(input.progress, {
+                kind: "taskReview",
+                profile: taskReviewProgressProfile(resolvedPolicy.policy.profile),
+              });
+              const execution = yield* executeReviewerSession<ReviewerOutput, never>({
+                identity: {
+                  owner: { kind: "task", id: taskId },
+                  producer: "task",
+                  agentProfile: resolvedPolicy.policy.profile,
+                  instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
+                  ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                  resources: {
+                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions ===
+                    undefined
+                      ? {}
+                      : {
+                          extensions:
+                            resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
+                        }),
+                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
+                      ? {}
+                      : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
+                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
+                      ? {}
+                      : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
+                  },
+                },
+                runtime: input.reviewerRuntime,
+                reviewerExecutor: input.reviewerExecutor,
+                decodeOutput: (output, reviewCall) =>
+                  decodeReviewerOutputContract({
+                    reviewer: "task",
+                    attempts: reviewCall,
+                    output,
+                  }).pipe(
+                    Effect.mapError(
+                      (error) =>
                         new ReviewerExecutionFailed({
                           kind: "output_contract",
-                          operationName: "decode_task_review_output",
-                          message: "Task Review Findings must use an empty artifactRefs array.",
+                          operationName: error.operationName,
+                          message: error.message,
+                          diagnostics: error.diagnostics,
                         }),
-                      ),
-                ),
-              ),
-            prompt,
-            continuationPrompt: buildTaskReviewContinuationPrompt({
-              previousProposal: previous?.proposal,
-              currentPrompt: prompt,
-              currentProposal: admitted.proposal,
+                    ),
+                    Effect.flatMap((report) =>
+                      report.findings.every((finding) => finding.artifactRefs.length === 0)
+                        ? Effect.succeed(report)
+                        : Effect.fail(
+                            new ReviewerExecutionFailed({
+                              kind: "output_contract",
+                              operationName: "decode_task_review_output",
+                              message: "Task Review Findings must use an empty artifactRefs array.",
+                            }),
+                          ),
+                    ),
+                  ),
+                prompt,
+                continuationPrompt: buildTaskReviewContinuationPrompt({
+                  previousProposal: previous?.proposal,
+                  currentPrompt: prompt,
+                  currentProposal: admitted.proposal,
+                }),
+                commandCwd: active.worktreePath,
+                resourceRoot: active.worktreePath,
+                sessionStorageRoot: input.reviewerSessionStorageRoot,
+                sessionStore,
+                completeReview: ({ initialResult }) => Effect.succeed(initialResult),
+              });
+              taskReviewEvidence = execution.evidence;
+              const reviewed = execution.result;
+              const sessionReference = reviewed.sessionReference ?? null;
+              return reviewed.ok
+                ? ({
+                    ok: true,
+                    output: reviewed.report,
+                    evidence: execution.evidence,
+                    sessionReference,
+                  } as const)
+                : ({
+                    ok: false,
+                    failure: {
+                      operation: reviewed.failure.operationName,
+                      message: reviewed.failure.message,
+                    },
+                    evidence: execution.evidence,
+                    sessionReference,
+                  } as const);
             }),
-            commandCwd: active.worktreePath,
-            resourceRoot: active.worktreePath,
-            sessionStorageRoot: input.reviewerSessionStorageRoot,
-            sessionStore,
-            completeReview: ({ initialResult }) => Effect.succeed(initialResult),
-          });
-          const reviewed = execution.result;
-          const sessionReference = reviewed.sessionReference ?? null;
-          return reviewed.ok
-            ? ({
-                ok: true,
-                output: reviewed.report,
-                evidence: execution.evidence,
-                sessionReference,
-              } as const)
-            : ({
-                ok: false,
-                failure: {
-                  operation: reviewed.failure.operationName,
-                  message: reviewed.failure.message,
-                },
-                evidence: execution.evidence,
-                sessionReference,
-              } as const);
-        }),
-    });
-
-    let execution: WorkspaceExecution;
-    if (workspace.ok && workspace.workspaceResult !== undefined) {
-      execution = workspace.workspaceResult;
-    } else {
-      const tooling = workspace.ok
-        ? { operation: "run_task_review", message: "Task reviewer produced no result." }
-        : {
-            operation: workspace.toolingError.operationName,
-            message: workspace.toolingError.errorMessage,
-          };
-      if (!workspace.ok && workspace.toolingError.cleanupResult.workspace !== "removed") {
-        const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-          workspaceId: reviewId,
-          expectedCommitSha: base.base.commit,
-          recordedWorktreePath: workspacePath,
         });
-        yield* input.persistence.recordCleanup(reviewId, cleanup.workspace, now);
-        if (cleanup.workspace !== "removed") {
+        let execution: WorkspaceExecution;
+        if (workspace.ok && workspace.workspaceResult !== undefined) {
+          execution = workspace.workspaceResult;
+        } else {
+          const tooling = workspace.ok
+            ? { operation: "run_task_review", message: "Task reviewer produced no result." }
+            : {
+                operation: workspace.toolingError.operationName,
+                message: workspace.toolingError.errorMessage,
+              };
+          if (!workspace.ok && workspace.toolingError.cleanupResult.workspace !== "removed") {
+            const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
+              workspaceId: reviewId,
+              expectedCommitSha: base.base.commit,
+              recordedWorktreePath: workspacePath,
+            });
+            yield* input.persistence.recordCleanup(reviewId, cleanup.workspace, now);
+            if (cleanup.workspace !== "removed") {
+              const active = yield* input.persistence.getById(reviewId);
+              if (active === undefined)
+                return { ok: false, code: "task_review_not_found" } as never;
+              return { ok: false, code: "task_review_recovery_required", review: active } as const;
+            }
+          }
+          execution = { ok: false, failure: tooling };
+        }
+
+        if (execution.evidence !== undefined) {
+          const executionInput = {
+            reviewId,
+            execution: {
+              ...execution.evidence,
+              sessionReference: execution.sessionReference ?? null,
+            },
+          };
+          const recordedExecution = yield* Effect.either(
+            recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, executionInput),
+          );
+          if (recordedExecution._tag === "Left") {
+            const failure = {
+              operation: "record_task_review_execution",
+              message: repositoryStorageErrorMessage(
+                "Task Review execution",
+                recordedExecution.left,
+              ),
+              pendingExecution: executionInput.execution,
+            };
+            yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+            const active = yield* input.persistence.getById(reviewId);
+            if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+            return { ok: false, code: "task_review_recovery_required", review: active } as const;
+          }
+        }
+
+        const transcriptDiscovery = discoverObservedReviewerTranscripts(
+          reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, taskId),
+          taskId,
+        );
+        if (!transcriptDiscovery.ok) {
+          const failure = {
+            operation: "index_task_reviewer_transcripts",
+            message: transcriptDiscovery.reason,
+          };
+          yield* input.persistence.recordActiveFailure(reviewId, failure, now);
           const active = yield* input.persistence.getById(reviewId);
           if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
-      }
-      execution = { ok: false, failure: tooling };
-    }
+        const indexed = yield* Effect.either(
+          input.persistence.recordTranscripts({
+            reviewId,
+            taskId,
+            transcripts: transcriptDiscovery.transcripts,
+          }),
+        );
+        if (indexed._tag === "Left") {
+          const failure = {
+            operation: "index_task_reviewer_transcripts",
+            message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
+          };
+          yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+          const active = yield* input.persistence.getById(reviewId);
+          if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+          return { ok: false, code: "task_review_recovery_required", review: active } as const;
+        }
 
-    if (execution.evidence !== undefined) {
-      const executionInput = {
-        reviewId,
-        execution: {
-          ...execution.evidence,
-          sessionReference: execution.sessionReference ?? null,
-        },
-      };
-      const recordedExecution = yield* Effect.either(
-        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, executionInput),
-      );
-      if (recordedExecution._tag === "Left") {
-        const failure = {
-          operation: "record_task_review_execution",
-          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
-          pendingExecution: executionInput.execution,
-        };
-        yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-        const active = yield* input.persistence.getById(reviewId);
-        if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-        return { ok: false, code: "task_review_recovery_required", review: active } as const;
-      }
-    }
-
-    const transcriptDiscovery = discoverObservedReviewerTranscripts(
-      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, taskId),
-      taskId,
-    );
-    if (!transcriptDiscovery.ok) {
-      const failure = {
-        operation: "index_task_reviewer_transcripts",
-        message: transcriptDiscovery.reason,
-      };
-      yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-      const active = yield* input.persistence.getById(reviewId);
-      if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-      return { ok: false, code: "task_review_recovery_required", review: active } as const;
-    }
-    const indexed = yield* Effect.either(
-      input.persistence.recordTranscripts({
-        reviewId,
-        taskId,
-        transcripts: transcriptDiscovery.transcripts,
+        const completed = yield* input.persistence.complete({
+          reviewId,
+          findings: execution.ok ? execution.output.findings : (execution.findings ?? []),
+          ...(execution.ok ? {} : { toolingFailure: execution.failure }),
+          now,
+        });
+        if (!completed.ok) {
+          const active = yield* input.persistence.getById(reviewId);
+          if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+          return { ok: false, code: "task_review_recovery_required", review: active } as const;
+        }
+        return completed;
       }),
-    );
-    if (indexed._tag === "Left") {
-      const failure = {
-        operation: "index_task_reviewer_transcripts",
-        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
-      };
-      yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-      const active = yield* input.persistence.getById(reviewId);
-      if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-      return { ok: false, code: "task_review_recovery_required", review: active } as const;
-    }
-
-    const completed = yield* input.persistence.complete({
-      reviewId,
-      findings: execution.ok ? execution.output.findings : (execution.findings ?? []),
-      ...(execution.ok ? {} : { toolingFailure: execution.failure }),
-      now,
+      outcome: (result) => (result.ok && result.outcome === "passed" ? "passed" : "failed"),
+      details: () => taskReviewProgressDetails(taskReviewEvidence),
+      failureDetails: () => taskReviewProgressDetails(taskReviewEvidence),
     });
-    if (!completed.ok) {
-      const active = yield* input.persistence.getById(reviewId);
-      if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-      return { ok: false, code: "task_review_recovery_required", review: active } as const;
-    }
-    return completed;
+    return result;
   });
+
+const taskReviewProgressDetails = (evidence: ReviewerExecutionEvidence | undefined) =>
+  evidence === undefined
+    ? undefined
+    : { continuity: evidence.continuity, reviewCalls: evidence.reviewCalls };
+
+const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
+  name: profile.agentProfile,
+  model: profile.profile.runtimeConfig?.model ?? "unknown",
+  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+});
 
 export const inspectTaskReviewIdentity = (
   input: {

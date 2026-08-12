@@ -7,6 +7,7 @@ import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import {
@@ -21,7 +22,6 @@ import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
 import { expectedSnapshotWorkspacePath } from "../validation/snapshotWorkspacePath.js";
-import type { SubmitProgress } from "../validation/submitProgress.js";
 import {
   SnapshotWorkspaceSetupFailed,
   type ValidationToolingFailure,
