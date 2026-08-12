@@ -66,14 +66,18 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
         reuseTaskReviewJudgment(sql, taskId, now),
       ),
-    checkAdmission: (taskId) =>
+    checkAdmission: (taskId, submissionMode) =>
       repository.transaction("check Task Review admission", (sql) =>
-        taskReviewAdmissionRejection(sql, taskId),
+        taskReviewAdmissionRejection(sql, taskId, submissionMode),
       ),
     admit: (input) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.gen(function* () {
-          const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId);
+          const rejected = yield* taskReviewAdmissionRejection(
+            sql,
+            input.taskId,
+            input.submissionMode ?? "ordinary",
+          );
           if (rejected !== undefined) return rejected;
           const tasks = yield* sql<{
             readonly title: string;
@@ -235,14 +239,19 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
   }));
 
-const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) =>
+const taskReviewAdmissionRejection = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  submissionMode: "ordinary" | "rerun",
+) =>
   Effect.gen(function* () {
     const tasks = yield* sql<{ readonly state: string }>`
       SELECT state FROM tasks WHERE id = ${taskId}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state !== "new") {
+    const requiredState = submissionMode === "rerun" ? "todo" : "new";
+    if (task.state !== requiredState) {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
     const linkedChanges = yield* sql<{ readonly id: string }>`
@@ -305,7 +314,7 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
       const proposal = yield* decodeProposalSnapshot(row.proposalSnapshot);
       if (JSON.stringify(proposal) !== JSON.stringify(currentProposal)) continue;
       const review = yield* decodeReview(sql, row);
-      const judgment = completedTaskReviewResult(review);
+      const judgment = completedTaskReviewResult(review, "new");
       if (judgment === undefined || judgment.outcome === "tooling_failed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
       }
@@ -372,7 +381,8 @@ const completeReview = (
       if (abandonReason !== undefined || current.outcome !== "tooling_failed") {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
-      const completed = completedTaskReviewResult(current);
+      const taskState = yield* readTaskState(sql, current.taskId);
+      const completed = completedTaskReviewResult(current, taskState);
       if (completed === undefined)
         return yield* invalid("complete Task Review", "Completion facts are inconsistent");
       return completed;
@@ -388,6 +398,11 @@ const completeReview = (
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
         WHERE id = ${current.taskId} AND state = 'new'
+      `;
+    } else if (outcome === "blocked") {
+      yield* sql`
+        UPDATE tasks SET state = 'new', updated_at = ${now}
+        WHERE id = ${current.taskId} AND state = 'todo'
       `;
     }
     yield* Effect.forEach(
@@ -408,7 +423,8 @@ const completeReview = (
     const completed = yield* getReview(sql, reviewId);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
-    const result = completedTaskReviewResult(completed);
+    const taskState = yield* readTaskState(sql, current.taskId);
+    const result = completedTaskReviewResult(completed, taskState);
     if (result === undefined)
       return yield* invalid("complete Task Review", "Completion facts are inconsistent");
     return result;
@@ -416,6 +432,7 @@ const completeReview = (
 
 const completedTaskReviewResult = (
   review: TaskReviewRecord,
+  taskState: TaskState,
 ): CompleteTaskReviewSuccess | undefined => {
   if (review.state !== "complete") return undefined;
   switch (review.outcome) {
@@ -436,6 +453,7 @@ const completedTaskReviewResult = (
     case "blocked": {
       const firstFinding = review.findings[0];
       if (firstFinding === undefined || review.toolingFailure !== null) return undefined;
+      if (taskState !== "new") return undefined;
       return {
         ok: true,
         outcome: review.outcome,
@@ -446,6 +464,7 @@ const completedTaskReviewResult = (
           findings: [firstFinding, ...review.findings.slice(1)],
           toolingFailure: null,
         },
+        task: { id: review.taskId, state: "new" },
       };
     }
     case "tooling_failed":
@@ -459,11 +478,23 @@ const completedTaskReviewResult = (
           outcome: review.outcome,
           toolingFailure: review.toolingFailure,
         },
+        task: { id: review.taskId, state: taskState },
       };
     case null:
       return undefined;
   }
 };
+
+const readTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly state: TaskState }>`
+      SELECT state FROM tasks WHERE id = ${taskId}
+    `;
+    const row = rows[0];
+    return row === undefined
+      ? yield* invalid("complete Task Review", "Task disappeared")
+      : row.state;
+  });
 
 const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
   Effect.gen(function* () {
@@ -484,7 +515,7 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
         },
       };
     }
-    if (task.state !== "new") {
+    if (task.state !== "new" && task.state !== "todo") {
       return {
         ok: false as const,
         failure: {

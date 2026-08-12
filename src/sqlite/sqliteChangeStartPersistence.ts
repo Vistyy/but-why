@@ -124,6 +124,19 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
+    const activeReviews = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews
+      WHERE task_id = ${taskId} AND state = 'running'
+      LIMIT 1
+    `;
+    const activeReview = activeReviews[0];
+    if (activeReview !== undefined) {
+      return {
+        ok: false as const,
+        code: "active_task_review" as const,
+        reviewId: activeReview.id,
+      };
+    }
     const dependencyRows = yield* sql<StoredTaskDependencyFactRow>`
       SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
       FROM task_dependencies

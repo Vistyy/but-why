@@ -291,6 +291,16 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     const current = yield* getTaskById(sql, input.taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state !== "new") {
+      if (current.state === "todo") {
+        const activeReview = yield* activeTaskReviewId(sql, input.taskId);
+        if (activeReview !== undefined) {
+          return {
+            ok: false as const,
+            code: "active_task_review" as const,
+            reviewId: activeReview,
+          };
+        }
+      }
       return {
         ok: false as const,
         code:
@@ -333,17 +343,12 @@ const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
         changeId: linkedChange.id,
       };
     }
-    const activeReviews = yield* sql<{ readonly id: string }>`
-      SELECT id FROM task_reviews
-      WHERE task_id = ${input.taskId} AND state = 'running'
-      LIMIT 1
-    `;
-    const activeReview = activeReviews[0];
+    const activeReview = yield* activeTaskReviewId(sql, input.taskId);
     if (activeReview !== undefined) {
       return {
         ok: false as const,
         code: "active_task_review" as const,
-        reviewId: activeReview.id,
+        reviewId: activeReview,
       };
     }
     if (current.state === "new") {
@@ -367,6 +372,16 @@ const cancelTask = (
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state === "done") return { ok: false as const, code: "task_already_done" as const };
     if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
+    if (current.state === "todo") {
+      const activeReview = yield* activeTaskReviewId(sql, input.taskId);
+      if (activeReview !== undefined) {
+        return {
+          ok: false as const,
+          code: "active_task_review" as const,
+          reviewId: activeReview,
+        };
+      }
+    }
     yield* sql`
       UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
       WHERE id = ${input.taskId}
@@ -383,6 +398,16 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
     const current = yield* getTaskById(sql, taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (!taskDependenciesAreEditable(current.state)) {
+      if (current.state === "todo") {
+        const activeReview = yield* activeTaskReviewId(sql, taskId);
+        if (activeReview !== undefined) {
+          return {
+            ok: false as const,
+            code: "active_task_review" as const,
+            reviewId: activeReview,
+          };
+        }
+      }
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
     const linked = yield* sql<{ readonly found: number }>`
@@ -393,6 +418,16 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
     }
     return { ok: true as const, task: current };
   });
+
+const activeTaskReviewId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.map(
+    sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews
+      WHERE task_id = ${taskId} AND state = 'running'
+      LIMIT 1
+    `,
+    (rows) => rows[0]?.id,
+  );
 
 type DependencyValidationResult = {
   readonly ok: false;

@@ -17,10 +17,11 @@ It does not authorize Task Submission, Change Start, or Implementation Authoriza
 _Avoid_: Approval of exact prose, Task Submission Authorization, approval to implement, automatic Change Start
 
 **Task Submission Authorization**:
-The Operator's explicit permission to submit one selected New Task proposal for Task Review and approval toward the intended outcome.
+The Operator's explicit permission to submit one selected Task proposal for Task Review toward the intended outcome.
+For a New Task, the intended outcome is approval.
+For an approved unlinked Todo Task, the intended outcome is reconsideration of its unchanged proposal.
 It is not persisted.
-Another submission requires new Task Submission Authorization when the selected Task or intended outcome materially changes.
-Another Review of an unchanged proposal requires new Task Submission Authorization.
+Another submission requires new Task Submission Authorization for the selected Task and intended outcome.
 It does not authorize Change Start or implementation.
 _Avoid_: Task Recording Authorization, Task Approval, reusable judgment
 
@@ -43,14 +44,18 @@ The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
 **Task Review**:
-One review of one exact New Task proposal for approval.
+One review of one exact Task proposal for approval or reconsideration.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
 A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Reviewer Session but always receives and judges the complete current proposal.
-Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
-Ordinary Task Submission reuses the newest completed passed or Finding-blocked Review for the exact unchanged proposal.
-An explicitly authorized Task Review rerun admits another Review of an unchanged unlinked New Task proposal instead of reusing that judgment, and it continues the most recent compatible usable Task Reviewer Session.
+Passing ordinary completion approves the exact reviewed Task atomically by moving it from New to Todo.
+Ordinary Task Submission reuses the newest completed passed or Finding-blocked Review for the exact unchanged New Task proposal.
+An explicitly authorized Task Review rerun admits another Review of an unchanged approved unlinked Todo Task proposal instead of reusing a completed judgment, and it continues the most recent compatible usable Task Reviewer Session.
+The Todo Task stays approved while the rerun is active.
+A passing rerun keeps the Task Todo.
+A Finding-blocked rerun moves the Task to New.
+A tooling-failed or successfully abandoned rerun keeps the Task Todo and preserves the previous applicable judgment without fabricating one for a legacy Todo Task.
 Active and tooling-failed Reviews are not reusable judgments, and a newer tooling failure does not hide an earlier applicable judgment.
 Context and direct Task Dependency identity are the only reuse identity fields.
 Repository state, Review Base, policy, configuration, dependency content, and dependency lifecycle do not affect reuse.
@@ -69,7 +74,8 @@ _Avoid_: Task Review outcome, Finding, retention-limited Artifact
 **Active Task Review**:
 The sole running Task Review for one Task until it completes or the Operator abandons it.
 It prevents another Task Submission for that Task.
-Task Context or Task Dependency changes can continue while review runs, but they prevent that Review from approving the Task.
+An Active Task Review of a Todo Task also prevents Task Context mutation, Task Dependency mutation, cancellation, Task Revision, and Change Start.
+A New Task proposal can change while its ordinary Review runs, but the changed proposal prevents that Review from approving the Task.
 _Avoid_: Task state, process lock, Active Validation Run
 
 **Task Review Proposal**:
@@ -84,8 +90,9 @@ _Avoid_: Change Base, caller checkout HEAD, Candidate
 
 **Task Approval**:
 The transition that confirms recorded Task intent can move from New to Todo.
-It occurs only through a passing fresh or reused Task Review judgment selected by Task Submission.
-V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
+It occurs only through a passing fresh or reused Task Review judgment selected by ordinary Task Submission.
+Approval remains represented by Todo without a separate approval snapshot.
+An explicit rerun can reconsider the unchanged approved proposal without removing approval before a completed Finding-blocked judgment.
 Task Context and Task Dependencies remain immutable while a Task is Todo.
 Task Revision can return an unlinked Todo Task to New before either is changed.
 _Avoid_: Change Start, Implementation Authorization

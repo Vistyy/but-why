@@ -33,6 +33,14 @@ export const runContextApplyCommand = (
         }
         if ("error" in result) return taskContextDraftReadError(result.error);
         if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
+        if (result.code === "active_task_review") {
+          return runtimeError({
+            code: result.code,
+            message: `Cannot change Task Context for ${taskId.taskId} while its Task Review is active.`,
+            details: { taskId: taskId.taskId, reviewId: result.reviewId },
+            help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
+          });
+        }
         if (result.code === "task_context_draft_cleanup_failed") {
           return runtimeError({
             code: result.code,

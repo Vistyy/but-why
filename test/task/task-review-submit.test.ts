@@ -288,6 +288,7 @@ it.effect("returns a reused judgment before every repository and reviewer collab
             toolingFailure: null,
             findings: retainedFindings,
           },
+          task: { id: taskId, state: "new" },
         }),
       checkAdmission: unused,
       admit: unused,
@@ -976,23 +977,41 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
       review: (input) => {
         observed.push(input);
         const sessionReference = input.resumeSession ?? "task-session-rerun";
+        const findings = observed.length === 1 ? [] : [finding];
         return Effect.succeed({
           ok: true as const,
-          report: { findings: [finding] },
+          report: { findings },
           attempts: 1,
-          stdout: `<reviewer-output>${JSON.stringify({ findings: [finding] })}</reviewer-output>`,
+          stdout: `<reviewer-output>${JSON.stringify({ findings })}</reviewer-output>`,
           sessionReference,
         });
       },
     };
 
+    const newTaskRerun = yield* runByInProcessEffect(
+      root,
+      ["task", "submit", "BY-1", "--rerun"],
+      undefined,
+      { globalConfigPath, taskReviewerAgentRuntime: reviewer },
+    );
+    expect(newTaskRerun.status, newTaskRerun.stdout).toBe(1);
+    expect(JSON.parse(newTaskRerun.stdout)).toMatchObject({
+      error: {
+        code: "invalid_task_state",
+        submission: { mode: "rerun" },
+        taskId: "BY-1",
+        state: "new",
+      },
+    });
+    expect(observed).toHaveLength(0);
+
     const first = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
       taskReviewerAgentRuntime: reviewer,
     });
-    expect(first.status, first.stdout).toBe(1);
+    expect(first.status, first.stdout).toBe(0);
     const firstOutput = JSON.parse(first.stdout) as {
-      error: { review: { id: string } };
+      review: { id: string };
     };
 
     const rerun = yield* runByInProcessEffect(
@@ -1014,11 +1033,13 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
         review: { state: "complete", outcome: "blocked" },
       },
     });
-    expect(rerunOutput.error.review.id).not.toBe(firstOutput.error.review.id);
+    expect(rerunOutput.error.review.id).not.toBe(firstOutput.review.id);
     expect(observed).toHaveLength(2);
     expect(observed[1]?.resumeSession).toBe("task-session-rerun");
     expect(observed[1]?.prompt).toContain("Re-evaluate the current proposal");
     expect(observed[1]?.prompt).toContain('"changed":{"title":null,"description":null');
+    const taskAfterRerun = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(taskAfterRerun.stdout)).toMatchObject({ task: { state: "new" } });
 
     const ordinary = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,

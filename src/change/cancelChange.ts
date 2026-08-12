@@ -63,6 +63,7 @@ export type TaskCancellationResult =
         | "task_not_found"
         | "change_not_found"
         | "task_already_done"
+        | "active_task_review"
         | "change_already_completed"
         | "github_pull_request_unavailable"
         | "owned_pull_request_mismatch"
@@ -70,6 +71,7 @@ export type TaskCancellationResult =
         | "submission_in_progress"
         | "active_validation_run";
       readonly taskId: PublicTaskId;
+      readonly reviewId?: string;
       readonly validationRunId?: string;
       readonly evidence?: PublicationFailureEvidence;
       readonly recoveryEvidence?: PublicationFailureEvidence;
@@ -189,7 +191,12 @@ const cancelTask = (
             change: null,
             cleanup: null,
           }
-        : { ok: false, code: cancelled.code, taskId: input.taskId };
+        : {
+            ok: false,
+            code: cancelled.code,
+            taskId: input.taskId,
+            ...(cancelled.code === "active_task_review" ? { reviewId: cancelled.reviewId } : {}),
+          };
     }
 
     const result = yield* cancelChange(dependencies, {

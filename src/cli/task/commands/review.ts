@@ -80,7 +80,14 @@ export const runTaskReviewCommand = (
     Effect.map(
       reviews.abandon(command.reviewId, command.reason, environment.now().toISOString()),
       (result) => {
-        if (result.ok) return success({ review: taskReviewView(result.review) });
+        if (result.ok) {
+          return success({
+            outcome: result.outcome,
+            review: taskReviewView(result.review),
+            task: result.task,
+            help: [`Run \`by task show ${result.task.id}\` to inspect its next action.`],
+          });
+        }
         if (result.code === "task_review_not_found") return reviewNotFound(command.reviewId);
         if (result.code === "task_review_not_active") {
           return runtimeError({

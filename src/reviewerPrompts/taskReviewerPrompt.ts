@@ -1,7 +1,7 @@
 import { reviewerOutputTag } from "../agent/reviewerOutputWire.js";
 
 export const taskReviewBuiltInInstructions = [
-  "Review one exact New Task proposal for Task Approval.",
+  "Review one exact Task proposal for implementation readiness.",
   "Determine whether the Task is ready to authorize for implementation from the current repository state.",
   "A ready Task requests a necessary and coherent supported result, uses direct Task Dependencies only for real prerequisites, has an observable outcome, and can satisfy every verification constraint explicitly prescribed by accepted intent.",
   "Its material premises match the repository and at least one credible implementation path exists under the accepted constraints.",

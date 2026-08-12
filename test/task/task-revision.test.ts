@@ -75,6 +75,74 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
   ),
 );
 
+it.scoped("locks Todo Task mutations while reconsideration is active", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      yield* tasks.createTask({ title: "Prerequisite", description: "Required", now });
+      yield* tasks.createTask({
+        title: "Approved proposal",
+        description: "Approved intent",
+        dependsOn: [publicTaskId("BY-1")],
+        now,
+      });
+      yield* setTaskStateFixture(publicTaskId("BY-2"), "todo", now);
+      yield* reviews.admit({
+        reviewId: "review-reconsideration",
+        taskId: publicTaskId("BY-2"),
+        submissionMode: "rerun",
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-reconsideration",
+        now,
+      });
+
+      expect(
+        yield* tasks.updateTaskContext({
+          taskId: publicTaskId("BY-2"),
+          description: "Unsafe change",
+          now: later,
+        }),
+      ).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: "review-reconsideration",
+      });
+      expect(
+        yield* tasks.editTaskDependencies({
+          taskId: publicTaskId("BY-2"),
+          operation: "clear",
+          prerequisiteTaskIds: [],
+        }),
+      ).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: "review-reconsideration",
+      });
+      expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: "review-reconsideration",
+      });
+      expect(
+        yield* tasks.cancelTask({ taskId: publicTaskId("BY-2"), reason: "Unsafe", now: later }),
+      ).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: "review-reconsideration",
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-2"))).toMatchObject({
+        state: "todo",
+        description: "Approved intent",
+        updatedAt: now,
+        prerequisites: [{ id: "BY-1" }],
+      });
+    }),
+  ),
+);
+
 it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
