@@ -12,6 +12,7 @@ import {
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
   withTaskReviewInspectionUseCases,
@@ -39,6 +40,7 @@ export type TaskCommandEnvironment = {
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly cancellationUseCases?: CancellationUseCases;
+  readonly writeStderr?: (message: string) => void;
 };
 
 export const withTasks = (
@@ -106,6 +108,9 @@ export const withTaskReviewSubmission = (
             ...(environment.reviewerAgentRuntime === undefined
               ? {}
               : { reviewerRuntime: environment.reviewerAgentRuntime }),
+            ...(environment.writeStderr === undefined
+              ? {}
+              : { progress: stderrSubmitProgress(environment.writeStderr) }),
           },
           use,
         ).pipe(

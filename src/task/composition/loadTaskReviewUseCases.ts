@@ -21,6 +21,7 @@ import {
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
+import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import {
   readRepositoryFileAtCommit,
   repositoryPathExistsAtCommit,
@@ -123,6 +124,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
     readonly cwd: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+    readonly progress?: SubmitProgress;
   },
   use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
@@ -201,6 +203,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
             runWorkspace: runDisposableExactCommitWorkspace,
             cleanupWorkspace: cleanupExactDisposableWorkspace,
             inspectWorkspace: inspectDisposableWorktree,
+            ...(input.progress === undefined ? {} : { progress: input.progress }),
           }),
         ),
       ),

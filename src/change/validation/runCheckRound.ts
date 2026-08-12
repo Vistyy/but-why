@@ -3,11 +3,11 @@ import { Clock, Effect } from "effect";
 import { runTimedCommand } from "../../command/runTimedCommand.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { runWithSubmitProgress, type SubmitProgress } from "../../submission/submissionProgress.js";
 import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
-import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import {
   CheckCommandExecutionToolingFailed,
   GitToolingFailed,

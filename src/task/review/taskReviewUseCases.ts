@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -27,6 +28,11 @@ import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/dispo
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import { buildTaskReviewerPrompt } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import {
+  runWithSubmitProgress,
+  type SubmitProgress,
+  type SubmitProgressProfile,
+} from "../../submission/submissionProgress.js";
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
@@ -150,6 +156,7 @@ export const openTaskReviewUseCases = (input: {
     expectedCommitSha: string,
     worktreePath: string,
   ) => Effect.Effect<DisposableWorktreeInspection>;
+  readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
@@ -206,12 +213,17 @@ const submitTaskReview = (
           const prepare = repoConfig.prepare;
           if (prepare !== undefined) {
             const prepared = yield* Effect.either(
-              runRepositoryPreparationEffect({
-                prepare: {
-                  command: prepare.command,
-                  timeoutSeconds: prepare.timeoutSeconds ?? 1200,
-                },
-                exec: active.commandExecutor,
+              runWithSubmitProgress({
+                progress: input.progress,
+                phase: { kind: "repositoryPreparation" },
+                run: runRepositoryPreparationEffect({
+                  prepare: {
+                    command: prepare.command,
+                    timeoutSeconds: prepare.timeoutSeconds ?? 1200,
+                  },
+                  exec: active.commandExecutor,
+                }),
+                outcome: (result) => (result.exitCode === 0 ? "passed" : "failed"),
               }),
             );
             if (prepared._tag === "Left") {
@@ -248,63 +260,80 @@ const submitTaskReview = (
             save: input.persistence.saveReviewerSession,
             remove: input.persistence.removeReviewerSession,
           };
-          const execution = yield* executeReviewerSession<ReviewerOutput, never>({
-            identity: {
-              owner: { kind: "task", id: taskId },
-              producer: "task",
-              agentProfile: resolvedPolicy.policy.profile,
-              instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
-              ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-              resources: {
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions === undefined
-                  ? {}
-                  : {
-                      extensions: resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
-                    }),
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
-                  ? {}
-                  : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
-                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
-                  ? {}
-                  : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
-              },
+          const execution = yield* runWithSubmitProgress({
+            progress: input.progress,
+            phase: {
+              kind: "taskReview",
+              profile: taskReviewProgressProfile(resolvedPolicy.policy.profile),
             },
-            runtime: input.reviewerRuntime,
-            reviewerExecutor: input.reviewerExecutor,
-            decodeOutput: (output, reviewCall) =>
-              decodeReviewerOutputContract({ reviewer: "task", attempts: reviewCall, output }).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new ReviewerExecutionFailed({
-                      kind: "output_contract",
-                      operationName: error.operationName,
-                      message: error.message,
-                      diagnostics: error.diagnostics,
-                    }),
+            run: executeReviewerSession<ReviewerOutput, never>({
+              identity: {
+                owner: { kind: "task", id: taskId },
+                producer: "task",
+                agentProfile: resolvedPolicy.policy.profile,
+                instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
+                ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                resources: {
+                  ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions === undefined
+                    ? {}
+                    : {
+                        extensions: resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
+                      }),
+                  ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
+                    ? {}
+                    : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
+                  ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
+                    ? {}
+                    : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
+                },
+              },
+              runtime: input.reviewerRuntime,
+              reviewerExecutor: input.reviewerExecutor,
+              decodeOutput: (output, reviewCall) =>
+                decodeReviewerOutputContract({
+                  reviewer: "task",
+                  attempts: reviewCall,
+                  output,
+                }).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ReviewerExecutionFailed({
+                        kind: "output_contract",
+                        operationName: error.operationName,
+                        message: error.message,
+                        diagnostics: error.diagnostics,
+                      }),
+                  ),
+                  Effect.flatMap((report) =>
+                    report.findings.every((finding) => finding.artifactRefs.length === 0)
+                      ? Effect.succeed(report)
+                      : Effect.fail(
+                          new ReviewerExecutionFailed({
+                            kind: "output_contract",
+                            operationName: "decode_task_review_output",
+                            message: "Task Review Findings must use an empty artifactRefs array.",
+                          }),
+                        ),
+                  ),
                 ),
-                Effect.flatMap((report) =>
-                  report.findings.every((finding) => finding.artifactRefs.length === 0)
-                    ? Effect.succeed(report)
-                    : Effect.fail(
-                        new ReviewerExecutionFailed({
-                          kind: "output_contract",
-                          operationName: "decode_task_review_output",
-                          message: "Task Review Findings must use an empty artifactRefs array.",
-                        }),
-                      ),
-                ),
-              ),
-            prompt,
-            continuationPrompt: buildTaskReviewContinuationPrompt({
-              previousProposal: previous?.proposal,
-              currentPrompt: prompt,
-              currentProposal: admitted.proposal,
+              prompt,
+              continuationPrompt: buildTaskReviewContinuationPrompt({
+                previousProposal: previous?.proposal,
+                currentPrompt: prompt,
+                currentProposal: admitted.proposal,
+              }),
+              commandCwd: active.worktreePath,
+              resourceRoot: active.worktreePath,
+              sessionStorageRoot: input.reviewerSessionStorageRoot,
+              sessionStore,
+              completeReview: ({ initialResult }) => Effect.succeed(initialResult),
             }),
-            commandCwd: active.worktreePath,
-            resourceRoot: active.worktreePath,
-            sessionStorageRoot: input.reviewerSessionStorageRoot,
-            sessionStore,
-            completeReview: ({ initialResult }) => Effect.succeed(initialResult),
+            outcome: (result) =>
+              result.result.ok && result.result.report.findings.length === 0 ? "passed" : "failed",
+            details: (result) => ({
+              continuity: result.evidence.continuity,
+              reviewCalls: result.evidence.reviewCalls,
+            }),
           });
           const reviewed = execution.result;
           const sessionReference = reviewed.sessionReference ?? null;
@@ -422,6 +451,12 @@ const submitTaskReview = (
     }
     return completed;
   });
+
+const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
+  name: profile.agentProfile,
+  model: profile.profile.runtimeConfig?.model ?? "unknown",
+  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+});
 
 export const inspectTaskReviewIdentity = (
   input: {

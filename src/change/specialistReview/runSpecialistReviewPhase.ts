@@ -29,12 +29,12 @@ import {
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
 } from "../../reviewerPrompts/specialistReviewerPrompt.js";
-import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
   type SubmitProgressProfile,
-} from "../validation/submitProgress.js";
+} from "../../submission/submissionProgress.js";
+import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
