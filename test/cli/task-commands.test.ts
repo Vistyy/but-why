@@ -172,6 +172,7 @@ describe("Task command Adapters", () => {
       const commandEnvironment: TaskCommandEnvironment = {
         ...environment(fakeTaskUseCases()),
         taskReviewSubmissionUseCases: {
+          reuseJudgment: () => Effect.succeed(undefined),
           submit: () => {
             calls += 1;
             return Effect.succeed(

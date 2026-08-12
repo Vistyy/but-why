@@ -17,7 +17,9 @@ import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import {
   openRepositoryRuntime,
+  openSubmissionRepositoryRuntime,
   type RepositoryRuntimeLoadError,
+  type SubmissionRepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
@@ -31,6 +33,10 @@ import {
   verifyRecordedTaskReviewBase,
 } from "../review/adapters/taskReviewGit.js";
 import { resolveTaskReviewPolicy } from "../review/taskReviewConfig.js";
+import type {
+  CompleteTaskReviewSuccess,
+  TaskReviewPersistence,
+} from "../review/taskReviewPersistence.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
@@ -42,6 +48,7 @@ import {
 
 export type LoadTaskReviewError =
   | RepositoryRuntimeLoadError
+  | SubmissionRepositoryRuntimeLoadError
   | { readonly code: "task_review_config_invalid"; readonly message: string };
 
 export const withTaskReviewInspectionUseCases = <A, E, R>(
@@ -114,6 +121,30 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
             ),
         }),
       ),
+      Effect.map((value) => ({ ok: true as const, value })),
+    ),
+  );
+};
+
+export const withReusableTaskReviewJudgment = <A, E, R>(
+  input: {
+    readonly cwd: string;
+    readonly taskId: Parameters<TaskReviewPersistence["reuseJudgment"]>[0];
+    readonly now: string;
+  },
+  use: (judgment: CompleteTaskReviewSuccess | undefined) => Effect.Effect<A, E, R>,
+): Effect.Effect<
+  | { readonly ok: true; readonly value: A }
+  | { readonly ok: false; readonly error: SubmissionRepositoryRuntimeLoadError },
+  E | RepositoryStorageError,
+  R
+> => {
+  const loaded = openSubmissionRepositoryRuntime(input.cwd);
+  if (!loaded.ok) return Effect.succeed(loaded);
+  return loaded.runtime.provide(
+    openSqliteTaskReviewPersistence().pipe(
+      Effect.flatMap((persistence) => persistence.reuseJudgment(input.taskId, input.now)),
+      Effect.flatMap(use),
       Effect.map((value) => ({ ok: true as const, value })),
     ),
   );

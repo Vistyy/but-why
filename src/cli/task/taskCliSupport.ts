@@ -15,11 +15,13 @@ import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryR
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
+  withReusableTaskReviewJudgment,
   withTaskReviewInspectionUseCases,
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
 } from "../../task/composition/loadTaskReviewUseCases.js";
 import { withTaskUseCases } from "../../task/composition/loadTaskUseCases.js";
+import type { CompleteTaskReviewSuccess } from "../../task/review/taskReviewPersistence.js";
 import type {
   TaskReviewInspectionUseCases,
   TaskReviewRecoveryUseCases,
@@ -92,6 +94,24 @@ export const withTaskReviewRecovery = (
           ),
         )
       : use(injected);
+  return catchTaskReviewStorageError(environment, program);
+};
+
+export const withReusableTaskReview = (
+  environment: TaskCommandEnvironment,
+  taskId: PublicTaskId,
+  now: string,
+  use: (judgment: CompleteTaskReviewSuccess | undefined) => Effect.Effect<CliResult>,
+): Effect.Effect<CliResult> => {
+  const injected = environment.taskReviewSubmissionUseCases;
+  const program =
+    injected === undefined
+      ? withReusableTaskReviewJudgment({ cwd: environment.cwd, taskId, now }, use).pipe(
+          Effect.map((result) =>
+            result.ok ? result.value : taskReviewLoadErrorResult(result.error),
+          ),
+        )
+      : injected.reuseJudgment(taskId, now).pipe(Effect.flatMap(use));
   return catchTaskReviewStorageError(environment, program);
 };
 

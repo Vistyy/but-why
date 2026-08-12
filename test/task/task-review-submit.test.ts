@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -1039,6 +1039,9 @@ it.effect(
       const firstId = (JSON.parse(first.stdout) as { error: { review: { id: string } } }).error
         .review.id;
 
+      const repoConfigPath = join(root, ".but-why", "config.json");
+      const repoConfig = readFileSync(repoConfigPath, "utf8");
+      writeFileSync(repoConfigPath, "{");
       writeFileSync(globalConfigPath, "{");
       const reused = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
@@ -1052,6 +1055,7 @@ it.effect(
         },
       });
       expect(observed).toHaveLength(1);
+      writeFileSync(repoConfigPath, repoConfig);
       writeFileSync(globalConfigPath, globalConfig);
 
       const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);

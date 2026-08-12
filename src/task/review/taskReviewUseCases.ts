@@ -98,6 +98,10 @@ export type TaskReviewRecoveryUseCases = {
 };
 
 export type TaskReviewSubmissionUseCases = {
+  readonly reuseJudgment: (
+    taskId: PublicTaskId,
+    now: string,
+  ) => Effect.Effect<CompleteTaskReviewSuccess | undefined, RepositoryStorageError>;
   readonly submit: (
     taskId: PublicTaskId,
     now: string,
@@ -161,6 +165,7 @@ export const openTaskReviewUseCases = (input: {
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
+  reuseJudgment: input.persistence.reuseJudgment,
   submit: (taskId, now) => submitTaskReview(input, taskId, now),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getById: input.persistence.getById,
