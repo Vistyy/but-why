@@ -17,6 +17,7 @@ import type {
   CreateTaskInput,
   EditTaskDependenciesInput,
   ListTasksInput,
+  ReviseTaskInput,
   StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
@@ -54,6 +55,8 @@ export const openSqliteTaskPersistence = (
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
       ),
+    reviseTask: (input) =>
+      repository.transactionImmediate("revise Task", (sql) => reviseTask(sql, input)),
     cancelTask: (input) =>
       repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input)),
   }));
@@ -288,7 +291,14 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     const current = yield* getTaskById(sql, input.taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state !== "new") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+      return {
+        ok: false as const,
+        code:
+          current.state === "todo"
+            ? ("task_revision_required" as const)
+            : ("invalid_task_state" as const),
+        state: current.state,
+      };
     }
     yield* sql`
       UPDATE tasks SET description = ${input.description}, updated_at = ${input.now}
@@ -303,6 +313,49 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
       return yield* invalidData("update Task Context", "Task Context disappeared");
     }
     return { ok: true as const, task: updated, context };
+  });
+
+const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, input.taskId);
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (current.state !== "new" && current.state !== "todo") {
+      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+    }
+    const linkedChanges = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE task_id = ${input.taskId} LIMIT 1
+    `;
+    const linkedChange = linkedChanges[0];
+    if (linkedChange !== undefined) {
+      return {
+        ok: false as const,
+        code: "task_change_linked" as const,
+        changeId: linkedChange.id,
+      };
+    }
+    const activeReviews = yield* sql<{ readonly id: string }>`
+      SELECT id FROM task_reviews
+      WHERE task_id = ${input.taskId} AND state = 'running'
+      LIMIT 1
+    `;
+    const activeReview = activeReviews[0];
+    if (activeReview !== undefined) {
+      return {
+        ok: false as const,
+        code: "active_task_review" as const,
+        reviewId: activeReview.id,
+      };
+    }
+    if (current.state === "new") {
+      return { ok: true as const, changed: false, task: current };
+    }
+    yield* sql`
+      UPDATE tasks SET state = 'new', updated_at = ${input.now}
+      WHERE id = ${input.taskId}
+    `;
+    const revised = yield* getTaskById(sql, input.taskId);
+    if (revised === undefined) return yield* invalidData("revise Task", "Task disappeared");
+    return { ok: true as const, changed: true, task: revised };
   });
 
 const cancelTask = (

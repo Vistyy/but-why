@@ -68,7 +68,7 @@ it.scoped(
             }),
           ).toEqual({
             ok: false,
-            code: "invalid_task_state",
+            code: "task_revision_required",
             state: "todo",
           });
           expect(yield* tasks.getTaskContextById(taskId)).toEqual({

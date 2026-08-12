@@ -86,8 +86,16 @@ _Avoid_: Change Base, caller checkout HEAD, Candidate
 The transition that confirms recorded Task intent can move from New to Todo.
 It occurs only through a passing fresh or reused Task Review judgment selected by Task Submission.
 V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
-Task Context and Task Dependencies become immutable at Task Approval.
+Task Context and Task Dependencies remain immutable while a Task is Todo.
+Task Revision can return an unlinked Todo Task to New before either is changed.
 _Avoid_: Change Start, Implementation Authorization
+
+**Task Revision**:
+The transition that returns an unlinked Todo Task to New before the Operator changes its approved intent.
+It preserves Task Context, direct Task Dependencies, and historical Task Review evidence.
+Revision of an unlinked New Task without an Active Task Review is an idempotent no-op.
+A Change-linked Task, an Active Task Review, or a terminal Task state prevents revision.
+_Avoid_: Task Review rerun, proposal identity change, Revision record
 
 **Task Lifecycle**:
 The user-facing progress of a Task through New, Todo, Done, or Cancelled.

@@ -2,7 +2,13 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { createGitRepo, runBuiltByWithInput, runByInProcessEffect } from "../support/by-cli.js";
+import {
+  createGitRepo,
+  runBuiltByWithEnv,
+  runBuiltByWithInput,
+  runByInProcessEffect,
+  setTodoTaskFixture,
+} from "../support/by-cli.js";
 
 const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
   const bytes = Buffer.from(stdout, "utf8");
@@ -11,6 +17,43 @@ const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
 };
 
 describe("by task CLI process boundary", () => {
+  it.effect(
+    "revises a Todo Task through the packaged CLI boundary",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        expect((yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
+        expect(
+          runBuiltByWithInput(
+            root,
+            "Original intent",
+            {},
+            "task",
+            "create",
+            "--title",
+            "Approved intent",
+            "--file",
+            "-",
+          ).status,
+        ).toBe(0);
+        yield* setTodoTaskFixture(root, "BY-1");
+
+        const revised = runBuiltByWithEnv(root, {}, "task", "revise", "BY-1");
+        expect(revised.status).toBe(0);
+        expect(revised.stderr).toBe("");
+        expectExactlyOneTrailingLineFeed(revised.stdout);
+        expect(JSON.parse(revised.stdout)).toMatchObject({
+          task: { id: "BY-1", state: "new", changed: true },
+        });
+
+        const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"]);
+        expect(JSON.parse(context.stdout)).toMatchObject({
+          task: { id: "BY-1", title: "Approved intent", description: "Original intent" },
+        });
+      }),
+    90_000,
+  );
+
   it.effect(
     "preserves piped bytes, structured results, exit status, and stdout framing",
     () =>

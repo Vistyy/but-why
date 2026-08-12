@@ -9,6 +9,7 @@ import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply.js";
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
 import { runListCommand } from "../../src/cli/task/commands/list.js";
+import { runReviseCommand } from "../../src/cli/task/commands/revise.js";
 import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
 import { runTaskSubmitCommand } from "../../src/cli/task/commands/submit.js";
 import { taskReviewView } from "../../src/cli/task/commands/taskReviewView.js";
@@ -395,12 +396,57 @@ describe("Task command Adapters", () => {
         },
         contextCommand: "by task context BY-1",
         reviewCommand: "by task-review show review-retained",
+        help: ["Run `by task revise BY-1` before changing approved Task intent."],
       });
       expect(context.stdout).toEqual({
         task: {
           id: "BY-1",
           title: "Inspect task",
           description: "Full intent\n\nWith details.",
+        },
+      });
+    }),
+  );
+
+  it.effect("renders Task revision mutation and rejection results", () =>
+    Effect.gen(function* () {
+      const revised = taskRecord({ state: "new", updatedAt: secondNow });
+      const successResult = yield* runReviseCommand(
+        { taskId: "BY-1" },
+        environment(
+          fakeTaskUseCases({ reviseTask: () => ({ ok: true, changed: true, task: revised }) }),
+          secondNow,
+        ),
+      );
+      const linkedResult = yield* runReviseCommand(
+        { taskId: "BY-1" },
+        environment(
+          fakeTaskUseCases({
+            reviseTask: () => ({ ok: false, code: "task_change_linked", changeId: "change-1" }),
+          }),
+          secondNow,
+        ),
+      );
+
+      expect(successResult).toMatchObject({
+        exitCode: 0,
+        stdout: {
+          task: { id: "BY-1", state: "new", changed: true, updatedAt: secondNow },
+          help: [
+            "Edit Task BY-1 with `by task context draft BY-1` and `by task context apply BY-1`.",
+          ],
+        },
+      });
+      expect(linkedResult).toEqual({
+        exitCode: 1,
+        stdout: {
+          error: {
+            code: "task_change_linked",
+            message: "Cannot revise Task BY-1 because it is linked to a Change.",
+            taskId: "BY-1",
+            changeId: "change-1",
+          },
+          help: ["Inspect the Change with `by change show change-1`."],
         },
       });
     }),
@@ -468,8 +514,9 @@ describe("Task command Adapters", () => {
           command: "Fix the draft, then rerun `by task context apply <task-id>`.",
         },
         {
-          result: { ok: false, code: "invalid_task_state", state: "todo" },
-          code: "invalid_task_state",
+          result: { ok: false, code: "task_revision_required", state: "todo" },
+          code: "task_revision_required",
+          command: "Run `by task revise BY-1` before changing approved Task intent.",
         },
         {
           result: {

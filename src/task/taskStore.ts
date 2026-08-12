@@ -67,9 +67,21 @@ export type UpdateTaskContextResult =
     }
   | {
       readonly ok: false;
-      readonly code: "invalid_task_state";
+      readonly code: "task_revision_required" | "invalid_task_state";
       readonly state: TaskState;
     };
+
+export type ReviseTaskInput = {
+  readonly taskId: PublicTaskId;
+  readonly now: string;
+};
+
+export type ReviseTaskResult =
+  | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
+  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
+  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState };
 
 export type CancelTaskInput = {
   readonly taskId: PublicTaskId;
