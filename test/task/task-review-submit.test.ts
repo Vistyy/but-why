@@ -62,7 +62,7 @@ it.effect("retries an idempotent Task Review execution record after an uncertain
   }),
 );
 
-it.effect("retains exact execution evidence when Task Review submit cannot record it", () =>
+it.effect("reports failed progress for Task Review persistence failures", () =>
   Effect.gen(function* () {
     const taskId = publicTaskId("BY-1");
     const profile = {
@@ -77,6 +77,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
     };
     let active: TaskReviewRecord | undefined;
     let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
+    let failWorkspaceCleanupPersistence = false;
     const executionAttempts: TaskReviewExecution[] = [];
     const persistence: TaskReviewPersistence = {
       admit: (input) => {
@@ -109,10 +110,17 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
         });
       },
       recordCleanup: (_reviewId, cleanup, now) =>
-        Effect.sync(() => {
-          if (active !== undefined)
-            active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
-        }),
+        failWorkspaceCleanupPersistence
+          ? Effect.fail(
+              new RepositorySqlOperationFailed({
+                operationName: "record workspace cleanup",
+                cause: new Error("workspace cleanup persistence unavailable"),
+              }),
+            )
+          : Effect.sync(() => {
+              if (active !== undefined)
+                active = { ...active, workspaceCleanup: cleanup, updatedAt: now };
+            }),
       complete: () =>
         Effect.succeed({ ok: false as const, code: "task_review_not_active" as const }),
       abandon: () =>
@@ -203,6 +211,20 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
     ]);
     if (result.ok || result.code !== "task_review_recovery_required") return;
     expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
+
+    active = undefined;
+    progressOutput.length = 0;
+    failWorkspaceCleanupPersistence = true;
+    const workspaceFailure = yield* Effect.either(
+      reviews.submit(taskId, "2026-08-11T12:01:00.000Z"),
+    );
+    expect(workspaceFailure._tag).toBe("Left");
+    expect(progressOutput).toEqual([
+      "Task Review started: profile=review model=unknown thinking=default\n",
+      expect.stringMatching(
+        /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=resumed reviewCalls=1\n$/,
+      ),
+    ]);
   }),
 );
 

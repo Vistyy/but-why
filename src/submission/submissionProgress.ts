@@ -69,20 +69,22 @@ export const startSubmitProgress = (
 
 export const runAfterSubmitProgressStarted = <A, E, R>(input: {
   readonly progress: SubmitProgress | undefined;
-  readonly started: StartedSubmitProgress | undefined;
+  readonly started: () => StartedSubmitProgress | undefined;
   readonly run: Effect.Effect<A, E, R>;
   readonly outcome: (result: A) => "passed" | "failed";
   readonly details?: (result: A) => SubmitProgressCompletion | undefined;
+  readonly failureDetails?: () => SubmitProgressCompletion | undefined;
 }): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(input.run);
-    if (input.progress !== undefined && input.started !== undefined) {
-      const durationMs = (yield* Clock.currentTimeMillis) - input.started.startedAt;
+    const started = input.started();
+    if (input.progress !== undefined && started !== undefined) {
+      const durationMs = (yield* Clock.currentTimeMillis) - started.startedAt;
       input.progress.completed(
-        input.started.phase,
+        started.phase,
         result._tag === "Success" ? input.outcome(result.value) : "failed",
         durationMs,
-        result._tag === "Success" ? input.details?.(result.value) : undefined,
+        result._tag === "Success" ? input.details?.(result.value) : input.failureDetails?.(),
       );
     }
     if (result._tag === "Failure") return yield* Effect.failCause(result.cause);
@@ -98,7 +100,7 @@ export const runWithSubmitProgress = <A, E, R>(input: {
 }): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const started = yield* startSubmitProgress(input.progress, input.phase);
-    return yield* runAfterSubmitProgressStarted({ ...input, started });
+    return yield* runAfterSubmitProgressStarted({ ...input, started: () => started });
   });
 
 const startLabel = (phase: SubmitProgressPhase): string => {
