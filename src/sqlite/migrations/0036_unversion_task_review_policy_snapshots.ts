@@ -28,7 +28,7 @@ const text = (value: unknown, label: string): string => {
 };
 
 const canonicalPolicy = (source: string): string => {
-  const policy = object(JSON.parse(source), "Task Review policy snapshot");
+  const policy = object(JSON.parse(source) as unknown, "Task Review policy snapshot");
   if (policy.id === "task_advisory_review" && policy.version === 1) {
     if (policy.profileScope !== "global") throw new Error("Invalid legacy profile scope");
     return JSON.stringify({
