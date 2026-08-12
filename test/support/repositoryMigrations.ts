@@ -39,6 +39,7 @@ import { taskReviewsMigration } from "../../src/sqlite/migrations/0034_task_revi
 import { taskReviewerSessionsMigration } from "../../src/sqlite/migrations/0035_task_reviewer_sessions.js";
 import { unversionTaskReviewPolicySnapshotsMigration } from "../../src/sqlite/migrations/0036_unversion_task_review_policy_snapshots.js";
 import { requirePassingReviewForUnlinkedTodoTasksMigration } from "../../src/sqlite/migrations/0037_require_passing_review_for_unlinked_todo_tasks.js";
+import { currentCandidateSelectionMigration } from "../../src/sqlite/migrations/0038_current_candidate_selection.js";
 
 export const testRepositoryMigrationLedger = [
   ["0001_baseline", baselineMigration],
@@ -90,6 +91,7 @@ export const testRepositoryMigrationLedger = [
     "0037_require_passing_review_for_unlinked_todo_tasks",
     requirePassingReviewForUnlinkedTodoTasksMigration,
   ],
+  ["0038_current_candidate_selection", currentCandidateSelectionMigration],
 ] as const;
 
 export const migrateTestRepositoryThrough = (lastMigrationId: number) => {

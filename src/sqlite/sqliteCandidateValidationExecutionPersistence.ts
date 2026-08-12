@@ -14,7 +14,11 @@ import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { compareCandidatesAscending, readCandidateById } from "./sqliteCandidateStorage.js";
+import {
+  compareCandidatesAscending,
+  readCandidateById,
+  readCurrentCandidateForChange,
+} from "./sqliteCandidateStorage.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationBlockerHistory,
@@ -153,17 +157,18 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         "Candidate validation requires the exact stored Candidate identity.",
       );
     }
-    const currentCandidateRows = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidates
-      WHERE change_id = ${candidate.changeId}
-      ORDER BY created_at DESC, id DESC LIMIT 1
-    `;
-    const currentCandidateId = yield* decodePersisted("start Candidate Validation Run", () => {
-      const row = currentCandidateRows[0];
-      if (row === undefined) throw new Error("Candidate validation requires a current Candidate");
-      return row.id;
-    });
-    if (currentCandidateId !== candidate.id) {
+    const currentCandidate = yield* readCurrentCandidateForChange(
+      sql,
+      candidate.changeId,
+      "start Candidate Validation Run",
+    );
+    if (currentCandidate === undefined) {
+      return yield* invalidData(
+        "start Candidate Validation Run",
+        "Candidate validation requires a current Candidate.",
+      );
+    }
+    if (currentCandidate.id !== candidate.id) {
       return yield* invalidData(
         "start Candidate Validation Run",
         "Candidate validation requires the current Candidate for its Change.",

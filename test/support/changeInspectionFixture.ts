@@ -207,12 +207,18 @@ export const captureCandidateFixture = (
     Effect.gen(function* () {
       const id = randomUUID();
       const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "create Candidate inspection fixture",
-        (sql) => sql`
-          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-          VALUES (${id}, ${changeId}, 'target-sha', ${headSha}, ${capturedAt})
-        `,
+      yield* repository.operation("create Candidate inspection fixture", (sql) =>
+        Effect.gen(function* () {
+          yield* sql`
+            INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+            VALUES (${id}, ${changeId}, 'target-sha', ${headSha}, ${capturedAt})
+          `;
+          yield* sql`
+            INSERT INTO current_candidates (change_id, candidate_id)
+            VALUES (${changeId}, ${id})
+            ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
+          `;
+        }),
       );
       return { id, headSha };
     }),
