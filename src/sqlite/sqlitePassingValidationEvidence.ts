@@ -51,12 +51,9 @@ export const readCurrentPassingValidationEvidence = (
     if (authority === undefined) return undefined;
 
     const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
-      `SELECT ${candidateReadColumns} FROM candidates AS candidate
-       WHERE candidate.id = (
-         SELECT current.id FROM candidates AS current
-         WHERE current.change_id = ?
-         ORDER BY current.created_at DESC, current.id DESC LIMIT 1
-       )`,
+      `SELECT ${candidateReadColumns} FROM current_candidates AS selection
+       JOIN candidates AS candidate ON candidate.id = selection.candidate_id
+       WHERE selection.change_id = ?`,
       [authority.id],
     );
     const candidate = yield* decodeSelectedCandidate(

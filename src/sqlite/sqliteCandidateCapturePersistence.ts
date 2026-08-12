@@ -49,6 +49,7 @@ const commitCapture = (sql: SqlClient.SqlClient, input: CommitCandidateCaptureIn
     const baseAssignment = yield* assignBase(sql, selected.change, input);
     if (!baseAssignment.ok) return baseAssignment;
     const candidate = yield* captureStoredCandidate(sql, selected.change.id, input);
+    yield* selectCurrentCandidate(sql, selected.change.id, candidate.candidateId);
 
     return {
       ok: true,
@@ -191,6 +192,13 @@ const captureStoredCandidate = (
     `;
     return { ok: true, candidateId, reused: false } as const;
   });
+
+const selectCurrentCandidate = (sql: SqlClient.SqlClient, changeId: string, candidateId: string) =>
+  sql`
+    INSERT INTO current_candidates (change_id, candidate_id)
+    VALUES (${changeId}, ${candidateId})
+    ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
+  `;
 
 const getChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(readChangeById(sql, changeId), (row) => decodeCandidateCaptureOptional(row));

@@ -46,6 +46,11 @@ const installPublicationIdentity = (
           )
         `;
         yield* sql`
+          INSERT INTO current_candidates (change_id, candidate_id)
+          VALUES (${changeId}, ${candidateId})
+          ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
+        `;
+        yield* sql`
           INSERT OR IGNORE INTO candidate_validation_runs (
             id, candidate_id, policy_snapshot, implementation_decisions,
             latest_resolved_blocker_id, state, outcome, created_at, updated_at
@@ -2214,11 +2219,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(37);
+          expect(yield* initializeMigrationCount).toBe(38);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(37);
+          expect(yield* readMigrationCount).toBe(38);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2318,9 +2323,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(37);
+              expect(migrations.length).toBe(38);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 37 }, (_, index) => index + 1),
+                Array.from({ length: 38 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2419,7 +2424,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 37,
+              migrationCount: 38,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);
