@@ -56,8 +56,10 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 When the Operator requests Task Review and approval, run `<but-why> task submit <task-id>` for the exact New Task proposal.
 A passing Task Review atomically approves that exact proposal by moving the Task to Todo.
-If Task Submission reports an Active Task Review, inspect it with `<but-why> task review show <review-id>`.
+If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
+Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
+Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
 Resolve every applicable Finding by updating the Task proposal before requesting another review.
 
 When the Operator explicitly requests direct Task Approval and no Task Review is active, inspect the selected Task and run `<but-why> task approve <task-id>`.

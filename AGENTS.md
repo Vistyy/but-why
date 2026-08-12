@@ -41,6 +41,7 @@
 - `src/change/candidateValidation/`: Candidate validation policy, execution, inspection, and composition.
 - `src/change/validation/`: Change Validation Gate and validation Adapters.
 - `src/change/validationRun/`: Validation Run domain records and evidence.
+- `src/agent/reviewerSession/`: shared Reviewer Session execution, compatibility, storage paths, and transcript discovery.
 - `src/change/publication/`: Candidate publication policy and Git Adapter.
 - `src/change/submit/`: Change submission configuration and errors.
 - `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.

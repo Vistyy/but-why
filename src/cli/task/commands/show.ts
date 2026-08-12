@@ -77,7 +77,7 @@ export const runTaskShowCommand = (
               ? task.state === "new"
                 ? { help: [`Run \`by task submit ${task.id}\` to review and approve this Task.`] }
                 : {}
-              : { reviewCommand: `by task review show ${review.id}` }),
+              : { reviewCommand: `by task-review show ${review.id}` }),
           });
         }),
       );

@@ -11,11 +11,11 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import type { RecordCandidateSpecialistRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type {
   ReviewerSessionRecord,
   ReviewerSessionStore,
-} from "../../src/change/reviewerSession/reviewerSession.js";
+} from "../../src/agent/reviewerSession/reviewerSession.js";
+import type { RecordCandidateSpecialistRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import {
   type RunSpecialistReviewPhaseInput,
   runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
@@ -112,7 +112,7 @@ const phaseHarness = (): PhaseHarness => {
     get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
     save: (record) =>
       Effect.sync(() => {
-        sessions.set(`${record.changeId}/${record.producer}`, record);
+        sessions.set(`${record.ownerId}/${record.producer}`, record);
       }),
     remove: (changeId, producer) =>
       Effect.sync(() => {

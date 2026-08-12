@@ -208,7 +208,7 @@ describe("Reviewer Transcript discovery", () => {
             "session-s1",
           );
           yield* changes.reviewerSessions.saveReviewerSession({
-            changeId,
+            ownerId: changeId,
             producer: "acceptance",
             fingerprint: "fingerprint",
             sessionReference: "session-a1",

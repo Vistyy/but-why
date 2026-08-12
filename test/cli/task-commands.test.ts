@@ -12,6 +12,7 @@ import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft
 import { runListCommand } from "../../src/cli/task/commands/list.js";
 import { runTaskShowCommand } from "../../src/cli/task/commands/show.js";
 import { runTaskSubmitCommand } from "../../src/cli/task/commands/submit.js";
+import { taskReviewView } from "../../src/cli/task/commands/taskReviewView.js";
 import { dashboard } from "../../src/cli/task/dashboard.js";
 import type { TaskCommandEnvironment } from "../../src/cli/task/taskCliSupport.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
@@ -67,6 +68,8 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   toolingFailure: null,
   abandonReason: null,
   findings: [],
+  sessions: [],
+  transcripts: [],
   createdAt: firstNow,
   updatedAt: firstNow,
   ...overrides,
@@ -77,6 +80,7 @@ const taskReviewInspection = (
 ): TaskReviewInspectionUseCases => ({
   getById: () => Effect.succeed(undefined),
   getLatestForTask: () => Effect.succeed(latest),
+  listForTask: () => Effect.succeed(latest === undefined ? [] : [latest]),
   proposalIsCurrent: () => Effect.succeed(false),
   inspectIdentity: () => Effect.succeed({ verified: true, workspace: { state: "absent" } }),
 });
@@ -94,6 +98,30 @@ const environment = (
 });
 
 describe("Task command Adapters", () => {
+  it("renders only valid Task Review recovery actions", () => {
+    const running = taskReviewRecord({ state: "running", outcome: null });
+
+    expect(taskReviewView(running).recovery.nextActions).toEqual([
+      "Run `by task-review show review-1` to inspect recovery.",
+    ]);
+    expect(
+      taskReviewView(running, false, {
+        verified: false,
+        message: "The workspace identity is not proven.",
+      }).recovery.nextActions,
+    ).toEqual(["Resolve the reported Task Review identity problem."]);
+    expect(
+      taskReviewView(running, false, {
+        verified: true,
+        workspace: { state: "absent" },
+      }).recovery.nextActions,
+    ).toEqual([
+      "Stop the Task Review process before abandonment.",
+      'Run `by task review abandon review-1 --reason "..."` after the process stops.',
+    ]);
+    expect(taskReviewView(taskReviewRecord()).recovery.nextActions).toEqual([]);
+  });
+
   it.effect("parses representative Task Create options and renders the mutation result", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
@@ -208,7 +236,7 @@ describe("Task command Adapters", () => {
             message: "Task Review is blocked by Findings; the Task remains New.",
             review: { id: "review-1", outcome: "blocked", findings },
           },
-          help: ["Run `by task review show review-1` to inspect the Task Review."],
+          help: ["Run `by task-review show review-1` to inspect the Task Review."],
         },
       });
       expect(failed).toEqual({
@@ -226,7 +254,7 @@ describe("Task command Adapters", () => {
               },
             },
           },
-          help: ["Run `by task review show review-1` to inspect the Task Review."],
+          help: ["Run `by task-review show review-1` to inspect the Task Review."],
         },
       });
     }),
@@ -286,7 +314,7 @@ describe("Task command Adapters", () => {
             taskId: "BY-1",
             reviewId: "review-active",
           },
-          help: ["Run `by task review show review-active` to inspect it."],
+          help: ["Run `by task-review show review-active` to inspect it."],
         },
       });
     }),
@@ -424,7 +452,7 @@ describe("Task command Adapters", () => {
           },
         },
         contextCommand: "by task context BY-1",
-        reviewCommand: "by task review show review-retained",
+        reviewCommand: "by task-review show review-retained",
       });
       expect(context.stdout).toEqual({
         task: {

@@ -13,6 +13,11 @@ import {
   ReviewerOutputContractFailed,
   validateReviewerArtifactRefs,
 } from "../../agent/reviewerOutput.js";
+import {
+  executeReviewerSession,
+  type ReviewerExecutionEvidence,
+} from "../../agent/reviewerSession/executeReviewerSession.js";
+import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
@@ -26,11 +31,6 @@ import {
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
-import {
-  executeReviewerSession,
-  type ReviewerExecutionEvidence,
-} from "../reviewerSession/executeReviewerSession.js";
-import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
@@ -190,7 +190,7 @@ const runAcceptanceReviewPhaseImpl = (
       ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
     });
     const identity = {
-      changeId: input.changeId,
+      owner: { kind: "change" as const, id: input.changeId },
       producer: "acceptance" as const,
       agentProfile: input.policy.profile,
       instructions: input.policy.instructions,

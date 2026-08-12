@@ -24,7 +24,7 @@ export const runTaskSubmitCommand = (
       Effect.map(reviews.submit(resolved.taskId, environment.now().toISOString()), (result) => {
         if (result.ok) {
           const review = result.review;
-          const reviewCommand = `by task review show ${review.id}`;
+          const reviewCommand = `by task-review show ${review.id}`;
           switch (result.outcome) {
             case "passed":
               return success({
@@ -73,7 +73,7 @@ export const runTaskSubmitCommand = (
               code: result.code,
               message: "This Task already has an Active Task Review.",
               details: { taskId: resolved.taskId, reviewId: result.reviewId },
-              help: [`Run \`by task review show ${result.reviewId}\` to inspect it.`],
+              help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
             });
           case "review_base_unavailable":
             return runtimeError({
@@ -106,7 +106,7 @@ export const runTaskSubmitCommand = (
                   },
                 },
               },
-              help: [`Run \`by task review show ${result.review.id}\` to inspect recovery state.`],
+              help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],
             });
         }
       }),

@@ -7,6 +7,15 @@ import {
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import { decodeReviewerOutputContract, type ReviewerOutput } from "../../agent/reviewerOutput.js";
+import {
+  executeReviewerSession,
+  type ReviewerExecutionEvidence,
+} from "../../agent/reviewerSession/executeReviewerSession.js";
+import {
+  type ReviewerSessionStore,
+  reviewerSessionsOwnerRoot,
+} from "../../agent/reviewerSession/reviewerSession.js";
+import { discoverObservedReviewerTranscripts } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -60,6 +69,9 @@ export type TaskReviewInspectionUseCases = {
   readonly getLatestForTask: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
+  readonly listForTask: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
   readonly proposalIsCurrent: (
     review: TaskReviewRecord,
   ) => Effect.Effect<boolean, RepositoryStorageError>;
@@ -88,10 +100,17 @@ export type TaskReviewUseCases = TaskReviewInspectionUseCases &
   TaskReviewSubmissionUseCases;
 
 type WorkspaceExecution =
-  | { readonly ok: true; readonly output: ReviewerOutput }
+  | {
+      readonly ok: true;
+      readonly output: ReviewerOutput;
+      readonly evidence: ReviewerExecutionEvidence;
+      readonly sessionReference: string | null;
+    }
   | {
       readonly ok: false;
       readonly failure: TaskReviewToolingFailure;
+      readonly evidence?: ReviewerExecutionEvidence;
+      readonly sessionReference?: string | null;
       readonly findings?: ReviewerOutput["findings"];
     };
 
@@ -107,6 +126,7 @@ export const openTaskReviewUseCases = (input: {
     baseCommit: string,
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
+  readonly reviewerSessionStorageRoot: string;
   readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
@@ -135,6 +155,7 @@ export const openTaskReviewUseCases = (input: {
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
+  listForTask: input.persistence.listForTask,
   proposalIsCurrent: input.persistence.proposalIsCurrent,
   inspectIdentity: (review) => inspectTaskReviewIdentity(input, review),
 });
@@ -215,11 +236,43 @@ const submitTaskReview = (
             }
           }
           const agentEnvironment = repoAgentEnvironment(repoConfig);
-          const reviewed = yield* input.reviewerRuntime.review({
+          const history = yield* input.persistence.listForTask(taskId);
+          const previous = history.length < 2 ? undefined : history.at(-2);
+          const prompt = buildTaskReviewerPrompt({
+            policy: resolvedPolicy.policy.snapshot,
+            proposal: admitted.proposal,
+            dependencyEvidence: admitted.dependencyEvidence,
+          });
+          const sessionStore: ReviewerSessionStore = {
+            get: input.persistence.getReviewerSession,
+            save: input.persistence.saveReviewerSession,
+            remove: input.persistence.removeReviewerSession,
+          };
+          const execution = yield* executeReviewerSession<ReviewerOutput, never>({
+            identity: {
+              owner: { kind: "task", id: taskId },
+              producer: "task",
+              agentProfile: resolvedPolicy.policy.profile,
+              instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
+              ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+              resources: {
+                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions === undefined
+                  ? {}
+                  : {
+                      extensions: resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
+                    }),
+                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
+                  ? {}
+                  : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
+                ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
+                  ? {}
+                  : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
+              },
+            },
+            runtime: input.reviewerRuntime,
             reviewerExecutor: input.reviewerExecutor,
-            reviewer: "Task",
-            decodeOutput: (output) =>
-              decodeReviewerOutputContract({ reviewer: "task", attempts: 1, output }).pipe(
+            decodeOutput: (output, reviewCall) =>
+              decodeReviewerOutputContract({ reviewer: "task", attempts: reviewCall, output }).pipe(
                 Effect.mapError(
                   (error) =>
                     new ReviewerExecutionFailed({
@@ -241,24 +294,35 @@ const submitTaskReview = (
                       ),
                 ),
               ),
-            prompt: buildTaskReviewerPrompt({
-              policy: resolvedPolicy.policy.snapshot,
-              proposal: admitted.proposal,
-              dependencyEvidence: admitted.dependencyEvidence,
+            prompt,
+            continuationPrompt: buildTaskReviewContinuationPrompt({
+              previousProposal: previous?.proposal,
+              currentPrompt: prompt,
+              currentProposal: admitted.proposal,
             }),
-            profile: resolvedPolicy.policy.profile,
             commandCwd: active.worktreePath,
             resourceRoot: active.worktreePath,
-            ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+            sessionStorageRoot: input.reviewerSessionStorageRoot,
+            sessionStore,
+            completeReview: ({ initialResult }) => Effect.succeed(initialResult),
           });
+          const reviewed = execution.result;
+          const sessionReference = reviewed.sessionReference ?? null;
           return reviewed.ok
-            ? ({ ok: true, output: reviewed.report } as const)
+            ? ({
+                ok: true,
+                output: reviewed.report,
+                evidence: execution.evidence,
+                sessionReference,
+              } as const)
             : ({
                 ok: false,
                 failure: {
                   operation: reviewed.failure.operationName,
                   message: reviewed.failure.message,
                 },
+                evidence: execution.evidence,
+                sessionReference,
               } as const);
         }),
     });
@@ -287,6 +351,62 @@ const submitTaskReview = (
         }
       }
       execution = { ok: false, failure: tooling };
+    }
+
+    if (execution.evidence !== undefined) {
+      const executionInput = {
+        reviewId,
+        execution: {
+          ...execution.evidence,
+          sessionReference: execution.sessionReference ?? null,
+        },
+      };
+      const recordedExecution = yield* Effect.either(
+        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, executionInput),
+      );
+      if (recordedExecution._tag === "Left") {
+        const failure = {
+          operation: "record_task_review_execution",
+          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
+          pendingExecution: executionInput.execution,
+        };
+        yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+        const active = yield* input.persistence.getById(reviewId);
+        if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+        return { ok: false, code: "task_review_recovery_required", review: active } as const;
+      }
+    }
+
+    const transcriptDiscovery = discoverObservedReviewerTranscripts(
+      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, taskId),
+      taskId,
+    );
+    if (!transcriptDiscovery.ok) {
+      const failure = {
+        operation: "index_task_reviewer_transcripts",
+        message: transcriptDiscovery.reason,
+      };
+      yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+      const active = yield* input.persistence.getById(reviewId);
+      if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+      return { ok: false, code: "task_review_recovery_required", review: active } as const;
+    }
+    const indexed = yield* Effect.either(
+      input.persistence.recordTranscripts({
+        reviewId,
+        taskId,
+        transcripts: transcriptDiscovery.transcripts,
+      }),
+    );
+    if (indexed._tag === "Left") {
+      const failure = {
+        operation: "index_task_reviewer_transcripts",
+        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
+      };
+      yield* input.persistence.recordActiveFailure(reviewId, failure, now);
+      const active = yield* input.persistence.getById(reviewId);
+      if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+      return { ok: false, code: "task_review_recovery_required", review: active } as const;
     }
 
     const completed = yield* input.persistence.complete({
@@ -339,6 +459,7 @@ export const inspectTaskReviewIdentity = (
 export const abandonTaskReview = (
   input: {
     readonly mainCheckoutRoot: string;
+    readonly reviewerSessionStorageRoot: string;
     readonly persistence: TaskReviewPersistence;
     readonly verifyReviewBase: (
       mainCheckoutRoot: string,
@@ -384,6 +505,123 @@ export const abandonTaskReview = (
         message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
       } as const;
     }
+    const pendingExecution = review.toolingFailure?.pendingExecution;
+    if (pendingExecution !== undefined) {
+      const recordedExecution = yield* Effect.either(
+        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, {
+          reviewId: review.id,
+          execution: pendingExecution,
+        }),
+      );
+      if (recordedExecution._tag === "Left") {
+        const failure = {
+          operation: "record_task_review_execution",
+          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
+          pendingExecution,
+        };
+        yield* input.persistence.recordActiveFailure(review.id, failure, now);
+        const current = yield* input.persistence.getById(review.id);
+        return {
+          ok: false,
+          code: "task_review_cleanup_failed",
+          review: current ?? review,
+          message: failure.message,
+        } as const;
+      }
+    }
+
+    const transcriptDiscovery = discoverObservedReviewerTranscripts(
+      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
+      review.taskId,
+    );
+    if (!transcriptDiscovery.ok) {
+      const failure = {
+        operation: "index_task_reviewer_transcripts",
+        message: transcriptDiscovery.reason,
+      };
+      yield* input.persistence.recordActiveFailure(review.id, failure, now);
+      const current = yield* input.persistence.getById(review.id);
+      return {
+        ok: false,
+        code: "task_review_cleanup_failed",
+        review: current ?? review,
+        message: failure.message,
+      } as const;
+    }
+    const indexed = yield* Effect.either(
+      input.persistence.recordTranscripts({
+        reviewId: review.id,
+        taskId: review.taskId,
+        transcripts: transcriptDiscovery.transcripts,
+      }),
+    );
+    if (indexed._tag === "Left") {
+      const failure = {
+        operation: "index_task_reviewer_transcripts",
+        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
+      };
+      yield* input.persistence.recordActiveFailure(review.id, failure, now);
+      const current = yield* input.persistence.getById(review.id);
+      return {
+        ok: false,
+        code: "task_review_cleanup_failed",
+        review: current ?? review,
+        message: failure.message,
+      } as const;
+    }
     const abandoned = yield* input.persistence.abandon(review.id, reason, now);
     return abandoned.ok ? { ok: true, review: abandoned.review } : abandoned;
   });
+
+const buildTaskReviewContinuationPrompt = (input: {
+  readonly previousProposal: TaskReviewRecord["proposal"] | undefined;
+  readonly currentProposal: TaskReviewRecord["proposal"];
+  readonly currentPrompt: string;
+}): string =>
+  [
+    "Continue the compatible Task Reviewer Session with the complete current proposal below.",
+    "Re-evaluate the current proposal. Do not reuse an earlier judgment.",
+    "Deterministic proposal diff from the most recent prior Review:",
+    JSON.stringify({
+      previous: input.previousProposal ?? null,
+      current: input.currentProposal,
+      changed: proposalDiff(input.previousProposal, input.currentProposal),
+    }),
+    "",
+    input.currentPrompt,
+  ].join("\n");
+
+const proposalDiff = (
+  previous: TaskReviewRecord["proposal"] | undefined,
+  current: TaskReviewRecord["proposal"],
+) => ({
+  title:
+    previous === undefined || previous.title === current.title
+      ? null
+      : { before: previous.title, after: current.title },
+  description:
+    previous === undefined || previous.description === current.description
+      ? null
+      : { before: previous.description, after: current.description },
+  dependencyIds:
+    previous === undefined ||
+    JSON.stringify(previous.dependencyIds) === JSON.stringify(current.dependencyIds)
+      ? null
+      : { before: previous.dependencyIds, after: current.dependencyIds },
+});
+
+export const recordTaskReviewExecutionWithRetry = (
+  recordExecution: TaskReviewPersistence["recordExecution"],
+  input: Parameters<TaskReviewPersistence["recordExecution"]>[0],
+): Effect.Effect<void, RepositoryStorageError> =>
+  recordExecution(input).pipe(
+    Effect.catchTag("RepositorySqlOperationFailed", () => recordExecution(input)),
+  );
+
+const repositoryStorageErrorMessage = (
+  subject: "Task Review execution" | "Task Reviewer Transcript",
+  error: RepositoryStorageError,
+): string =>
+  "operationName" in error
+    ? `${subject} persistence failed during ${error.operationName}.`
+    : `${subject} persistence failed: ${error._tag}.`;

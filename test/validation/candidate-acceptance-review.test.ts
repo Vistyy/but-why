@@ -9,11 +9,11 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import type { ReviewerSessionStore } from "../../src/agent/reviewerSession/reviewerSession.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type { AcceptanceContextCandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
-import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";

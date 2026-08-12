@@ -1,5 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
 import type { ChangeRecord } from "../change/change.js";
 import type {
@@ -7,7 +8,6 @@ import type {
   ImplementationBlockerHistory,
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
 import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -265,7 +265,12 @@ export const decodeReviewerSession = (
   changeId: string,
 ): ReviewerSessionRecord => {
   if (row.changeId !== changeId) throw new Error("Reviewer Session belongs to another Change");
-  return row;
+  return {
+    ownerId: row.changeId,
+    producer: row.producer,
+    fingerprint: row.fingerprint,
+    sessionReference: row.sessionReference,
+  };
 };
 
 export type StoredReviewerTranscriptRow = {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -11,14 +12,14 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import type {
+  ReviewerSessionRecord,
+  ReviewerSessionStore,
+} from "../../src/agent/reviewerSession/reviewerSession.js";
 import { runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
 import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
-import type {
-  ReviewerSessionRecord,
-  ReviewerSessionStore,
-} from "../../src/change/reviewerSession/reviewerSession.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -299,6 +300,19 @@ describe("Acceptance Review phase", () => {
         const first = acceptancePhaseFixture({ review: firstReview }, { sessionStore });
         const firstResult = yield* first.run();
         expect(firstResult.reviewerEvidence).toMatchObject({ continuity: "fresh", reviewCalls: 1 });
+        const persistedFingerprint = createHash("sha256")
+          .update(
+            JSON.stringify({
+              changeId: "change-1",
+              producer: "acceptance",
+              agentProfile: policy.profile,
+              instructions: policy.instructions,
+              agentEnvironment: ["nix", "develop", "-c"],
+              resources: {},
+            }),
+          )
+          .digest("hex");
+        expect(sessions.get("change-1/acceptance")?.fingerprint).toBe(persistedFingerprint);
 
         const temporaryFailure = new ReviewerExecutionFailed({
           kind: "process_execution",
@@ -478,7 +492,6 @@ const memorySessionStore = (
   sessions: Map<string, ReviewerSessionRecord>,
 ): ReviewerSessionStore => ({
   get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
-  save: (record) =>
-    Effect.sync(() => sessions.set(`${record.changeId}/${record.producer}`, record)),
+  save: (record) => Effect.sync(() => sessions.set(`${record.ownerId}/${record.producer}`, record)),
   remove: (changeId, producer) => Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
 });

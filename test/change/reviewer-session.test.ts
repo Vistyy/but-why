@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 import {
   type ReviewerSessionIdentity,
   reviewerSessionFingerprint,
-  reviewerSessionsChangeRoot,
+  reviewerSessionsOwnerRoot,
   reviewerSessionsPath,
   reviewerSessionsProducerRoot,
-} from "../../src/change/reviewerSession/reviewerSession.js";
+} from "../../src/agent/reviewerSession/reviewerSession.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const identity = (changeId: string, producer: string): ReviewerSessionIdentity => ({
-  changeId,
+  owner: { kind: "change", id: changeId },
   producer,
   agentProfile: {
     agentProfile: "strict",
@@ -43,7 +43,7 @@ describe("Reviewer Session storage", () => {
     expect(reviewerSessionsProducerRoot(root, changeId, "standards")).toBe(
       join(root, changeId, "standards"),
     );
-    expect(reviewerSessionsChangeRoot(root, changeId)).toBe(join(root, changeId));
+    expect(reviewerSessionsOwnerRoot(root, changeId)).toBe(join(root, changeId));
   });
 
   it("derives a stable fingerprint from the runtime Reviewer Session identity", () => {
@@ -56,6 +56,7 @@ describe("Reviewer Session storage", () => {
     const otherProducer = reviewerSessionFingerprint(identity("change-1", "standards"));
     const otherChange = reviewerSessionFingerprint(identity("change-2", "acceptance"));
 
+    expect(first).toBe("4dc33727b47c71e5c5b5d453288d20206fa8752de0c716880f6ec762574911f3");
     expect(same).toBe(first);
     expect(changedInstructions).not.toBe(first);
     expect(otherProducer).not.toBe(first);

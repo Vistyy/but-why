@@ -33,7 +33,7 @@ export const runApproveCommand = (
               code: result.code,
               message: "Direct Task Approval is unavailable while a Task Review is active.",
               details: { taskId: taskId.taskId, reviewId: result.reviewId },
-              help: [`Run \`by task review show ${result.reviewId}\` to inspect it.`],
+              help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
             });
           }
           return invalidTaskApproval(taskId.taskId, result.state);

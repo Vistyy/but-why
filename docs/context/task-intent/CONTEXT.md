@@ -35,13 +35,24 @@ The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
 **Task Review**:
-One fresh review of one exact New Task proposal for approval.
+One review of one exact New Task proposal for approval.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
 A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
+A Task Review can continue the most recent compatible usable Task Reviewer Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 A Task Review does not create reusable judgment authority.
-_Avoid_: Acceptance Review, Validation Run
+_Avoid_: Task Approval, Acceptance Review, Validation Run
+
+**Task Reviewer Session**:
+A continuing reviewer conversation owned by one Task under one compatible resolved Task Review policy.
+It can continue across changed proposals so the reviewer can reuse repository orientation, but it does not reuse an earlier judgment.
+_Avoid_: Task Review, cross-Task reviewer conversation, reusable judgment
+
+**Task Reviewer Transcript**:
+The complete Pi session conversation observed while executing a Task Reviewer Session.
+Every observed JSONL file has one immutable idempotently indexed reference and remains inspectable with Task Review history after the Task lifecycle advances.
+_Avoid_: Task Review outcome, Finding, retention-limited Artifact
 
 **Active Task Review**:
 The sole running Task Review for one Task until it completes or the Operator abandons it.

@@ -1,21 +1,46 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
+import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import {
+  resolveTaskId,
   type TaskCommandEnvironment,
   withTaskReviewInspection,
   withTaskReviewRecovery,
+  withTasks,
 } from "../taskCliSupport.js";
-import { taskReviewView } from "./taskReviewView.js";
+import { taskReviewHistoryView, taskReviewView } from "./taskReviewView.js";
 
 export type TaskReviewCommand =
   | { readonly action: "show"; readonly reviewId: string }
+  | { readonly action: "list"; readonly taskId: string }
   | { readonly action: "abandon"; readonly reviewId: string; readonly reason: string };
 
 export const runTaskReviewCommand = (
   command: TaskReviewCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
+  if (command.action === "list") {
+    const parsed = parseCliTaskIdValue(command.taskId);
+    if (!parsed.ok) return Effect.succeed(parsed.result);
+    return withTasks(environment, (tasks) => {
+      const resolved = resolveTaskId(tasks, parsed.taskId);
+      if (!resolved.ok) return Effect.succeed(resolved.result);
+      return withTaskReviewInspection(environment, (reviews) =>
+        Effect.map(reviews.listForTask(resolved.taskId), (history) =>
+          success({
+            taskId: resolved.taskId,
+            reviews: history.map(taskReviewHistoryView),
+            reviewCount: history.length,
+            help:
+              history.length === 0
+                ? ["Run `by task submit <task-id>` to start a Task Review for a New Task."]
+                : [`Run \`by task-review show <review-id>\` to inspect one Review.`],
+          }),
+        ),
+      );
+    });
+  }
   if (command.action === "show") {
     return withTaskReviewInspection(environment, (reviews) =>
       Effect.gen(function* () {
@@ -62,7 +87,7 @@ export const runTaskReviewCommand = (
             code: result.code,
             message: "Task Review is not active.",
             details: { reviewId: command.reviewId },
-            help: [`Run \`by task review show ${command.reviewId}\` to inspect its outcome.`],
+            help: [`Run \`by task-review show ${command.reviewId}\` to inspect its outcome.`],
           });
         }
         if ("message" in result) {

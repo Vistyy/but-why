@@ -241,6 +241,17 @@ const taskSubmitCommand = withCliHandler(
       ),
     ),
 );
+const taskReviewsCommand = withCliHandler(
+  leaf("reviews", "List ordered Task Review history and valid next actions.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/review.js")).pipe(
+      Effect.flatMap(({ runTaskReviewCommand }) =>
+        runTaskReviewCommand({ action: "list", taskId: values.taskId }, environment),
+      ),
+    ),
+);
 const taskReviewShowCommand = withCliHandler(
   leaf("show", "Inspect one exact Task Review and its recovery state.", {
     reviewId: Args.text({ name: "review-id" }),
@@ -275,6 +286,14 @@ taskReviewCommand = group(
   {},
   () => generatedCommandUsage(taskReviewCommand),
 );
+let taskReviewTopCommand: AnyCommand;
+taskReviewTopCommand = group(
+  "task-review",
+  "Inspect and recover Task Reviews.",
+  [taskReviewShowCommand],
+  {},
+  () => generatedCommandUsage(taskReviewTopCommand),
+);
 const taskApproveCommand = withCliHandler(
   leaf("approve", "Directly approve a New Task with no Active Task Review.", {
     taskId: taskIdArgument,
@@ -308,6 +327,7 @@ taskCommand = group(
     taskListCommand,
     taskShowCommand,
     taskSubmitCommand,
+    taskReviewsCommand,
     taskReviewCommand,
     taskApproveCommand,
     taskContextCommand,
@@ -695,6 +715,7 @@ const commandTree = commandRootWithHandler.pipe(
     initCommand,
     snapshotCommand,
     taskCommand,
+    taskReviewTopCommand,
     changeCommand,
     validationRunCommand,
   ]),
@@ -904,5 +925,5 @@ const nativeHelpText = (help: string): string => {
 
 const rootHelpCorrection = (help: string): string =>
   help
-    .replaceAll(/\b(task|change|validation-run) \1\b/gu, "$1")
+    .replaceAll(/\b(task|task-review|change|validation-run) \1\b/gu, "$1")
     .replaceAll(/\[<task-id>\] (?=(draft|apply) <task-id>)/gu, "");
