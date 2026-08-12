@@ -455,9 +455,9 @@ const submitTaskReview = (
           if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
-        return { ok: true, review: completed.review } as const;
+        return completed;
       }),
-      outcome: (result) => (result.ok && result.review.outcome === "passed" ? "passed" : "failed"),
+      outcome: (result) => (result.ok && result.outcome === "passed" ? "passed" : "failed"),
       details: () => taskReviewProgressDetails(taskReviewEvidence),
       failureDetails: () => taskReviewProgressDetails(taskReviewEvidence),
     });
