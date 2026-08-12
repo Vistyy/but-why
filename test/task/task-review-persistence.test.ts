@@ -281,7 +281,7 @@ it.scoped("atomically applies a reused passing judgment and rejects malformed ev
       yield* repository.operation("malform reusable Review evidence", (sql) =>
         Effect.gen(function* () {
           yield* sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`;
-          yield* sql`UPDATE task_reviews SET policy_snapshot = '{' WHERE id = 'review-passed'`;
+          yield* sql`UPDATE task_reviews SET proposal_snapshot = '{' WHERE id = 'review-passed'`;
         }),
       );
       const malformed = yield* Effect.either(reviews.reuseJudgment(publicTaskId("BY-1"), later));

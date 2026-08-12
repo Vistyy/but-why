@@ -259,11 +259,11 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
     if (active[0] !== undefined) return undefined;
 
     const dependencyIds = yield* directDependencyIds(sql, taskId);
-    const proposalSnapshot = JSON.stringify({
+    const currentProposal: TaskReviewProposal = {
       title: task.title,
       description: task.description,
       dependencyIds,
-    });
+    };
     const rows = yield* sql<ReviewRow>`
       SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
         dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
@@ -272,12 +272,12 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
-      WHERE task_id = ${taskId} AND proposal_snapshot = ${proposalSnapshot}
-        AND state = 'complete' AND outcome IN ('passed', 'blocked')
-      ORDER BY sequence DESC LIMIT 1
+      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
+      ORDER BY sequence DESC
     `;
-    const row = rows[0];
-    if (row !== undefined) {
+    for (const row of rows) {
+      const proposal = yield* decodeProposalSnapshot(row.proposalSnapshot);
+      if (JSON.stringify(proposal) !== JSON.stringify(currentProposal)) continue;
       const review = yield* decodeReview(sql, row);
       const judgment = completedTaskReviewResult(review);
       if (judgment === undefined || judgment.outcome === "tooling_failed") {
@@ -292,6 +292,13 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
       return judgment;
     }
     return undefined;
+  });
+
+const decodeProposalSnapshot = (source: string) =>
+  Effect.try({
+    try: () => parseProposal(source),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({ operationName: "read Task Review", cause }),
   });
 
 const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewRow>`
