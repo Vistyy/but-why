@@ -1470,6 +1470,146 @@ describe("Shared Repository State migrations", () => {
     }).pipe(Effect.provide(nodeSqliteLayer(":memory:"))),
   );
 
+  it.effect("migrates every Task Review policy snapshot to one unversioned shape", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(35);
+              yield* sql`
+                INSERT INTO tasks (
+                  id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                ) VALUES (
+                  'BY-1', 1, 'Reviewed', 'Historical proposal', 'new', NULL,
+                  '2026-08-12T08:00:00.000Z', '2026-08-12T08:00:00.000Z'
+                )
+              `;
+              for (const [id, policy] of [
+                [
+                  "review-v1",
+                  {
+                    id: "task_advisory_review",
+                    version: 1,
+                    agentProfile: "legacy",
+                    profileScope: "global",
+                    instructions: "Legacy instructions",
+                  },
+                ],
+                [
+                  "review-v2",
+                  {
+                    id: "task_advisory_review",
+                    version: 2,
+                    profile: {
+                      agentProfile: "review",
+                      scope: "global",
+                      profile: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+                    },
+                    builtInInstructions: "Current instructions",
+                    guidance: { content: "Guidance", source: "global" },
+                  },
+                ],
+                [
+                  "review-v3",
+                  {
+                    id: "task_review",
+                    version: 3,
+                    profile: {
+                      agentProfile: "repo-review",
+                      scope: "repo",
+                      profile: { agentRuntime: "pi" },
+                    },
+                    builtInInstructions: "Current instructions",
+                    guidance: null,
+                  },
+                ],
+              ] as const) {
+                yield* sql`
+                  INSERT INTO task_reviews (
+                    id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
+                    base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
+                    tooling_failure, abandon_reason, created_at, updated_at
+                  ) VALUES (
+                    ${id}, 'BY-1', '{"title":"Reviewed","description":"Historical proposal","dependencyIds":[]}',
+                    '[]', ${JSON.stringify(policy)}, 'refs/heads/main', ${"a".repeat(40)},
+                    ${`/tmp/${id}`}, 'complete', 'blocked', 'removed', NULL, NULL,
+                    '2026-08-12T08:00:00.000Z', '2026-08-12T08:00:00.000Z'
+                  )
+                `;
+              }
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const snapshots = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              return yield* repository.operation(
+                "read migrated Task Review policies",
+                (sql) =>
+                  sql<{ readonly id: string; readonly policySnapshot: string }>`
+                  SELECT id, policy_snapshot AS policySnapshot FROM task_reviews ORDER BY id
+                `,
+              );
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "initialize",
+                }),
+              ),
+            ),
+          );
+
+          expect(
+            snapshots.map(({ id, policySnapshot }) => [id, JSON.parse(policySnapshot)]),
+          ).toEqual([
+            [
+              "review-v1",
+              {
+                profile: {
+                  agentProfile: "legacy",
+                  scope: "global",
+                  profile: null,
+                },
+                builtInInstructions: "Legacy instructions",
+                guidance: null,
+              },
+            ],
+            [
+              "review-v2",
+              {
+                profile: {
+                  agentProfile: "review",
+                  scope: "global",
+                  profile: { agentRuntime: "pi", runtimeConfig: { model: "provider/model" } },
+                },
+                builtInInstructions: "Current instructions",
+                guidance: { content: "Guidance", source: "global" },
+              },
+            ],
+            [
+              "review-v3",
+              {
+                profile: {
+                  agentProfile: "repo-review",
+                  scope: "repo",
+                  profile: { agentRuntime: "pi" },
+                },
+                builtInInstructions: "Current instructions",
+                guidance: null,
+              },
+            ],
+          ]);
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("reports migration failures through the typed error channel", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),

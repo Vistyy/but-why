@@ -35,6 +35,7 @@ import { backfillPreNativeSnapshotWorkspaceCleanupMigration as backfillPreNative
 import { removePreNativeSnapshotWorkspaceCleanupMigration as removePreNativeSnapshotWorkspaceCleanup } from "./migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 import { taskReviewsMigration as taskReviews } from "./migrations/0034_task_reviews.js";
 import { taskReviewerSessionsMigration as taskReviewerSessions } from "./migrations/0035_task_reviewer_sessions.js";
+import { unversionTaskReviewPolicySnapshotsMigration as unversionTaskReviewPolicySnapshots } from "./migrations/0036_unversion_task_review_policy_snapshots.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -72,6 +73,7 @@ const migrations = {
   "0033_remove_pre_native_snapshot_workspace_cleanup": removePreNativeSnapshotWorkspaceCleanup,
   "0034_task_reviews": taskReviews,
   "0035_task_reviewer_sessions": taskReviewerSessions,
+  "0036_unversion_task_review_policy_snapshots": unversionTaskReviewPolicySnapshots,
 };
 
 export const migrateRepositoryState = Migrator.make({})({

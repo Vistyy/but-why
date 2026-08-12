@@ -70,8 +70,6 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       profile: { agentRuntime: "pi" as const },
     };
     const policy = {
-      id: "task_advisory_review" as const,
-      version: 2 as const,
       profile,
       builtInInstructions: taskReviewBuiltInInstructions,
       guidance: null,
@@ -480,11 +478,13 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 reviewId,
                 taskId: publicTaskId("BY-1"),
                 policy: {
-                  id: "task_advisory_review",
-                  version: 1,
-                  agentProfile: "review",
-                  profileScope: "global",
-                  instructions: taskReviewBuiltInInstructions,
+                  profile: {
+                    agentProfile: "review",
+                    scope: "global",
+                    profile: { agentRuntime: "pi" },
+                  },
+                  builtInInstructions: taskReviewBuiltInInstructions,
+                  guidance: null,
                 },
                 baseRef: "refs/heads/main",
                 baseCommit: commit,
@@ -563,11 +563,13 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
               reviewId: mismatchedReviewId,
               taskId: publicTaskId("BY-2"),
               policy: {
-                id: "task_advisory_review",
-                version: 1,
-                agentProfile: "review",
-                profileScope: "global",
-                instructions: taskReviewBuiltInInstructions,
+                profile: {
+                  agentProfile: "review",
+                  scope: "global",
+                  profile: { agentRuntime: "pi" },
+                },
+                builtInInstructions: taskReviewBuiltInInstructions,
+                guidance: null,
               },
               baseRef: "refs/heads/not-main",
               baseCommit: commit,
@@ -677,10 +679,20 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     });
     expect(observed?.prompt).toContain("Repository guidance");
     expect(observed?.prompt).toContain("remain controlling if the guidance conflicts");
-    expect(JSON.parse(submitted.stdout)).toMatchObject({
+    const submittedOutput = JSON.parse(submitted.stdout) as { review: { id: string } };
+    expect(submittedOutput).toMatchObject({
+      review: { outcome: "passed" },
+      task: { id: "BY-1", state: "todo" },
+    });
+    const shown = yield* runByInProcessEffect(root, [
+      "task",
+      "review",
+      "show",
+      submittedOutput.review.id,
+    ]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
       review: {
         policy: {
-          version: 2,
           profile: {
             agentProfile: "task-review",
             scope: "repo",
@@ -729,19 +741,21 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
       reviewerAgentRuntime: passingReviewer,
     });
     expect(submitted.status, submitted.stdout).toBe(0);
-    const output: unknown = JSON.parse(submitted.stdout);
-    expect(output).toMatchObject({
-      review: {
-        taskId: "BY-1",
-        state: "complete",
-        outcome: "passed",
-        proposal: { title: "Review me", description: "Exact proposal", dependencyIds: [] },
-        reviewBase: { ref: "refs/heads/main" },
-        workspace: { cleanup: "removed" },
-      },
+    const output = JSON.parse(submitted.stdout) as { review: { id: string } };
+    expect(output).toEqual({
+      review: { id: output.review.id, outcome: "passed" },
+      task: { id: "BY-1", state: "todo" },
+      help: ["Run `by task show BY-1` to inspect its startability and next action."],
     });
-    const review = (output as { review: { workspace: { path: string } } }).review;
-    expect(existsSync(review.workspace.path)).toBe(false);
+    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", output.review.id]);
+    const shownOutput = JSON.parse(shown.stdout) as {
+      review: { proposalCurrent: boolean; workspace: { path: string; cleanup: string } };
+    };
+    expect(shownOutput.review.proposalCurrent).toBe(true);
+    expect(shownOutput.review.workspace.cleanup).toBe("removed");
+    expect(existsSync(shownOutput.review.workspace.path)).toBe(false);
+    const task = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+    expect(JSON.parse(task.stdout)).toMatchObject({ task: { state: "todo" } });
   }),
 );
 
@@ -774,6 +788,13 @@ it.effect(
       ]);
 
       const observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0][] = [];
+      const finding = {
+        title: "Proposal needs revision",
+        description: "Revise the proposal before approval.",
+        evidence: "The reviewer requested a revision.",
+        files: [],
+        artifactRefs: [],
+      };
       const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
         review: (input) => {
           observed.push(input);
@@ -788,9 +809,9 @@ it.effect(
           );
           return Effect.succeed({
             ok: true as const,
-            report: { findings: [] },
+            report: { findings: [finding] },
             attempts: 1,
-            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+            stdout: `<reviewer-output>${JSON.stringify({ findings: [finding] })}</reviewer-output>`,
             sessionReference: sessionId,
             sessionFilePath,
           });
@@ -801,8 +822,9 @@ it.effect(
         globalConfigPath,
         reviewerAgentRuntime: reviewer,
       });
-      expect(first.status, first.stdout).toBe(0);
-      const firstId = (JSON.parse(first.stdout) as { review: { id: string } }).review.id;
+      expect(first.status, first.stdout).toBe(1);
+      const firstId = (JSON.parse(first.stdout) as { error: { review: { id: string } } }).error
+        .review.id;
 
       const drafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const draftPath = (JSON.parse(drafted.stdout) as { draft: { path: string } }).draft.path;
@@ -814,13 +836,14 @@ it.effect(
         globalConfigPath,
         reviewerAgentRuntime: reviewer,
       });
-      expect(second.status, second.stdout).toBe(0);
+      expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
       expect(observed[1]?.resumeSession).toBe("task-session-1");
       expect(observed[1]?.prompt).toContain("Changed proposal");
       expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
 
-      const secondId = (JSON.parse(second.stdout) as { review: { id: string } }).review.id;
+      const secondId = (JSON.parse(second.stdout) as { error: { review: { id: string } } }).error
+        .review.id;
       const history = yield* runByInProcessEffect(root, ["task", "reviews", "BY-1"]);
       expect(history.status, history.stdout).toBe(0);
       expect(JSON.parse(history.stdout)).toEqual({
@@ -830,8 +853,8 @@ it.effect(
           {
             id: firstId,
             state: "complete",
-            outcome: "passed",
-            findingCount: 0,
+            outcome: "blocked",
+            findingCount: 1,
             toolingFailure: null,
             workspaceCleanup: "removed",
             sessionCount: 1,
@@ -843,8 +866,8 @@ it.effect(
           {
             id: secondId,
             state: "complete",
-            outcome: "passed",
-            findingCount: 0,
+            outcome: "blocked",
+            findingCount: 1,
             toolingFailure: null,
             workspaceCleanup: "removed",
             sessionCount: 1,
@@ -879,9 +902,9 @@ it.effect(
         error: {
           code: "task_review_recovery_required",
           review: {
-            state: "running",
-            toolingFailure: { operation: "index_task_reviewer_transcripts" },
-            sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+            id: expect.any(String),
+            reviewBase: { ref: "refs/heads/main", commit: expect.any(String) },
+            workspace: { path: expect.any(String), cleanup: "removed" },
           },
         },
       });
@@ -890,6 +913,18 @@ it.effect(
           error: { review: { id: string } };
         }
       ).error.review.id;
+      const failedShown = yield* runByInProcessEffect(root, [
+        "task-review",
+        "show",
+        failedReviewId,
+      ]);
+      expect(JSON.parse(failedShown.stdout)).toMatchObject({
+        review: {
+          state: "running",
+          toolingFailure: { operation: "index_task_reviewer_transcripts" },
+          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
+        },
+      });
       rmSync(invalidTranscript);
       const abandoned = yield* runByInProcessEffect(root, [
         "task",

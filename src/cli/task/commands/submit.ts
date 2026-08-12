@@ -10,7 +10,6 @@ import {
   withTasks,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
-import { taskReviewView } from "./taskReviewView.js";
 
 export const runTaskSubmitCommand = (
   command: TaskIdCommand,
@@ -24,24 +23,40 @@ export const runTaskSubmitCommand = (
     return withTaskReviewSubmission(environment, (reviews) =>
       Effect.map(reviews.submit(resolved.taskId, environment.now().toISOString()), (result) => {
         if (result.ok) {
-          if (result.review.outcome === "passed") {
-            return success({ review: taskReviewView(result.review) });
+          const review = result.review;
+          const reviewCommand = `by task-review show ${review.id}`;
+          switch (result.outcome) {
+            case "passed":
+              return success({
+                review: { id: review.id, outcome: result.outcome },
+                task: result.task,
+                help: [
+                  `Run \`by task show ${review.taskId}\` to inspect its startability and next action.`,
+                ],
+              });
+            case "blocked":
+              return runtimeError({
+                code: "task_review_findings",
+                message: "Task Review is blocked by Findings; the Task remains New.",
+                details: {
+                  review: { id: review.id, outcome: result.outcome, findings: review.findings },
+                },
+                help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
+              });
+            case "tooling_failed":
+              return runtimeError({
+                code: "task_review_tooling_failed",
+                message: "Task Review did not approve the Task.",
+                details: {
+                  review: {
+                    id: review.id,
+                    outcome: result.outcome,
+                    toolingFailure: review.toolingFailure,
+                  },
+                },
+                help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
+              });
           }
-          if (result.review.outcome === "blocked") {
-            return runtimeError({
-              code: "task_review_findings",
-              message: "Task Review is blocked by Findings.",
-              details: { review: taskReviewView(result.review) },
-              help: [`Run \`by task-review show ${result.review.id}\` to inspect every Finding.`],
-            });
-          }
-          return runtimeError({
-            code: "task_review_tooling_failed",
-            message:
-              "Task Review failed because its tooling did not produce a safe passing judgment.",
-            details: { review: taskReviewView(result.review) },
-            help: [`Run \`by task-review show ${result.review.id}\` to inspect the failure.`],
-          });
         }
         switch (result.code) {
           case "task_not_found":
@@ -78,7 +93,19 @@ export const runTaskSubmitCommand = (
             return runtimeError({
               code: result.code,
               message: "Task Review cleanup or final persistence did not complete.",
-              details: { review: taskReviewView(result.review) },
+              details: {
+                review: {
+                  id: result.review.id,
+                  reviewBase: {
+                    ref: result.review.baseRef,
+                    commit: result.review.baseCommit,
+                  },
+                  workspace: {
+                    path: result.review.workspacePath,
+                    cleanup: result.review.workspaceCleanup,
+                  },
+                },
+              },
               help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],
             });
         }

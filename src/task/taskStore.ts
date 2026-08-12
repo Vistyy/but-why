@@ -68,6 +68,11 @@ export type TaskApprovalResult =
       readonly ok: false;
       readonly code: "invalid_task_state";
       readonly state: TaskState;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "active_task_review";
+      readonly reviewId: string;
     };
 
 export type UpdateTaskContextInput = {

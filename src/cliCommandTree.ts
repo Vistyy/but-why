@@ -231,7 +231,7 @@ const taskShowCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Run an advisory review of one exact New Task proposal.", {
+  leaf("submit", "Review and approve one exact New Task proposal when it passes.", {
     taskId: taskIdArgument,
   }),
   (values, environment) =>
@@ -295,7 +295,9 @@ taskReviewTopCommand = group(
   () => generatedCommandUsage(taskReviewTopCommand),
 );
 const taskApproveCommand = withCliHandler(
-  leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
+  leaf("approve", "Directly approve a New Task with no Active Task Review.", {
+    taskId: taskIdArgument,
+  }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/approve.js")).pipe(
       Effect.flatMap(({ runApproveCommand }) =>

@@ -27,9 +27,16 @@ export const runApproveCommand = (
       tasks.approveTask(taskId.taskId, environment.now().toISOString()),
       (result) => {
         if (!result.ok) {
-          return result.code === "task_not_found"
-            ? taskNotFound(taskId.taskId)
-            : invalidTaskApproval(taskId.taskId, result.state);
+          if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
+          if (result.code === "active_task_review") {
+            return runtimeError({
+              code: result.code,
+              message: "Direct Task Approval is unavailable while a Task Review is active.",
+              details: { taskId: taskId.taskId, reviewId: result.reviewId },
+              help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
+            });
+          }
+          return invalidTaskApproval(taskId.taskId, result.state);
         }
         return success({
           task: {
