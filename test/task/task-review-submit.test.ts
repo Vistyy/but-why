@@ -1079,12 +1079,14 @@ it.effect("reruns an unchanged proposal in its compatible Task Reviewer Session"
     expect(rerun.status, rerun.stdout).toBe(1);
     const rerunOutput = JSON.parse(rerun.stdout) as {
       error: {
+        message: string;
         submission: { mode: string };
         review: { id: string; state: string; outcome: string };
       };
     };
     expect(rerunOutput).toMatchObject({
       error: {
+        message: "Task Review is blocked by Findings; the Task moved from Todo to New.",
         submission: { mode: "rerun" },
         review: { state: "complete", outcome: "blocked" },
       },

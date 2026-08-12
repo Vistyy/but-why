@@ -52,7 +52,10 @@ const renderResult = (
       case "blocked":
         return runtimeError({
           code: "task_review_findings",
-          message: "Task Review is blocked by Findings; the Task remains New.",
+          message:
+            mode === "rerun"
+              ? "Task Review is blocked by Findings; the Task moved from Todo to New."
+              : "Task Review is blocked by Findings; the Task remains New.",
           details: {
             submission: { mode },
             review: {
