@@ -83,18 +83,15 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("describes explicit Task Review reruns in generated help", () =>
+  it.effect("omits the retired Task Review rerun option from generated help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["task", "submit", "--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       const { help } = parseOutput(result.stdout);
-      expect(help).toEqual(
-        expect.stringContaining(
-          "--rerun\n\n  A true or false value.\n\n  Reconsider the unchanged approved proposal of an unlinked Todo Task without reusing its completed judgment.",
-        ),
-      );
+      expect(help).toEqual(expect.stringContaining("Submit a New Task for review."));
+      expect(help).not.toContain("--rerun");
     }),
   );
 

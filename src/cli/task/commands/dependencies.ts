@@ -89,15 +89,6 @@ const dependencyError = (
   result: Exclude<RepoEditTaskDependenciesResult, { readonly ok: true }>,
 ): CliResult => {
   if (result.code === "task_not_found") return taskNotFound(taskId);
-  if (result.code === "active_task_review") {
-    return runtimeError({
-      code: result.code,
-      message: `Cannot change dependencies for Task ${taskId} while its Task Review is active.`,
-      details: { taskId, reviewId: result.reviewId },
-      help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
-    });
-  }
-
   const details = {
     taskId,
     ...(result.code === "dependencies_locked" ? { state: result.state } : {}),
@@ -139,8 +130,6 @@ const dependencyErrorMessage = (
       return "Task dependencies must not contain a cycle.";
     case "replace_requires_dependency":
       return "The replace operation requires at least one prerequisite.";
-    case "active_task_review":
-      return `Cannot change dependencies for Task ${taskId} while its Task Review is active.`;
     case "dependencies_locked":
       return result.state === "todo"
         ? `Dependencies for task ${taskId} are locked until the Task is opened for revision.`
