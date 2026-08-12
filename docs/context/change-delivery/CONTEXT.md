@@ -188,11 +188,11 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
 **Implementation Authorization**:
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
-Task Recording Authorization and Task Approval do not grant it.
+Task Recording Authorization and Task Submission do not grant it.
 It applies to Task-backed Changes, taskless Changes, and direct edits.
 For a Task-backed Change, Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
 For taskless work, implementation remains in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
-_Avoid_: Task Approval, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
+_Avoid_: Task Submission, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
 **Managed Worktree**:
 The persistent But Why-owned Git branch and linked worktree belonging to one open Change.

@@ -69,7 +69,7 @@ export const runTaskShowCommand = (
             contextCommand: `by task context ${task.id}`,
             ...(review === undefined
               ? task.state === "new"
-                ? { help: [`Run \`by task submit ${task.id}\` to review and approve this Task.`] }
+                ? { help: [`Run \`by task submit ${task.id}\` to submit this Task for review.`] }
                 : task.state === "todo" && projection === null
                   ? {
                       help: [

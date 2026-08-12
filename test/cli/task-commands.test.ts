@@ -250,7 +250,7 @@ describe("Task command Adapters", () => {
         stdout: {
           error: {
             code: "task_review_tooling_failed",
-            message: "Task Review did not approve the Task.",
+            message: "Task Review had a Tooling Failure; the Task remains New.",
             submission: { mode: "ordinary" },
             review: {
               id: "review-1",

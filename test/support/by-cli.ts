@@ -11,10 +11,10 @@ import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import { passTaskReviewFixture as passStoredTaskReviewFixture } from "./repository.js";
 import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
@@ -167,24 +167,14 @@ const runByInProcessEffectRaw = (
 
 export const runByInProcessEffect = runByInProcessEffectRaw;
 
-export const setTodoTaskFixture = (
+export const passTaskReviewFixture = (
   root: string,
   taskId: string,
   now = "2026-06-30T12:00:00.000Z",
 ) => {
   const loaded = openRepositoryRuntime(root);
   if (!loaded.ok) throw new Error(`Could not open Task fixture repository: ${loaded.error.code}`);
-  return loaded.runtime.provide(
-    Effect.flatMap(RepositorySql, (repository) =>
-      repository.operation(
-        "set Todo Task fixture state",
-        (sql) => sql`
-          UPDATE tasks SET state = 'todo', updated_at = ${now}
-          WHERE id = ${publicTaskId(taskId)}
-        `,
-      ),
-    ),
-  );
+  return loaded.runtime.provide(passStoredTaskReviewFixture(publicTaskId(taskId), now));
 };
 
 export const createGitRepo = (root = createTestWorkspace()) => {

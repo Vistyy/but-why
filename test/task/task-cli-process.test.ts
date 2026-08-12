@@ -4,10 +4,10 @@ import { describe } from "vitest";
 
 import {
   createGitRepo,
+  passTaskReviewFixture,
   runBuiltByWithEnv,
   runBuiltByWithInput,
   runByInProcessEffect,
-  setTodoTaskFixture,
 } from "../support/by-cli.js";
 
 const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
@@ -36,7 +36,7 @@ describe("by task CLI process boundary", () => {
             "-",
           ).status,
         ).toBe(0);
-        yield* setTodoTaskFixture(root, "BY-1");
+        yield* passTaskReviewFixture(root, "BY-1");
 
         const revised = runBuiltByWithEnv(root, {}, "task", "revise", "BY-1");
         expect(revised.status).toBe(0);

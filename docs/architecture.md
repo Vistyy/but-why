@@ -6,7 +6,7 @@ The [Context Map](../CONTEXT-MAP.md) and its linked contexts define canonical do
 
 ## Domain ownership
 
-[Task Intent](context/task-intent/CONTEXT.md) owns requested intent, approval, dependencies, Task Reviews, and user-facing Task Lifecycle.
+[Task Intent](context/task-intent/CONTEXT.md) owns requested intent, Task Submission, dependencies, Task Reviews, and user-facing Task Lifecycle.
 [Change Delivery](context/change-delivery/CONTEXT.md) owns code lineage, implementation, Candidates, validation, publication, reconciliation, and Change completion.
 [Repository Runtime](context/repository-runtime/CONTEXT.md) owns Local Repository identity, Shared Repository State, configuration resolution, executable selection, preparation, and agent runtime configuration.
 
@@ -38,7 +38,7 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 Ordinary Task Submission first selects the newest completed passed or Finding-blocked Review for the exact unchanged Task Context and direct Task Dependency set of a New Task.
 A reusable judgment returns before repository and reviewer preparation.
 When no reusable judgment exists, ordinary Task Submission reviews one exact New Task proposal under its captured effective policy.
-Passing fresh completion or reuse records the Task Approval transition from New to Todo in the applicable transaction.
+Passing fresh completion or reuse moves the Task from New to Todo in the applicable Task Submission transaction.
 An explicitly requested rerun instead admits the unchanged approved proposal of an unlinked Todo Task and bypasses completed-judgment reuse.
 The Todo Task stays approved while reconsideration runs.
 A passing rerun keeps the Task Todo, a Finding-blocked rerun moves it to New, and a tooling-failed or abandoned rerun keeps it Todo without replacing the previous applicable judgment.

@@ -1,22 +1,22 @@
 import { reviewerOutputTag } from "../agent/reviewerOutputWire.js";
 
 export const taskReviewBuiltInInstructions = [
-  "Review one exact New Task proposal for Task Approval.",
-  "Determine whether the Task is ready to authorize for implementation from the current repository state.",
+  "Review one exact Task proposal selected by Task Submission.",
+  "Determine whether the Task is ready for a passing Task Review from the current repository state.",
   "A ready Task requests a necessary and coherent supported result, uses direct Task Dependencies only for real prerequisites, has an observable outcome, and can satisfy every verification constraint explicitly prescribed by accepted intent.",
   "Its material premises match the repository and at least one credible implementation path exists under the accepted constraints.",
-  "Establish that credible path at the authorization level while leaving implementation and verification-mechanism selection to the Implementer.",
+  "Establish that credible path at the Task Review level while leaving implementation and verification-mechanism selection to the Implementer.",
   "Treat the selected title, description, and direct Task Dependency identities as the exact proposal under review.",
   "Inspect current code, configuration, documentation, and supported tools until repository evidence resolves the questions it can answer.",
   "",
-  "Report a Finding for each material unresolved condition that prevents implementation authorization.",
+  "Report a Finding for each material unresolved condition that prevents a passing Task Review.",
   "Such conditions include a requested result that is already satisfied, materially ambiguous, contradictory, unsupported, or unbounded; a material premise that conflicts with the repository; a missing credible implementation path; an unanswered consequential technical assumption; an invalid prerequisite; or an outcome that cannot distinguish a materially incorrect implementation.",
   "An exhaustive classification or equivalence requirement over an open-ended input space is bounded only when accepted intent or an existing supported contract defines that boundary.",
   "Representative accepted and rejected cases provide evidence within a boundary rather than defining an otherwise open boundary or proving feasibility.",
-  "For each Finding, identify the exact unresolved condition, repository evidence, and why it prevents safe implementation authorization.",
+  "For each Finding, identify the exact unresolved condition, repository evidence, and why it prevents a passing Task Review.",
   "",
   "Request a Task decision when intent must be selected or clarified.",
-  "Recommend a bounded spike only for a consequential technical hypothesis that repository inspection cannot resolve and that can materially affect authorization.",
+  "Recommend a bounded spike only for a consequential technical hypothesis that repository inspection cannot resolve and that can materially affect the Task Review judgment.",
   "State the falsifiable hypothesis and the smallest real-system experiment that can support or refute it.",
   "Use real-system observations to establish consequential technical assumptions; treat plans, intuition, test doubles, and unverified external claims as inputs rather than confirmation.",
   "",
@@ -27,7 +27,7 @@ export const taskReviewBuiltInInstructions = [
   "Treat a Task Verification Contract, verification plan, review-path template, test count, coverage target, file limit, theoretical minimality proof, optional improvement, and effort estimate as optional unless accepted intent requires one.",
   "Multiple credible implementation approaches, an absent detailed implementation plan, and reviewer preference for another design or verification mechanism are compatible with readiness.",
   "Keep the judgment within requested intent and leave preferred implementation choices to implementation.",
-  "Return an empty Findings array when no material unresolved condition prevents implementation authorization.",
+  "Return an empty Findings array when no material unresolved condition prevents a passing Task Review.",
 ].join("\n");
 
 export const buildTaskReviewerPrompt = (input: {

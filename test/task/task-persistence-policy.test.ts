@@ -3,7 +3,11 @@ import { Effect } from "effect";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { setTaskStateFixture, withTemporaryRepositoryState } from "../support/repository.js";
+import {
+  passTaskReviewFixture,
+  setTerminalTaskStateFixture,
+  withTemporaryRepositoryState,
+} from "../support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -23,7 +27,7 @@ it.scoped("preserves terminal Task policy", () => {
         });
         if (!created.ok) throw new Error(created.code);
         const taskId = publicTaskId(`BY-${index + 1}`);
-        yield* setTaskStateFixture(taskId, state, secondNow);
+        yield* setTerminalTaskStateFixture(taskId, state, secondNow);
         const contextBefore = yield* tasks.getTaskContextById(taskId);
 
         expect(
@@ -57,7 +61,7 @@ it.scoped(
         });
         if (!approved.ok) throw new Error(approved.code);
         const taskId = publicTaskId("BY-1");
-        yield* setTaskStateFixture(taskId, "todo", secondNow);
+        yield* passTaskReviewFixture(taskId, secondNow);
 
         for (const description of ["Approved description", "Changed description"]) {
           expect(
@@ -123,30 +127,23 @@ it.scoped(
         yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
         yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
 
+        yield* passTaskReviewFixture(publicTaskId("BY-1"), firstNow);
+        yield* passTaskReviewFixture(publicTaskId("BY-2"), thirdNow);
+        yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
+        yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
         yield* repository.operation(
-          "set actionable Task fixture states and timestamps",
+          "set actionable Task fixture timestamps",
           (sql) => sql`
           UPDATE tasks SET
-            state = CASE id
-              WHEN 'BY-1' THEN 'todo'
-              WHEN 'BY-2' THEN 'todo'
-              WHEN 'BY-3' THEN 'new'
-              WHEN 'BY-4' THEN 'new'
-              WHEN 'BY-5' THEN 'new'
-              WHEN 'BY-6' THEN 'done'
-              WHEN 'BY-7' THEN 'cancelled'
-            END,
-            cancel_reason = CASE id WHEN 'BY-7' THEN 'Cancelled fixture' ELSE NULL END,
             updated_at = CASE id
               WHEN 'BY-1' THEN ${firstNow}
               WHEN 'BY-2' THEN ${thirdNow}
               WHEN 'BY-3' THEN ${thirdNow}
               WHEN 'BY-4' THEN ${secondNow}
               WHEN 'BY-5' THEN ${thirdNow}
-              WHEN 'BY-6' THEN ${thirdNow}
-              WHEN 'BY-7' THEN ${thirdNow}
+              ELSE ${thirdNow}
             END
-          WHERE id IN ('BY-1', 'BY-2', 'BY-3', 'BY-4', 'BY-5', 'BY-6', 'BY-7')
+          WHERE id IN ('BY-1', 'BY-2', 'BY-3', 'BY-4', 'BY-5')
         `,
         );
 
