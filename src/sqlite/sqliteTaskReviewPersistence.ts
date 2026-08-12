@@ -611,9 +611,12 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
     profile: {
       agentProfile: requiredString(profile.agentProfile),
       scope,
-      profile: Schema.decodeUnknownSync(agentProfileSchema, { onExcessProperty: "error" })(
-        profile.profile,
-      ),
+      profile:
+        profile.profile === null
+          ? null
+          : Schema.decodeUnknownSync(agentProfileSchema, { onExcessProperty: "error" })(
+              profile.profile,
+            ),
     },
     builtInInstructions: requiredString(value.builtInInstructions),
     guidance: value.guidance === null ? null : parseGuidance(value.guidance),

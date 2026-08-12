@@ -1,5 +1,6 @@
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
+import type { PiAgentProfileConfig } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 
@@ -21,7 +22,9 @@ export type TaskReviewDependencyEvidence = {
 };
 
 export type TaskReviewPolicySnapshot = {
-  readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope" | "profile">;
+  readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope"> & {
+    readonly profile: PiAgentProfileConfig | null;
+  };
   readonly builtInInstructions: string;
   readonly guidance: {
     readonly content: string;

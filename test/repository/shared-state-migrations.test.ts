@@ -1574,7 +1574,7 @@ describe("Shared Repository State migrations", () => {
                 profile: {
                   agentProfile: "legacy",
                   scope: "global",
-                  profile: { agentRuntime: "pi" },
+                  profile: null,
                 },
                 builtInInstructions: "Legacy instructions",
                 guidance: null,

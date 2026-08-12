@@ -35,7 +35,7 @@ const canonicalPolicy = (source: string): string => {
       profile: {
         agentProfile: text(policy.agentProfile, "legacy Agent Profile"),
         scope: "global",
-        profile: { agentRuntime: "pi" },
+        profile: null,
       },
       builtInInstructions: text(policy.instructions, "legacy built-in instructions"),
       guidance: null,

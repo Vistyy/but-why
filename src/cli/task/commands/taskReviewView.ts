@@ -74,7 +74,7 @@ const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) => ({
 const taskReviewProfileView = (profile: TaskReviewPolicySnapshot["profile"]) => ({
   agentProfile: profile.agentProfile,
   scope: profile.scope,
-  profile: piAgentProfileView(profile.profile),
+  profile: profile.profile === null ? null : piAgentProfileView(profile.profile),
 });
 
 const piAgentProfileView = (profile: PiAgentProfileConfig) => ({
