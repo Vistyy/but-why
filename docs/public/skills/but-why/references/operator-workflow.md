@@ -9,8 +9,11 @@ Use CLI help to confirm exact command syntax before execution.
 ## Authority
 
 Work Route Selection is the Operator's explicit choice of a Task-backed Change, a taskless Change, or a direct edit.
-Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Approval, Change Start, or implementation.
-Task Approval confirms one recorded Task without starting a Change or authorizing implementation.
+Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Submission, Change Start, or implementation.
+Task Submission Authorization permits submission of one selected New Task proposal for Task Review and approval toward the intended outcome.
+It is distinct from Task Recording Authorization and Implementation Authorization and is not persisted.
+A materially changed selected Task or intended outcome requires new Task Submission Authorization.
+Task Approval confirms reviewed Task intent without starting a Change or authorizing implementation.
 Implementation Authorization permits implementation of one selected work item through its selected Work Route.
 Do not start a Change or begin implementation without Implementation Authorization for that work item.
 
@@ -43,7 +46,7 @@ This section is complete when the selected work item and Work Route are explicit
 4. Present the proposed Task titles, intended outcomes, actual dependencies, and unresolved choices that affect scope or observable behavior.
 5. Obtain Task Recording Authorization before mutating any Task or Task Dependency.
    This authorization permits clear description wording and dependency encoding within the agreed scope.
-   It does not authorize Task Approval, Change Start, or implementation.
+   It does not authorize Task Submission, Change Start, or implementation.
 6. Record the agreed Tasks and only their actual prerequisites.
    Use a Task Context draft and apply operation for an existing unstarted Task.
 7. Treat each successful mutation result as authoritative for its returned committed fields.
@@ -54,7 +57,8 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 ## Review and approve a Task
 
-When the Operator requests Task Review and approval, run `<but-why> task submit <task-id>` for the exact New Task proposal.
+Obtain Task Submission Authorization for the selected New Task and intended outcome before running Task Submission.
+Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
 Ordinary Task Submission reuses an applicable completed judgment for an unchanged proposal.
 When the Operator explicitly requests another Review of an unchanged unlinked New Task proposal and gives new Task Submission Authorization for the selected Task and intended outcome, run `<but-why> task submit <task-id> --rerun`.
 A rerun bypasses completed-judgment reuse and continues the most recent compatible usable Task Reviewer Session.
@@ -68,9 +72,7 @@ Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history an
 Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
 Resolve every applicable Finding by updating the Task proposal before requesting another review, unless the Operator explicitly authorizes an unchanged rerun with new Task Submission Authorization.
 
-When the Operator explicitly requests direct Task Approval and no Task Review is active, inspect the selected Task and run `<but-why> task approve <task-id>`.
-Treat the returned Task state as authoritative.
-Inspect the Task again only when the result omits required approval or Change-link state.
+Task Submission is the only supported route that can approve an unlinked New Task.
 Task Approval does not authorize Change Start or implementation.
 
 This section is complete when the selected Task is approved and no Change has started from this action.

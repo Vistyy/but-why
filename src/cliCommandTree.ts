@@ -299,17 +299,6 @@ taskReviewTopCommand = group(
   {},
   () => generatedCommandUsage(taskReviewTopCommand),
 );
-const taskApproveCommand = withCliHandler(
-  leaf("approve", "Directly approve a New Task with no Active Task Review.", {
-    taskId: taskIdArgument,
-  }),
-  (values, environment) =>
-    Effect.promise(() => import("./cli/task/commands/approve.js")).pipe(
-      Effect.flatMap(({ runApproveCommand }) =>
-        runApproveCommand({ taskId: values.taskId }, environment),
-      ),
-    ),
-);
 const taskCancelCommand = withCliHandler(
   leaf("cancel", "Permanently cancel an unfinished Task.", {
     taskId: taskIdArgument,
@@ -334,7 +323,6 @@ taskCommand = group(
     taskSubmitCommand,
     taskReviewsCommand,
     taskReviewCommand,
-    taskApproveCommand,
     taskContextCommand,
     taskCancelCommand,
   ],

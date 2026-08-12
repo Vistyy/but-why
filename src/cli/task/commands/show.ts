@@ -6,11 +6,11 @@ import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
+  type TaskIdCommand,
   taskNotFound,
   withTaskReviewInspection,
   withTasks,
 } from "../taskCliSupport.js";
-import type { TaskIdCommand } from "./approve.js";
 
 export const runTaskShowCommand = (
   command: TaskIdCommand,

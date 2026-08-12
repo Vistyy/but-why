@@ -5,7 +5,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { runApproveCommand } from "../../src/cli/task/commands/approve.js";
 import { runContextCommand } from "../../src/cli/task/commands/context.js";
 import { runContextApplyCommand } from "../../src/cli/task/commands/contextApply.js";
 import { runContextDraftCommand } from "../../src/cli/task/commands/contextDraft.js";
@@ -260,66 +259,6 @@ describe("Task command Adapters", () => {
             },
           },
           help: ["Run `by task-review show review-1` to inspect the Task Review."],
-        },
-      });
-    }),
-  );
-
-  it.effect("maps Task Approval mutation and rejection results", () =>
-    Effect.gen(function* () {
-      const approvedTask = taskRecord({ state: "todo", updatedAt: secondNow });
-      let approvalCalls = 0;
-      const commandEnvironment = environment(
-        fakeTaskUseCases({
-          approveTask: () => {
-            approvalCalls += 1;
-            return approvalCalls === 1
-              ? { ok: true as const, changed: true, task: approvedTask }
-              : approvalCalls === 2
-                ? { ok: true as const, changed: false, task: approvedTask }
-                : approvalCalls === 3
-                  ? {
-                      ok: false as const,
-                      code: "invalid_task_state" as const,
-                      state: "done" as const,
-                    }
-                  : {
-                      ok: false as const,
-                      code: "active_task_review" as const,
-                      reviewId: "review-active",
-                    };
-          },
-        }),
-        secondNow,
-      );
-
-      const changed = yield* runApproveCommand({ taskId: "BY-1" }, commandEnvironment);
-      const unchanged = yield* runApproveCommand({ taskId: "BY-1" }, commandEnvironment);
-      const rejected = yield* runApproveCommand({ taskId: "BY-1" }, commandEnvironment);
-      const activeReview = yield* runApproveCommand({ taskId: "BY-1" }, commandEnvironment);
-
-      expect(changed).toEqual({
-        exitCode: 0,
-        stdout: { task: { id: "BY-1", state: "todo", changed: true, updatedAt: secondNow } },
-      });
-      expect(unchanged).toEqual({
-        exitCode: 0,
-        stdout: { task: { id: "BY-1", state: "todo", changed: false, updatedAt: secondNow } },
-      });
-      expect(rejected).toMatchObject({
-        exitCode: 1,
-        stdout: { error: { code: "invalid_task_state", taskId: "BY-1", state: "done" } },
-      });
-      expect(activeReview).toEqual({
-        exitCode: 1,
-        stdout: {
-          error: {
-            code: "active_task_review",
-            message: "Direct Task Approval is unavailable while a Task Review is active.",
-            taskId: "BY-1",
-            reviewId: "review-active",
-          },
-          help: ["Run `by task-review show review-active` to inspect it."],
         },
       });
     }),

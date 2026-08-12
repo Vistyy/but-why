@@ -10,7 +10,10 @@ import type { InteractiveSessionHost } from "../../src/change/interactiveSession
 import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
+import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
+import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
@@ -163,6 +166,24 @@ const runByInProcessEffectRaw = (
   }).pipe(Effect.map(cliResultToInProcessResult));
 
 export const runByInProcessEffect = runByInProcessEffectRaw;
+
+export const approveTaskFixture = (
+  root: string,
+  taskId: string,
+  now = "2026-06-30T12:00:00.000Z",
+) => {
+  const loaded = openRepositoryRuntime(root);
+  if (!loaded.ok) throw new Error(`Could not open Task fixture repository: ${loaded.error.code}`);
+  return loaded.runtime.provide(
+    openSqliteTaskPersistence(loaded.runtime.context.taskPrefix).pipe(
+      Effect.flatMap((tasks) => tasks.approveTask({ taskId: publicTaskId(taskId), now })),
+      Effect.map((result) => {
+        if (!result.ok) throw new Error(`Could not approve Task fixture: ${result.code}`);
+        return undefined;
+      }),
+    ),
+  );
+};
 
 export const createGitRepo = (root = createTestWorkspace()) => {
   runGit(root, "init", "-q");
