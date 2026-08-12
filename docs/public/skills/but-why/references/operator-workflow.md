@@ -34,9 +34,13 @@ This section is complete when the selected work item and Work Route are explicit
 1. Gather the Operator-approved outcome, applicable authority, existing Tasks, and relevant repository evidence.
    Do not infer approval from brainstorming or provisional planning.
    Ask the Operator when the outcome or scope is unclear.
-2. Choose Tasks that each leave one independently acceptable supported result.
-   Do not omit or weaken approved behavior to make a Task smaller.
-   Split work only when each result remains safe, usable, and independently valuable.
+2. Choose the smallest coherent vertical Tasks that each leave the repository safe and supported.
+   Each Task must be independently understandable, implementable, reviewable, and verifiable, but it need not deliver standalone end-user value.
+   Split separable observable behavior, external integrations, lifecycle or recovery rules, durable state changes, or materially different verification boundaries when the narrower results remain supported.
+   Do not combine separable behavior only because it contributes to one product outcome.
+   Keep behavior together when a narrower result would leave the repository unsupported or require temporary duplicated interfaces without independently verifiable behavior.
+   Do not split or combine work based only on files, modules, implementation steps, line count, estimated effort, or difficulty.
+   Ensure the complete proposed Task set covers the approved outcome without omitting or weakening approved behavior.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 3. Describe each Task in the form that communicates its outcome and consequential constraints clearly.
    Do not require standard headings, a verification inventory, an implementation plan, or an exact file forecast.
