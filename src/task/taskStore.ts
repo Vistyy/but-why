@@ -34,8 +34,7 @@ export type EditTaskDependenciesResult =
       readonly code: DependencyValidationCode | "replace_requires_dependency";
       readonly taskId?: PublicTaskId;
     }
-  | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string };
+  | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState };
 
 export type TaskListLimit = number | "all";
 
@@ -66,7 +65,6 @@ export type UpdateTaskContextResult =
       readonly ok: false;
       readonly code: "task_not_found";
     }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
   | {
       readonly ok: false;
       readonly code: "task_revision_required" | "invalid_task_state";
@@ -94,5 +92,4 @@ export type CancelTaskInput = {
 export type CancelTaskResult =
   | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
   | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: "task_already_done" }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string };
+  | { readonly ok: false; readonly code: "task_already_done" };

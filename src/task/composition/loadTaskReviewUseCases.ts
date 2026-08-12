@@ -136,7 +136,6 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
     readonly progress?: SubmitProgress;
     readonly taskId: PublicTaskId;
     readonly now: string;
-    readonly rerun?: boolean;
   },
   use: (result: TaskReviewRepositorySubmitResult) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
@@ -145,7 +144,6 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  if (input.rerun === true) return submitFreshTaskReview(input, use);
   const reuseRuntime = openSubmissionRepositoryRuntime(input.cwd);
   if (!reuseRuntime.ok) return Effect.succeed(reuseRuntime);
   return reuseRuntime.runtime
@@ -171,7 +169,6 @@ const submitFreshTaskReview = <A, E, R>(
     readonly progress?: SubmitProgress;
     readonly taskId: PublicTaskId;
     readonly now: string;
-    readonly rerun?: boolean;
   },
   use: (result: TaskReviewRepositorySubmitResult) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
@@ -249,7 +246,7 @@ const submitFreshTaskReview = <A, E, R>(
           cleanupWorkspace: cleanupExactDisposableWorkspace,
           inspectWorkspace: inspectDisposableWorktree,
           ...(input.progress === undefined ? {} : { progress: input.progress }),
-        }).submit(resolved.taskId, input.now, { rerun: input.rerun === true }),
+        }).submit(resolved.taskId, input.now),
       ),
       Effect.flatMap(use),
       Effect.map((value) => ({ ok: true as const, value })),

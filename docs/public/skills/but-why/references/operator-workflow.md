@@ -9,10 +9,9 @@ Treat historical material only as evidence unless the Operator approves it as a 
 
 Work Route Selection is the Operator's explicit choice of a Task-backed Change, a taskless Change, or a direct edit.
 Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Submission, Change Start, or implementation.
-Task Submission Authorization permits submission of one selected Task proposal for Task Review toward the intended outcome.
-The intended outcome is a passing Task Review and transition to Todo for a New Task, or reconsideration for an unchanged approved unlinked Todo Task.
+Task Submission Authorization permits submission of one selected New Task proposal for Task Review toward a passing Task Review and transition to Todo.
 It is distinct from Task Recording Authorization and Implementation Authorization and is not persisted.
-Each selected Task and intended outcome requires new Task Submission Authorization.
+Each selected Task requires new Task Submission Authorization.
 Task Submission does not start a Change or authorize implementation.
 Implementation Authorization permits implementation of one selected work item through its selected Work Route.
 Do not start a Change or begin implementation without Implementation Authorization for that work item.
@@ -61,22 +60,17 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 Obtain Task Submission Authorization for the selected Task and intended outcome before running Task Submission.
 Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
-Ordinary Task Submission reuses an applicable completed judgment for an unchanged New Task proposal.
-When the Operator explicitly requests reconsideration of an unchanged approved unlinked Todo Task proposal and gives new Task Submission Authorization for the selected Task and intended outcome, run `<but-why> task submit <task-id> --rerun`.
-A rerun bypasses completed-judgment reuse and continues the most recent compatible usable Task Reviewer Session.
-The Task remains Todo while reconsideration is active.
-A passing rerun keeps the Task Todo and makes the new passed Review current.
-A Finding-blocked rerun moves the Task to New and makes the new Findings current.
-A tooling-failed or successfully abandoned rerun keeps the Task Todo, records its actual Review history, and preserves the previous applicable judgment.
-Use the returned Submission mode, Review state and outcome, and help to identify the result and valid next action.
+Ordinary Task Submission selects the newest completed Review for an unchanged New Task proposal and reuses it only when it passed.
+Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.
+A later authorized submission of an unchanged New Task proposal runs a new Task Review.
+Use the returned Review state and outcome, and help, to identify the result and valid next action.
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
 Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
-Resolve every applicable Finding by updating the New Task proposal before requesting another Review.
-Use `--rerun` only for explicitly authorized reconsideration of an unchanged approved Todo Task.
+Resolve every applicable Finding by updating the New Task proposal before requesting another Review, or submit the unchanged New Task again when a new Task Submission is authorized.
 
-Task Submission is the only supported route that can approve an unlinked New Task or reconsider an approved unlinked Todo Task.
+Task Submission is the only supported route that can approve an unlinked New Task.
 Task Submission does not authorize Change Start or implementation.
 
 This section is complete when the selected Task is approved and no Change has started from this action.

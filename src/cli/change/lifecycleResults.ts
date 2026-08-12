@@ -22,14 +22,6 @@ export const startResult = (result: ChangeStartResult): CliResult => {
       help: ["Run `by task list --all --limit all` to see known Tasks."],
     });
   }
-  if (result.code === "active_task_review") {
-    return runtimeError({
-      code: result.code,
-      message: "The Task cannot start while its Task Review is active.",
-      details: { reviewId: result.reviewId },
-      help: [`Run \`by task-review show ${result.reviewId}\` to inspect it.`],
-    });
-  }
   if (result.code === "invalid_task_state") {
     return runtimeError({
       code: result.code,
