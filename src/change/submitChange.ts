@@ -4,6 +4,7 @@ import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { SubmitProgress } from "../submission/submissionProgress.js";
 import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
@@ -44,7 +45,6 @@ import type {
 import type { ReconciledChange } from "./reconcileChange.js";
 import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
-import type { SubmitProgress } from "./validation/submitProgress.js";
 import type { ReviewerExecutionEvidence } from "./validationRun/reviewerArtifacts.js";
 
 export type ChangeSubmitResult =
