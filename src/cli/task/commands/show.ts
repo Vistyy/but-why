@@ -79,7 +79,7 @@ export const runTaskShowCommand = (
                   : {}
               : {
                   reviewCommand: `by task-review show ${review.id}`,
-                  ...(task.state === "todo" && projection === null && review.state !== "running"
+                  ...(task.state === "todo" && projection === null
                     ? {
                         help: [
                           `Run \`by task revise ${task.id}\` before changing approved Task intent.`,

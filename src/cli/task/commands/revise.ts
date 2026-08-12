@@ -60,6 +60,6 @@ const reviseResult = (taskId: string, result: ReviseTaskResult): CliResult => {
     code: result.code,
     message: `Cannot revise Task ${taskId} from state ${result.state}.`,
     details: { taskId, state: result.state },
-    help: ["Only an unlinked Todo or New Task without an Active Task Review can be revised."],
+    help: ["Only an unlinked Todo or New Task can be revised."],
   });
 };
