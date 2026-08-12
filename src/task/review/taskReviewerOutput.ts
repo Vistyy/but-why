@@ -6,7 +6,7 @@ import {
 } from "../../contracts/contractDiagnostics.js";
 import { reviewerFindingCoreSchema } from "../../contracts/reviewerFinding.js";
 
-export class TaskReviewerOutputContractFailed extends Data.TaggedError(
+class TaskReviewerOutputContractFailed extends Data.TaggedError(
   "TaskReviewerOutputContractFailed",
 )<{
   readonly operationName: string;
