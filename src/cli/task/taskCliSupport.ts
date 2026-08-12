@@ -15,6 +15,7 @@ import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryR
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
+  type TaskReviewRepositorySubmitResult,
   withTaskReviewInspectionUseCases,
   withTaskReviewRecoveryUseCases,
   withTaskReviewSubmissionUseCases,
@@ -97,7 +98,9 @@ export const withTaskReviewRecovery = (
 
 export const withTaskReviewSubmission = (
   environment: TaskCommandEnvironment,
-  use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  taskId: PublicTaskId,
+  now: string,
+  use: (result: TaskReviewRepositorySubmitResult) => Effect.Effect<CliResult>,
 ): Effect.Effect<CliResult> => {
   const program =
     environment.taskReviewSubmissionUseCases === undefined
@@ -111,6 +114,8 @@ export const withTaskReviewSubmission = (
             ...(environment.writeStderr === undefined
               ? {}
               : { progress: stderrSubmitProgress(environment.writeStderr) }),
+            taskId,
+            now,
           },
           use,
         ).pipe(
@@ -118,7 +123,7 @@ export const withTaskReviewSubmission = (
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
         )
-      : use(environment.taskReviewSubmissionUseCases);
+      : environment.taskReviewSubmissionUseCases.submit(taskId, now).pipe(Effect.flatMap(use));
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(

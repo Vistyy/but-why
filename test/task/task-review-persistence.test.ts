@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
@@ -110,6 +111,187 @@ it.scoped("selects the latest Review deterministically when creation times match
         id: "review-second",
         state: "running",
       });
+    }),
+  ),
+);
+
+it.scoped("reuses the newest exact completed judgment and skips newer Tooling Failures", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const repository = yield* RepositorySql;
+      yield* tasks.createTask({ title: "Dependency", description: "Original", now });
+      yield* tasks.createTask({
+        title: "Proposal",
+        description: "Exact",
+        dependsOn: [publicTaskId("BY-1")],
+        now,
+      });
+      const finding = (title: string) => ({
+        title,
+        description: `${title} description`,
+        evidence: `${title} evidence`,
+        files: [],
+        artifactRefs: [],
+      });
+      for (const input of [
+        { id: "review-old", findings: [finding("Old")] },
+        { id: "review-new", findings: [finding("New")] },
+        {
+          id: "review-tooling",
+          findings: [],
+          toolingFailure: { operation: "review", message: "Unavailable" },
+        },
+      ]) {
+        yield* reviews.admit({
+          reviewId: input.id,
+          taskId: publicTaskId("BY-2"),
+          policy,
+          baseRef: `refs/heads/${input.id}`,
+          baseCommit: input.id.padEnd(40, "a"),
+          workspacePath: `/tmp/${input.id}`,
+          now,
+        });
+        yield* reviews.recordCleanup(input.id, "removed", later);
+        yield* reviews.complete({
+          reviewId: input.id,
+          findings: input.findings,
+          ...(input.toolingFailure === undefined ? {} : { toolingFailure: input.toolingFailure }),
+          now: later,
+        });
+      }
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Different proposal",
+        now: later,
+      });
+      yield* reviews.admit({
+        reviewId: "review-nonmatching",
+        taskId: publicTaskId("BY-2"),
+        policy,
+        baseRef: "refs/heads/nonmatching",
+        baseCommit: "d".repeat(40),
+        workspacePath: "/tmp/review-nonmatching",
+        now: later,
+      });
+      yield* reviews.recordCleanup("review-nonmatching", "removed", later);
+      yield* reviews.complete({
+        reviewId: "review-nonmatching",
+        findings: [finding("Nonmatching")],
+        now: later,
+      });
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Exact",
+        now: later,
+      });
+      yield* repository.operation(
+        "malform excluded Review evidence",
+        (sql) =>
+          sql`UPDATE task_reviews SET policy_snapshot = '{'
+            WHERE id IN ('review-tooling', 'review-nonmatching')`,
+      );
+      yield* repository.operation(
+        "change irrelevant dependency evidence",
+        (sql) =>
+          sql`UPDATE tasks SET title = 'Renamed dependency', description = 'Changed', state = 'done'
+              WHERE id = 'BY-1'`,
+      );
+
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toMatchObject({
+        ok: true,
+        outcome: "blocked",
+        review: {
+          id: "review-new",
+          baseRef: "refs/heads/review-new",
+          findings: [{ title: "New" }],
+        },
+      });
+
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Changed proposal",
+        now: later,
+      });
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
+      yield* tasks.updateTaskContext({
+        taskId: publicTaskId("BY-2"),
+        description: "Exact",
+        now: later,
+      });
+      yield* repository.operation(
+        "change direct dependency set",
+        (sql) =>
+          sql`DELETE FROM task_dependencies
+              WHERE dependent_task_id = 'BY-2' AND prerequisite_task_id = 'BY-1'`,
+      );
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
+      yield* repository.operation(
+        "restore direct dependency set",
+        (sql) =>
+          sql`INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
+            VALUES ('BY-2', 'BY-1')`,
+      );
+      yield* reviews.admit({
+        reviewId: "review-active",
+        taskId: publicTaskId("BY-2"),
+        policy,
+        baseRef: "refs/heads/active",
+        baseCommit: "c".repeat(40),
+        workspacePath: "/tmp/review-active",
+        now: later,
+      });
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
+    }),
+  ),
+);
+
+it.scoped("atomically applies a reused passing judgment and rejects malformed evidence", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const repository = yield* RepositorySql;
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      yield* reviews.admit({
+        reviewId: "review-passed",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-passed",
+        now,
+      });
+      yield* reviews.recordCleanup("review-passed", "removed", later);
+      yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later });
+      yield* repository.operation(
+        "restore New Task fixture",
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`,
+      );
+
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-1"), later)).toMatchObject({
+        ok: true,
+        outcome: "passed",
+        review: { id: "review-passed", baseCommit: "a".repeat(40) },
+        task: { id: "BY-1", state: "todo" },
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "todo" });
+
+      yield* repository.operation("malform reusable Review evidence", (sql) =>
+        Effect.gen(function* () {
+          yield* sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`;
+          yield* sql`UPDATE task_reviews SET proposal_snapshot = '{' WHERE id = 'review-passed'`;
+        }),
+      );
+      const malformed = yield* Effect.either(reviews.reuseJudgment(publicTaskId("BY-1"), later));
+      expect(malformed._tag).toBe("Left");
+      if (malformed._tag === "Left") {
+        expect(malformed.left).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Task Review",
+        });
+      }
     }),
   ),
 );
