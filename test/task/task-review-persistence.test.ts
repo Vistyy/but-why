@@ -346,11 +346,6 @@ it.scoped("atomically approves only a passing exact Task Review", () =>
         workspacePath: "/tmp/review-passed",
         now,
       });
-      expect(yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now })).toEqual({
-        ok: false,
-        code: "active_task_review",
-        reviewId: "review-passed",
-      });
       yield* reviews.recordCleanup("review-passed", "removed", later);
 
       const completed = yield* reviews.complete({

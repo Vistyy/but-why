@@ -29,7 +29,6 @@ const expectedCommandPaths = [
   "task review show",
   "task review abandon",
   "task-review show",
-  "task approve",
   "task context",
   "task context draft",
   "task context apply",
@@ -72,6 +71,7 @@ describe("by CLI", () => {
       }
       expect(help).not.toContain("task task");
       expect(help).not.toContain("change change");
+      expect(help).not.toContain("task approve");
       for (const nativeCapability of [
         "(-h, --help)",
         "--version",
@@ -81,6 +81,18 @@ describe("by CLI", () => {
       ]) {
         expect(help, nativeCapability).toContain(nativeCapability);
       }
+    }),
+  );
+
+  it.effect("rejects the removed direct Task Approval command without an alias", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "approve", "BY-1"]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(parseOutput(result.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
     }),
   );
 

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
-import { runByInProcessEffect } from "../support/by-cli.js";
+import { setTodoTaskFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -127,7 +127,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Remote required", "Do not start without it.\n");
-      expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
+      yield* setTodoTaskFixture(root, taskId, now);
       git(root, "remote", "remove", "origin");
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
@@ -139,6 +139,24 @@ describe("Change Start Managed Worktree boundaries", () => {
       });
       const task = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
       expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
+    }),
+  );
+
+  it.effect("starts an existing Todo Task without Task Review history", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const taskId = yield* createTask(root, "Existing Todo", "Start approved work.\n");
+      yield* setTodoTaskFixture(root, taskId, now);
+
+      const inspected = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
+      expect(inspected.status).toBe(0);
+      expect(JSON.parse(inspected.stdout)).toMatchObject({
+        task: { id: taskId, state: "todo", review: null },
+      });
+
+      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
+      expect(started.status).toBe(0);
+      expect(JSON.parse(started.stdout)).toMatchObject({ change: { taskId } });
     }),
   );
 
@@ -241,9 +259,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       Effect.gen(function* () {
         const root = yield* repositoryCopy();
         const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-        expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(
-          0,
-        );
+        yield* setTodoTaskFixture(root, taskId, now);
         const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
         writeFileSync(siblingRoot, "occupied\n");
 

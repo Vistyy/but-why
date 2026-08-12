@@ -13,13 +13,15 @@ _Avoid_: Agent-selected workflow, Task Approval, Change Start
 **Task Recording Authorization**:
 The Operator's explicit permission to persist agreed Task outcomes and their actual Task Dependencies for selected work.
 It permits clear Task description wording and dependency encoding within the agreed scope.
-It does not authorize Task Approval, Change Start, or Implementation Authorization.
-_Avoid_: Approval of exact prose, Task Approval, approval to implement, automatic Change Start
+It does not authorize Task Submission, Change Start, or Implementation Authorization.
+_Avoid_: Approval of exact prose, Task Submission Authorization, approval to implement, automatic Change Start
 
 **Task Submission Authorization**:
 The Operator's explicit permission to submit one selected New Task proposal for Task Review and approval toward the intended outcome.
+It is not persisted.
+Another submission requires new Task Submission Authorization when the selected Task or intended outcome materially changes.
 Another Review of an unchanged proposal requires new Task Submission Authorization.
-It does not authorize direct Task Approval, Change Start, or implementation.
+It does not authorize Change Start or implementation.
 _Avoid_: Task Recording Authorization, Task Approval, reusable judgment
 
 **Task**:
@@ -66,7 +68,7 @@ _Avoid_: Task Review outcome, Finding, retention-limited Artifact
 
 **Active Task Review**:
 The sole running Task Review for one Task until it completes or the Operator abandons it.
-It prevents another Task Submission and direct Task Approval for that Task.
+It prevents another Task Submission for that Task.
 Task Context or Task Dependency changes can continue while review runs, but they prevent that Review from approving the Task.
 _Avoid_: Task state, process lock, Active Validation Run
 
@@ -82,7 +84,7 @@ _Avoid_: Change Base, caller checkout HEAD, Candidate
 
 **Task Approval**:
 The transition that confirms recorded Task intent can move from New to Todo.
-It occurs through a passing fresh or reused Task Review judgment, or through the Operator's direct approval when no Task Review is active.
+It occurs only through a passing fresh or reused Task Review judgment selected by Task Submission.
 V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
 Task Context and Task Dependencies become immutable at Task Approval.
 _Avoid_: Change Start, Implementation Authorization

@@ -5,7 +5,7 @@ import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
-import { withTemporaryRepositoryState } from "../support/repository.js";
+import { setTaskStateFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-08-09T12:00:00.000Z";
 const secondNow = "2026-08-09T12:05:00.000Z";
@@ -21,10 +21,10 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
       yield* createTask(tasks, "Done Task");
       yield* createTask(tasks, "Cancelled Task");
       yield* createTask(tasks, "Task with Resolution");
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow });
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow });
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-4"), now: secondNow });
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-5"), now: secondNow });
+      yield* setTaskStateFixture(publicTaskId("BY-2"), "todo", secondNow);
+      yield* setTaskStateFixture(publicTaskId("BY-3"), "todo", secondNow);
+      yield* setTaskStateFixture(publicTaskId("BY-4"), "todo", secondNow);
+      yield* setTaskStateFixture(publicTaskId("BY-5"), "todo", secondNow);
       yield* repository.operation("set terminal Task fixtures", (sql) =>
         sql.unsafe(`
           UPDATE tasks
@@ -97,8 +97,8 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       yield* createTask(tasks, "Prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1"]);
       yield* createTask(tasks, "Task with existing Change");
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow });
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow });
+      yield* setTaskStateFixture(publicTaskId("BY-2"), "todo", secondNow);
+      yield* setTaskStateFixture(publicTaskId("BY-3"), "todo", secondNow);
 
       yield* repository.operation("inject malformed prerequisite Task state", (sql) =>
         Effect.gen(function* () {
@@ -140,7 +140,7 @@ it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Self-dependent Task");
-      yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
+      yield* setTaskStateFixture(publicTaskId("BY-1"), "todo", secondNow);
       yield* repository.operation("insert self-referential Task dependency", (sql) =>
         sql.unsafe(`
           INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)

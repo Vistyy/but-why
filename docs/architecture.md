@@ -40,7 +40,7 @@ A reusable judgment returns before repository and reviewer preparation.
 An explicitly requested rerun bypasses completed-judgment reuse for an unchanged unlinked New Task proposal.
 When no reusable judgment exists or a rerun is requested, Task Submission reviews one exact New Task proposal under its captured effective policy.
 Passing fresh completion or reuse records the Task Approval transition from New to Todo in the applicable transaction.
-Direct Task Approval remains a separate Operator action when no Task Review is active.
+Task Submission is the only supported operation that can approve an unlinked New Task.
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.
 Submission returns without validation when there is no changed Candidate.
