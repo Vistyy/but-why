@@ -57,10 +57,10 @@ export const readCurrentCandidateForChange = (
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<CandidateOwnerRow>(
       `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
-       FROM candidates AS candidate
+       FROM current_candidates AS selection
+       JOIN candidates AS candidate ON candidate.id = selection.candidate_id
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE candidate.change_id = ?
-       ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1`,
+       WHERE selection.change_id = ?`,
       [changeId],
     );
     const row = rows[0];

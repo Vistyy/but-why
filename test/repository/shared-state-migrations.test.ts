@@ -168,6 +168,50 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
+  it.effect("backfills the newest-created Candidate as the current selection", () => {
+    return Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* migrateTestRepositoryThrough(37);
+            yield* sql`
+              INSERT INTO changes (
+                id, repository_common_directory, branch_ref, state, created_at, updated_at
+              ) VALUES (
+                'change-selection', ${directory}, 'refs/heads/selection', 'open',
+                '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'
+              )
+            `;
+            yield* sql`
+              INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+              VALUES
+                ('candidate-a', 'change-selection', 'base', 'head-a', '2026-08-12T10:01:00.000Z'),
+                ('candidate-b', 'change-selection', 'base', 'head-b', '2026-08-12T10:02:00.000Z')
+            `;
+            yield* migrateTestRepositoryThrough(38);
+            const selected = yield* sql<{
+              readonly changeId: string;
+              readonly candidateId: string;
+            }>`
+              SELECT change_id AS changeId, candidate_id AS candidateId
+              FROM current_candidates
+            `;
+            const candidates = yield* sql<{ readonly id: string }>`
+              SELECT id FROM candidates WHERE change_id = 'change-selection'
+              ORDER BY id
+            `;
+            expect(selected).toEqual([
+              { changeId: "change-selection", candidateId: "candidate-b" },
+            ]);
+            expect(candidates).toEqual([{ id: "candidate-a" }, { id: "candidate-b" }]);
+          }).pipe(Effect.provide(nodeSqliteLayer(join(directory, "state.sqlite")))),
+        ),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    );
+  });
+
   it.effect("restores unsupported unlinked Todo Tasks to New", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
