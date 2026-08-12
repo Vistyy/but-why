@@ -2214,11 +2214,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(36);
+          expect(yield* initializeMigrationCount).toBe(37);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(36);
+          expect(yield* readMigrationCount).toBe(37);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2318,9 +2318,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(36);
+              expect(migrations.length).toBe(37);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 36 }, (_, index) => index + 1),
+                Array.from({ length: 37 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2419,7 +2419,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 36,
+              migrationCount: 37,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

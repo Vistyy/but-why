@@ -4,10 +4,10 @@ import { describe } from "vitest";
 
 import {
   createGitRepo,
+  passTaskReviewFixture,
   runBuiltByWithEnv,
   runBuiltByWithInput,
   runByInProcessEffect,
-  passTaskReviewFixture,
 } from "../support/by-cli.js";
 
 const expectExactlyOneTrailingLineFeed = (stdout: string): void => {

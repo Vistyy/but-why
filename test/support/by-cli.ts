@@ -14,8 +14,8 @@ import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRun
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
-import { runTestProcess } from "./testProcess.js";
 import { passTaskReviewFixture as passStoredTaskReviewFixture } from "./repository.js";
+import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");

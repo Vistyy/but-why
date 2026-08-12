@@ -12,7 +12,7 @@ import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskRev
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { runByInProcessEffect, passTaskReviewFixture } from "../support/by-cli.js";
+import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,

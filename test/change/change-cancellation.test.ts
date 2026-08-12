@@ -18,8 +18,8 @@ import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
-  runByInProcessEffect,
   passTaskReviewFixture,
+  runByInProcessEffect,
 } from "../support/by-cli.js";
 import {
   noOpTerminalCleanupDependencies,
