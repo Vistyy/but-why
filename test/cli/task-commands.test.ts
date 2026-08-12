@@ -405,6 +405,21 @@ describe("Task command Adapters", () => {
           description: "Full intent\n\nWith details.",
         },
       });
+
+      const active = yield* runTaskShowCommand(
+        { taskId: "BY-1" },
+        environment(
+          fakeTaskUseCases({
+            getTaskForInspection: () =>
+              taskRecord({ title: "Inspect task", state: "todo", updatedAt: secondNow }),
+          }),
+          firstNow,
+          taskReviewInspection(
+            taskReviewRecord({ id: "review-active", state: "running", outcome: null }),
+          ),
+        ),
+      );
+      expect(active.stdout).not.toHaveProperty("help");
     }),
   );
 

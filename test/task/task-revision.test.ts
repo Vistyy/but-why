@@ -65,6 +65,12 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         { id: "review-retained", state: "complete", outcome: "passed" },
       ]);
       expect(before).toMatchObject({ state: "todo", updatedAt: now });
+      expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toMatchObject({
+        ok: true,
+        outcome: "passed",
+        review: { id: "review-retained" },
+        task: { id: "BY-2", state: "todo" },
+      });
     }),
   ),
 );
