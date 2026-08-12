@@ -37,7 +37,7 @@ type ReviewRow = {
   readonly updatedAt: string;
 };
 
-type FindingRow = Omit<TaskReviewFinding, "artifactRefs" | "files"> & {
+type FindingRow = Omit<TaskReviewFinding, "files"> & {
   readonly files: string;
 };
 
@@ -494,7 +494,6 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           description: finding.description,
           evidence: finding.evidence,
           files: parseStringArray(finding.files),
-          artifactRefs: [],
         })),
         sessions: executions.map(({ restartReason, ...execution }) => ({
           ...execution,

@@ -6,7 +6,6 @@ import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
-import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   cleanupExactDisposableWorkspace,
@@ -31,6 +30,7 @@ import {
   verifyRecordedTaskReviewBase,
 } from "../review/adapters/taskReviewGit.js";
 import { resolveTaskReviewPolicy } from "../review/taskReviewConfig.js";
+import type { TaskReviewerOutput } from "../review/taskReviewerOutput.js";
 import {
   abandonTaskReview,
   inspectTaskReviewIdentity,
@@ -123,7 +123,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
   input: {
     readonly cwd: string;
     readonly globalConfigPath: string;
-    readonly reviewerRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
+    readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
     readonly progress?: SubmitProgress;
   },
   use: (reviews: TaskReviewSubmissionUseCases) => Effect.Effect<A, E, R>,

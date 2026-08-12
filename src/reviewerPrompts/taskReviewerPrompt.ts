@@ -66,5 +66,5 @@ export const buildTaskReviewerPrompt = (input: {
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must include title, description, evidence, files, and artifactRefs. artifactRefs must be empty.",
+    "Each Finding must include exactly title, description, evidence, and files.",
   ].join("\n");

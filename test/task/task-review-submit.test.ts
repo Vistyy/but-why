@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
-import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
@@ -16,6 +15,7 @@ import {
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import type { TaskReviewExecution, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
 import {
   openTaskReviewUseCases,
@@ -167,7 +167,7 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
         }
         return { ok: true as const, ...(workspaceResult === undefined ? {} : { workspaceResult }) };
       });
-    const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+    const reviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
       review: () =>
         Effect.succeed({
           ok: true as const,
@@ -228,7 +228,7 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
   }),
 );
 
-const passingReviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+const passingReviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
   review: () =>
     Effect.succeed({
       ok: true,
@@ -688,9 +688,9 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       "--file",
       proposalPath,
     ]);
-    let observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0] | undefined;
+    let observed: Parameters<ReviewerAgentRuntime<TaskReviewerOutput>["review"]>[0] | undefined;
     const progress: string[] = [];
-    const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+    const reviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
       review: (input) => {
         observed = input;
         return passingReviewer.review(input);
@@ -699,7 +699,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
 
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
-      reviewerAgentRuntime: reviewer,
+      taskReviewerAgentRuntime: reviewer,
       writeStderr: (message) => progress.push(message),
     });
 
@@ -721,6 +721,10 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     });
     expect(observed?.prompt).toContain("Repository guidance");
     expect(observed?.prompt).toContain("remain controlling if the guidance conflicts");
+    expect(observed?.prompt).toContain(
+      "Each Finding must include exactly title, description, evidence, and files.",
+    );
+    expect(observed?.prompt).not.toContain("artifactRefs");
     const submittedOutput = JSON.parse(submitted.stdout) as { review: { id: string } };
     expect(submittedOutput).toMatchObject({
       review: { outcome: "passed" },
@@ -756,7 +760,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     const blockedProgress: string[] = [];
     const blocked = yield* runByInProcessEffect(root, ["task", "submit", "BY-2"], undefined, {
       globalConfigPath,
-      reviewerAgentRuntime: {
+      taskReviewerAgentRuntime: {
         review: () =>
           Effect.succeed({
             ok: true as const,
@@ -767,7 +771,6 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
                   description: "The proposal omits one required outcome.",
                   evidence: "The proposal text has no required outcome.",
                   files: [],
-                  artifactRefs: [],
                 },
               ],
             },
@@ -820,7 +823,7 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
 
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
-      reviewerAgentRuntime: passingReviewer,
+      taskReviewerAgentRuntime: passingReviewer,
       writeStderr: () => {
         throw new Error("stderr unavailable");
       },
@@ -872,15 +875,14 @@ it.effect(
         proposalPath,
       ]);
 
-      const observed: Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0][] = [];
+      const observed: Parameters<ReviewerAgentRuntime<TaskReviewerOutput>["review"]>[0][] = [];
       const finding = {
         title: "Proposal needs revision",
         description: "Revise the proposal before approval.",
         evidence: "The reviewer requested a revision.",
         files: [],
-        artifactRefs: [],
       };
-      const reviewer: ReviewerAgentRuntime<ReviewerOutput> = {
+      const reviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
         review: (input) => {
           observed.push(input);
           const storageRoot = input.sessionStorageRoot;
@@ -905,7 +907,7 @@ it.effect(
 
       const first = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
-        reviewerAgentRuntime: reviewer,
+        taskReviewerAgentRuntime: reviewer,
       });
       expect(first.status, first.stdout).toBe(1);
       const firstId = (JSON.parse(first.stdout) as { error: { review: { id: string } } }).error
@@ -919,7 +921,7 @@ it.effect(
 
       const second = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
-        reviewerAgentRuntime: reviewer,
+        taskReviewerAgentRuntime: reviewer,
       });
       expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
@@ -980,7 +982,7 @@ it.effect(
       writeFileSync(invalidTranscript, "{}\n");
       const failedIndex = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
-        reviewerAgentRuntime: reviewer,
+        taskReviewerAgentRuntime: reviewer,
       });
       expect(failedIndex.status).toBe(1);
       expect(JSON.parse(failedIndex.stdout)).toMatchObject({

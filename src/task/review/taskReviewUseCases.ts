@@ -7,7 +7,6 @@ import {
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
-import { decodeReviewerOutputContract, type ReviewerOutput } from "../../agent/reviewerOutput.js";
 import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,
@@ -39,6 +38,7 @@ import {
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
+import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
 import type { CompleteTaskReviewSuccess, TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
@@ -111,7 +111,7 @@ export type TaskReviewUseCases = TaskReviewInspectionUseCases &
 type WorkspaceExecution =
   | {
       readonly ok: true;
-      readonly output: ReviewerOutput;
+      readonly output: TaskReviewerOutput;
       readonly evidence: ReviewerExecutionEvidence;
       readonly sessionReference: string | null;
     }
@@ -120,7 +120,7 @@ type WorkspaceExecution =
       readonly failure: TaskReviewToolingFailure;
       readonly evidence?: ReviewerExecutionEvidence;
       readonly sessionReference?: string | null;
-      readonly findings?: ReviewerOutput["findings"];
+      readonly findings?: TaskReviewerOutput["findings"];
     };
 
 export const openTaskReviewUseCases = (input: {
@@ -136,7 +136,7 @@ export const openTaskReviewUseCases = (input: {
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly reviewerSessionStorageRoot: string;
-  readonly reviewerRuntime: ReviewerAgentRuntime<ReviewerOutput>;
+  readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
     mainCheckoutRoot: string,
@@ -273,7 +273,7 @@ const submitTaskReview = (
                 kind: "taskReview",
                 profile: taskReviewProgressProfile(resolvedPolicy.policy.profile),
               });
-              const execution = yield* executeReviewerSession<ReviewerOutput, never>({
+              const execution = yield* executeReviewerSession<TaskReviewerOutput, never>({
                 identity: {
                   owner: { kind: "task", id: taskId },
                   producer: "task",
@@ -299,11 +299,7 @@ const submitTaskReview = (
                 runtime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
                 decodeOutput: (output, reviewCall) =>
-                  decodeReviewerOutputContract({
-                    reviewer: "task",
-                    attempts: reviewCall,
-                    output,
-                  }).pipe(
+                  decodeTaskReviewerOutput({ attempts: reviewCall, output }).pipe(
                     Effect.mapError(
                       (error) =>
                         new ReviewerExecutionFailed({
@@ -312,17 +308,6 @@ const submitTaskReview = (
                           message: error.message,
                           diagnostics: error.diagnostics,
                         }),
-                    ),
-                    Effect.flatMap((report) =>
-                      report.findings.every((finding) => finding.artifactRefs.length === 0)
-                        ? Effect.succeed(report)
-                        : Effect.fail(
-                            new ReviewerExecutionFailed({
-                              kind: "output_contract",
-                              operationName: "decode_task_review_output",
-                              message: "Task Review Findings must use an empty artifactRefs array.",
-                            }),
-                          ),
                     ),
                   ),
                 prompt,

@@ -55,13 +55,7 @@ export const runTaskShowCommand = (
                       outcome: review.outcome,
                       proposalCurrent: proposalCurrent ?? null,
                       findingCount: review.findings.length,
-                      findings: review.findings.map((finding) => ({
-                        title: finding.title,
-                        description: finding.description,
-                        evidence: finding.evidence,
-                        files: finding.files,
-                        artifactRefs: finding.artifactRefs,
-                      })),
+                      findings: review.findings,
                       workspaceCleanup: review.workspaceCleanup,
                       toolingFailure:
                         review.toolingFailure === null

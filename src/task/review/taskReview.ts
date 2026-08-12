@@ -38,9 +38,7 @@ export type TaskReviewToolingFailure = {
   readonly pendingExecution?: TaskReviewExecution;
 };
 
-export type TaskReviewFinding = ReviewerFindingCore & {
-  readonly artifactRefs: readonly string[];
-};
+export type TaskReviewFinding = ReviewerFindingCore;
 
 export type TaskReviewerTranscript = {
   readonly producer: string;
