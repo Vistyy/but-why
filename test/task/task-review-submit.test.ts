@@ -10,6 +10,7 @@ import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWork
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { stderrSubmitProgress } from "../../src/submission/submissionProgress.js";
 import {
   readCanonicalMainReviewBase,
   verifyRecordedTaskReviewBase,
@@ -168,6 +169,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
           sessionReference: "session-1",
         }),
     };
+    const progressOutput: string[] = [];
     const reviews = openTaskReviewUseCases({
       mainCheckoutRoot: createTestWorkspace(),
       loadRepoConfig: () => ({ ok: true, config: { taskPrefix: "BY" } }),
@@ -182,6 +184,7 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       runWorkspace,
       cleanupWorkspace: () => Effect.succeed({ workspace: "removed" }),
       inspectWorkspace: () => Effect.succeed({ state: "absent" }),
+      progress: stderrSubmitProgress((message) => progressOutput.push(message)),
     });
 
     const result = yield* reviews.submit(taskId, "2026-08-11T12:00:00.000Z");
@@ -192,6 +195,12 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       review: { toolingFailure: { operation: "record_task_review_execution" } },
     });
     expect(executionAttempts).toHaveLength(2);
+    expect(progressOutput).toEqual([
+      "Task Review started: profile=review model=unknown thinking=default\n",
+      expect.stringMatching(
+        /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
+      ),
+    ]);
     if (result.ok || result.code !== "task_review_recovery_required") return;
     expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
   }),
