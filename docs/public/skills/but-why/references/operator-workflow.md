@@ -66,7 +66,7 @@ If Task Submission reports an Active Task Review, inspect it with `<but-why> tas
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
 Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
-Resolve every applicable Finding by updating the Task proposal before requesting another review.
+Resolve every applicable Finding by updating the Task proposal before requesting another review, unless the Operator explicitly authorizes an unchanged rerun with new Task Submission Authorization.
 
 When the Operator explicitly requests direct Task Approval and no Task Review is active, inspect the selected Task and run `<but-why> task approve <task-id>`.
 Treat the returned Task state as authoritative.
