@@ -230,6 +230,17 @@ const taskShowCommand = withCliHandler(
       ),
     ),
 );
+const taskReviseCommand = withCliHandler(
+  leaf("revise", "Move an unlinked Todo Task to New before changing its intent.", {
+    taskId: taskIdArgument,
+  }),
+  (values, environment) =>
+    Effect.promise(() => import("./cli/task/commands/revise.js")).pipe(
+      Effect.flatMap(({ runReviseCommand }) =>
+        runReviseCommand({ taskId: values.taskId }, environment),
+      ),
+    ),
+);
 const taskSubmitCommand = withCliHandler(
   leaf("submit", "Review and approve one exact New Task proposal when it passes.", {
     taskId: taskIdArgument,
@@ -320,6 +331,7 @@ taskCommand = group(
     taskDependenciesCommand,
     taskListCommand,
     taskShowCommand,
+    taskReviseCommand,
     taskSubmitCommand,
     taskReviewsCommand,
     taskReviewCommand,

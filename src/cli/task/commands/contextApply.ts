@@ -50,10 +50,10 @@ export const runContextApplyCommand = (
 const invalidTaskContextDraftState = (taskId: PublicTaskId, state: string): CliResult => {
   if (state === "todo") {
     return runtimeError({
-      code: "invalid_task_state",
-      message: `Cannot apply a Task Context draft to task ${taskId}: approved Task intent is immutable.`,
+      code: "task_revision_required",
+      message: `Cannot apply a Task Context draft to task ${taskId} until its approved intent is opened for revision.`,
       details: { taskId, state },
-      help: ["Approved Task Context cannot be changed after Task Approval."],
+      help: [`Run \`by task revise ${taskId}\` before changing approved Task intent.`],
     });
   }
   return runtimeError({

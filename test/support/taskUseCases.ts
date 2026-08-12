@@ -37,6 +37,7 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
     getTaskContextById: () => unexpected("getTaskContextById"),
     createTaskContextDraft: () => unexpected("createTaskContextDraft"),
     applyTaskContextDraft: () => unexpected("applyTaskContextDraft"),
+    reviseTask: () => unexpected("reviseTask"),
     ...overrides,
   };
 
@@ -69,5 +70,6 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
     getTaskContextById: (...args) => Effect.succeed(sync.getTaskContextById(...args)),
     createTaskContextDraft: (...args) => Effect.succeed(sync.createTaskContextDraft(...args)),
     applyTaskContextDraft: (...args) => Effect.succeed(sync.applyTaskContextDraft(...args)),
+    reviseTask: (...args) => Effect.succeed(sync.reviseTask(...args)),
   };
 };

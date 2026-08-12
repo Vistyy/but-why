@@ -66,6 +66,7 @@ const persistence = (overrides: Partial<TaskPersistence> = {}): TaskPersistence 
   getTaskById: () => unexpected("getTaskById"),
   getTaskContextById: () => unexpected("getTaskContextById"),
   updateTaskContext: () => unexpected("updateTaskContext"),
+  reviseTask: () => unexpected("reviseTask"),
   cancelTask: () => unexpected("cancelTask"),
   ...overrides,
 });

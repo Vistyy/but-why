@@ -334,14 +334,11 @@ describe("Task dependency CLI", () => {
       expectJsonError(result, {
         error: {
           code: "dependencies_locked",
-          message:
-            "Dependencies for task BY-1 are locked because approved Task intent is immutable.",
+          message: "Dependencies for task BY-1 are locked until the Task is opened for revision.",
           taskId: "BY-1",
           state: "todo",
         },
-        help: [
-          "Approved Task intent is immutable. Dependency edits are available only before Task Approval.",
-        ],
+        help: ["Run `by task revise BY-1` before changing approved Task dependencies."],
       });
     }),
   );

@@ -70,8 +70,23 @@ export const runTaskShowCommand = (
             ...(review === undefined
               ? task.state === "new"
                 ? { help: [`Run \`by task submit ${task.id}\` to review and approve this Task.`] }
-                : {}
-              : { reviewCommand: `by task-review show ${review.id}` }),
+                : task.state === "todo" && projection === null
+                  ? {
+                      help: [
+                        `Run \`by task revise ${task.id}\` before changing approved Task intent.`,
+                      ],
+                    }
+                  : {}
+              : {
+                  reviewCommand: `by task-review show ${review.id}`,
+                  ...(task.state === "todo" && projection === null && review.state !== "running"
+                    ? {
+                        help: [
+                          `Run \`by task revise ${task.id}\` before changing approved Task intent.`,
+                        ],
+                      }
+                    : {}),
+                }),
           });
         }),
       );

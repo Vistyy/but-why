@@ -21,6 +21,8 @@ import type {
   EditTaskDependenciesResult,
   ListTasksInput,
   ListTasksResult,
+  ReviseTaskInput,
+  ReviseTaskResult,
 } from "./taskStore.js";
 
 export type TaskUseCases = {
@@ -51,6 +53,9 @@ export type TaskUseCases = {
   readonly applyTaskContextDraft: (
     input: ApplyTaskContextDraftInput,
   ) => Effect.Effect<ApplyTaskContextDraftResult, RepositoryStorageError>;
+  readonly reviseTask: (
+    input: ReviseTaskInput,
+  ) => Effect.Effect<ReviseTaskResult, RepositoryStorageError>;
 };
 
 export type TaskContextDraft = { readonly path: string; readonly content: string };
@@ -63,7 +68,11 @@ export type ApplyTaskContextDraftInput = {
 export type ApplyTaskContextDraftResult =
   | { readonly ok: true; readonly task: TaskRecord; readonly context: TaskContext }
   | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
+  | {
+      readonly ok: false;
+      readonly code: "task_revision_required" | "invalid_task_state";
+      readonly state: TaskState;
+    }
   | { readonly ok: false; readonly error: TaskContextDraftReadError }
   | {
       readonly ok: false;
@@ -89,6 +98,7 @@ export const openTaskUseCases = (
   getTaskContextById: tasks.getTaskContextById,
   createTaskContextDraft: (taskId) => createTaskContextDraft(context, tasks, taskId),
   applyTaskContextDraft: (input) => applyTaskContextDraft(context, tasks, input),
+  reviseTask: tasks.reviseTask,
 });
 
 const createTaskContextDraft = (

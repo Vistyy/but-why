@@ -48,7 +48,9 @@ This section is complete when the selected work item and Work Route are explicit
    This authorization permits clear description wording and dependency encoding within the agreed scope.
    It does not authorize Task Submission, Change Start, or implementation.
 6. Record the agreed Tasks and only their actual prerequisites.
-   Use a Task Context draft and apply operation for an existing unstarted Task.
+   For an approved unlinked Todo Task, run `<but-why> task revise <task-id>` before using a Task Context draft and apply operation.
+   Revision returns the Task to New without changing its current Context or direct Task Dependencies.
+   For an existing New Task, use the Task Context draft and apply operation directly.
 7. Treat each successful mutation result as authoritative for its returned committed fields.
    Use an inspection command only when the result omits required recording state.
    Verify that every recorded Task remains unapproved and unlinked to a Change.

@@ -105,7 +105,7 @@ const dependencyError = (
     help: [
       result.code === "dependencies_locked"
         ? result.state === "todo"
-          ? "Approved Task intent is immutable. Dependency edits are available only before Task Approval."
+          ? `Run \`by task revise ${taskId}\` before changing approved Task dependencies.`
           : "Dependency edits are available only before Change Start."
         : result.code === "replace_requires_dependency"
           ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
@@ -133,7 +133,7 @@ const dependencyErrorMessage = (
       return "The replace operation requires at least one prerequisite.";
     case "dependencies_locked":
       return result.state === "todo"
-        ? `Dependencies for task ${taskId} are locked because approved Task intent is immutable.`
+        ? `Dependencies for task ${taskId} are locked until the Task is opened for revision.`
         : `Dependencies for task ${taskId} are locked after Start.`;
   }
 };
