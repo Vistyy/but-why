@@ -3,11 +3,11 @@ import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/ag
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import type { TaskReviewPolicySnapshotV3 } from "./taskReview.js";
+import type { TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type ResolvedTaskReviewPolicy = {
   readonly profile: ResolvedPiAgentProfile;
-  readonly snapshot: TaskReviewPolicySnapshotV3;
+  readonly snapshot: TaskReviewPolicySnapshot;
 };
 
 export type TaskReviewPolicyResolutionResult =
@@ -65,8 +65,6 @@ export const resolveTaskReviewPolicy = (input: {
     policy: {
       profile,
       snapshot: {
-        id: "task_review",
-        version: 3,
         profile: {
           agentProfile: profile.agentProfile,
           scope: profile.scope,
@@ -96,7 +94,7 @@ const resolveGuidance = (input: {
 }):
   | {
       readonly ok: true;
-      readonly guidance: TaskReviewPolicySnapshotV3["guidance"];
+      readonly guidance: TaskReviewPolicySnapshot["guidance"];
     }
   | { readonly ok: false; readonly message: string } => {
   const repoPath = input.repoConfig.review?.task?.instructionsFile;
@@ -124,7 +122,7 @@ const nonEmptyGuidance = (
   source: "repo" | "global",
   path: string,
 ):
-  | { readonly ok: true; readonly guidance: NonNullable<TaskReviewPolicySnapshotV3["guidance"]> }
+  | { readonly ok: true; readonly guidance: NonNullable<TaskReviewPolicySnapshot["guidance"]> }
   | { readonly ok: false; readonly message: string } =>
   content.trim().length === 0
     ? { ok: false, message: `Task Review guidance file is empty: ${path}` }

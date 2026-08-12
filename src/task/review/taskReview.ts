@@ -20,15 +20,7 @@ export type TaskReviewDependencyEvidence = {
   readonly state: string;
 };
 
-export type TaskReviewPolicySnapshotV1 = {
-  readonly id: "task_advisory_review";
-  readonly version: 1;
-  readonly agentProfile: string;
-  readonly profileScope: "global";
-  readonly instructions: string;
-};
-
-type TaskReviewPolicySnapshotBody = {
+export type TaskReviewPolicySnapshot = {
   readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope" | "profile">;
   readonly builtInInstructions: string;
   readonly guidance: {
@@ -36,21 +28,6 @@ type TaskReviewPolicySnapshotBody = {
     readonly source: "repo" | "global";
   } | null;
 };
-
-export type TaskReviewPolicySnapshotV2 = TaskReviewPolicySnapshotBody & {
-  readonly id: "task_advisory_review";
-  readonly version: 2;
-};
-
-export type TaskReviewPolicySnapshotV3 = TaskReviewPolicySnapshotBody & {
-  readonly id: "task_review";
-  readonly version: 3;
-};
-
-export type TaskReviewPolicySnapshot =
-  | TaskReviewPolicySnapshotV1
-  | TaskReviewPolicySnapshotV2
-  | TaskReviewPolicySnapshotV3;
 
 export type TaskReviewToolingFailure = {
   readonly operation: string;

@@ -1,7 +1,6 @@
 import type { PiAgentProfileConfig, PiRuntimeConfig } from "../../../contracts/agentConfig.js";
 import type {
   TaskReviewPolicySnapshot,
-  TaskReviewPolicySnapshotV2,
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
 import type { TaskReviewIdentityInspection } from "../../../task/review/taskReviewUseCases.js";
@@ -66,18 +65,13 @@ const taskReviewRecoveryActions = (
   ];
 };
 
-const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) =>
-  policy.version === 1
-    ? policy
-    : {
-        id: policy.id,
-        version: policy.version,
-        profile: taskReviewProfileView(policy.profile),
-        builtInInstructions: policy.builtInInstructions,
-        guidance: policy.guidance,
-      };
+const taskReviewPolicyView = (policy: TaskReviewPolicySnapshot) => ({
+  profile: taskReviewProfileView(policy.profile),
+  builtInInstructions: policy.builtInInstructions,
+  guidance: policy.guidance,
+});
 
-const taskReviewProfileView = (profile: TaskReviewPolicySnapshotV2["profile"]) => ({
+const taskReviewProfileView = (profile: TaskReviewPolicySnapshot["profile"]) => ({
   agentProfile: profile.agentProfile,
   scope: profile.scope,
   profile: piAgentProfileView(profile.profile),

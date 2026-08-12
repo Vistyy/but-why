@@ -9,11 +9,13 @@ import { withTemporaryRepositoryState } from "../support/repository.js";
 const now = "2026-08-11T12:00:00.000Z";
 const later = "2026-08-11T12:05:00.000Z";
 const policy = {
-  id: "task_advisory_review" as const,
-  version: 1 as const,
-  agentProfile: "review",
-  profileScope: "global" as const,
-  instructions: taskReviewBuiltInInstructions,
+  profile: {
+    agentProfile: "review",
+    scope: "global" as const,
+    profile: { agentRuntime: "pi" as const },
+  },
+  builtInInstructions: taskReviewBuiltInInstructions,
+  guidance: null,
 };
 
 it.scoped(

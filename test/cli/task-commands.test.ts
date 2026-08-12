@@ -53,11 +53,13 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   proposal: { title: "Inspect task", description: "Description", dependencyIds: [] },
   dependencyEvidence: [],
   policy: {
-    id: "task_advisory_review",
-    version: 1,
-    agentProfile: "review",
-    profileScope: "global",
-    instructions: "Review the exact proposal.",
+    profile: {
+      agentProfile: "review",
+      scope: "global",
+      profile: { agentRuntime: "pi" },
+    },
+    builtInInstructions: "Review the exact proposal.",
+    guidance: null,
   },
   baseRef: "refs/heads/main",
   baseCommit: "a".repeat(40),

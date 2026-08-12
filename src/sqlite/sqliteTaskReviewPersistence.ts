@@ -604,24 +604,10 @@ const parseDependencies = (source: string): readonly TaskReviewDependencyEvidenc
 };
 const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const value = parseObject(source);
-  if (value.id === "task_advisory_review" && value.version === 1) {
-    if (value.profileScope !== "global") throw new Error("Invalid legacy policy");
-    return {
-      id: "task_advisory_review",
-      version: 1,
-      agentProfile: requiredString(value.agentProfile),
-      profileScope: "global",
-      instructions: requiredString(value.instructions),
-    };
-  }
-  const legacy = value.id === "task_advisory_review" && value.version === 2;
-  const current = value.id === "task_review" && value.version === 3;
-  if (!legacy && !current) throw new Error("Invalid policy");
   const profile = parseObject(JSON.stringify(value.profile));
   const scope = profile.scope;
   if (scope !== "repo" && scope !== "global") throw new Error("Invalid profile scope");
-  const guidance = value.guidance === null ? null : parseGuidance(value.guidance);
-  const body = {
+  return {
     profile: {
       agentProfile: requiredString(profile.agentProfile),
       scope,
@@ -630,15 +616,10 @@ const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
       ),
     },
     builtInInstructions: requiredString(value.builtInInstructions),
-    guidance,
-  } as const;
-  return legacy
-    ? { id: "task_advisory_review", version: 2, ...body }
-    : { id: "task_review", version: 3, ...body };
+    guidance: value.guidance === null ? null : parseGuidance(value.guidance),
+  };
 };
-const parseGuidance = (
-  value: unknown,
-): NonNullable<Extract<TaskReviewPolicySnapshot, { readonly version: 2 | 3 }>["guidance"]> => {
+const parseGuidance = (value: unknown): NonNullable<TaskReviewPolicySnapshot["guidance"]> => {
   const parsed = parseObject(JSON.stringify(value));
   if (parsed.source !== "repo" && parsed.source !== "global") {
     throw new Error("Invalid guidance source");

@@ -70,8 +70,6 @@ it.effect("retains exact execution evidence when Task Review submit cannot recor
       profile: { agentRuntime: "pi" as const },
     };
     const policy = {
-      id: "task_review" as const,
-      version: 3 as const,
       profile,
       builtInInstructions: taskReviewBuiltInInstructions,
       guidance: null,
@@ -480,11 +478,13 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 reviewId,
                 taskId: publicTaskId("BY-1"),
                 policy: {
-                  id: "task_advisory_review",
-                  version: 1,
-                  agentProfile: "review",
-                  profileScope: "global",
-                  instructions: taskReviewBuiltInInstructions,
+                  profile: {
+                    agentProfile: "review",
+                    scope: "global",
+                    profile: { agentRuntime: "pi" },
+                  },
+                  builtInInstructions: taskReviewBuiltInInstructions,
+                  guidance: null,
                 },
                 baseRef: "refs/heads/main",
                 baseCommit: commit,
@@ -563,11 +563,13 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
               reviewId: mismatchedReviewId,
               taskId: publicTaskId("BY-2"),
               policy: {
-                id: "task_advisory_review",
-                version: 1,
-                agentProfile: "review",
-                profileScope: "global",
-                instructions: taskReviewBuiltInInstructions,
+                profile: {
+                  agentProfile: "review",
+                  scope: "global",
+                  profile: { agentRuntime: "pi" },
+                },
+                builtInInstructions: taskReviewBuiltInInstructions,
+                guidance: null,
               },
               baseRef: "refs/heads/not-main",
               baseCommit: commit,
@@ -691,8 +693,6 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     expect(JSON.parse(shown.stdout)).toMatchObject({
       review: {
         policy: {
-          id: "task_review",
-          version: 3,
           profile: {
             agentProfile: "task-review",
             scope: "repo",
