@@ -36,6 +36,9 @@ Before you add a Shared Repository State Migration Artifact, run `<but-why> snap
 Before selecting or adding verification evidence, read [Task verification](task-verification.md) completely.
 Select proportionate evidence after the implementation shape is known.
 When multiple approaches remain compliant with accepted intent, select one.
+When implementation gives an existing capability a second current consumer or duplicates mechanics that enforce the same invariant, inspect the capability owner and directly affected callers before naming or placing the behavior.
+Share only mechanics that the current consumers demonstrably have in common, and keep distinct policy, lifecycle, results, and persistence with their owners.
+Do not generalize for hypothetical reuse or code similarity alone.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Use `<but-why> change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
 The Choice names the selected approach.

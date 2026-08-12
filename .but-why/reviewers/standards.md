@@ -21,7 +21,10 @@ Apply a lens only when the Candidate changes its relevant area:
 - **Domain ownership and terms**: Keep behavior in its owning domain, preserve valid domain relationships, and use canonical terms from the applicable context.
 - **Design locality and necessity**: Keep caller knowledge and coordination small, put behavior in its clear owner, and require concrete justification for abstractions, seams, and indirection.
   When the Candidate changes relationships across modules, trace one representative affected operation through the complete module chain and judge aggregate coordination instead of reviewing each changed module in isolation.
-  Treat scattered feature checks, repeated conditionals, pass-through wrappers, and new layers as investigation leads for split ownership or displaced complexity, not as defects by themselves.
+  When a capability gains a current caller, operation, or phase, inspect whether its name, owner, inputs, and interface still describe its complete current responsibility.
+  Require correction only when current consumers expose concrete harm, such as misleading domain translation, duplicated invariant enforcement, or coordination that must change across owners.
+  Share only mechanics and invariants that current consumers demonstrably have in common, and preserve their distinct policy, lifecycle, results, and persistence.
+  Treat possible future reuse, code similarity, scattered feature checks, repeated conditionals, pass-through wrappers, and new layers as investigation leads for split ownership or displaced complexity, not as defects by themselves.
   Apply the deletion test to a new or changed abstraction: require it to reduce concrete caller knowledge or coordination, or to preserve a named ownership or lifecycle boundary.
   Prefer a correction that removes concepts or moving parts over one that only redistributes complexity, but require evidence that the simpler structure preserves required behavior and repository authority.
 - **Interface integrity**: Review changed interfaces and directly affected callers for added caller knowledge, ordering constraints, and optional capabilities.
