@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, approval, dependencies, and user-facing Task progress.
+- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, Task Submission, dependencies, and user-facing Task progress.
 - [Change Delivery](./docs/context/change-delivery/CONTEXT.md) - owns code lineage, implementation, Candidate selection, validation, publication, reconciliation, and Change completion.
 - [Repository Runtime](./docs/context/repository-runtime/CONTEXT.md) - owns repository identity, shared operational state, configuration, executable selection, preparation, and agent runtime configuration.
 

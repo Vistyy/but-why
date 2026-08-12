@@ -5,7 +5,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { withTemporaryRepositoryState } from "../support/repository.js";
+import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-08-11T12:00:00.000Z";
 const later = "2026-08-11T12:05:00.000Z";
@@ -331,7 +331,7 @@ it.scoped("atomically applies a reused passing judgment and rejects malformed ev
   ),
 );
 
-it.scoped("atomically approves only a passing exact Task Review", () =>
+it.scoped("atomically moves a Task to Todo only for a passing exact Task Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
@@ -368,26 +368,27 @@ it.scoped("atomically approves only a passing exact Task Review", () =>
   ),
 );
 
-it.scoped("applies Todo reconsideration outcomes without fabricating prior Review history", () =>
+it.scoped("applies Todo reconsideration outcomes while preserving passing Review history", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
-      const repository = yield* RepositorySql;
       for (const title of ["Pass", "Finding", "Tooling", "Abandon"]) {
-        yield* tasks.createTask({ title, description: `${title} approved intent`, now });
+        const created = yield* tasks.createTask({
+          title,
+          description: `${title} approved intent`,
+          now,
+        });
+        if (!created.ok) throw new Error(created.code);
+        yield* passTaskReviewFixture(publicTaskId(created.task.id), now);
       }
-      yield* repository.operation(
-        "approve legacy Todo fixtures",
-        (sql) => sql`UPDATE tasks SET state = 'todo', updated_at = ${now}`,
-      );
 
       for (const [sequence, completion] of [
         { findings: [] },
         {
           findings: [
             {
-              title: "Approval no longer trustworthy",
+              title: "Todo status no longer justified",
               description: "The approved proposal has a material gap.",
               evidence: "The proposal omits the required outcome.",
               files: [],
@@ -441,7 +442,7 @@ it.scoped("applies Todo reconsideration outcomes without fabricating prior Revie
         outcome: "tooling_failed",
       });
       expect(yield* tasks.getTaskById(publicTaskId("BY-4"))).toMatchObject({ state: "todo" });
-      expect(yield* reviews.listForTask(publicTaskId("BY-4"))).toHaveLength(1);
+      expect(yield* reviews.listForTask(publicTaskId("BY-4"))).toHaveLength(2);
     }),
   ),
 );
@@ -491,43 +492,45 @@ it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
   ),
 );
 
-it.scoped("records the exact non-approval reason when Task state changes during review", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
-      yield* reviews.admit({
-        reviewId: "review-cancelled",
-        taskId: publicTaskId("BY-1"),
-        policy,
-        baseRef: "refs/heads/main",
-        baseCommit: "a".repeat(40),
-        workspacePath: "/tmp/review-cancelled",
-        now,
-      });
-      yield* tasks.cancelTask({ taskId: publicTaskId("BY-1"), reason: "Superseded", now: later });
-      yield* reviews.recordCleanup("review-cancelled", "removed", later);
+it.scoped(
+  "records the exact incomplete-submission reason when Task state changes during review",
+  () =>
+    withTemporaryRepositoryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const reviews = yield* openSqliteTaskReviewPersistence();
+        yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+        yield* reviews.admit({
+          reviewId: "review-cancelled",
+          taskId: publicTaskId("BY-1"),
+          policy,
+          baseRef: "refs/heads/main",
+          baseCommit: "a".repeat(40),
+          workspacePath: "/tmp/review-cancelled",
+          now,
+        });
+        yield* tasks.cancelTask({ taskId: publicTaskId("BY-1"), reason: "Superseded", now: later });
+        yield* reviews.recordCleanup("review-cancelled", "removed", later);
 
-      const completed = yield* reviews.complete({
-        reviewId: "review-cancelled",
-        findings: [],
-        now: later,
-      });
+        const completed = yield* reviews.complete({
+          reviewId: "review-cancelled",
+          findings: [],
+          now: later,
+        });
 
-      expect(completed).toMatchObject({
-        ok: true,
-        outcome: "tooling_failed",
-        review: {
+        expect(completed).toMatchObject({
+          ok: true,
           outcome: "tooling_failed",
-          toolingFailure: {
-            operation: "confirm_task_review_task_state",
-            message: "Task state changed from new to cancelled during review.",
+          review: {
+            outcome: "tooling_failed",
+            toolingFailure: {
+              operation: "confirm_task_review_task_state",
+              message: "Task state changed from new to cancelled during review.",
+            },
           },
-        },
-      });
-    }),
-  ),
+        });
+      }),
+    ),
 );
 
 it.scoped("returns the exact abandonment reason to a stale Task Submission completion", () =>

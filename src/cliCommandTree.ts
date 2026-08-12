@@ -106,7 +106,7 @@ const taskDependenciesOperationCommand = (
   );
 
 const taskDependenciesClearCommand = withCliHandler(
-  leaf("clear", "Remove all direct Task prerequisites before Task Approval.", {
+  leaf("clear", "Remove all direct Task prerequisites before Task Submission.", {
     taskId: taskIdArgument,
   }),
   (values, environment) =>
@@ -129,14 +129,17 @@ taskDependenciesCommand = group(
   "dependencies",
   "Manage direct Task prerequisites.",
   [
-    taskDependenciesOperationCommand("add", "Add direct Task prerequisites before Task Approval."),
+    taskDependenciesOperationCommand(
+      "add",
+      "Add direct Task prerequisites before Task Submission.",
+    ),
     taskDependenciesOperationCommand(
       "remove",
-      "Remove direct Task prerequisites before Task Approval.",
+      "Remove direct Task prerequisites before Task Submission.",
     ),
     taskDependenciesOperationCommand(
       "replace",
-      "Replace all direct Task prerequisites before Task Approval.",
+      "Replace all direct Task prerequisites before Task Submission.",
     ),
     taskDependenciesClearCommand,
   ],
@@ -242,7 +245,7 @@ const taskReviseCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Review a New Task for approval or reconsider an approved Todo Task.", {
+  leaf("submit", "Submit a New Task for review or reconsider an approved Todo Task.", {
     taskId: taskIdArgument,
     rerun: Options.boolean("rerun").pipe(
       Options.withDescription(

@@ -1199,7 +1199,7 @@ it.effect(
       const observed: Parameters<ReviewerAgentRuntime<TaskReviewerOutput>["review"]>[0][] = [];
       const finding = {
         title: "Proposal needs revision",
-        description: "Revise the proposal before approval.",
+        description: "Revise the proposal before Task Submission.",
         evidence: "The reviewer requested a revision.",
         files: [],
       };

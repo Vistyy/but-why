@@ -38,6 +38,7 @@ import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqli
 import { taskReviewsMigration } from "../../src/sqlite/migrations/0034_task_reviews.js";
 import { taskReviewerSessionsMigration } from "../../src/sqlite/migrations/0035_task_reviewer_sessions.js";
 import { unversionTaskReviewPolicySnapshotsMigration } from "../../src/sqlite/migrations/0036_unversion_task_review_policy_snapshots.js";
+import { requirePassingReviewForUnlinkedTodoTasksMigration } from "../../src/sqlite/migrations/0037_require_passing_review_for_unlinked_todo_tasks.js";
 
 export const testRepositoryMigrationLedger = [
   ["0001_baseline", baselineMigration],
@@ -85,6 +86,10 @@ export const testRepositoryMigrationLedger = [
   ["0034_task_reviews", taskReviewsMigration],
   ["0035_task_reviewer_sessions", taskReviewerSessionsMigration],
   ["0036_unversion_task_review_policy_snapshots", unversionTaskReviewPolicySnapshotsMigration],
+  [
+    "0037_require_passing_review_for_unlinked_todo_tasks",
+    requirePassingReviewForUnlinkedTodoTasksMigration,
+  ],
 ] as const;
 
 export const migrateTestRepositoryThrough = (lastMigrationId: number) => {

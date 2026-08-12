@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,19 +6,53 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import type { TaskState } from "../../src/task/lifecycle.js";
+import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
 
-export const setTaskStateFixture = (
+const taskReviewPolicyFixture = {
+  profile: {
+    agentProfile: "review",
+    scope: "global" as const,
+    profile: { agentRuntime: "pi" as const },
+  },
+  builtInInstructions: taskReviewBuiltInInstructions,
+  guidance: null,
+};
+
+export const passTaskReviewFixture = (taskId: PublicTaskId, now: string) =>
+  Effect.gen(function* () {
+    const reviews = yield* openSqliteTaskReviewPersistence();
+    const reviewId = randomUUID();
+    const admitted = yield* reviews.admit({
+      reviewId,
+      taskId,
+      policy: taskReviewPolicyFixture,
+      baseRef: "refs/heads/main",
+      baseCommit: "a".repeat(40),
+      workspacePath: `/tmp/task-review-${reviewId}`,
+      now,
+    });
+    if (!admitted.ok)
+      throw new Error(`Could not admit passing Task Review fixture: ${admitted.code}`);
+    yield* reviews.recordCleanup(reviewId, "removed", now);
+    const completed = yield* reviews.complete({ reviewId, findings: [], now });
+    if (!completed.ok || completed.outcome !== "passed") {
+      throw new Error("Could not complete passing Task Review fixture");
+    }
+    return completed;
+  });
+
+export const setTerminalTaskStateFixture = (
   taskId: PublicTaskId,
-  state: TaskState,
+  state: "done" | "cancelled",
   updatedAt: string,
   cancelReason: string | null = state === "cancelled" ? "Cancelled fixture" : null,
 ) =>
   Effect.flatMap(RepositorySql, (repository) =>
     repository.operation(
-      "set Task fixture state",
+      "set terminal Task fixture state",
       (sql) => sql`
         UPDATE tasks
         SET state = ${state}, cancel_reason = ${cancelReason}, updated_at = ${updatedAt}

@@ -168,6 +168,66 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
+  it.effect("restores unsupported unlinked Todo Tasks to New", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* migrateTestRepositoryThrough(36);
+            yield* sql`INSERT INTO tasks (
+              id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+            ) VALUES
+              ('BY-1', 1, 'Unsupported Todo', 'No passing Review.', 'todo', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-2', 2, 'Passed Todo', 'Has passing Review.', 'todo', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-3', 3, 'Blocked Todo', 'Has only blocked Review.', 'todo', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-4', 4, 'Linked Todo', 'Change captured its Context.', 'todo', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-5', 5, 'New Task', 'Remain New.', 'new', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-6', 6, 'Done Task', 'Remain Done.', 'done', NULL, '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('BY-7', 7, 'Cancelled Task', 'Remain Cancelled.', 'cancelled', 'No longer needed.', '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z')`;
+            yield* sql`INSERT INTO task_reviews (
+              id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
+              base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
+              created_at, updated_at
+            ) VALUES
+              ('review-passed', 'BY-2', '{}', '[]', '{}', 'refs/heads/main', 'base',
+               ${join(directory, "passed")}, 'complete', 'passed', 'removed',
+               '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z'),
+              ('review-blocked', 'BY-3', '{}', '[]', '{}', 'refs/heads/main', 'base',
+               ${join(directory, "blocked")}, 'complete', 'blocked', 'removed',
+               '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z')`;
+            yield* sql`INSERT INTO changes (
+              id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at,
+              base_ref, base_remote_url, starting_commit, worktree_path, acceptance_context
+            ) VALUES (
+              'change-linked', ${directory}, 'refs/heads/linked', 'BY-4', 'open',
+              '2026-08-12T10:00:00.000Z', '2026-08-12T10:00:00.000Z',
+              'refs/remotes/origin/main', 'https://github.test/acme/repo.git', 'base',
+              ${join(directory, "linked")},
+              '{"version":1,"title":"Linked Todo","description":"Change captured its Context."}'
+            )`;
+
+            yield* migrateTestRepositoryThrough(37);
+
+            const tasks = yield* sql<{ readonly id: string; readonly state: string }>`
+              SELECT id, state FROM tasks ORDER BY numeric_id
+            `;
+            expect(tasks).toEqual([
+              { id: "BY-1", state: "new" },
+              { id: "BY-2", state: "todo" },
+              { id: "BY-3", state: "new" },
+              { id: "BY-4", state: "todo" },
+              { id: "BY-5", state: "new" },
+              { id: "BY-6", state: "done" },
+              { id: "BY-7", state: "cancelled" },
+            ]);
+          }).pipe(Effect.provide(nodeSqliteLayer(join(directory, "state.sqlite")))),
+        ),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("upgrades supported lifecycle state records through the strict active schema", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),

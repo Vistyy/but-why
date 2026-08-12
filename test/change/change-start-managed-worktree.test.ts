@@ -12,7 +12,7 @@ import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskRev
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { runByInProcessEffect, setTodoTaskFixture } from "../support/by-cli.js";
+import { runByInProcessEffect, passTaskReviewFixture } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -131,7 +131,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Remote required", "Do not start without it.\n");
-      yield* setTodoTaskFixture(root, taskId, now);
+      yield* passTaskReviewFixture(root, taskId, now);
       git(root, "remote", "remove", "origin");
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
@@ -150,7 +150,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Reconsidering", "Keep approval during review.\n");
-      yield* setTodoTaskFixture(root, taskId, now);
+      yield* passTaskReviewFixture(root, taskId, now);
       const loaded = openRepositoryRuntime(root);
       if (!loaded.ok) throw new Error("Expected repository runtime");
       yield* loaded.runtime.provide(
@@ -190,16 +190,20 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("starts an existing Todo Task without Task Review history", () =>
+  it.effect("starts an existing Todo Task with passing Task Review history", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Existing Todo", "Start approved work.\n");
-      yield* setTodoTaskFixture(root, taskId, now);
+      yield* passTaskReviewFixture(root, taskId, now);
 
       const inspected = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
       expect(inspected.status).toBe(0);
       expect(JSON.parse(inspected.stdout)).toMatchObject({
-        task: { id: taskId, state: "todo", review: null },
+        task: {
+          id: taskId,
+          state: "todo",
+          review: { state: "complete", outcome: "passed", proposalCurrent: true },
+        },
       });
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
@@ -307,7 +311,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       Effect.gen(function* () {
         const root = yield* repositoryCopy();
         const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-        yield* setTodoTaskFixture(root, taskId, now);
+        yield* passTaskReviewFixture(root, taskId, now);
         const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
         writeFileSync(siblingRoot, "occupied\n");
 
