@@ -132,6 +132,8 @@ const renderResult = (
           submission: { mode },
           review: {
             id: result.review.id,
+            state: result.review.state,
+            outcome: result.review.outcome,
             reviewBase: {
               ref: result.review.baseRef,
               commit: result.review.baseCommit,

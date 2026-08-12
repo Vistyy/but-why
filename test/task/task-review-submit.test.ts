@@ -1258,8 +1258,11 @@ it.effect(
       expect(JSON.parse(failedIndex.stdout)).toMatchObject({
         error: {
           code: "task_review_recovery_required",
+          submission: { mode: "ordinary" },
           review: {
             id: expect.any(String),
+            state: "running",
+            outcome: null,
             reviewBase: { ref: "refs/heads/main", commit: expect.any(String) },
             workspace: { path: expect.any(String), cleanup: "removed" },
           },
