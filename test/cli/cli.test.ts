@@ -105,7 +105,7 @@ describe("by CLI", () => {
       const { help } = parseOutput(result.stdout);
       expect(help).toEqual(
         expect.stringContaining(
-          "--rerun\n\n  A true or false value.\n\n  Run another Review of the unchanged unlinked New Task proposal instead of reusing a completed judgment.",
+          "--rerun\n\n  A true or false value.\n\n  Reconsider the unchanged approved proposal of an unlinked Todo Task without reusing its completed judgment.",
         ),
       );
     }),

@@ -61,13 +61,17 @@ const renderResult = (
               outcome: result.outcome,
               findings: review.findings,
             },
+            task: result.task,
           },
           help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
         });
       case "tooling_failed":
         return runtimeError({
           code: "task_review_tooling_failed",
-          message: "Task Review did not approve the Task.",
+          message:
+            mode === "rerun"
+              ? "Task Review had a Tooling Failure; the Task remains Todo and its previous applicable judgment is preserved."
+              : "Task Review did not approve the Task.",
           details: {
             submission: { mode },
             review: {
@@ -76,6 +80,7 @@ const renderResult = (
               outcome: result.outcome,
               toolingFailure: review.toolingFailure,
             },
+            task: result.task,
           },
           help: [`Run \`${reviewCommand}\` to inspect the Task Review.`],
         });
@@ -92,7 +97,7 @@ const renderResult = (
     case "invalid_task_state":
       return runtimeError({
         code: result.code,
-        message: `Task Review requires a New Task; current state is ${result.state}.`,
+        message: `Task Review ${mode === "rerun" ? "rerun requires an unlinked Todo Task" : "requires a New Task"}; current state is ${result.state}.`,
         details: { submission: { mode }, taskId, state: result.state },
         help: [`Run \`by task show ${taskId}\` to inspect its current lifecycle.`],
       });

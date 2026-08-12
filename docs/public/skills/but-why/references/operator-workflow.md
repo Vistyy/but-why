@@ -10,9 +10,10 @@ Use CLI help to confirm exact command syntax before execution.
 
 Work Route Selection is the Operator's explicit choice of a Task-backed Change, a taskless Change, or a direct edit.
 Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Submission, Change Start, or implementation.
-Task Submission Authorization permits submission of one selected New Task proposal for Task Review and approval toward the intended outcome.
+Task Submission Authorization permits submission of one selected Task proposal for Task Review toward the intended outcome.
+The intended outcome is approval for a New Task or reconsideration for an unchanged approved unlinked Todo Task.
 It is distinct from Task Recording Authorization and Implementation Authorization and is not persisted.
-A materially changed selected Task or intended outcome requires new Task Submission Authorization.
+Each selected Task and intended outcome requires new Task Submission Authorization.
 Task Approval confirms reviewed Task intent without starting a Change or authorizing implementation.
 Implementation Authorization permits implementation of one selected work item through its selected Work Route.
 Do not start a Change or begin implementation without Implementation Authorization for that work item.
@@ -59,22 +60,24 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 ## Review and approve a Task
 
-Obtain Task Submission Authorization for the selected New Task and intended outcome before running Task Submission.
+Obtain Task Submission Authorization for the selected Task and intended outcome before running Task Submission.
 Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
-Ordinary Task Submission reuses an applicable completed judgment for an unchanged proposal.
-When the Operator explicitly requests another Review of an unchanged unlinked New Task proposal and gives new Task Submission Authorization for the selected Task and intended outcome, run `<but-why> task submit <task-id> --rerun`.
+Ordinary Task Submission reuses an applicable completed judgment for an unchanged New Task proposal.
+When the Operator explicitly requests reconsideration of an unchanged approved unlinked Todo Task proposal and gives new Task Submission Authorization for the selected Task and intended outcome, run `<but-why> task submit <task-id> --rerun`.
 A rerun bypasses completed-judgment reuse and continues the most recent compatible usable Task Reviewer Session.
-A passing Task Review, including a rerun, atomically approves that exact proposal by moving the Task to Todo.
-A Finding-blocked, tooling-failed, or successfully abandoned rerun leaves the Task New.
-A Finding-blocked rerun becomes the current judgment, while a tooling failure or successful abandonment records no judgment and preserves any prior applicable completed judgment.
+The Task remains Todo while reconsideration is active.
+A passing rerun keeps the Task Todo and makes the new passed Review current.
+A Finding-blocked rerun moves the Task to New and makes the new Findings current.
+A tooling-failed or successfully abandoned rerun keeps the Task Todo, records its actual Review history, and preserves the previous applicable judgment without fabricating one for a legacy Todo Task.
 Use the returned Submission mode, Review state and outcome, and help to identify the result and valid next action.
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
 Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
-Resolve every applicable Finding by updating the Task proposal before requesting another review, unless the Operator explicitly authorizes an unchanged rerun with new Task Submission Authorization.
+Resolve every applicable Finding by updating the New Task proposal before requesting another Review.
+Use `--rerun` only for explicitly authorized reconsideration of an unchanged approved Todo Task.
 
-Task Submission is the only supported route that can approve an unlinked New Task.
+Task Submission is the only supported route that can approve an unlinked New Task or reconsider an approved unlinked Todo Task.
 Task Approval does not authorize Change Start or implementation.
 
 This section is complete when the selected Task is approved and no Change has started from this action.

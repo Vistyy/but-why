@@ -368,6 +368,84 @@ it.scoped("atomically approves only a passing exact Task Review", () =>
   ),
 );
 
+it.scoped("applies Todo reconsideration outcomes without fabricating prior Review history", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const repository = yield* RepositorySql;
+      for (const title of ["Pass", "Finding", "Tooling", "Abandon"]) {
+        yield* tasks.createTask({ title, description: `${title} approved intent`, now });
+      }
+      yield* repository.operation(
+        "approve legacy Todo fixtures",
+        (sql) => sql`UPDATE tasks SET state = 'todo', updated_at = ${now}`,
+      );
+
+      for (const [sequence, completion] of [
+        { findings: [] },
+        {
+          findings: [
+            {
+              title: "Approval no longer trustworthy",
+              description: "The approved proposal has a material gap.",
+              evidence: "The proposal omits the required outcome.",
+              files: [],
+            },
+          ],
+        },
+        {
+          findings: [],
+          toolingFailure: { operation: "run_task_review", message: "Reviewer failed." },
+        },
+      ].entries()) {
+        const taskId = publicTaskId(`BY-${sequence + 1}`);
+        const reviewId = `review-rerun-${sequence + 1}`;
+        const admitted = yield* reviews.admit({
+          reviewId,
+          taskId,
+          submissionMode: "rerun",
+          policy,
+          baseRef: "refs/heads/main",
+          baseCommit: "a".repeat(40),
+          workspacePath: `/tmp/${reviewId}`,
+          now,
+        });
+        expect(admitted).toMatchObject({ ok: true });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
+        yield* reviews.recordCleanup(reviewId, "removed", later);
+        const completed = yield* reviews.complete({ reviewId, ...completion, now: later });
+        expect(completed).toMatchObject({
+          ok: true,
+          outcome: sequence === 0 ? "passed" : sequence === 1 ? "blocked" : "tooling_failed",
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({
+          state: sequence === 1 ? "new" : "todo",
+        });
+      }
+
+      const abandonedId = "review-rerun-abandoned";
+      yield* reviews.admit({
+        reviewId: abandonedId,
+        taskId: publicTaskId("BY-4"),
+        submissionMode: "rerun",
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: `/tmp/${abandonedId}`,
+        now,
+      });
+      yield* reviews.recordCleanup(abandonedId, "removed", later);
+      expect(yield* reviews.abandon(abandonedId, "Stopped", later)).toMatchObject({
+        ok: true,
+        outcome: "tooling_failed",
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-4"))).toMatchObject({ state: "todo" });
+      expect(yield* reviews.listForTask(publicTaskId("BY-4"))).toHaveLength(1);
+    }),
+  ),
+);
+
 it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

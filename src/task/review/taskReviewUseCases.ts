@@ -39,7 +39,11 @@ import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
-import type { CompleteTaskReviewSuccess, TaskReviewPersistence } from "./taskReviewPersistence.js";
+import type {
+  CompleteTaskReviewSuccess,
+  TaskReviewPersistence,
+  TaskReviewSubmissionMode,
+} from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
@@ -56,7 +60,12 @@ export type TaskReviewSubmitResult =
     };
 
 export type TaskReviewAbandonResult =
-  | { readonly ok: true; readonly review: TaskReviewRecord }
+  | {
+      readonly ok: true;
+      readonly outcome: "tooling_failed";
+      readonly review: TaskReviewRecord;
+      readonly task: { readonly id: string; readonly state: string };
+    }
   | { readonly ok: false; readonly code: "task_review_not_found" | "task_review_not_active" }
   | {
       readonly ok: false;
@@ -183,7 +192,8 @@ const submitTaskReview = (
       const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
       if (reusableJudgment !== undefined) return reusableJudgment;
     }
-    const rejected = yield* input.persistence.checkAdmission(taskId);
+    const submissionMode: TaskReviewSubmissionMode = options?.rerun === true ? "rerun" : "ordinary";
+    const rejected = yield* input.persistence.checkAdmission(taskId, submissionMode);
     if (rejected !== undefined) return rejected;
 
     const base = yield* input.readReviewBase(input.mainCheckoutRoot);
@@ -206,6 +216,7 @@ const submitTaskReview = (
     const admitted = yield* input.persistence.admit({
       reviewId,
       taskId,
+      submissionMode,
       policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
@@ -617,7 +628,14 @@ export const abandonTaskReview = (
       } as const;
     }
     const abandoned = yield* input.persistence.abandon(review.id, reason, now);
-    return abandoned.ok ? { ok: true, review: abandoned.review } : abandoned;
+    return abandoned.ok
+      ? {
+          ok: true,
+          outcome: "tooling_failed",
+          review: abandoned.review,
+          task: abandoned.task,
+        }
+      : abandoned;
   });
 
 const buildTaskReviewContinuationPrompt = (input: {

@@ -198,6 +198,7 @@ describe("Task command Adapters", () => {
                         findings,
                         toolingFailure: null,
                       },
+                      task: { id: "BY-1", state: "new" as const },
                     }
                   : {
                       ok: true as const,
@@ -211,6 +212,7 @@ describe("Task command Adapters", () => {
                           message: "Task title or description changed during review.",
                         },
                       },
+                      task: { id: "BY-1", state: "new" as const },
                     },
             );
           },
@@ -238,6 +240,7 @@ describe("Task command Adapters", () => {
             message: "Task Review is blocked by Findings; the Task remains New.",
             submission: { mode: "ordinary" },
             review: { id: "review-1", state: "complete", outcome: "blocked", findings },
+            task: { id: "BY-1", state: "new" },
           },
           help: ["Run `by task-review show review-1` to inspect the Task Review."],
         },
@@ -258,6 +261,7 @@ describe("Task command Adapters", () => {
                 message: "Task title or description changed during review.",
               },
             },
+            task: { id: "BY-1", state: "new" },
           },
           help: ["Run `by task-review show review-1` to inspect the Task Review."],
         },
@@ -396,7 +400,10 @@ describe("Task command Adapters", () => {
         },
         contextCommand: "by task context BY-1",
         reviewCommand: "by task-review show review-retained",
-        help: ["Run `by task revise BY-1` before changing approved Task intent."],
+        help: [
+          "Run `by task submit BY-1 --rerun` to reconsider the unchanged approved proposal.",
+          "Run `by task revise BY-1` before changing approved Task intent.",
+        ],
       });
       expect(context.stdout).toEqual({
         task: {

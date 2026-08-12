@@ -242,11 +242,11 @@ const taskReviseCommand = withCliHandler(
     ),
 );
 const taskSubmitCommand = withCliHandler(
-  leaf("submit", "Review and approve one exact New Task proposal when it passes.", {
+  leaf("submit", "Review a New Task for approval or reconsider an approved Todo Task.", {
     taskId: taskIdArgument,
     rerun: Options.boolean("rerun").pipe(
       Options.withDescription(
-        "Run another Review of the unchanged unlinked New Task proposal instead of reusing a completed judgment.",
+        "Reconsider the unchanged approved proposal of an unlinked Todo Task without reusing its completed judgment.",
       ),
     ),
   }),

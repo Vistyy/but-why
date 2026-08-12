@@ -35,12 +35,14 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 
 ## Workflow boundaries
 
-Task Submission first selects the newest completed passed or Finding-blocked Review for the exact unchanged Task Context and direct Task Dependency set.
+Ordinary Task Submission first selects the newest completed passed or Finding-blocked Review for the exact unchanged Task Context and direct Task Dependency set of a New Task.
 A reusable judgment returns before repository and reviewer preparation.
-An explicitly requested rerun bypasses completed-judgment reuse for an unchanged unlinked New Task proposal.
-When no reusable judgment exists or a rerun is requested, Task Submission reviews one exact New Task proposal under its captured effective policy.
+When no reusable judgment exists, ordinary Task Submission reviews one exact New Task proposal under its captured effective policy.
 Passing fresh completion or reuse records the Task Approval transition from New to Todo in the applicable transaction.
-Task Submission is the only supported operation that can approve an unlinked New Task.
+An explicitly requested rerun instead admits the unchanged approved proposal of an unlinked Todo Task and bypasses completed-judgment reuse.
+The Todo Task stays approved while reconsideration runs.
+A passing rerun keeps the Task Todo, a Finding-blocked rerun moves it to New, and a tooling-failed or abandoned rerun keeps it Todo without replacing the previous applicable judgment.
+Task Submission is the only supported operation that can approve an unlinked New Task or reconsider an approved Todo Task.
 Task Revision atomically returns an unlinked Todo Task without an Active Task Review to New while preserving its Context, dependencies, and Review history.
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.

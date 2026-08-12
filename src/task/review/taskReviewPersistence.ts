@@ -3,6 +3,7 @@ import type { ReviewerSessionRecord } from "../../agent/reviewerSession/reviewer
 import type { ObservedReviewerTranscript } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
+import type { TaskState } from "../lifecycle.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
@@ -14,9 +15,12 @@ import type {
   TaskReviewToolingFailure,
 } from "./taskReview.js";
 
+export type TaskReviewSubmissionMode = "ordinary" | "rerun";
+
 export type AdmitTaskReviewInput = {
   readonly reviewId: string;
   readonly taskId: PublicTaskId;
+  readonly submissionMode?: TaskReviewSubmissionMode;
   readonly policy: TaskReviewPolicySnapshot;
   readonly baseRef: string;
   readonly baseCommit: string;
@@ -82,11 +86,13 @@ export type CompleteTaskReviewSuccess =
       readonly ok: true;
       readonly outcome: "blocked";
       readonly review: BlockedTaskReviewRecord;
+      readonly task: { readonly id: string; readonly state: "new" };
     }
   | {
       readonly ok: true;
       readonly outcome: "tooling_failed";
       readonly review: ToolingFailedTaskReviewRecord;
+      readonly task: { readonly id: string; readonly state: TaskState };
     };
 
 export type CompleteTaskReviewResult =
@@ -100,6 +106,7 @@ export type TaskReviewPersistence = {
   ) => Effect.Effect<CompleteTaskReviewSuccess | undefined, RepositoryStorageError>;
   readonly checkAdmission: (
     taskId: PublicTaskId,
+    submissionMode: TaskReviewSubmissionMode,
   ) => Effect.Effect<TaskReviewAdmissionRejection | undefined, RepositoryStorageError>;
   readonly admit: (
     input: AdmitTaskReviewInput,
