@@ -1,6 +1,6 @@
 # Operator Workflow
 
-Use this reference when selecting a Work Route, recording or submitting Tasks, authorizing implementation, or starting an Implementer Interactive Session.
+Use this reference when selecting a Work Route, recording or submitting Tasks, authorizing implementation, starting an Implementer Interactive Session, or managing Interactive Session continuation.
 Read target-repository instructions, current repository state, and any repository documentation authority map before acting.
 When no map identifies an artifact's authority, do not infer authority from its name or path.
 Treat historical material only as evidence unless the Operator approves it as a current requirement source.
