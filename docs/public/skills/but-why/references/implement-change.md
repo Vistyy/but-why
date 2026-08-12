@@ -73,38 +73,8 @@ The main operator inspects the blocker with `<but-why> change blocker list <chan
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 For a Task-backed Change, the Resolution appends to the current Acceptance Context.
 For a taskless Change, the Resolution remains Change history and creates no Acceptance Context.
-In a bound unpaused Implementer Interactive Session, the continuation extension detects an approved Resolution and resumes the Implementer in the same Managed Worktree.
-If automatic continuation is paused or unavailable, the main operator tells the Implementer to continue.
-
-## Change continuation
-
-Change continuation is optional.
-Change Implement sessions load the packaged `continue-change` extension automatically. Do not add it to an Agent Profile.
-
-While the bound Change has an active Implementation Blocker, the extension checks for an approved Resolution every 30 seconds.
-Inspections do not overlap.
-When the extension finds a new Resolution in an unpaused session, it explains the Resolution and automatically resumes the Implementer once for that Resolution.
-It explains the Resolution before it directs the Implementer to Findings from an earlier Validation Run.
-Polling stops when the Change is no longer blocked or is closed.
-A terminal Change does not wake the Implementer.
-
-Use `/pause-change` to pause automatic continuation before discussing a Change or taking an external action.
-Pause overrides an inspection that is already in progress.
-A Resolution recorded while paused remains pending.
-
-Use `/continue-change` to unpause when needed, refresh the Change state, and continue the bound Change when continuation is safe.
-Repeated `/continue-change` commands keep continuation unpaused.
-A pending Resolution is handled when the operator explicitly continues or when the Interactive Session starts unpaused.
-
-If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
-A Validation Tooling Failure receives recovery guidance only after the operator runs `/continue-change`.
-
-The continuation widget reports when the Change is blocked, implementing a revision, validating a revision, or waiting for human review.
-When a publication has a pull request URL, the widget includes that URL while waiting for human review and during later revision implementation or validation.
 
 Candidate Publication is a delivery state, not durable Change completion.
-Automatic continuation waits while the exact current Candidate remains published.
-Explicit `/continue-change` can resume revision work under the operator's direct instruction.
 After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.
 Change Submit must pass before the same owned open pull request is updated.
 
