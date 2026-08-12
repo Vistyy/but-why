@@ -15,12 +15,10 @@ import {
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import type { TaskReviewExecution, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import { recordTaskReviewExecutionWithRetry } from "../../src/task/review/taskReviewEvidenceSettlement.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
-import {
-  openTaskReviewUseCases,
-  recordTaskReviewExecutionWithRetry,
-} from "../../src/task/review/taskReviewUseCases.js";
+import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -217,10 +215,15 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
     active = undefined;
     progressOutput.length = 0;
     failWorkspaceCleanupPersistence = true;
-    const workspaceFailure = yield* Effect.either(
-      reviews.submit(taskId, "2026-08-11T12:01:00.000Z"),
-    );
-    expect(workspaceFailure._tag).toBe("Left");
+    const workspaceFailure = yield* reviews.submit(taskId, "2026-08-11T12:01:00.000Z");
+    expect(workspaceFailure).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: {
+        state: "running",
+        toolingFailure: { operation: "record_task_review_cleanup" },
+      },
+    });
     expect(progressOutput).toEqual([
       "Task Review started: profile=review model=unknown thinking=default\n",
       expect.stringMatching(

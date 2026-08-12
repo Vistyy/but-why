@@ -11,11 +11,7 @@ import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,
 } from "../../agent/reviewerSession/executeReviewerSession.js";
-import {
-  type ReviewerSessionStore,
-  reviewerSessionsOwnerRoot,
-} from "../../agent/reviewerSession/reviewerSession.js";
-import { discoverObservedReviewerTranscripts } from "../../agent/reviewerSession/reviewerTranscript.js";
+import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -38,6 +34,7 @@ import {
 import type { PublicTaskId } from "../taskId.js";
 import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
+import { settleTaskReviewEvidence } from "./taskReviewEvidenceSettlement.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
 import type {
   CompleteTaskReviewSuccess,
@@ -236,8 +233,6 @@ const submitTaskReview = (
           workspaceId: reviewId,
           commitSha: base.base.commit,
           copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
-          recordWorkspaceCleanup: (cleanup) =>
-            input.persistence.recordCleanup(reviewId, cleanup.workspace, now),
           runInWorkspace: (active) =>
             Effect.gen(function* () {
               const prepare = repoConfig.prepare;
@@ -364,90 +359,35 @@ const submitTaskReview = (
                   } as const);
             }),
         });
-        let execution: WorkspaceExecution;
-        if (workspace.ok && workspace.workspaceResult !== undefined) {
-          execution = workspace.workspaceResult;
-        } else {
-          const tooling = workspace.ok
-            ? { operation: "run_task_review", message: "Task reviewer produced no result." }
+        const execution: WorkspaceExecution =
+          workspace.ok && workspace.workspaceResult !== undefined
+            ? workspace.workspaceResult
             : {
-                operation: workspace.toolingError.operationName,
-                message: workspace.toolingError.errorMessage,
+                ok: false,
+                failure: workspace.ok
+                  ? { operation: "run_task_review", message: "Task reviewer produced no result." }
+                  : {
+                      operation: workspace.toolingError.operationName,
+                      message: workspace.toolingError.errorMessage,
+                    },
               };
-          if (!workspace.ok && workspace.toolingError.cleanupResult.workspace !== "removed") {
-            const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-              workspaceId: reviewId,
-              expectedCommitSha: base.base.commit,
-              recordedWorktreePath: workspacePath,
-            });
-            yield* input.persistence.recordCleanup(reviewId, cleanup.workspace, now);
-            if (cleanup.workspace !== "removed") {
-              const active = yield* input.persistence.getById(reviewId);
-              if (active === undefined)
-                return { ok: false, code: "task_review_not_found" } as never;
-              return { ok: false, code: "task_review_recovery_required", review: active } as const;
-            }
-          }
-          execution = { ok: false, failure: tooling };
-        }
-
-        if (execution.evidence !== undefined) {
-          const executionInput = {
-            reviewId,
-            execution: {
-              ...execution.evidence,
-              sessionReference: execution.sessionReference ?? null,
-            },
-          };
-          const recordedExecution = yield* Effect.either(
-            recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, executionInput),
-          );
-          if (recordedExecution._tag === "Left") {
-            const failure = {
-              operation: "record_task_review_execution",
-              message: repositoryStorageErrorMessage(
-                "Task Review execution",
-                recordedExecution.left,
-              ),
-              pendingExecution: executionInput.execution,
-            };
-            yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-            const active = yield* input.persistence.getById(reviewId);
-            if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-            return { ok: false, code: "task_review_recovery_required", review: active } as const;
-          }
-        }
-
-        const transcriptDiscovery = discoverObservedReviewerTranscripts(
-          reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, taskId),
-          taskId,
+        const settlement = yield* settleTaskReviewEvidence(
+          input,
+          admitted.review,
+          now,
+          execution.evidence === undefined
+            ? undefined
+            : {
+                ...execution.evidence,
+                sessionReference: execution.sessionReference ?? null,
+              },
         );
-        if (!transcriptDiscovery.ok) {
-          const failure = {
-            operation: "index_task_reviewer_transcripts",
-            message: transcriptDiscovery.reason,
-          };
-          yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-          const active = yield* input.persistence.getById(reviewId);
-          if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-          return { ok: false, code: "task_review_recovery_required", review: active } as const;
-        }
-        const indexed = yield* Effect.either(
-          input.persistence.recordTranscripts({
-            reviewId,
-            taskId,
-            transcripts: transcriptDiscovery.transcripts,
-          }),
-        );
-        if (indexed._tag === "Left") {
-          const failure = {
-            operation: "index_task_reviewer_transcripts",
-            message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
-          };
-          yield* input.persistence.recordActiveFailure(reviewId, failure, now);
-          const active = yield* input.persistence.getById(reviewId);
-          if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
-          return { ok: false, code: "task_review_recovery_required", review: active } as const;
+        if (!settlement.ok) {
+          return {
+            ok: false,
+            code: "task_review_recovery_required",
+            review: settlement.review,
+          } as const;
         }
 
         const completed = yield* input.persistence.complete({
@@ -536,95 +476,13 @@ export const abandonTaskReview = (
     const review = yield* input.persistence.getById(reviewId);
     if (review === undefined) return { ok: false, code: "task_review_not_found" } as const;
     if (review.state !== "running") return { ok: false, code: "task_review_not_active" } as const;
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
-      ref: review.baseRef,
-      commit: review.baseCommit,
-    });
-    if (!base.ok) {
+    const settlement = yield* settleTaskReviewEvidence(input, review, now);
+    if (!settlement.ok) {
       return {
         ok: false,
         code: "task_review_cleanup_failed",
-        review,
-        message: base.message,
-      } as const;
-    }
-    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: review.id,
-      expectedCommitSha: review.baseCommit,
-      recordedWorktreePath: review.workspacePath,
-    });
-    yield* input.persistence.recordCleanup(review.id, cleanup.workspace, now);
-    if (cleanup.workspace !== "removed") {
-      const current = yield* input.persistence.getById(review.id);
-      return {
-        ok: false,
-        code: "task_review_cleanup_failed",
-        review: current ?? review,
-        message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
-      } as const;
-    }
-    const pendingExecution = review.toolingFailure?.pendingExecution;
-    if (pendingExecution !== undefined) {
-      const recordedExecution = yield* Effect.either(
-        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, {
-          reviewId: review.id,
-          execution: pendingExecution,
-        }),
-      );
-      if (recordedExecution._tag === "Left") {
-        const failure = {
-          operation: "record_task_review_execution",
-          message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
-          pendingExecution,
-        };
-        yield* input.persistence.recordActiveFailure(review.id, failure, now);
-        const current = yield* input.persistence.getById(review.id);
-        return {
-          ok: false,
-          code: "task_review_cleanup_failed",
-          review: current ?? review,
-          message: failure.message,
-        } as const;
-      }
-    }
-
-    const transcriptDiscovery = discoverObservedReviewerTranscripts(
-      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
-      review.taskId,
-    );
-    if (!transcriptDiscovery.ok) {
-      const failure = {
-        operation: "index_task_reviewer_transcripts",
-        message: transcriptDiscovery.reason,
-      };
-      yield* input.persistence.recordActiveFailure(review.id, failure, now);
-      const current = yield* input.persistence.getById(review.id);
-      return {
-        ok: false,
-        code: "task_review_cleanup_failed",
-        review: current ?? review,
-        message: failure.message,
-      } as const;
-    }
-    const indexed = yield* Effect.either(
-      input.persistence.recordTranscripts({
-        reviewId: review.id,
-        taskId: review.taskId,
-        transcripts: transcriptDiscovery.transcripts,
-      }),
-    );
-    if (indexed._tag === "Left") {
-      const failure = {
-        operation: "index_task_reviewer_transcripts",
-        message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
-      };
-      yield* input.persistence.recordActiveFailure(review.id, failure, now);
-      const current = yield* input.persistence.getById(review.id);
-      return {
-        ok: false,
-        code: "task_review_cleanup_failed",
-        review: current ?? review,
-        message: failure.message,
+        review: settlement.review,
+        message: settlement.message,
       } as const;
     }
     const abandoned = yield* input.persistence.abandon(review.id, reason, now);
@@ -674,19 +532,3 @@ const proposalDiff = (
       ? null
       : { before: previous.dependencyIds, after: current.dependencyIds },
 });
-
-export const recordTaskReviewExecutionWithRetry = (
-  recordExecution: TaskReviewPersistence["recordExecution"],
-  input: Parameters<TaskReviewPersistence["recordExecution"]>[0],
-): Effect.Effect<void, RepositoryStorageError> =>
-  recordExecution(input).pipe(
-    Effect.catchTag("RepositorySqlOperationFailed", () => recordExecution(input)),
-  );
-
-const repositoryStorageErrorMessage = (
-  subject: "Task Review execution" | "Task Reviewer Transcript",
-  error: RepositoryStorageError,
-): string =>
-  "operationName" in error
-    ? `${subject} persistence failed during ${error.operationName}.`
-    : `${subject} persistence failed: ${error._tag}.`;

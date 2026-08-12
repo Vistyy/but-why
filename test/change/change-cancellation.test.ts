@@ -16,10 +16,10 @@ import type {
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
 import {
-  setTodoTaskFixture,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runByInProcessEffect,
+  setTodoTaskFixture,
 } from "../support/by-cli.js";
 import {
   noOpTerminalCleanupDependencies,
