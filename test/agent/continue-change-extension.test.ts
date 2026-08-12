@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import continueChange from "../../extensions/continue-change.js";
 
@@ -682,7 +682,7 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     expect(harness.widgets.at(-1)?.name).toBe("but-why-change-watcher");
-    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
+    expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);
 
     await harness.runCommand("pause-change");
     expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
@@ -704,7 +704,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([
       expect.stringContaining(`Resume implementation of Change ${changeId}.`),
     ]);
-    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
+    expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);
   });
 
   it("refreshes and continues without toggling when the operator runs continue twice", async () => {
@@ -733,7 +733,164 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
   });
 
-  it("does not wake after an external blocker Resolution and explains it before old Findings", async () => {
+  it("polls a blocked Change every 30 seconds and resumes once for a new Resolution", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+      const initialInspectionCalls = harness.getExecCallCount();
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
+
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+        active: null,
+      });
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
+      const resolvedInspectionCalls = harness.getExecCallCount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.getExecCallCount()).toBe(resolvedInspectionCalls);
+      expect(harness.sent).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps polling a blocked Change after a transient inspection failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+      harness.setInspectionFails(true);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(harness.sent).toEqual([]);
+      expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
+
+      harness.setInspectionFails(false);
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        active: null,
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds a Resolution while paused and handles it on explicit continuation", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+      await harness.runCommand("pause-change");
+      const pausedInspectionCalls = harness.getExecCallCount();
+
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        active: null,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.getExecCallCount()).toBe(pausedInspectionCalls);
+      expect(harness.sent).toEqual([]);
+
+      await harness.runCommand("continue-change");
+      expect(harness.sent).toEqual([expect.stringContaining("Continue safely.")]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap blocked inspections and pause overrides the inspection in progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+      harness.blockInspection();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      const inProgressCallCount = harness.getExecCallCount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.getExecCallCount()).toBe(inProgressCallCount);
+
+      await harness.runCommand("pause-change");
+      harness.releaseInspection();
+      await Promise.resolve();
+      expect(harness.sent).toEqual([]);
+      expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cleans up blocked polling when the session shuts down", async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness();
+      harness.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+      const initialInspectionCalls = harness.getExecCallCount();
+
+      await harness.emit("session_shutdown");
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(harness.getExecCallCount()).toBe(initialInspectionCalls);
+
+      const inFlight = createHarness();
+      inFlight.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [],
+        active: { id: "blocker-1" },
+      });
+      await inFlight.emit("session_start", { type: "session_start", reason: "startup" });
+      inFlight.blockInspection();
+      await vi.advanceTimersByTimeAsync(30_000);
+      inFlight.setBlockerHistory({
+        blockers: [{ id: "blocker-1" }],
+        resolutions: [{ id: "resolution-1", content: "Do not deliver after shutdown." }],
+        active: null,
+      });
+      await inFlight.emit("session_shutdown");
+      inFlight.releaseInspection();
+      await Promise.resolve();
+      expect(inFlight.sent).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("automatically resumes after an external blocker Resolution and explains it before old Findings", async () => {
     const harness = createHarness();
     harness.setSnapshot(
       snapshot({ change: { state: "open", closeReason: null, taskId: "BY-236" } }),
@@ -747,15 +904,9 @@ describe("packaged Change Implement continuation extension", () => {
       active: null,
     });
     await harness.emit("agent_settled");
-    await harness.emit("agent_settled");
-
-    expect(harness.sent).toEqual([]);
-    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
-
-    await harness.emit("session_start", { type: "session_start", reason: "resume" });
-    await harness.runCommand("continue-change");
 
     expect(harness.sent).toHaveLength(1);
+    expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);
     const message = harness.sent[0];
     expect(message).toBeDefined();
     expect(message).toContain("Use the approved design.");
@@ -770,7 +921,7 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(
       snapshot({
         toolingFailureCount: 1,
-        currentValidationRun: { id: "validation-run-1" },
+        currentValidationRun: { id: "validation-run-1", state: "complete" },
       }),
     );
 
@@ -795,32 +946,73 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.execCalls.filter(({ command }) => command === "just").at(-1)).toMatchObject({
       args: expect.arrayContaining([changeId]),
     });
-    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
+    expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);
   });
 
-  it("reports waiting-for-human-merge for the published Candidate", async () => {
+  it("reports waiting for human review with the published Candidate URL", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setSnapshot(
       snapshot({
         currentCandidate: { id: "candidate-1", headSha: "head" },
+        currentValidationRun: { id: "run-1", state: "complete" },
         publication: {
           candidateId: "candidate-1",
           expectedHeadSha: "head",
-          pullRequest: { number: 12 },
+          pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
-        pullRequest: { number: 12 },
+        pullRequest: { number: 12, url: "https://github.test/pull/12" },
       }),
     );
 
     await harness.emit("agent_settled");
     expect(harness.sent).toEqual([]);
-    expect(harness.latestWidgetText()).toEqual(["◌ Waiting for human merge"]);
+    expect(harness.latestWidgetText()).toEqual([
+      "◌ Waiting for human review - https://github.test/pull/12",
+    ]);
 
     await harness.runCommand("continue-change");
 
     expect(harness.sent).toHaveLength(1);
-    expect(harness.latestWidgetText()).toEqual(["● Watching Change de32d32a…"]);
+    expect(harness.latestWidgetText()).toEqual([
+      "● Implementing revision - https://github.test/pull/12",
+    ]);
+  });
+
+  it("shows the pull request URL during revision implementation and validation", async () => {
+    const harness = createHarness();
+    harness.setSnapshot(
+      snapshot({
+        currentCandidate: { id: "candidate-2", headSha: "head" },
+        publication: {
+          candidateId: "candidate-1",
+          expectedHeadSha: "old-head",
+          pullRequest: { number: 12, url: "https://github.test/pull/12" },
+        },
+        pullRequest: { number: 12, url: "https://github.test/pull/12" },
+      }),
+    );
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    expect(harness.latestWidgetText()).toEqual([
+      "● Implementing revision - https://github.test/pull/12",
+    ]);
+
+    harness.setSnapshot(
+      snapshot({
+        currentCandidate: { id: "candidate-2", headSha: "head" },
+        currentValidationRun: { id: "run-2", state: "running" },
+        publication: {
+          candidateId: "candidate-1",
+          expectedHeadSha: "old-head",
+          pullRequest: { number: 12, url: "https://github.test/pull/12" },
+        },
+        pullRequest: { number: 12, url: "https://github.test/pull/12" },
+      }),
+    );
+    await harness.runCommand("continue-change");
+    expect(harness.latestWidgetText()).toEqual([
+      "◐ Validating revision - https://github.test/pull/12",
+    ]);
   });
 
   it("reports cancelled and cleanup-needed terminal states", async () => {
@@ -883,7 +1075,11 @@ describe("packaged Change Implement continuation extension", () => {
       undefined,
     ],
     ["Candidate identity", snapshot({ currentCandidate: { id: "candidate-1" } }), undefined],
-    ["Validation Run identity", snapshot({ currentValidationRun: {} }), undefined],
+    [
+      "Validation Run identity and state",
+      snapshot({ currentValidationRun: { id: "validation-run-1", state: "not-a-state" } }),
+      undefined,
+    ],
     ["non-negative Finding count", snapshot({ findingCount: -1 }), undefined],
     ["integer Tooling Failure count", snapshot({ toolingFailureCount: 0.5 }), undefined],
     [
