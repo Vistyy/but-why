@@ -954,6 +954,16 @@ export default function continueChange(pi: ExtensionAPI): void {
     saveState({ ...previous, submissionReassessment: state });
   };
 
+  const showValidationStarted = (ctx: ExtensionContext): void => {
+    const pullRequestUrl =
+      watcherDisplay.kind === "implementing" ||
+      watcherDisplay.kind === "validating" ||
+      watcherDisplay.kind === "waiting-for-human-review"
+        ? watcherDisplay.pullRequestUrl
+        : null;
+    showWatcher(ctx, { kind: "validating", pullRequestUrl });
+  };
+
   pi.on("tool_call", async (event, ctx) => {
     if (!isToolCallEventType("bash", event)) return;
     const runningReassessment = persisted?.submissionReassessment;
@@ -974,7 +984,10 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state === "complete" || reassessment?.state === "not-required") return;
+    if (reassessment?.state === "complete" || reassessment?.state === "not-required") {
+      showValidationStarted(ctx);
+      return;
+    }
     if (
       reassessment?.state === "awaiting-settle" ||
       reassessment?.state === "awaiting-restart" ||
@@ -1001,6 +1014,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         hasResolutions: false,
         evidence: emptyReassessmentEvidence(),
       });
+      showValidationStarted(ctx);
       return;
     }
     saveSubmissionReassessment({

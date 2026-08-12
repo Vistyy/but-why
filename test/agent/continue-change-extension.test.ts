@@ -420,6 +420,52 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([]);
   });
 
+  it("shows validation during an allowed Change Submit and retains the publication URL", async () => {
+    const harness = createHarness(sourceCwd, {
+      changeId,
+      fingerprint: "saved",
+      unchangedRestarts: 0,
+      paused: false,
+      submissionReassessment: {
+        state: "complete",
+        taskId: "BY-236",
+        baseRef: "refs/remotes/origin/main",
+        hasResolutions: false,
+        evidence: {
+          change: true,
+          acceptanceContext: true,
+          blockerResolutions: false,
+          worktreeStatus: true,
+          candidateDiff: true,
+        },
+      },
+    });
+    harness.setSnapshot(
+      snapshot({
+        currentCandidate: { id: "candidate-2", headSha: "head" },
+        publication: {
+          candidateId: "candidate-1",
+          expectedHeadSha: "old-head",
+          pullRequest: { number: 12, url: "https://github.test/pull/12" },
+        },
+        pullRequest: { number: 12, url: "https://github.test/pull/12" },
+      }),
+    );
+    await harness.emit("session_start", { type: "session_start", reason: "resume" });
+
+    expect(
+      await harness.emit("tool_call", {
+        type: "tool_call",
+        toolCallId: "submit-1",
+        toolName: "bash",
+        input: { command: `just by change submit ${changeId}` },
+      }),
+    ).toBeUndefined();
+    expect(harness.latestWidgetText()).toEqual([
+      "◐ Validating revision - https://github.test/pull/12",
+    ]);
+  });
+
   it("mentions approved Resolutions only when eligibility inspection finds them", async () => {
     const harness = createHarness();
     harness.setBlockerHistory({
