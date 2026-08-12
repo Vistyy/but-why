@@ -16,7 +16,7 @@ import type {
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
 import {
-  approveTaskFixture,
+  setTodoTaskFixture,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runByInProcessEffect,
@@ -48,7 +48,7 @@ describe("Change cancellation", () => {
             "task.md",
           ])).status,
         ).toBe(0);
-        yield* approveTaskFixture(root, "BY-1");
+        yield* setTodoTaskFixture(root, "BY-1");
         const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
         expect(started.status).toBe(0);
         const changeId = (
@@ -101,7 +101,7 @@ describe("Change cancellation", () => {
           "task.md",
         ])).status,
       ).toBe(0);
-      yield* approveTaskFixture(root, "BY-1");
+      yield* setTodoTaskFixture(root, "BY-1");
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
       expect(started.status).toBe(0);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })

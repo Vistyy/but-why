@@ -21,7 +21,10 @@ import { repoRoot } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { observeUntil } from "../support/observe.js";
-import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
+import {
+  setTaskStateFixture,
+  withTemporaryRepositoryState as withTemporaryState,
+} from "../support/repository.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const installPublicationIdentity = (
@@ -130,7 +133,7 @@ describe("repository SQL storage", () => {
         });
         if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
         const taskId = storedPublicTaskId(task.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:49:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:49:00.000Z");
 
         const starts = yield* openSqliteChangeStartPersistence();
         const created = yield* starts.create({
@@ -210,7 +213,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-raise-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -263,7 +266,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-duplicate-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -317,7 +320,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-published-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -397,7 +400,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:03:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T23:03:00.000Z");
         const started = yield* starts.create({
           id: "change-resolve-blocker",
           repositoryCommonDirectory: input.commonDirectory,
@@ -542,7 +545,7 @@ describe("repository SQL storage", () => {
           });
           if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
           const taskId = storedPublicTaskId(created.task.id);
-          yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+          yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
           const started = yield* starts.create({
             id: "change-cancel-atomic",
             repositoryCommonDirectory: input.commonDirectory,
@@ -600,7 +603,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-stale-evidence",
           repositoryCommonDirectory: input.commonDirectory,
@@ -710,7 +713,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-newer-publication",
           repositoryCommonDirectory: input.commonDirectory,
@@ -833,7 +836,7 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        yield* setTaskStateFixture(taskId, "todo", "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-atomic-completion",
           repositoryCommonDirectory: input.commonDirectory,

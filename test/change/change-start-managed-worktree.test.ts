@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
-import { approveTaskFixture, runByInProcessEffect } from "../support/by-cli.js";
+import { setTodoTaskFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -127,7 +127,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Remote required", "Do not start without it.\n");
-      yield* approveTaskFixture(root, taskId, now);
+      yield* setTodoTaskFixture(root, taskId, now);
       git(root, "remote", "remove", "origin");
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
@@ -146,7 +146,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Existing Todo", "Start approved work.\n");
-      yield* approveTaskFixture(root, taskId, now);
+      yield* setTodoTaskFixture(root, taskId, now);
 
       const inspected = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
       expect(inspected.status).toBe(0);
@@ -259,7 +259,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       Effect.gen(function* () {
         const root = yield* repositoryCopy();
         const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-        yield* approveTaskFixture(root, taskId, now);
+        yield* setTodoTaskFixture(root, taskId, now);
         const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
         writeFileSync(siblingRoot, "occupied\n");
 

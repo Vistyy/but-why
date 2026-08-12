@@ -11,7 +11,7 @@ import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
@@ -167,7 +167,7 @@ const runByInProcessEffectRaw = (
 
 export const runByInProcessEffect = runByInProcessEffectRaw;
 
-export const approveTaskFixture = (
+export const setTodoTaskFixture = (
   root: string,
   taskId: string,
   now = "2026-06-30T12:00:00.000Z",
@@ -175,12 +175,14 @@ export const approveTaskFixture = (
   const loaded = openRepositoryRuntime(root);
   if (!loaded.ok) throw new Error(`Could not open Task fixture repository: ${loaded.error.code}`);
   return loaded.runtime.provide(
-    openSqliteTaskPersistence(loaded.runtime.context.taskPrefix).pipe(
-      Effect.flatMap((tasks) => tasks.approveTask({ taskId: publicTaskId(taskId), now })),
-      Effect.map((result) => {
-        if (!result.ok) throw new Error(`Could not approve Task fixture: ${result.code}`);
-        return undefined;
-      }),
+    Effect.flatMap(RepositorySql, (repository) =>
+      repository.operation(
+        "set Todo Task fixture state",
+        (sql) => sql`
+          UPDATE tasks SET state = 'todo', updated_at = ${now}
+          WHERE id = ${publicTaskId(taskId)}
+        `,
+      ),
     ),
   );
 };
