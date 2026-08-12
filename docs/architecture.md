@@ -37,7 +37,8 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 
 Task Submission first selects the newest completed passed or Finding-blocked Review for the exact unchanged Task Context and direct Task Dependency set.
 A reusable judgment returns before repository and reviewer preparation.
-When no reusable judgment exists, Task Submission reviews one exact New Task proposal under its captured effective policy.
+An explicitly requested rerun bypasses completed-judgment reuse for an unchanged unlinked New Task proposal.
+When no reusable judgment exists or a rerun is requested, Task Submission reviews one exact New Task proposal under its captured effective policy.
 Passing fresh completion or reuse records the Task Approval transition from New to Todo in the applicable transaction.
 Direct Task Approval remains a separate Operator action when no Task Review is active.
 

@@ -45,6 +45,7 @@ export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
+  | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
   | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
   | { readonly ok: false; readonly code: "review_base_unavailable"; readonly message: string }
   | { readonly ok: false; readonly code: "task_review_config_invalid"; readonly message: string }
@@ -101,6 +102,7 @@ export type TaskReviewSubmissionUseCases = {
   readonly submit: (
     taskId: PublicTaskId,
     now: string,
+    options?: { readonly rerun?: boolean },
   ) => Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError>;
 };
 
@@ -161,7 +163,7 @@ export const openTaskReviewUseCases = (input: {
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
-  submit: (taskId, now) => submitTaskReview(input, taskId, now),
+  submit: (taskId, now, options) => submitTaskReview(input, taskId, now, options),
   abandon: (reviewId, reason, now) => abandonTaskReview(input, reviewId, reason, now),
   getById: input.persistence.getById,
   getLatestForTask: input.persistence.getLatestForTask,
@@ -174,10 +176,15 @@ const submitTaskReview = (
   input: Parameters<typeof openTaskReviewUseCases>[0],
   taskId: PublicTaskId,
   now: string,
+  options?: { readonly rerun?: boolean },
 ): Effect.Effect<TaskReviewSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
-    if (reusableJudgment !== undefined) return reusableJudgment;
+    if (options?.rerun !== true) {
+      const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
+      if (reusableJudgment !== undefined) return reusableJudgment;
+    }
+    const rejected = yield* input.persistence.checkAdmission(taskId);
+    if (rejected !== undefined) return rejected;
 
     const base = yield* input.readReviewBase(input.mainCheckoutRoot);
     if (!base.ok)

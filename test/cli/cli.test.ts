@@ -84,6 +84,21 @@ describe("by CLI", () => {
     }),
   );
 
+  it.effect("describes explicit Task Review reruns in generated help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "submit", "--help"]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      const { help } = parseOutput(result.stdout);
+      expect(help).toEqual(
+        expect.stringContaining(
+          "--rerun\n\n  A true or false value.\n\n  Run another Review of the unchanged unlinked New Task proposal instead of reusing a completed judgment.",
+        ),
+      );
+    }),
+  );
+
   it.effect("classifies Change Submit as a long-running command in generated help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["change", "submit", "--help"]);

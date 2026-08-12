@@ -55,12 +55,18 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 ## Review and approve a Task
 
 When the Operator requests Task Review and approval, run `<but-why> task submit <task-id>` for the exact New Task proposal.
-A passing Task Review atomically approves that exact proposal by moving the Task to Todo.
+Ordinary Task Submission reuses an applicable completed judgment for an unchanged proposal.
+When the Operator explicitly requests another Review of an unchanged unlinked New Task proposal and gives new Task Submission Authorization for the selected Task and intended outcome, run `<but-why> task submit <task-id> --rerun`.
+A rerun bypasses completed-judgment reuse and continues the most recent compatible usable Task Reviewer Session.
+A passing Task Review, including a rerun, atomically approves that exact proposal by moving the Task to Todo.
+A Finding-blocked, tooling-failed, or successfully abandoned rerun leaves the Task New.
+A Finding-blocked rerun becomes the current judgment, while a tooling failure or successful abandonment records no judgment and preserves any prior applicable completed judgment.
+Use the returned Submission mode, Review state and outcome, and help to identify the result and valid next action.
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
 Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
-Resolve every applicable Finding by updating the Task proposal before requesting another review.
+Resolve every applicable Finding by updating the Task proposal before requesting another review, unless the Operator explicitly authorizes an unchanged rerun with new Task Submission Authorization.
 
 When the Operator explicitly requests direct Task Approval and no Task Review is active, inspect the selected Task and run `<but-why> task approve <task-id>`.
 Treat the returned Task state as authoritative.
