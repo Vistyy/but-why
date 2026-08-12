@@ -15,12 +15,10 @@ import {
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import type { TaskReviewExecution, TaskReviewRecord } from "../../src/task/review/taskReview.js";
+import { recordTaskReviewExecutionWithRetry } from "../../src/task/review/taskReviewEvidenceSettlement.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
-import {
-  openTaskReviewUseCases,
-  recordTaskReviewExecutionWithRetry,
-} from "../../src/task/review/taskReviewUseCases.js";
+import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -78,6 +76,7 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
     let active: TaskReviewRecord | undefined;
     let session: Parameters<TaskReviewPersistence["saveReviewerSession"]>[0] | undefined;
     let failWorkspaceCleanupPersistence = false;
+    let failInitialWorkspaceCleanupAfterExecution = false;
     const executionAttempts: TaskReviewExecution[] = [];
     const persistence: TaskReviewPersistence = {
       reuseJudgment: () => Effect.succeed(undefined),
@@ -157,15 +156,29 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
     };
     const runWorkspace: RunDisposableExactCommitWorkspace = (input) =>
       Effect.gen(function* () {
+        const worktreePath = createTestWorkspace();
         const workspaceResult =
           input.runInWorkspace === undefined
             ? undefined
             : yield* input.runInWorkspace({
                 commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
-                worktreePath: createTestWorkspace(),
+                worktreePath,
               });
         if (input.recordWorkspaceCleanup !== undefined) {
           yield* input.recordWorkspaceCleanup({ workspace: "removed" });
+        }
+        if (failInitialWorkspaceCleanupAfterExecution) {
+          return {
+            ok: false as const,
+            toolingError: {
+              operationName: "cleanup_disposable_workspace" as const,
+              workspaceId: input.workspaceId,
+              commitSha: input.commitSha,
+              worktreePath,
+              errorMessage: "Initial cleanup failed.",
+              cleanupResult: { workspace: "failed" as const },
+            },
+          };
         }
         return { ok: true as const, ...(workspaceResult === undefined ? {} : { workspaceResult }) };
       });
@@ -214,19 +227,62 @@ it.effect("reports failed progress for Task Review persistence failures", () =>
     if (result.ok || result.code !== "task_review_recovery_required") return;
     expect(result.review.toolingFailure?.pendingExecution).toEqual(executionAttempts[0]);
 
+    failWorkspaceCleanupPersistence = true;
+    const failedRecovery = yield* reviews.abandon(
+      result.review.id,
+      "Reviewer stopped",
+      "2026-08-11T12:00:30.000Z",
+    );
+    expect(failedRecovery).toMatchObject({
+      ok: false,
+      code: "task_review_cleanup_failed",
+      review: {
+        state: "running",
+        toolingFailure: {
+          operation: "record_task_review_cleanup",
+          pendingExecution: executionAttempts[0],
+        },
+      },
+    });
+
     active = undefined;
     progressOutput.length = 0;
     failWorkspaceCleanupPersistence = true;
-    const workspaceFailure = yield* Effect.either(
-      reviews.submit(taskId, "2026-08-11T12:01:00.000Z"),
-    );
-    expect(workspaceFailure._tag).toBe("Left");
+    const workspaceFailure = yield* reviews.submit(taskId, "2026-08-11T12:01:00.000Z");
+    expect(workspaceFailure).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: {
+        state: "running",
+        toolingFailure: { operation: "record_task_review_cleanup" },
+      },
+    });
     expect(progressOutput).toEqual([
       "Task Review started: profile=review model=unknown thinking=default\n",
       expect.stringMatching(
         /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=resumed reviewCalls=1\n$/,
       ),
     ]);
+
+    active = undefined;
+    failWorkspaceCleanupPersistence = false;
+    failInitialWorkspaceCleanupAfterExecution = true;
+    progressOutput.length = 0;
+    const postReviewCleanupFailure = yield* reviews.submit(taskId, "2026-08-11T12:02:00.000Z");
+    expect(postReviewCleanupFailure).toMatchObject({
+      ok: false,
+      code: "task_review_recovery_required",
+      review: {
+        state: "running",
+        toolingFailure: {
+          operation: "record_task_review_execution",
+          pendingExecution: {
+            continuity: "resumed",
+            sessionReference: "session-1",
+          },
+        },
+      },
+    });
   }),
 );
 
