@@ -90,7 +90,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(parseOutput(result.stdout)["help"]).toEqual(
+      expect(parseOutput(result.stdout).help).toEqual(
         expect.stringContaining(
           "--rerun\n\n  A true or false value.\n\n  Run another Review of the unchanged unlinked New Task proposal instead of reusing a completed judgment.",
         ),
