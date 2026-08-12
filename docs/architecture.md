@@ -35,7 +35,8 @@ The enforced dependency zones and contributor checks are documented in [Tooling]
 
 ## Workflow boundaries
 
-Ordinary Task Submission first selects the newest completed passed Review for the exact unchanged Task Context and direct Task Dependency set of a New Task.
+Ordinary Task Submission first selects the newest completed Review for the exact unchanged Task Context and direct Task Dependency set of a New Task.
+Only a passed matching Review is reusable.
 A reusable judgment returns before repository and reviewer preparation.
 When no reusable judgment exists, ordinary Task Submission reviews one exact New Task proposal under its captured effective policy.
 Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.

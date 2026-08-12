@@ -60,7 +60,7 @@ This section is complete when the authorized Tasks and Task Dependencies are rec
 
 Obtain Task Submission Authorization for the selected Task and intended outcome before running Task Submission.
 Run `<but-why> task submit <task-id>` for the exact authorized New Task proposal.
-Ordinary Task Submission reuses an applicable passed Review for an unchanged New Task proposal.
+Ordinary Task Submission selects the newest completed Review for an unchanged New Task proposal and reuses it only when it passed.
 Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.
 A later authorized submission of an unchanged New Task proposal runs a new Task Review.
 Use the returned Review state and outcome, and help, to identify the result and valid next action.

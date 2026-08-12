@@ -48,7 +48,7 @@ A Task Review captures dependency evidence, a Review Base, and the immutable eff
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Reviewer Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
-Ordinary Task Submission reuses the newest completed passed Review for the exact unchanged New Task proposal.
+Ordinary Task Submission selects the newest completed Review for the exact unchanged New Task proposal and reuses it only when it passed.
 Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.
 A later authorized submission of an unchanged New Task proposal runs a new Task Review.
 Context and direct Task Dependency identity are the only reuse identity fields.

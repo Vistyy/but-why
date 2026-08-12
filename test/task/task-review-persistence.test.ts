@@ -151,7 +151,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
   ),
 );
 
-it.scoped("does not reuse Finding-blocked or tooling-failed Reviews", () =>
+it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an earlier pass", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
@@ -164,6 +164,21 @@ it.scoped("does not reuse Finding-blocked or tooling-failed Reviews", () =>
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
+      yield* reviews.admit({
+        reviewId: "review-passed",
+        taskId: publicTaskId("BY-2"),
+        policy,
+        baseRef: "refs/heads/review-passed",
+        baseCommit: "p".repeat(40),
+        workspacePath: "/tmp/review-passed",
+        now,
+      });
+      yield* reviews.recordCleanup("review-passed", "removed", later);
+      yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later });
+      yield* repository.operation(
+        "restore New Task after earlier passing Review",
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-2'`,
+      );
       const finding = (title: string) => ({
         title,
         description: `${title} description`,

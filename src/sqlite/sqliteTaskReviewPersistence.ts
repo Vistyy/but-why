@@ -298,23 +298,22 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete' AND outcome = 'passed'
+      WHERE task_id = ${taskId} AND state = 'complete'
       ORDER BY sequence DESC
     `;
     for (const row of rows) {
       const proposal = yield* decodeProposalSnapshot(row.proposalSnapshot);
       if (JSON.stringify(proposal) !== JSON.stringify(currentProposal)) continue;
+      if (row.outcome !== "passed") return undefined;
       const review = yield* decodeReview(sql, row);
       const judgment = completedTaskReviewResult(review, "new");
       if (judgment === undefined || judgment.outcome !== "passed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
       }
-      if (judgment.outcome === "passed") {
-        yield* sql`
-          UPDATE tasks SET state = 'todo', updated_at = ${now}
-          WHERE id = ${taskId} AND state = 'new'
-        `;
-      }
+      yield* sql`
+        UPDATE tasks SET state = 'todo', updated_at = ${now}
+        WHERE id = ${taskId} AND state = 'new'
+      `;
       return judgment;
     }
     return undefined;
