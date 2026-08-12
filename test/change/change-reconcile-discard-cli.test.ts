@@ -4,6 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
@@ -24,6 +25,63 @@ describe("by change reconcile --discard-work", () => {
         expect(JSON.parse(result.stdout)).toMatchObject({
           error: { code: "discard_requires_change_id" },
           help: ["Run `by change reconcile <change-id> --discard-work` for one exact Change."],
+        });
+      }),
+    30_000,
+  );
+
+  it.effect(
+    "reports retryable contention through the configured Change lock",
+    () =>
+      Effect.gen(function* () {
+        const root = createInitializedRepo();
+        commitButWhyConfigAndRecordDefault(root);
+        const commonDirectory = join(root, ".git");
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const starts = yield* openSqliteChangeStartPersistence();
+            const changes = yield* openSqliteChangeTestDependencies();
+            const created = yield* starts.create({
+              id: "change-contended",
+              repositoryCommonDirectory: commonDirectory,
+              branchRef: "refs/heads/but-why/change-contended",
+              baseRef: "refs/heads/main",
+              baseRemoteUrl: "https://github.com/acme/repo.git",
+              startingCommit: git(root, "rev-parse", "refs/heads/main"),
+              worktreePath: join(root, "uncreated-worktree"),
+              now,
+            });
+            if (!created.ok) throw new Error(created.code);
+            yield* starts.recordPrepareOutcome(created.change.id, null, now);
+            const cancelled = yield* changes.delivery.cancelChange({
+              changeId: created.change.id,
+              reason: "cleanup",
+              now,
+            });
+            if (!cancelled.ok) throw new Error(cancelled.code);
+          }),
+        );
+
+        const result = yield* openSqliteExecutionLock({ commonDirectory }).withLock({
+          owner: "change_submission",
+          key: "change-contended",
+          effect: runByInProcessEffect(root, [
+            "change",
+            "reconcile",
+            "change-contended",
+            "--discard-work",
+          ]),
+        });
+
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            code: "submission_in_progress",
+            message: "Another operation owns the Change execution lock.",
+            changes: [{ changeId: "change-contended", status: "submission_in_progress" }],
+          },
+          help: ["Wait for the current Change operation to finish, then retry reconciliation."],
         });
       }),
     30_000,
