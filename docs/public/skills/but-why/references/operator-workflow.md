@@ -1,6 +1,6 @@
 # Operator Workflow
 
-Use this reference when selecting a Work Route, recording or submitting Tasks, authorizing implementation, or starting an Implementer Interactive Session.
+Use this reference when selecting a Work Route, recording or submitting Tasks, authorizing implementation, starting an Implementer Interactive Session, or managing Interactive Session continuation.
 Read target-repository instructions, current repository state, and any repository documentation authority map before acting.
 When no map identifies an artifact's authority, do not infer authority from its name or path.
 Treat historical material only as evidence unless the Operator approves it as a current requirement source.
@@ -121,3 +121,34 @@ For `launch_indeterminate`, inspect the existing Herdr session and do not retry 
 Keep the current session open.
 
 This section is complete when Change Implement reports `started` or `already_active` for the exact Change.
+
+## Manage Interactive Session continuation
+
+Change Implement sessions load the packaged `continue-change` extension automatically.
+Do not add it to an Agent Profile.
+
+While the bound Change has an active Implementation Blocker, the extension checks for an approved Resolution every 30 seconds.
+Inspections do not overlap.
+When the extension finds a new Resolution in an unpaused session, it explains the Resolution and automatically resumes the Implementer once for that Resolution.
+It explains the Resolution before it directs the Implementer to Findings from an earlier Validation Run.
+Polling stops when the Change is no longer blocked or is closed.
+A terminal Change does not wake the Implementer.
+
+Use `/pause-change` in the Interactive Session before discussing a Change with the Implementer or taking an external action.
+Pause overrides an inspection that is already in progress.
+A Resolution recorded while paused remains pending.
+
+Use `/continue-change` in the Interactive Session to unpause when needed, refresh the Change state, and continue the bound Change when continuation is safe.
+Repeated `/continue-change` commands keep continuation unpaused.
+A pending Resolution is handled when the Operator explicitly continues or when the Interactive Session starts unpaused.
+If automatic continuation is unavailable, tell the Implementer to continue after recording the Resolution.
+
+If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
+A Validation Tooling Failure receives recovery guidance only after the Operator runs `/continue-change`.
+
+The continuation widget reports when the Change is blocked, implementing a revision, validating a revision, or waiting for human review.
+When a publication has a pull request URL, the widget includes that URL while waiting for human review and during later revision implementation or validation.
+Automatic continuation waits while the exact current Candidate remains published.
+Under the Operator's direct instruction, `/continue-change` resumes revision work for a published Change.
+
+This section is complete when the extension is in the state required for the Operator's next action.

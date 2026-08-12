@@ -26,6 +26,7 @@ type CurrentCandidate = JsonObject & {
 
 type CurrentValidationRun = JsonObject & {
   readonly id: string;
+  readonly state: "running" | "complete";
 };
 
 type BlockerResolution = JsonObject & {
@@ -94,7 +95,8 @@ type PersistedContinuationState = RetryState & {
 };
 
 type WatcherDisplay =
-  | { readonly kind: "watching" }
+  | { readonly kind: "implementing"; readonly pullRequestUrl: string | null }
+  | { readonly kind: "validating"; readonly pullRequestUrl: string | null }
   | { readonly kind: "checking" }
   | { readonly kind: "paused" }
   | { readonly kind: "complete" }
@@ -104,7 +106,7 @@ type WatcherDisplay =
   | { readonly kind: "blocked" }
   | { readonly kind: "inspection-failed" }
   | { readonly kind: "stopped" }
-  | { readonly kind: "waiting-for-human-merge" };
+  | { readonly kind: "waiting-for-human-review"; readonly pullRequestUrl: string };
 
 type RunResult =
   | { readonly ok: true; readonly stdout: string }
@@ -136,6 +138,7 @@ type InspectionResult =
 const stateEntry = "but-why-change-continuation";
 const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
+const blockerPollingIntervalMs = 30_000;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
@@ -583,7 +586,10 @@ export default function continueChange(pi: ExtensionAPI): void {
   let persisted: PersistedContinuationState | undefined;
   let settling = false;
   let pauseGeneration = 0;
-  let watcherDisplay: WatcherDisplay = { kind: "watching" };
+  let shutDown = false;
+  let activeInspectionAbortController: AbortController | undefined;
+  let pollingTimer: ReturnType<typeof setTimeout> | undefined;
+  let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
   const pendingReassessmentEvidence = new Map<string, ReassessmentEvidence>();
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
@@ -594,8 +600,10 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     const text = (() => {
       switch (display.kind) {
-        case "watching":
-          return `● Watching Change ${changeId.slice(0, 8)}…`;
+        case "implementing":
+          return `● Implementing revision${display.pullRequestUrl === null ? "" : ` - ${display.pullRequestUrl}`}`;
+        case "validating":
+          return `◐ Validating revision${display.pullRequestUrl === null ? "" : ` - ${display.pullRequestUrl}`}`;
         case "checking":
           return "◐ Checking Change state…";
         case "paused":
@@ -614,8 +622,8 @@ export default function continueChange(pi: ExtensionAPI): void {
           return "! Change inspection failed";
         case "stopped":
           return "! Watching stopped - no progress";
-        case "waiting-for-human-merge":
-          return "◌ Waiting for human merge";
+        case "waiting-for-human-review":
+          return `◌ Waiting for human review - ${display.pullRequestUrl}`;
       }
     })();
     ctx.ui.setWidget(watcherWidget, (_tui, theme) => ({
@@ -631,9 +639,9 @@ export default function continueChange(pi: ExtensionAPI): void {
                 ? "error"
                 : display.kind === "complete" ||
                     display.kind === "idle" ||
-                    display.kind === "waiting-for-human-merge"
+                    display.kind === "waiting-for-human-review"
                   ? "success"
-                  : display.kind === "checking"
+                  : display.kind === "checking" || display.kind === "validating"
                     ? "muted"
                     : "accent",
             text.slice(0, Math.max(width, 0)),
@@ -644,21 +652,30 @@ export default function continueChange(pi: ExtensionAPI): void {
     }));
   };
 
+  const publicationPullRequestUrl = (snapshot: ChangeInspectionSnapshot): string | null => {
+    const pullRequest = snapshot.publication?.pullRequest;
+    if (pullRequest === null || pullRequest === undefined) return null;
+    const url = Reflect.get(pullRequest, "url");
+    return typeof url === "string" ? url : null;
+  };
+
   const displayFor = (
     snapshot: ChangeInspectionSnapshot,
     git: GitInspection,
     blockerHistory: BlockerHistory,
   ): WatcherDisplay => {
-    if (blockerHistory.active !== null) {
-      return { kind: "blocked" };
-    }
     if (snapshot.change.state === "closed") {
       if (snapshot.cleanup?.state === "pending") return { kind: "cleanup-needed" };
       return snapshot.change.closeReason === "cancelled"
         ? { kind: "cancelled" }
         : { kind: "complete" };
     }
+    if (blockerHistory.active !== null) return { kind: "blocked" };
     if (snapshot.toolingFailureCount > 0) return { kind: "stopped" };
+    const pullRequestUrl = publicationPullRequestUrl(snapshot);
+    if (snapshot.currentValidationRun?.state === "running") {
+      return { kind: "validating", pullRequestUrl };
+    }
     const decision = decideContinuation(snapshot, git);
     if (decision.kind === "idle") {
       const publication = snapshot.publication;
@@ -672,11 +689,13 @@ export default function continueChange(pi: ExtensionAPI): void {
         git.head === publication.expectedHeadSha &&
         git.status.trim() === ""
       ) {
-        return { kind: "waiting-for-human-merge" };
+        return pullRequestUrl === null
+          ? { kind: "idle" }
+          : { kind: "waiting-for-human-review", pullRequestUrl };
       }
       return { kind: "idle" };
     }
-    return { kind: "watching" };
+    return { kind: "implementing", pullRequestUrl };
   };
 
   const restoreState = (ctx: ExtensionContext): void => {
@@ -698,10 +717,19 @@ export default function continueChange(pi: ExtensionAPI): void {
     pi.appendEntry(stateEntry, state);
   };
 
-  const run = async (command: string, args: readonly string[], cwd: string): Promise<RunResult> => {
+  const run = async (
+    command: string,
+    args: readonly string[],
+    cwd: string,
+    signal?: AbortSignal,
+  ): Promise<RunResult> => {
     const label = [command, ...args].join(" ");
     try {
-      const result = await pi.exec(command, [...args], { cwd, timeout: 15_000 });
+      const result = await pi.exec(command, [...args], {
+        cwd,
+        timeout: 15_000,
+        ...(signal === undefined ? {} : { signal }),
+      });
       if (result.code === 0) return { ok: true, stdout: result.stdout };
       const stderr = result.stderr.trim();
       return {
@@ -743,13 +771,18 @@ export default function continueChange(pi: ExtensionAPI): void {
   const inspectCommand = async (
     commandArgs: readonly string[],
     cwd: string,
+    signal?: AbortSignal,
   ): Promise<RunResult> => {
     const prefix = commandPrefixFor(cwd);
     const [command, ...args] = cliInvocation(prefix, commandArgs);
-    return run(command, args, cwd);
+    return run(command, args, cwd, signal);
   };
 
-  const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
+  const inspect = async (
+    ctx: ExtensionContext,
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<InspectionResult> => {
     const args = ["change", "show", id];
     const blockerArgs = ["change", "blocker", "list", id];
     const [
@@ -761,13 +794,13 @@ export default function continueChange(pi: ExtensionAPI): void {
       stagedResult,
       untrackedResult,
     ] = await Promise.all([
-      inspectCommand(args, ctx.cwd),
-      inspectCommand(blockerArgs, ctx.cwd),
-      run("git", ["rev-parse", "HEAD"], ctx.cwd),
-      run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
-      run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
-      run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
-      run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
+      inspectCommand(args, ctx.cwd, signal),
+      inspectCommand(blockerArgs, ctx.cwd, signal),
+      run("git", ["rev-parse", "HEAD"], ctx.cwd, signal),
+      run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd, signal),
+      run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd, signal),
+      run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd, signal),
+      run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd, signal),
     ]);
     const results = [
       changeResult,
@@ -799,7 +832,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const untrackedHashResult =
       untrackedPaths.length === 0
         ? ({ ok: true, stdout: "" } as const)
-        : await run("git", ["hash-object", "--", ...untrackedPaths], ctx.cwd);
+        : await run("git", ["hash-object", "--", ...untrackedPaths], ctx.cwd, signal);
     if (!untrackedHashResult.ok) {
       return {
         ok: false,
@@ -934,6 +967,16 @@ export default function continueChange(pi: ExtensionAPI): void {
     saveState({ ...previous, submissionReassessment: state });
   };
 
+  const showValidationStarted = (ctx: ExtensionContext): void => {
+    const pullRequestUrl =
+      watcherDisplay.kind === "implementing" ||
+      watcherDisplay.kind === "validating" ||
+      watcherDisplay.kind === "waiting-for-human-review"
+        ? watcherDisplay.pullRequestUrl
+        : null;
+    showWatcher(ctx, { kind: "validating", pullRequestUrl });
+  };
+
   pi.on("tool_call", async (event, ctx) => {
     if (!isToolCallEventType("bash", event)) return;
     const runningReassessment = persisted?.submissionReassessment;
@@ -954,7 +997,10 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     if (!containsVisibleChangeSubmit(event.input.command)) return;
     const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state === "complete" || reassessment?.state === "not-required") return;
+    if (reassessment?.state === "complete" || reassessment?.state === "not-required") {
+      showValidationStarted(ctx);
+      return;
+    }
     if (
       reassessment?.state === "awaiting-settle" ||
       reassessment?.state === "awaiting-restart" ||
@@ -981,6 +1027,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         hasResolutions: false,
         evidence: emptyReassessmentEvidence(),
       });
+      showValidationStarted(ctx);
       return;
     }
     saveSubmissionReassessment({
@@ -1046,6 +1093,23 @@ export default function continueChange(pi: ExtensionAPI): void {
     return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
   };
 
+  const clearBlockedPolling = (): void => {
+    if (pollingTimer !== undefined) clearTimeout(pollingTimer);
+    pollingTimer = undefined;
+  };
+
+  let continueWatching: (ctx: ExtensionContext, explicit: boolean) => Promise<void>;
+
+  const scheduleBlockedPolling = (ctx: ExtensionContext): void => {
+    clearBlockedPolling();
+    if (shutDown || persisted?.paused) return;
+    pollingTimer = setTimeout(() => {
+      pollingTimer = undefined;
+      void continueWatching(ctx, false);
+    }, blockerPollingIntervalMs);
+    if (typeof pollingTimer === "object") pollingTimer.unref();
+  };
+
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
     if (changeId === undefined) {
       ctx.ui.setWidget(watcherWidget, undefined);
@@ -1057,34 +1121,59 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     showWatcher(ctx, { kind: "checking" });
     const observed = await inspect(ctx, changeId);
+    if (shutDown) return;
     if (!observed.ok) {
       showWatcher(ctx, { kind: "inspection-failed" });
       return;
     }
-    const latest = resolutionId(latestResolution(observed.blockerHistory));
-    const previousResolutionId = persisted?.resolutionId;
-    const resolutionChanged =
-      previousResolutionId !== undefined && latest !== null && latest !== previousResolutionId;
-    const pendingResolutionId = persisted?.pendingResolutionId;
-    const pendingResolution =
-      resolutionChanged ||
-      (pendingResolutionId !== undefined &&
-        pendingResolutionId !== null &&
-        pendingResolutionId !== latest)
-        ? latest
-        : (pendingResolutionId ?? null);
-    saveState({
+    const latest = latestResolution(observed.blockerHistory);
+    const latestId = resolutionId(latest);
+    const previous = persisted;
+    const handledResolutionId = previous?.resolutionId ?? null;
+    const resolutionChanged = latestId !== null && latestId !== handledResolutionId;
+    const pendingResolutionId = resolutionChanged
+      ? latestId
+      : (previous?.pendingResolutionId ?? null);
+    const initializedState: PersistedContinuationState = {
       changeId,
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: latest,
-      pendingResolutionId: pendingResolution,
-      ...(persisted?.submissionReassessment === undefined
+      resolutionId: handledResolutionId,
+      pendingResolutionId,
+      ...(previous?.submissionReassessment === undefined
         ? {}
-        : { submissionReassessment: persisted.submissionReassessment }),
-    });
+        : { submissionReassessment: previous.submissionReassessment }),
+    };
+    saveState(initializedState);
     showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
+    if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
+      scheduleBlockedPolling(ctx);
+      return;
+    }
+    clearBlockedPolling();
+    if (
+      pendingResolutionId !== null &&
+      latest !== null &&
+      latest.id === pendingResolutionId &&
+      observed.snapshot.change.state === "open" &&
+      ctx.isIdle()
+    ) {
+      saveState({
+        ...initializedState,
+        resolutionId: latest.id,
+        pendingResolutionId: null,
+      });
+      showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
+      pi.sendUserMessage(
+        resolutionMessage(
+          changeId,
+          latest,
+          observed.snapshot.findingCount > 0,
+          commandPrefixFor(ctx.cwd),
+        ),
+      );
+    }
   };
 
   const pause = (ctx: ExtensionContext): void => {
@@ -1096,6 +1185,8 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     pauseGeneration += 1;
+    clearBlockedPolling();
+    activeInspectionAbortController?.abort();
     const state = persisted ?? {
       changeId,
       fingerprint: "inspection-unavailable",
@@ -1111,10 +1202,13 @@ export default function continueChange(pi: ExtensionAPI): void {
     );
   };
 
-  const continueWatching = async (ctx: ExtensionContext, explicit: boolean): Promise<void> => {
-    if (!ctx.isIdle() || settling) return;
+  continueWatching = async (ctx: ExtensionContext, explicit: boolean): Promise<void> => {
+    if (!ctx.isIdle() || settling) {
+      if (!persisted?.paused && watcherDisplay.kind === "blocked") scheduleBlockedPolling(ctx);
+      return;
+    }
     if (changeId === undefined) {
-      showWatcher(ctx, { kind: "watching" });
+      showWatcher(ctx, { kind: "implementing", pullRequestUrl: null });
       return;
     }
     if (!explicit && persisted?.paused) {
@@ -1123,10 +1217,14 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     const id = changeId;
     const startedAtPauseGeneration = pauseGeneration;
+    const wasBlocked = watcherDisplay.kind === "blocked";
+    const inspectionAbortController = new AbortController();
+    activeInspectionAbortController = inspectionAbortController;
     settling = true;
     showWatcher(ctx, { kind: "checking" });
     try {
-      const observed = await inspect(ctx, id);
+      const observed = await inspect(ctx, id, inspectionAbortController.signal);
+      if (shutDown) return;
       if (persisted?.paused || startedAtPauseGeneration !== pauseGeneration) {
         showWatcher(ctx, { kind: "paused" });
         return;
@@ -1152,7 +1250,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           fingerprint: previous.fingerprint,
           unchangedRestarts: previous.unchangedRestarts + 1,
         };
-        if (retry.unchangedRestarts > maxUnchangedRestarts) {
+        if (!wasBlocked && retry.unchangedRestarts > maxUnchangedRestarts) {
           saveState({ ...previous, ...retry, paused: false });
           showWatcher(ctx, { kind: "stopped" });
           ctx.ui.notify(
@@ -1167,7 +1265,11 @@ export default function continueChange(pi: ExtensionAPI): void {
           "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator pauses it.",
           "warning",
         );
-        if (!explicit && ctx.isIdle()) {
+        if (wasBlocked) {
+          showWatcher(ctx, { kind: "blocked" });
+          scheduleBlockedPolling(ctx);
+        }
+        if (!explicit && !wasBlocked && ctx.isIdle()) {
           pi.sendUserMessage(
             `But Why could not inspect the current Change state for ${id}. Restore But Why CLI and Git access, then inspect the Change and Managed Worktree and continue. Do not assume a stopping condition.`,
           );
@@ -1198,29 +1300,28 @@ export default function continueChange(pi: ExtensionAPI): void {
         ...previous,
         ...retry,
         paused: false,
-        resolutionId: currentResolutionId,
+        resolutionId: previous.resolutionId ?? currentResolutionId,
         pendingResolutionId: resolutionChanged
           ? currentResolutionId
           : (previous.pendingResolutionId ?? null),
       });
 
-      if (observed.blockerHistory.active !== null) {
+      if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
         showWatcher(ctx, { kind: "blocked" });
+        scheduleBlockedPolling(ctx);
         return;
       }
-      if (!explicit && (resolutionChanged || pendingResolution)) {
-        showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
-        return;
-      }
-      if (explicit && (resolutionChanged || pendingResolution) && currentResolution !== null) {
-        showWatcher(ctx, { kind: "watching" });
+      clearBlockedPolling();
+      if ((resolutionChanged || pendingResolution) && currentResolution !== null) {
         if (observed.snapshot.change.state === "open") {
           saveState({
             ...previous,
             ...retry,
+            paused: false,
             resolutionId: currentResolutionId,
             pendingResolutionId: null,
           });
+          showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
           pi.sendUserMessage(
             resolutionMessage(
               id,
@@ -1248,7 +1349,10 @@ export default function continueChange(pi: ExtensionAPI): void {
           observed.snapshot.publication?.pullRequest !== null &&
           observed.snapshot.publication?.pullRequest !== undefined
         ) {
-          showWatcher(ctx, { kind: "watching" });
+          showWatcher(ctx, {
+            kind: "implementing",
+            pullRequestUrl: publicationPullRequestUrl(observed.snapshot),
+          });
           pi.sendUserMessage(
             `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand(commandPrefix, "change", "submit", id)} before publication.`,
           );
@@ -1266,11 +1370,16 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       const message = buildContinuationMessage(decision, id, commandPrefix);
-      showWatcher(ctx, { kind: "watching" });
+      showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
       if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {
+      if (activeInspectionAbortController === inspectionAbortController) {
+        activeInspectionAbortController = undefined;
+      }
       settling = false;
-      if (watcherDisplay.kind === "checking") showWatcher(ctx, { kind: "watching" });
+      if (!shutDown && watcherDisplay.kind === "checking") {
+        showWatcher(ctx, { kind: "implementing", pullRequestUrl: null });
+      }
     }
   };
 
@@ -1305,7 +1414,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("continue-change", {
-    description: "Refresh and continue the Change watcher",
+    description: "Resume automatic continuation and refresh the Change",
     handler: async (_args, ctx) => {
       if (changeId === undefined) {
         ctx.ui.notify(
@@ -1343,7 +1452,19 @@ export default function continueChange(pi: ExtensionAPI): void {
     const inputChangeId = extractChangeId(event.text);
     if (inputChangeId === undefined || changeId !== undefined) return;
     changeId = inputChangeId;
-    showWatcher(ctx, persisted?.paused ? { kind: "paused" } : { kind: "watching" });
+    showWatcher(
+      ctx,
+      persisted?.paused ? { kind: "paused" } : { kind: "implementing", pullRequestUrl: null },
+    );
+  });
+
+  pi.on("session_shutdown", () => {
+    shutDown = true;
+    pauseGeneration += 1;
+    clearBlockedPolling();
+    activeInspectionAbortController?.abort();
+    activeInspectionAbortController = undefined;
+    pendingReassessmentEvidence.clear();
   });
 
   pi.on("agent_end", (event, ctx) => {
@@ -1439,7 +1560,9 @@ const isCandidate = (value: unknown): value is CurrentCandidate =>
   typeof recordValue(value, "headSha") === "string";
 
 const isValidationRun = (value: unknown): value is CurrentValidationRun =>
-  isRecord(value) && typeof recordValue(value, "id") === "string";
+  isRecord(value) &&
+  typeof recordValue(value, "id") === "string" &&
+  (recordValue(value, "state") === "running" || recordValue(value, "state") === "complete");
 
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;

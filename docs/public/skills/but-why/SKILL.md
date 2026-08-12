@@ -11,7 +11,7 @@ It does not require target-repository private instructions or other local skills
 
 Before running a But Why command, read [Command guidance](references/command-guidance.md) completely.
 Before setup guidance, read [Setup guidance](../../setup.md) completely.
-Before Task authoring, Work Route Selection, Task Submission, implementation authorization, or Interactive Session launch, read [Operator workflow](references/operator-workflow.md) completely.
+Before Task authoring, Work Route Selection, Task Submission, implementation authorization, Interactive Session launch, or Interactive Session continuation management, read [Operator workflow](references/operator-workflow.md) completely.
 
 When the current session is bound to a Change, Task-backed Change, or Managed Worktree for implementation, treat the session as Change implementation.
 Before inspecting the repository, editing files, or running repository commands, read [Implement a Change](references/implement-change.md) completely and follow it.

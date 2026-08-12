@@ -73,29 +73,8 @@ The main operator inspects the blocker with `<but-why> change blocker list <chan
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 For a Task-backed Change, the Resolution appends to the current Acceptance Context.
 For a taskless Change, the Resolution remains Change history and creates no Acceptance Context.
-After resolution, the main operator manually tells the Implementer to continue in the same Managed Worktree.
-Do not detect, stop, message, or automatically wake an Interactive Session.
-
-## Change continuation
-
-Change continuation is optional.
-Change Implement sessions load the packaged `continue-change` extension automatically. Do not add it to an Agent Profile.
-
-Use `/pause-change` to pause automatic continuation before discussing a Change or taking an external action.
-
-Use `/continue-change` to refresh the Change state and continue the bound Change when continuation is safe.
-`/continue-change` is idempotent and does not toggle the pause state.
-
-After an external Implementation Blocker Resolution, run `/continue-change` manually.
-The extension does not poll for the Resolution or automatically wake the Implementer after the Resolution.
-The extension explains the Resolution before it directs the Implementer to Findings from an earlier Validation Run.
-
-If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
-A Validation Tooling Failure receives recovery guidance only after the operator runs `/continue-change`.
 
 Candidate Publication is a delivery state, not durable Change completion.
-Automatic continuation waits while the exact current Candidate remains published.
-Explicit `/continue-change` can resume revision work under the operator's direct instruction.
 After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.
 Change Submit must pass before the same owned open pull request is updated.
 
