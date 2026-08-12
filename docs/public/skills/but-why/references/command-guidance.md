@@ -10,7 +10,7 @@ Use that prefix for every But Why command in the session.
 Every But Why command returns one compact JSON document on stdout.
 Decode the JSON before using result fields in a program.
 
-Use CLI `--help` output for exact command syntax.
+Use CLI `--help` output when you need to discover or confirm exact command syntax.
 
 After each But Why command, inspect its structured output and exit code.
 For a read-only command, verify that the output contains the requested information.

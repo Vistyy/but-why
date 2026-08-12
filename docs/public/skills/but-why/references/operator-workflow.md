@@ -4,7 +4,6 @@ Use this reference when selecting a Work Route, recording Tasks, approving a Tas
 Read target-repository instructions, current repository state, and any repository documentation authority map before acting.
 When no map identifies an artifact's authority, do not infer authority from its name or path.
 Treat historical material only as evidence unless the Operator approves it as a current requirement source.
-Use CLI help to confirm exact command syntax before execution.
 
 ## Authority
 
