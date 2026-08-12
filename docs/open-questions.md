@@ -120,6 +120,71 @@ But Why must revalidate before an expected-SHA push.
 A human must retain merge authority.
 Conflict remediation should merge the latest base into the PR branch, then run the complete Validation Gate.
 
+## How should Candidate Publication present the complete work to a human reviewer?
+
+The current owned pull-request body exposes the Task identity and Implementation Decision Log, but it does not synthesize the Task and Change lifecycle into a review experience.
+Future design should determine how an agent examines the approved Task intent, Task Review history, Task Dependencies, Acceptance Context, Implementation Decisions, Implementation Blockers and Resolutions, historical Candidates and Findings, the exact passing Validation Run, selected evidence, and the final code to explain the complete Change without dumping those records.
+
+The presentation should help a human understand the behavior, affected code beyond the changed lines, and the material path by which the exact Candidate became publishable.
+It must bind every Candidate-specific claim to the exact published Candidate and Validation Run.
+An earlier Candidate's Finding may be presented as historical, but a later passing Candidate does not by itself establish a durable one-to-one Finding resolution.
+The design must decide which additional lifecycle provenance must be recorded before publication can make stronger claims.
+The synthesis agent should explain existing accepted and validated evidence rather than perform another broad correctness review, create Findings, or independently reopen accepted scope.
+
+The presentation should combine a small stable review spine with adaptive content.
+The stable part should make recurring facts easy to scan, while the agent remains free to select useful prose, tables, one or more diagrams, or other media for the Change.
+Guidance should state the review outcomes and useful presentation techniques without requiring every optional section or one universal document shape.
+A deterministic boundary should validate provenance, references, size and safety constraints, generated-content ownership, and remote mutation recovery without prescribing the complete narrative structure.
+
+When a revised Candidate updates an existing owned pull request, presentation generation should receive the prior published presentation and the new exact lifecycle evidence.
+It should revise what changed rather than independently regenerate the complete explanation from scratch.
+The design must define the stable identity and storage of each proposed presentation, how an uncertain GitHub mutation reuses the same proposed content, how the revised result removes stale claims, and whether human-authored edits can exist outside a publisher-owned section.
+
+The design should evaluate whether one `low`, `medium`, or `high` review signal is useful without conflating impact, delivery difficulty, review effort, and merge safety.
+Its name and definition should communicate how much risk requires deliberate human review without implying that the classification alone determines merge eligibility.
+
+The [no-mistakes pipeline](https://github.com/kunchenguid/no-mistakes) and [pull request 711](https://github.com/kunchenguid/no-mistakes/pull/711) are useful comparable evidence.
+Its separation of intent, changed behavior, risk, evidence, and machine-readable lifecycle data is relevant, while its full intent dump, repeated clean-step output, raw automated-test transcripts, and stale head-bound presentation show failure modes to avoid.
+
+## How should initial delivery expectations be compared with observed Change history?
+
+A Task may initially appear small, familiar, or easy to implement, while its Change later exposes unexpected scope, Decisions, Blockers and Resolutions, repeated Candidate or Submission attempts, historical Findings, or materially different verification needs.
+A concise comparison could help a human notice that the work differed materially from its initial expectation.
+Preserved expectations and observed outcomes could later support analysis across completed Changes outside the publication lifecycle.
+
+Do not include Initial Delivery Expectations or expectation-versus-outcome comparison in the first publication-presentation version.
+Before implementation, determine which concepts are useful, when an expectation is recorded, who produces or accepts it, whether it belongs to Task Intent or Change Delivery, how taskless Changes participate, which observations are authoritative, and how confidence and changed understanding are represented without one misleading mutable score.
+Keep delivery difficulty, impact, uncertainty, review effort, review scrutiny, and merge safety distinct unless evidence supports a defined relationship.
+Counts of Decisions, Findings, attempts, elapsed time, or usage must not by themselves imply risk or process failure.
+Any later publication presentation should only flag a material per-Change divergence and should not own cross-Change diagnosis or recommendations about systemic causes.
+
+## How should publication provide code-anchored Review Guidance?
+
+A future publication agent may identify a concise review path through important files or lines, including affected code that is not itself changed.
+GitHub file-level and line-level review comments can provide useful spatial guidance, but they can also create notification noise, resemble Findings, and become outdated when a revised Candidate changes the diff.
+
+Do not include code-anchored Review Guidance in the first publication-presentation version.
+Before adding it, dogfood body-level file and line links and define annotation purpose, selection limits, exact-Candidate binding, stable identity, update and removal behavior, revised-Candidate reconciliation, and visual distinction from actionable Findings and Operator feedback.
+The design should determine whether GitHub review comments, Check annotations, body links, or another platform-specific surface best preserves the guidance.
+
+## How should human-inspectable evidence be published?
+
+Validation currently retains bounded local Artifact Content while a Change is Open and removes that content during Terminal Cleanup.
+Future publication may need to present non-automated or one-time evidence that helps a human judge observable behavior, such as screenshots, recordings, focused experiments, exploratory verification, before-and-after comparisons, and environment-specific observations.
+Routine passing test and lint output should not be repeated when it adds no review information.
+
+Before implementation, define evidence selection, supported media, redaction, access control, truncation disclosure, exact Candidate and environment binding, durable hosting, retention, cleanup, and behavior when evidence becomes unavailable.
+Distinguish direct evidence from an agent's summary of that evidence.
+Do not treat GitHub Checks or commit statuses as the evidence merely because they can transport a result or link.
+
+## How should opportunities outside the accepted Change become follow-up work?
+
+Implementation, validation, and publication agents can discover missing adjacent behavior, worthwhile improvements, or affected code outside the accepted Change that should not expand the current scope.
+A pull-request presentation may disclose a material limitation or intentionally excluded concern, but editable pull-request prose should not silently create accepted work or imply that every optional improvement is required.
+
+Future design must determine which observations deserve durable follow-up records, who judges their relevance and scope, how they relate to the originating Task or Change, whether they become proposed Tasks, and how duplicates and speculative agent suggestions are controlled.
+Keep follow-up discovery separate from the exact Candidate's passing judgment and from accepted Task intent.
+
 ## How should Operator Review Feedback re-enter an Open Change?
 
 Dogfooding identified a need for the Operator to annotate code on an owned pull request and return one review to the Implementer without managing each GitHub conversation as workflow state.
