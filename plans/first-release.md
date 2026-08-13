@@ -1,7 +1,8 @@
 # First release planning index
 
-**Status:** Active exploration.
-This file is temporary planning context and is not implementation authority.
+**Status:** Paused pending the Task Intent extraction boundary.
+The existing dependency order and release scope are not current planning direction.
+This file is temporary historical planning context and is not implementation authority.
 
 **Removal condition:** Remove this file after every approved implementation outcome is recorded in the smallest applicable SQLite Tasks, accepted architectural decisions are recorded in their authoritative artifacts, and remaining release operations are completed or captured in an approved procedure.
 

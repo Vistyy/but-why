@@ -1,7 +1,8 @@
 # First-release readiness plan
 
-**Status:** Active exploration.
-It is not implementation or publication authority.
+**Status:** Paused pending the product and package boundary.
+Release operations may remain applicable after the Task Intent extraction is resolved.
+Do not use this plan as current planning direction, implementation authority, or publication authority.
 
 **Removal condition:** Remove this file after all repository outcomes are implemented and documented, all release operations are completed, and any remaining supported procedure is recorded in its authoritative documentation.
 

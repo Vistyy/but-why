@@ -1,7 +1,8 @@
 # Agent Session and execution plan
 
-**Status:** Active exploration.
-It is not implementation authority.
+**Status:** Paused pending the Task Intent extraction boundary.
+The Change Delivery portions may remain applicable, while Task Review execution may move to another product.
+Do not use this plan as current planning direction or implementation authority.
 
 **Removal condition:** Remove this file after the approved behavior is implemented, recorded in applicable current architecture and domain authorities, and represented by completed SQLite Tasks.
 

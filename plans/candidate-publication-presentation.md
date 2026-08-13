@@ -1,6 +1,8 @@
 # Candidate Publication presentation plan
 
-**Status:** Approved by the Operator as provisional planning context. It is not implementation authority.
+**Status:** Paused pending the Task Intent extraction boundary.
+The prior provisional approval is not current planning direction because publication inputs and Task Review access may change.
+Do not use this plan as implementation authority.
 
 **Scheduling:** Wait for `agent-session-execution.md` to establish the shared execution contract before decomposing this plan into Tasks.
 This plan supplies logical persistence and recovery requirements to `release-baseline-cutover.md`, which selects their physical representation.

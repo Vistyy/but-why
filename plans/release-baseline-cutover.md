@@ -1,7 +1,8 @@
 # First-release baseline and state cutover plan
 
-**Status:** Active exploration.
-It is not implementation authority.
+**Status:** Paused pending the Task Intent extraction boundary.
+Schema ownership and the released baseline cannot be selected until that boundary is resolved.
+Do not use this plan as current planning direction or implementation authority.
 
 **Removal condition:** Remove this file after the released baseline is implemented, the prerelease state is archived, the cutover is completed, and accepted authority changes are recorded in current artifacts.
 

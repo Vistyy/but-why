@@ -1,7 +1,8 @@
 # Task Backend boundary plan
 
-**Status:** Active exploration.
-It is not implementation authority.
+**Status:** Paused and expected to be superseded.
+The current direction is to extract Task Intent rather than add a Task Backend boundary inside But Why.
+Do not use this plan as current planning direction or implementation authority.
 
 **Removal condition:** Remove this file after the Operator approves the supported outcome, its implementation Tasks are recorded, and any implemented architectural decision is recorded in its authoritative artifact.
 

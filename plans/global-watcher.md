@@ -1,9 +1,10 @@
 # Global Watcher planning record
 
-Status: Approved planning direction, deferred until after the first stable release.
+Status: Paused pending the Task Intent extraction boundary.
 
-This file preserves the accepted Global Watcher design while implementation is intentionally deferred.
-It is temporary planning context and is not implementation authority.
+The prior planning direction depends on repository-owned Task state, automatic Task selection, and atomic Task and Change completion.
+Those assumptions are under reconsideration.
+Do not use this plan as current planning direction or implementation authority.
 No Task Recording, Task Submission, Change Start, or Implementation Authorization is granted by this file.
 
 Removal condition: Remove this file after the accepted outcomes are recorded in the smallest applicable SQLite Tasks and all implemented behavior and architectural decisions are recorded in their authoritative artifacts.

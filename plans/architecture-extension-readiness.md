@@ -1,7 +1,8 @@
 # Architecture extension readiness plan
 
-**Status:** Approved by the Operator as planning direction.
-It is not implementation authority.
+**Status:** Paused.
+The prior planning direction is under reconsideration because Task Intent may move to a separate product.
+Do not use this plan as current planning direction or implementation authority.
 
 **Removal condition:** Remove this file after its accepted architectural constraints are implemented or recorded in the applicable current architecture authority, and all resulting implementation outcomes are recorded in SQLite Tasks.
 
