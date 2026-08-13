@@ -2,7 +2,8 @@
 
 **Status:** Approved by the Operator as provisional planning context. It is not implementation authority.
 
-**Scheduling:** Wait for the first-release schema refactor planning to establish the applicable persistence direction before decomposing this plan into Tasks.
+**Scheduling:** Wait for `agent-session-execution.md` to establish the shared execution contract before decomposing this plan into Tasks.
+This plan supplies logical persistence and recovery requirements to `release-baseline-cutover.md`, which selects their physical representation.
 
 **Removal condition:** Remove this file after the Operator approves the plan and every accepted requirement and qualifying decision is recorded in its applicable SQLite Task, current domain context, accepted ADR, or current documentation source.
 
@@ -23,8 +24,9 @@ The work is split into independently reviewable deliverables.
 1. A separate prerequisite generalizes the current Reviewer Session infrastructure into a shared Agent Session capability while preserving existing review behavior.
 2. This Candidate Publication presentation work consumes the shared Agent Session capability.
 
-The Agent Session design is owned by the separate `agent-session-design` session.
-The broader rules for Candidate selection, Validation eligibility, Submission reuse, and publication freshness are owned by the separate `submission-freshness` session.
+`agent-session-execution.md` owns shared Agent Session and Agent Execution behavior.
+`release-baseline-cutover.md` owns the final physical schema.
+This plan owns Publication Agent behavior and Candidate Publication state and consumes those shared capabilities.
 This plan assumes only that Candidate Publication receives an exact Candidate and an upstream-selected eligible passing Validation Run.
 It does not define when Validation must rerun.
 
@@ -269,13 +271,20 @@ Those inputs govern generation and Agent Session compatibility, not whether comp
 
 ## Pending and confirmed publication state
 
-Version 1 extends the existing current Candidate Publication snapshot rather than adding a presentation-history table.
-The physical schema must support both:
+Version 1 extends current Change-owned Candidate Publication state rather than adding presentation history.
+The logical state distinguishes:
 
-- The last confirmed Candidate Publication and presentation.
-- A pending exact proposal for a new or revised Candidate Publication.
+- Active generation, which identifies the Change, Candidate, Validation Run, presentation source digest, and unsettled Agent Execution before complete presentation content exists.
+- A complete pending proposal awaiting publication mutation or reconciliation.
+- The last confirmed publication and presentation.
 
-The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, exact head and Change Base, and presentation source digest.
+Successful Agent Execution settlement replaces active-generation state with the complete pending proposal rather than retaining generation history.
+The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, presentation source digest, and successful Agent Execution ID.
+Exact head and Change Base are derived from the immutable Candidate rather than duplicated.
+Confirmed state requires pull request number and URL.
+Pending state omits those fields and uses confirmed state when updating an existing pull request.
+Confirmed state retains the successful Agent Execution ID as generation evidence.
+The release-baseline review selects the physical table count and placement.
 
 The update flow is:
 
@@ -287,9 +296,11 @@ The update flow is:
 6. Promote the pending proposal to current confirmed publication and clear pending state.
 
 An uncertain GitHub result is reconciled against exact pending and confirmed facts.
+If the exact Candidate merges during uncertainty, reconciliation promotes pending only when the merged pull request's title, body, target, and head match it.
+Otherwise, terminal reconciliation retains the prior confirmed snapshot, clears unconfirmed pending state, and completes the already merged exact Candidate without claiming unverified presentation evidence.
 A retry never regenerates an already persisted exact proposal.
 No Candidate Publication or presentation chronology is retained in version 1.
-The current storage design extends the `changes`-owned current publication snapshot, subject to the parallel schema design selecting the physical representation.
+Candidate Publication remains owned by Change Delivery regardless of its physical persistence representation.
 
 The title, body, Risk, and source digest remain internal in version 1.
 GitHub is the presentation surface.
@@ -308,7 +319,7 @@ An existing open owned pull request that predates stored presentation state is u
 Its current remote title and body are not supplied as prior agent output because But Why cannot establish that provenance.
 The resulting complete presentation may replace existing human edits under the normal ownership rule.
 But Why does not run a background migration or mutate GitHub merely because the software was upgraded.
-The separate submission-freshness design owns the upstream rule for which Validation Run is eligible.
+Change Submission owns the upstream rule for which Validation Run is eligible.
 Publication owns only presentation and remote-publication freshness.
 
 ## Submission Workspace
@@ -332,7 +343,10 @@ Each active Submission Workspace requires durable recovery facts:
 - Cleanup state.
 - Selected Validation Run reference when applicable.
 
-The physical table or schema representation is intentionally unresolved because a parallel session is redesigning persistence.
+Change Delivery's Submission operation owns Submission Workspace lifecycle and recovery across Validation and publication synthesis.
+The release-baseline plan selects its physical persistence representation.
+The durable recovery state exists only while setup, use, or cleanup remains active and is removed after successful cleanup.
+Validation and Publication retain their own evidence rather than permanent workspace history.
 The required behavior is that But Why records recovery facts before worktree creation and verifies exact identity, path, commit, and cleanliness before reuse or cleanup.
 
 The workspace is cleaned immediately after a valid presentation is persisted and before GitHub mutation.
@@ -406,7 +420,7 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 
 ## Unresolved decisions
 
-- Author the exact dependent Task only after the first-release schema refactor planning establishes the applicable persistence direction, the prerequisite Agent Session Task is available, and Task Recording is authorized.
+- Author the exact dependent Task only after the Agent Session and release-baseline plans establish the applicable execution and persistence direction, the prerequisite Agent Session Task is available, and Task Recording is authorized.
 - Evaluate implemented architectural decisions against the ADR gate after implementation.
 - Keep the accepted `Submission Workspace`, `Risk`, and `Publication Agent` definitions in this plan until the functionality is implemented, then record them in Change Delivery Context only with separate Operator authorization.
 - Integrate the parallel schema design's physical representation without changing this plan's required behavior.
