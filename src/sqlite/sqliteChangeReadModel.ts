@@ -9,7 +9,7 @@ import type {
   ImplementationBlockerHistory,
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
+import type { LegacyReviewerTranscriptReference } from "../change/legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -346,7 +346,7 @@ export type StoredReviewerTranscriptRow = {
 export const decodeReviewerTranscript = (
   row: StoredReviewerTranscriptRow,
   changeId: string,
-): ReviewerTranscript => {
+): LegacyReviewerTranscriptReference => {
   if (row.changeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
   return row;
 };

@@ -28,7 +28,7 @@ import type {
   ImplementationBlockerHistory,
 } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { ReviewerTranscript } from "./reviewerSession/reviewerTranscript.js";
+import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
@@ -155,7 +155,7 @@ export type ChangeReviewerSessionPort = {
 export type ChangeReviewerTranscriptPort = {
   readonly listReviewerTranscripts: (
     changeId: string,
-  ) => StorageEffect<readonly ReviewerTranscript[]>;
+  ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
 export type TerminalCleanupChange = {
