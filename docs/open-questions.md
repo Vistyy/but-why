@@ -122,7 +122,7 @@ Conflict remediation should merge the latest base into the PR branch, then run t
 
 ## How should Candidate Publication present the complete work to a human reviewer?
 
-The current owned pull-request body exposes the Task identity and Implementation Decision Log, but it does not synthesize the Task and Change lifecycle into a review experience.
+The current owned pull-request body exposes the Implementation Decision Log but not Task identity, and it does not synthesize the Task and Change lifecycle into a review experience.
 Future design should determine how an agent examines the approved Task intent, Task Review history, Task Dependencies, Acceptance Context, Implementation Decisions, Implementation Blockers and Resolutions, historical Candidates and Findings, the exact passing Validation Run, selected evidence, and the final code to explain the complete Change without dumping those records.
 
 The presentation should help a human understand the behavior, affected code beyond the changed lines, and the material path by which the exact Candidate became publishable.
