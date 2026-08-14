@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
+import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -184,8 +185,11 @@ const submitFreshTaskReview = <A, E, R>(
   if (!resolved.ok)
     return use(resolved).pipe(Effect.map((value) => ({ ok: true as const, value })));
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence().pipe(
-      Effect.flatMap((persistence) =>
+    Effect.all({
+      persistence: openSqliteTaskReviewPersistence(),
+      agentPersistence: openSqliteAgentSessionPersistence(),
+    }).pipe(
+      Effect.flatMap(({ persistence, agentPersistence }) =>
         openTaskReviewUseCases({
           mainCheckoutRoot: context.mainCheckoutRoot,
           reviewerSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
@@ -238,6 +242,7 @@ const submitFreshTaskReview = <A, E, R>(
             });
           },
           persistence,
+          agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
           readReviewBase: readCanonicalMainReviewBase,

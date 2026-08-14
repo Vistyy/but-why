@@ -73,18 +73,11 @@ const executePiReviewerProcess = (
     const sessionReference =
       sessionStorageRoot === undefined
         ? undefined
-        : (parsed.sessionReference ?? input.resumeSession);
+        : (input.sessionId ?? parsed.sessionReference ?? input.resumeSession);
     const sessionFilePath =
       sessionReference === undefined || sessionStorageRoot === undefined
         ? undefined
         : findSessionFile(sessionStorageRoot, sessionReference);
-    if (sessionReference !== undefined && sessionFilePath === undefined) {
-      return yield* Effect.fail(
-        reviewerProcessExecutionFailed(
-          `Reviewer Session transcript "${sessionReference}" was not found under ${sessionStorageRoot}.`,
-        ),
-      );
-    }
     const result: ReviewerProcessResult = {
       stdout: parsed.stdout,
       invocationUsage: parsed.usage ?? null,
@@ -101,6 +94,7 @@ const executePiReviewerProcess = (
               {
                 ...input,
                 prompt,
+                sessionId: sessionReference,
                 resumeSession: sessionReference,
               },
               executeCommand,
@@ -141,7 +135,13 @@ const commandInvocation = (
     ...(input.sessionStorageRoot === undefined
       ? ["--no-session"]
       : ["--session-dir", input.sessionStorageRoot]),
-    ...(input.resumeSession === undefined ? [] : ["--session", input.resumeSession]),
+    ...(input.resumeSession === undefined
+      ? input.sessionId === undefined
+        ? []
+        : input.sessionId.startsWith("by-agent-")
+          ? ["--session-id", input.sessionId]
+          : ["--session", input.sessionId]
+      : ["--session", input.resumeSession]),
     "--name",
     `${input.reviewer} Review`,
     input.prompt,

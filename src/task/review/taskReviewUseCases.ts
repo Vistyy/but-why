@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
+import {
+  executeAgentSession,
+  type AgentExecutionEvidence,
+} from "../../agent/agentSession/executeAgentSession.js";
+import type {
+  AgentSessionConfiguration,
+  AgentSessionPersistence,
+} from "../../agent/agentSession/agentSession.js";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import {
@@ -11,7 +19,6 @@ import {
   executeReviewerSession,
   type ReviewerExecutionEvidence,
 } from "../../agent/reviewerSession/executeReviewerSession.js";
-import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -139,6 +146,7 @@ export const openTaskReviewUseCases = (input: {
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly reviewerSessionStorageRoot: string;
+  readonly agentPersistence?: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
@@ -191,7 +199,19 @@ const submitTaskReview = (
     if (!config.ok)
       return { ok: false, code: "review_base_unavailable", message: config.message } as const;
     const repoConfig = config.config;
-    const resolvedPolicy = input.resolvePolicy(repoConfig, base.base.commit);
+    const storedPolicy =
+      input.persistence.getReviewerConfiguration === undefined
+        ? undefined
+        : yield* input.persistence.getReviewerConfiguration(taskId);
+    const configurationCanBeCorrected =
+      storedPolicy !== undefined &&
+      input.persistence.reviewerConfigurationCanBeCorrected !== undefined
+        ? yield* input.persistence.reviewerConfigurationCanBeCorrected(taskId)
+        : false;
+    const resolvedPolicy =
+      storedPolicy === undefined || configurationCanBeCorrected
+        ? input.resolvePolicy(repoConfig, base.base.commit)
+        : taskReviewPolicyFromSnapshot(storedPolicy);
     if (!resolvedPolicy.ok) {
       return {
         ok: false,
@@ -271,65 +291,90 @@ const submitTaskReview = (
                 proposal: admitted.proposal,
                 dependencyEvidence: admitted.dependencyEvidence,
               });
-              const sessionStore: ReviewerSessionStore = {
-                get: input.persistence.getReviewerSession,
-                save: input.persistence.saveReviewerSession,
-                remove: input.persistence.removeReviewerSession,
-              };
               taskReviewProgress = yield* startSubmitProgress(input.progress, {
                 kind: "taskReview",
                 profile: taskReviewProgressProfile(resolvedPolicy.policy.profile),
               });
-              const execution = yield* executeReviewerSession<TaskReviewerOutput, never>({
-                identity: {
-                  owner: { kind: "task", id: taskId },
-                  producer: "task",
-                  agentProfile: resolvedPolicy.policy.profile,
-                  instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
-                  ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-                  resources: {
-                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.extensions ===
-                    undefined
-                      ? {}
-                      : {
-                          extensions:
-                            resolvedPolicy.policy.profile.profile.runtimeConfig.extensions,
-                        }),
-                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.skills === undefined
-                      ? {}
-                      : { skills: resolvedPolicy.policy.profile.profile.runtimeConfig.skills }),
-                    ...(resolvedPolicy.policy.profile.profile.runtimeConfig?.tools === undefined
-                      ? {}
-                      : { tools: resolvedPolicy.policy.profile.profile.runtimeConfig.tools }),
-                  },
-                },
-                runtime: input.reviewerRuntime,
-                reviewerExecutor: input.reviewerExecutor,
-                decodeOutput: (output, reviewCall) =>
-                  decodeTaskReviewerOutput({ attempts: reviewCall, output }).pipe(
-                    Effect.mapError(
-                      (error) =>
-                        new ReviewerExecutionFailed({
-                          kind: "output_contract",
-                          operationName: error.operationName,
-                          message: error.message,
-                          diagnostics: error.diagnostics,
-                        }),
-                    ),
+              const decodeOutput = (output: unknown, reviewCall: number) =>
+                decodeTaskReviewerOutput({ attempts: reviewCall, output }).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ReviewerExecutionFailed({
+                        kind: "output_contract",
+                        operationName: error.operationName,
+                        message: error.message,
+                        diagnostics: error.diagnostics,
+                      }),
                   ),
-                prompt,
-                continuationPrompt: buildTaskReviewContinuationPrompt({
-                  previousProposal: previous?.proposal,
-                  currentPrompt: prompt,
-                  currentProposal: admitted.proposal,
-                }),
-                commandCwd: active.worktreePath,
-                resourceRoot: active.worktreePath,
-                sessionStorageRoot: input.reviewerSessionStorageRoot,
-                sessionStore,
-                completeReview: ({ initialResult }) => Effect.succeed(initialResult),
-              });
-              taskReviewEvidence = execution.evidence;
+                );
+              const reviewerSessionId =
+                input.persistence.getReviewerAgentSession === undefined
+                  ? undefined
+                  : yield* input.persistence.getReviewerAgentSession(taskId);
+              const execution =
+                input.agentPersistence !== undefined &&
+                input.persistence.linkAgentInvocation !== undefined
+                  ? yield* executeAgentSession({
+                      ...(reviewerSessionId === undefined
+                        ? {}
+                        : { agentSessionId: reviewerSessionId }),
+                      configuration: agentConfiguration(resolvedPolicy.policy.profile),
+                      agentPersistence: input.agentPersistence,
+                      linkInvocation: input.persistence.linkAgentInvocation({
+                        taskId,
+                        reviewId,
+                        configuration: agentConfiguration(resolvedPolicy.policy.profile),
+                        configurationSnapshot: resolvedPolicy.policy.snapshot,
+                      }),
+                      reviewerRuntime: input.reviewerRuntime,
+                      reviewerExecutor: input.reviewerExecutor,
+                      decodeOutput,
+                      prompt,
+                      continuationPrompt: buildTaskReviewContinuationPrompt({
+                        previousProposal: previous?.proposal,
+                        currentPrompt: prompt,
+                        currentProposal: admitted.proposal,
+                      }),
+                      commandCwd: active.worktreePath,
+                      resourceRoot: active.worktreePath,
+                      profile: resolvedPolicy.policy.profile,
+                      reviewer: "task",
+                      sessionStorageRoot: input.reviewerSessionStorageRoot,
+                      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                    })
+                  : yield* executeReviewerSession<TaskReviewerOutput, never>({
+                      identity: {
+                        owner: { kind: "task", id: taskId },
+                        producer: "task",
+                        agentProfile: resolvedPolicy.policy.profile,
+                        instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
+                        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                        resources: {},
+                      },
+                      runtime: input.reviewerRuntime,
+                      reviewerExecutor: input.reviewerExecutor,
+                      decodeOutput,
+                      prompt,
+                      continuationPrompt: buildTaskReviewContinuationPrompt({
+                        previousProposal: previous?.proposal,
+                        currentPrompt: prompt,
+                        currentProposal: admitted.proposal,
+                      }),
+                      commandCwd: active.worktreePath,
+                      resourceRoot: active.worktreePath,
+                      sessionStorageRoot: input.reviewerSessionStorageRoot,
+                      sessionStore: {
+                        get: input.persistence.getReviewerSession,
+                        save: input.persistence.saveReviewerSession,
+                        remove: input.persistence.removeReviewerSession,
+                      },
+                      completeReview: ({ initialResult }) => Effect.succeed(initialResult),
+                    });
+              taskReviewEvidence = (
+                execution.evidence.invocations === undefined
+                  ? execution.evidence
+                  : reviewerEvidenceFromAgent(execution.evidence as AgentExecutionEvidence)
+              ) as ReviewerExecutionEvidence;
               const reviewed = execution.result;
               const sessionReference = reviewed.sessionReference ?? null;
               taskReviewSessionReference = sessionReference;
@@ -337,7 +382,7 @@ const submitTaskReview = (
                 ? ({
                     ok: true,
                     output: reviewed.report,
-                    evidence: execution.evidence,
+                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const)
                 : ({
@@ -346,7 +391,7 @@ const submitTaskReview = (
                       operation: reviewed.failure.operationName,
                       message: reviewed.failure.message,
                     },
-                    evidence: execution.evidence,
+                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const);
             }),
@@ -402,6 +447,42 @@ const submitTaskReview = (
     });
     return result;
   });
+
+const taskReviewPolicyFromSnapshot = (
+  snapshot: import("./taskReview.js").TaskReviewPolicySnapshot,
+): TaskReviewPolicyResolutionResult =>
+  snapshot.profile.profile === null
+    ? { ok: false, message: "Stored Task Reviewer configuration has no Agent Profile." }
+    : {
+        ok: true,
+        policy: {
+          snapshot,
+          profile: {
+            agentProfile: snapshot.profile.agentProfile,
+            scope: snapshot.profile.scope,
+            profile: snapshot.profile.profile,
+          },
+        },
+      };
+
+const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfiguration => ({
+  harness: "pi",
+  provider: null,
+  model: profile.profile.runtimeConfig?.model ?? "",
+  thinking: profile.profile.runtimeConfig?.thinking ?? null,
+});
+
+const reviewerEvidenceFromAgent = (
+  evidence: AgentExecutionEvidence,
+): ReviewerExecutionEvidence => ({
+  continuity: evidence.invocations[0]?.settlementKind === "returned" ? "fresh" : "restarted",
+  identityFingerprint: "agent-session",
+  durationMs: 0,
+  reviewCalls: evidence.invocations.length,
+  invocationUsage: evidence.invocations.map((invocation) => invocation.usage),
+  agentSessionId: evidence.agentSessionId,
+  invocations: evidence.invocations,
+});
 
 const taskReviewProgressDetails = (evidence: ReviewerExecutionEvidence | undefined) =>
   evidence === undefined

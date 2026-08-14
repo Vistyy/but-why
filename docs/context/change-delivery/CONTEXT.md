@@ -135,31 +135,60 @@ The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, a
 Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
 _Avoid_: Mutable current config, raw config hash, retroactive policy
 
-**Reviewer Session**:
-A continuing reviewer conversation owned by one Change and one Reviewer Session identity.
-It can resume across that Change's Candidates and disposable Snapshot Workspaces so a reviewer can reuse repository orientation.
-_Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
+**Agent Session**:
+The durable conversation owner for one Task Reviewer or one Change reviewer producer.
+It owns the ordered Agent Continuations and their Invocations while the domain owner retains policy, Findings, and lifecycle state.
+An Agent Session does not cross its Task or Change owner boundary.
+_Avoid_: Reviewer Session, fresh conversation per Candidate, cross-owner conversation
 
-**Reviewer Transcript**:
-The complete Pi session conversation produced by one Reviewer Session.
-It is retained after its Change closes as debugging and improvement evidence.
+**Agent Continuation**:
+One Pi harness continuation within an Agent Session.
+A continuation records its fixed harness configuration, transcript path, and unusable state.
+A new continuation is appended when the current continuation cannot safely resume.
+_Avoid_: Agent Session, reviewer policy, transcript copy
+
+**Agent Invocation**:
+One dispatched host call in an Agent Continuation.
+An Invocation is settled exactly once as returned, launch_failed, failed, or return_unknown and records token evidence when available.
+Task Review and Change Validation link each Invocation to their own domain evidence.
+_Avoid_: reviewer attempt, cumulative session usage, reviewer outcome
+
+**Agent Session Configuration**:
+The resolved Pi harness, provider, model, and thinking configuration fixed for an Agent Session.
+Task Review stores its resolved configuration snapshot before execution, and Change Start stores its resolved reviewer roster before implementation.
+Later configuration changes do not alter these stored facts.
+_Avoid_: current Repo Config, Agent Profile name alone, prompt
+
+**Reviewer Session**:
+A legacy read-only reviewer conversation record retained for historical evidence.
+Current reviewer execution does not create, update, or delete Reviewer Session records.
+_Avoid_: Agent Session, current reviewer execution
+
+**Agent Transcript**:
+The complete Pi session conversation produced by one Agent Continuation.
+The Agent Continuation records its path relative to the operational session root when the transcript is available.
 _Avoid_: Review report, reviewer stdout, security audit trail
 
-**Reviewer Transcript Reference**:
-The immutable persisted record of one retained Reviewer Transcript, identifying its exact Change, Reviewer Producer, Pi session ID, and file path relative to the per-producer reviewer-session root.
-Terminal Cleanup records one reference per retained JSONL file and never removes historical references.
-_Avoid_: Active Reviewer Session record, transcript copy, transcript move, CLI output
+**Legacy Reviewer Transcript**:
+A historical transcript reference produced by the retired Reviewer Session path.
+It remains read-only evidence and is not created by current reviewer execution.
+_Avoid_: Agent Transcript, current transcript record
 
-**Reviewer Session Usability**:
-The Reviewer Agent Runtime classification after a failed resumed review.
-`unusable` means the stored Reviewer Session is proven unable to continue, while `unknown` means the failure does not establish that the stored session is unusable and the session remains preserved.
+**Legacy Reviewer Transcript Reference**:
+The immutable persisted record of one retained Legacy Reviewer Transcript, identifying its exact Change, Reviewer Producer, Pi session ID, and file path relative to the per-producer reviewer-session root.
+Terminal Cleanup does not create new references for current Agent Transcripts and does not remove historical references.
+_Avoid_: Agent Continuation transcript path, transcript copy, transcript move, CLI output
+
+**Agent Continuation Usability**:
+The Agent Runtime classification after a failed resumed Invocation.
+`unusable` means the stored Agent Continuation is proven unable to continue, while an unknown return keeps the continuation preserved for explicit recovery.
 _Avoid_: Provider error message, automatic retry status
 
-**Reviewer Invocation Usage**:
-The token usage evidence for one reviewer process invocation.
-A measured invocation records its input, cached input, output, and total token counts, while unavailable usage is recorded as `null` and is not treated as zero.
-A resumed Reviewer Session produces new Reviewer Invocation Usage for each invocation instead of repeating cumulative session usage.
-_Avoid_: Reviewer Session total, inferred zero usage, cumulative resumed-session usage
+**Invocation Token Evidence**:
+The token usage evidence for one Agent Invocation.
+A measured Invocation records its input, cached input, output, and total token counts, while unavailable usage is recorded as `null` and is not treated as zero.
+A resumed Agent Continuation produces new Invocation Token Evidence for each Invocation instead of repeating cumulative session usage.
+_Avoid_: Agent Session total, inferred zero usage, cumulative resumed-session usage
 
 **Producer**:
 The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
@@ -167,13 +196,13 @@ A Producer identifies the source that creates an Artifact or Finding.
 _Avoid_: Agent Profile, Reviewer Session, Validation Run
 
 **Reviewer Producer**:
-A Producer identifier for an Acceptance Reviewer or Specialist Reviewer that owns a continuing Reviewer Session.
+A Producer identifier for an Acceptance Reviewer or Specialist Reviewer that owns an Agent Session within its Change.
 _Avoid_: Agent Profile, generic validation phase, cross-Change reviewer
 
-**Reviewer Session Identity**:
-The Change, Reviewer Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
-Its fingerprint is the sole persisted compatibility identity.
-_Avoid_: Session file path, Candidate identity, Validation Run identity
+**Legacy Reviewer Session Identity**:
+The Change, Reviewer Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that historically determined whether a Reviewer Session could safely continue.
+Its fingerprint remains historical evidence only.
+_Avoid_: Agent Session, Session file path, Candidate identity, Validation Run identity
 
 **Artifact**:
 A durable reference to bounded validation evidence with explicit Run, phase, producer, storage, and truncation metadata.
@@ -225,7 +254,7 @@ _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
 **Terminal Cleanup**:
 The one idempotent Change-owned cleanup operation that runs for a Closed Change after completion or cancellation and retries on repeated cancellation and reconciliation.
-It indexes every retained Reviewer Session JSONL file into immutable Reviewer Transcript References, covers the Managed Worktree, local Repository Branch, and Remote Change Branch, and invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
+It indexes only retained legacy Reviewer Session JSONL files into immutable Legacy Reviewer Transcript References, covers the Managed Worktree, local Repository Branch, and Remote Change Branch, and invokes the legacy Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
 Cleanup stays pending and retryable when transcript indexing cannot complete.
 _Avoid_: Generic cleanup framework, per-caller cleanup orchestration, worktree removal alone
 

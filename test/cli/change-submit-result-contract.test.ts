@@ -5,6 +5,7 @@ import type { ChangeSubmitResult } from "../../src/change/submitChange.js";
 import { submitResult } from "../../src/cli/change/submitResult.js";
 import type { CliResult } from "../../src/cliResults.js";
 import type { StructuredObject } from "../../src/output/structured.js";
+import { structuredValue } from "../../src/output/structuredValue.js";
 
 const changeId = "change-1";
 const reviewerEvidence = {
@@ -141,7 +142,7 @@ const cases = {
   },
   completed: {
     result: { ok: true, status: "completed", change },
-    expected: { exitCode: 0, stdout: { status: "completed", change } },
+    expected: { exitCode: 0, stdout: { status: "completed", change: structuredValue(change) } },
   },
   validation_findings: {
     result: {

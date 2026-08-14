@@ -2,7 +2,14 @@ import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
+import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
+import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
+
+export type ChangeReviewerConfiguration = {
+  readonly acceptanceReview: AcceptanceReviewPolicy | null;
+  readonly specialistReviews: readonly SpecialistReviewPolicy[];
+};
 
 export type ChangeStartRecord = {
   readonly id: string;
@@ -14,6 +21,7 @@ export type ChangeStartRecord = {
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly state: ChangeState;
@@ -28,6 +36,7 @@ export type CreateChangeStartInput = {
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly taskId?: PublicTaskId;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly now: string;
 };

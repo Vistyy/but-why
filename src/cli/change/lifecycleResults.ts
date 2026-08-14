@@ -7,6 +7,13 @@ import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult): CliResult => {
   if (result.ok) return success(changeView(result.change, true));
+  if (result.code === "reviewer_configuration_invalid") {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      help: ["Fix the configured Change reviewers, then run Change Start again."],
+    });
+  }
   if (result.code === "task_dependencies_unsatisfied") {
     return runtimeError({
       code: result.code,

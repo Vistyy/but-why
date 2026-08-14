@@ -9,6 +9,7 @@ type SubmitRecoveryAction =
   | "integrate_change_base";
 
 import { structuredContractDiagnostics } from "../../output/contractDiagnostics.js";
+import { structuredValue } from "../../output/structuredValue.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
 
 export const submitRecovery = (
@@ -55,7 +56,7 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
       });
     }
     if (result.status === "completed")
-      return success({ status: result.status, change: result.change });
+      return success({ status: result.status, change: structuredValue(result.change) });
     if (result.status === "published") {
       return success({
         changeId: result.changeId,

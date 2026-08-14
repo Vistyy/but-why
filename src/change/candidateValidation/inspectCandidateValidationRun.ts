@@ -8,6 +8,7 @@ import type { ChangeValidationReadPort } from "../validation/changeValidationPor
 import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type {
+  CandidateValidationAgentInvocation,
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
@@ -30,6 +31,7 @@ export type CandidateValidationRunInspection = {
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
   readonly artifacts: readonly CandidateValidationArtifactInspection[];
+  readonly agentInvocations: readonly CandidateValidationAgentInvocation[];
 };
 
 export type CandidateValidationArtifactInspection = CandidateValidationArtifact & {
@@ -99,6 +101,10 @@ const inspectRun = (
     const findings = yield* dependencies.persistence.listFindings(validationRunId);
     const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
     const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
+    const agentInvocations =
+      dependencies.persistence.listAgentInvocations === undefined
+        ? []
+        : yield* dependencies.persistence.listAgentInvocations(validationRunId);
 
     const findingArtifactRefs = new Set(findings.flatMap((finding) => finding.artifactRefs));
     const includeAllAvailablePreviews = toolingFailures.length > 0;
@@ -124,6 +130,7 @@ const inspectRun = (
       findings,
       toolingFailures,
       artifacts: inspectedArtifacts,
+      agentInvocations,
     };
   });
 

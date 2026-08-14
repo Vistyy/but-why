@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangePrepareFailure } from "../change/change.js";
+import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
@@ -95,13 +96,14 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
     yield* sql`
       INSERT INTO changes (
         id, repository_common_directory, branch_ref, base_ref, base_remote_url, task_id,
-        starting_commit, worktree_path, acceptance_context,
+        starting_commit, worktree_path, acceptance_context, reviewer_configuration,
         prepare_command, prepare_timeout_seconds, prepare_failure,
         state, close_reason, created_at, updated_at, closed_at
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
+        ${input.reviewerConfiguration === undefined ? null : JSON.stringify(input.reviewerConfiguration)},
         ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
@@ -174,7 +176,8 @@ const changeStartSelectionColumns = `
   id, repository_common_directory AS repositoryCommonDirectory,
   branch_ref AS branchRef, base_ref AS baseRef, base_remote_url AS baseRemoteUrl,
   task_id AS taskId, starting_commit AS startingCommit, worktree_path AS worktreePath,
-  acceptance_context AS acceptanceContext, prepare_command AS prepareCommand,
+  acceptance_context AS acceptanceContext, reviewer_configuration AS reviewerConfiguration,
+  prepare_command AS prepareCommand,
   prepare_timeout_seconds AS prepareTimeoutSeconds,
   prepare_failure AS prepareFailure, state
 `;
@@ -189,6 +192,7 @@ type StoredChangeStartRow = {
   readonly startingCommit: unknown;
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
+  readonly reviewerConfiguration: unknown;
   readonly prepareCommand: unknown;
   readonly prepareTimeoutSeconds: unknown;
   readonly prepareFailure: unknown;
@@ -247,6 +251,14 @@ const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
   if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
     throw new Error("Stored Change preparation relationship is incomplete");
   }
+  const encodedReviewerConfiguration = decodeStoredNullableString(
+    row.reviewerConfiguration,
+    "Change Reviewer Configuration",
+  );
+  const reviewerConfiguration =
+    encodedReviewerConfiguration === null
+      ? null
+      : decodeReviewerConfiguration(encodedReviewerConfiguration);
   const encodedPrepareFailure = decodeStoredNullableString(
     row.prepareFailure,
     "Change prepare failure",
@@ -270,6 +282,7 @@ const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
+    reviewerConfiguration,
     prepare:
       prepareCommand === null || prepareTimeoutSeconds === null
         ? null
@@ -280,6 +293,25 @@ const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
     state: decodeChangeState(row.state),
   };
+};
+
+const decodeReviewerConfiguration = (source: string): ChangeReviewerConfiguration => {
+  const value: unknown = JSON.parse(source);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Array.isArray((value as { specialistReviews?: unknown }).specialistReviews)
+  ) {
+    throw new Error("Stored Change Reviewer Configuration is invalid");
+  }
+  const configuration = value as ChangeReviewerConfiguration;
+  if (
+    configuration.acceptanceReview !== null &&
+    typeof configuration.acceptanceReview !== "object"
+  ) {
+    throw new Error("Stored Change Acceptance Reviewer Configuration is invalid");
+  }
+  return configuration;
 };
 
 const invalidData = (operationName: string, message: string) =>

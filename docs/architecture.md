@@ -27,8 +27,9 @@ Domain workflow modules depend on owner-defined ports instead of concrete Adapte
 Repository Runtime provides a scoped database capability rather than an Adapter registry or application container.
 
 SQLite Adapters implement owner-defined persistence ports and own SQL and transaction mechanics.
-Shared reviewer execution owns Reviewer Session compatibility, invocation, resume, restart, paths, permissions, session references, and execution evidence for Task Review and Change Validation.
-Task Intent and Change Delivery retain separate policy, prompts, output decoding, persistence, Findings, errors, and lifecycle behavior.
+Shared Agent Session execution owns Agent Session dispatch, Agent Continuation resume, Invocation settlement, Pi harness execution, transcript paths, token evidence, and compatibility reads for Task Review and Change Validation.
+Task Intent and Change Delivery retain separate reviewer policy, prompts, output decoding, Findings, errors, and lifecycle behavior.
+Legacy Reviewer Session records remain read-only evidence and are not written by current reviewer execution.
 External execution, Git, GitHub, agent runtime, and disposable workspace behavior remain behind their applicable Adapter boundaries.
 
 The enforced dependency zones and contributor checks are documented in [Tooling](tooling.md).

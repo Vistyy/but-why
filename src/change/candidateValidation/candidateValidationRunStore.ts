@@ -1,3 +1,4 @@
+import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
@@ -129,6 +130,11 @@ export type CandidateValidationRunRecord = {
   readonly outcome: CandidateValidationOutcome | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+};
+
+export type CandidateValidationAgentInvocation = AgentInvocationRecord & {
+  readonly phase: ValidationPhase;
+  readonly producer: string;
 };
 
 export type CandidateValidationRound = {

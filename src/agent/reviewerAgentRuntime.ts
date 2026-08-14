@@ -54,7 +54,9 @@ export type ReviewerAgentInput<Output> = {
   readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
+  readonly sessionId?: string;
   readonly resumeSession?: string;
+  readonly singleInvocation?: boolean;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -111,6 +113,7 @@ const reviewWithPi = <Output>(
         ...(input.sessionStorageRoot === undefined
           ? {}
           : { sessionStorageRoot: input.sessionStorageRoot }),
+        ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
         ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
       };
       const initial = yield* Effect.either(
@@ -126,6 +129,11 @@ const reviewWithPi = <Output>(
       if (validation._tag === "Right") {
         retainSession();
         return successfulResult(validation.right, current, 1, invocationUsage);
+      }
+
+      if (input.singleInvocation === true) {
+        retainSession();
+        return failedOutputResult(validation.left, current, 1, invocationUsage);
       }
 
       let attempts = 1;

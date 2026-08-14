@@ -1,4 +1,8 @@
 import type { Effect } from "effect";
+import type {
+  AgentSessionConfiguration,
+  AgentSessionSqlLink,
+} from "../../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../../agent/reviewerSession/reviewerSession.js";
 import type { ObservedReviewerTranscript } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -129,6 +133,21 @@ export type TaskReviewPersistence = {
   readonly listForTask: (
     taskId: PublicTaskId,
   ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
+  readonly getReviewerAgentSession?: (
+    taskId: string,
+  ) => Effect.Effect<number | undefined, RepositoryStorageError>;
+  readonly getReviewerConfiguration?: (
+    taskId: string,
+  ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
+  readonly reviewerConfigurationCanBeCorrected?: (
+    taskId: string,
+  ) => Effect.Effect<boolean, RepositoryStorageError>;
+  readonly linkAgentInvocation?: (input: {
+    readonly taskId: string;
+    readonly reviewId: string;
+    readonly configuration: AgentSessionConfiguration;
+    readonly configurationSnapshot?: unknown;
+  }) => AgentSessionSqlLink;
   readonly getReviewerSession: (
     taskId: string,
     producer: string,

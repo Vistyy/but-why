@@ -1,6 +1,7 @@
 import { chmodSync, readdirSync, statSync } from "node:fs";
 
 import { Clock, Effect } from "effect";
+import type { AgentInvocationRecord } from "../agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
   ReviewerAgentResult,
@@ -24,6 +25,8 @@ export type ReviewerExecutionEvidence = {
   readonly durationMs: number;
   readonly reviewCalls: number;
   readonly invocationUsage: readonly (TokenUsage | null)[];
+  readonly agentSessionId?: number;
+  readonly invocations?: readonly AgentInvocationRecord[];
 };
 
 export type ExecuteReviewerSessionInput<Output, ReviewBoundaryError> = {

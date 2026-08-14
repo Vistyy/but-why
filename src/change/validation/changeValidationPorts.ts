@@ -4,6 +4,7 @@ import type { CandidateRecord } from "../candidate/candidate.js";
 import type {
   AbandonCandidateValidationRunInput,
   ActiveCandidateValidationRun,
+  CandidateValidationAgentInvocation,
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
@@ -80,6 +81,9 @@ export type ChangeValidationReadPort = {
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
   readonly listArtifacts: CandidateValidationExecutionPort["listArtifacts"];
+  readonly listAgentInvocations?: (
+    validationRunId: string,
+  ) => StorageEffect<readonly CandidateValidationAgentInvocation[]>;
 };
 
 export type ActiveValidationRunPort = {

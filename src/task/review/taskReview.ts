@@ -1,4 +1,5 @@
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
 import type { PiAgentProfileConfig } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
@@ -67,6 +68,9 @@ export type TaskReviewRecord = {
   readonly findings: readonly TaskReviewFinding[];
   readonly sessions: readonly TaskReviewExecution[];
   readonly transcripts: readonly TaskReviewerTranscript[];
+  readonly agentSessionId?: number;
+  readonly agentInvocations?: readonly AgentInvocationRecord[];
+  readonly reviewerConfiguration?: TaskReviewPolicySnapshot;
   readonly createdAt: string;
   readonly updatedAt: string;
 };

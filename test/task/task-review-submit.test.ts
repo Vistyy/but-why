@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -919,7 +919,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     ]);
     expect(JSON.parse(shown.stdout)).toMatchObject({
       review: {
-        policy: {
+        reviewerConfiguration: {
           profile: {
             agentProfile: "task-review",
             scope: "repo",
@@ -1060,9 +1060,8 @@ it.effect("reviews an unchanged New proposal again after a Finding-blocked Revie
     });
     expect(secondOutput.review.id).not.toBe(firstOutput.error.review.id);
     expect(observed).toHaveLength(2);
-    expect(observed[1]?.resumeSession).toBe("task-session-1");
-    expect(observed[1]?.prompt).toContain("Re-evaluate the current proposal");
-    expect(observed[1]?.prompt).toContain('"changed":{"title":null,"description":null');
+    expect(observed[1]?.resumeSession).toBeUndefined();
+    expect(observed[1]?.prompt).toContain("Exact Task proposal:");
 
     const ordinary = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
@@ -1229,7 +1228,7 @@ it.effect(
       });
       expect(second.status, second.stdout).toBe(1);
       expect(observed).toHaveLength(2);
-      expect(observed[1]?.resumeSession).toBe("task-session-1");
+      expect(observed[1]?.resumeSession).toBe("by-agent-1");
       expect(observed[1]?.prompt).toContain("Changed proposal");
       expect(observed[1]?.prompt).toContain("Deterministic proposal diff");
 
@@ -1248,8 +1247,7 @@ it.effect(
             findingCount: 1,
             toolingFailure: null,
             workspaceCleanup: "removed",
-            sessionCount: 1,
-            transcriptCount: 1,
+            agentInvocationCount: 1,
             createdAt: expect.any(String),
             updatedAt: expect.any(String),
             nextActions: [`Run \`by task-review show ${firstId}\` to inspect this Review.`],
@@ -1261,8 +1259,7 @@ it.effect(
             findingCount: 1,
             toolingFailure: null,
             workspaceCleanup: "removed",
-            sessionCount: 1,
-            transcriptCount: 1,
+            agentInvocationCount: 1,
             createdAt: expect.any(String),
             updatedAt: expect.any(String),
             nextActions: [`Run \`by task-review show ${secondId}\` to inspect this Review.`],
@@ -1275,15 +1272,14 @@ it.effect(
       expect(JSON.parse(shown.stdout)).toMatchObject({
         review: {
           proposal: { description: "Changed proposal\n" },
-          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
-          transcripts: [{ piSessionId: "task-session-1" }],
+          agentSession: {
+            id: expect.any(Number),
+            invocations: [{ settlementKind: "returned" }],
+          },
+          legacyReviewerEvidence: { sessions: [], transcripts: [] },
         },
       });
 
-      const sessionStorageRoot = observed[1]?.sessionStorageRoot;
-      if (sessionStorageRoot === undefined) throw new Error("Expected session storage root");
-      const invalidTranscript = join(sessionStorageRoot, "invalid.jsonl");
-      writeFileSync(invalidTranscript, "{}\n");
       const nextDrafted = yield* runByInProcessEffect(root, ["task", "context", "draft", "BY-1"]);
       const nextDraftPath = (JSON.parse(nextDrafted.stdout) as { draft: { path: string } }).draft
         .path;
@@ -1291,57 +1287,17 @@ it.effect(
       expect((yield* runByInProcessEffect(root, ["task", "context", "apply", "BY-1"])).status).toBe(
         0,
       );
-      const failedIndex = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      const next = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
         globalConfigPath,
         taskReviewerAgentRuntime: reviewer,
       });
-      expect(failedIndex.status).toBe(1);
-      expect(JSON.parse(failedIndex.stdout)).toMatchObject({
+      expect(next.status).toBe(1);
+      expect(JSON.parse(next.stdout)).toMatchObject({
         error: {
-          code: "task_review_recovery_required",
           review: {
-            id: expect.any(String),
-            state: "running",
-            outcome: null,
-            reviewBase: { ref: "refs/heads/main", commit: expect.any(String) },
-            workspace: { path: expect.any(String), cleanup: "removed" },
+            state: "complete",
+            outcome: "blocked",
           },
-        },
-      });
-      const failedReviewId = (
-        JSON.parse(failedIndex.stdout) as {
-          error: { review: { id: string } };
-        }
-      ).error.review.id;
-      const failedShown = yield* runByInProcessEffect(root, [
-        "task-review",
-        "show",
-        failedReviewId,
-      ]);
-      expect(JSON.parse(failedShown.stdout)).toMatchObject({
-        review: {
-          state: "running",
-          toolingFailure: { operation: "index_task_reviewer_transcripts" },
-          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
-        },
-      });
-      rmSync(invalidTranscript);
-      const abandoned = yield* runByInProcessEffect(root, [
-        "task",
-        "review",
-        "abandon",
-        failedReviewId,
-        "--reason",
-        "Indexing interrupted completion",
-      ]);
-      expect(abandoned.status, abandoned.stdout).toBe(0);
-      expect(JSON.parse(abandoned.stdout)).toMatchObject({
-        review: {
-          id: failedReviewId,
-          state: "complete",
-          outcome: "tooling_failed",
-          sessions: [{ continuity: "resumed", sessionReference: "task-session-1" }],
-          transcripts: [{ piSessionId: "task-session-1" }],
         },
       });
     }),

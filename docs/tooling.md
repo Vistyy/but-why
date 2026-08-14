@@ -30,6 +30,11 @@ Before npm publication, `just by ...` uses the Trusted But Why Executable from t
 It does not load CLI or migration code from a Candidate worktree.
 Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
 
+While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
+The command must resolve the executable from the canonical main checkout before it reads or mutates Shared Repository State.
+A Candidate worktree must not invoke its own CLI for repository state operations.
+After publication, packaged commands use the published But Why Executable instead.
+
 ## Check ownership
 
 Behavior tests own runtime contracts at supported interfaces.

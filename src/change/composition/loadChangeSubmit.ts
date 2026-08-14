@@ -13,6 +13,7 @@ import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandid
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
@@ -142,6 +143,7 @@ export const loadChangeSubmit = (input: {
   const layerFor = (
     persistence: CandidateValidationExecutionPort,
     reviewerSessions: ChangeReviewerSessionPort,
+    agentPersistence: import("../../agent/agentSession/agentSession.js").AgentSessionPersistence,
   ) =>
     candidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
@@ -157,6 +159,13 @@ export const loadChangeSubmit = (input: {
           reviewerSessions.removeReviewerSession(changeId, producer),
       },
       reviewerSessionsRoot: context.paths.operationalDir,
+      agentPersistence,
+      ...(reviewerSessions.getAgentSession === undefined
+        ? {}
+        : { getAgentSession: reviewerSessions.getAgentSession }),
+      ...(reviewerSessions.linkAgentInvocation === undefined
+        ? {}
+        : { linkAgentInvocation: reviewerSessions.linkAgentInvocation }),
     });
 
   return {
@@ -168,12 +177,21 @@ export const loadChangeSubmit = (input: {
           validation: openSqliteCandidateValidationExecutionPort(),
           submission: openSqliteChangeSubmissionPort(),
           reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
         }).pipe(
-          Effect.flatMap(({ capture, validation, submission, reviewerSessions, publication }) =>
-            programFor(capture, submission, publication)
-              .submit(submitInput)
-              .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
+          Effect.flatMap(
+            ({
+              capture,
+              validation,
+              submission,
+              reviewerSessions,
+              agentPersistence,
+              publication,
+            }) =>
+              programFor(capture, submission, publication)
+                .submit(submitInput)
+                .pipe(Effect.provide(layerFor(validation, reviewerSessions, agentPersistence))),
           ),
           loaded.runtime.provide,
         ),

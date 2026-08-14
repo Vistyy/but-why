@@ -1,8 +1,10 @@
 import type { Effect } from "effect";
+import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   ChangeCleanup,
   ChangeCloseReason,
@@ -133,6 +135,17 @@ export type ChangeReadPort = {
 };
 
 export type ChangeReviewerSessionPort = {
+  readonly getAgentSession?: (
+    changeId: string,
+    producer: string,
+  ) => StorageEffect<number | undefined>;
+  readonly linkAgentInvocation?: (input: {
+    readonly changeId: string;
+    readonly producer: string;
+    readonly validationRunId: string;
+    readonly phase: string;
+    readonly configurationSnapshot?: unknown;
+  }) => AgentSessionSqlLink;
   readonly getReviewerSession: (
     changeId: string,
     producer: string,
@@ -172,6 +185,7 @@ export type SubmissionChange = {
   readonly baseRemoteUrl: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
   readonly publication: ChangePublication | null;
 };
 
@@ -190,6 +204,10 @@ type CompleteMergedFailure = {
 
 export type ChangeSubmissionPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<SubmissionChange | undefined>;
+  readonly agentSessionConfigurationCanBeCorrected?: (
+    changeId: string,
+    producer: string,
+  ) => StorageEffect<boolean>;
   readonly getChangeForOutputById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getCompletedPublicationEvidence: (
     changeId: string,

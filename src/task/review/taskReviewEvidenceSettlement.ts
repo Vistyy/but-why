@@ -99,7 +99,9 @@ export const settleTaskReviewEvidence = (
       );
     }
 
-    if (requiredExecution !== undefined) {
+    const agentEvidence =
+      requiredExecution?.invocations !== undefined || (review.agentInvocations?.length ?? 0) > 0;
+    if (requiredExecution !== undefined && !agentEvidence) {
       const recordedExecution = yield* Effect.either(
         recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, {
           reviewId: review.id,
@@ -119,42 +121,42 @@ export const settleTaskReviewEvidence = (
           requiredExecution,
         );
       }
-    }
 
-    const transcriptDiscovery = discoverObservedReviewerTranscripts(
-      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
-      review.taskId,
-    );
-    if (!transcriptDiscovery.ok) {
-      return yield* settlementFailed(
-        input.persistence,
-        review,
-        {
-          operation: "index_task_reviewer_transcripts",
-          message: transcriptDiscovery.reason,
-        },
-        now,
-        requiredExecution,
+      const transcriptDiscovery = discoverObservedReviewerTranscripts(
+        reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
+        review.taskId,
       );
-    }
-    const indexed = yield* Effect.either(
-      input.persistence.recordTranscripts({
-        reviewId: review.id,
-        taskId: review.taskId,
-        transcripts: transcriptDiscovery.transcripts,
-      }),
-    );
-    if (indexed._tag === "Left") {
-      return yield* settlementFailed(
-        input.persistence,
-        review,
-        {
-          operation: "index_task_reviewer_transcripts",
-          message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
-        },
-        now,
-        requiredExecution,
+      if (!transcriptDiscovery.ok) {
+        return yield* settlementFailed(
+          input.persistence,
+          review,
+          {
+            operation: "index_task_reviewer_transcripts",
+            message: transcriptDiscovery.reason,
+          },
+          now,
+          requiredExecution,
+        );
+      }
+      const indexed = yield* Effect.either(
+        input.persistence.recordTranscripts({
+          reviewId: review.id,
+          taskId: review.taskId,
+          transcripts: transcriptDiscovery.transcripts,
+        }),
       );
+      if (indexed._tag === "Left") {
+        return yield* settlementFailed(
+          input.persistence,
+          review,
+          {
+            operation: "index_task_reviewer_transcripts",
+            message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
+          },
+          now,
+          requiredExecution,
+        );
+      }
     }
 
     return { ok: true } as const;

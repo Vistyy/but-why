@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import type { AgentInvocationRecord } from "../agent/agentSession/agentSession.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -22,6 +23,27 @@ export type StoredValidationRoundRow = {
   readonly roundNumber: number;
   readonly status: CandidateValidationRound["status"];
   readonly createdAt: string;
+};
+
+export type StoredValidationAgentInvocationRow = {
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly id: number;
+  readonly agentSessionId: number;
+  readonly continuationId: number;
+  readonly createdAt: string;
+  readonly settledAt: string | null;
+  readonly settlementKind: string | null;
+  readonly inputTokens: number | null;
+  readonly cachedInputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly harness: string;
+  readonly provider: string | null;
+  readonly model: string;
+  readonly thinking: string | null;
+  readonly transcriptPath: string | null;
+  readonly unusableReason: string | null;
 };
 
 export type StoredValidationFindingRow = {
@@ -93,6 +115,39 @@ export const listValidationRounds = (sql: SqlClient.SqlClient, validationRunId: 
       validateRoundPolicyRelationships(rounds, new Map([[run.id, run]])),
     );
     return rounds;
+  });
+
+export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validationRunId: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<StoredValidationAgentInvocationRow>`
+      SELECT link.phase, link.producer,
+        invocation.id, continuation.agent_session_id AS agentSessionId,
+        invocation.continuation_id AS continuationId,
+        invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
+        invocation.settlement_kind AS settlementKind,
+        invocation.input_tokens AS inputTokens,
+        invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.output_tokens AS outputTokens,
+        invocation.total_tokens AS totalTokens,
+        continuation.harness,
+        continuation.provider,
+        continuation.model,
+        continuation.thinking,
+        continuation.transcript_path AS transcriptPath,
+        continuation.unusable_reason AS unusableReason
+      FROM validation_phase_agent_invocations link
+      JOIN agent_invocations invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations continuation ON continuation.id = invocation.continuation_id
+      WHERE link.validation_run_id = ${validationRunId}
+      ORDER BY invocation.id ASC
+    `;
+    return yield* decodePersisted("list Candidate Agent Invocations", () =>
+      rows.map((row) => ({
+        ...decodeAgentInvocation(row),
+        phase: row.phase,
+        producer: row.producer,
+      })),
+    );
   });
 
 export const listValidationFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
@@ -203,6 +258,60 @@ export const decodeValidationRound = (row: StoredValidationRoundRow): CandidateV
   status: row.status,
   createdAt: row.createdAt,
 });
+
+const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentInvocationRecord => {
+  const validKinds = ["returned", "launch_failed", "failed", "return_unknown"] as const;
+  if (
+    row.settlementKind !== null &&
+    !validKinds.includes(row.settlementKind as (typeof validKinds)[number])
+  ) {
+    throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
+  }
+  const values = [row.inputTokens, row.cachedInputTokens, row.outputTokens, row.totalTokens];
+  const hasUsage = values.some((value) => value !== null);
+  if (
+    hasUsage &&
+    values.some((value) => value === null || !Number.isSafeInteger(value) || value < 0)
+  ) {
+    throw new Error("Incomplete Agent Invocation token evidence");
+  }
+  return {
+    id: row.id,
+    continuationId: row.continuationId,
+    createdAt: row.createdAt,
+    settledAt: row.settledAt,
+    settlementKind: row.settlementKind as AgentInvocationRecord["settlementKind"],
+    usage: hasUsage
+      ? {
+          inputTokens: row.inputTokens as number,
+          cachedInputTokens: row.cachedInputTokens as number,
+          outputTokens: row.outputTokens as number,
+          totalTokens: row.totalTokens as number,
+        }
+      : null,
+    continuation: {
+      id: row.continuationId,
+      agentSessionId: row.agentSessionId,
+      harness: decodeAgentHarness(row.harness),
+      provider: row.provider,
+      model: row.model,
+      thinking: row.thinking === null ? null : decodeAgentThinking(row.thinking),
+      transcriptPath: row.transcriptPath,
+      unusableReason: row.unusableReason,
+    },
+  };
+};
+
+const decodeAgentHarness = (value: string): "pi" => {
+  if (value !== "pi") throw new Error(`Invalid Agent Harness: ${value}`);
+  return "pi";
+};
+
+const decodeAgentThinking = (value: string) => {
+  if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(value))
+    throw new Error(`Invalid Agent thinking level: ${value}`);
+  return value as "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+};
 
 export const decodeValidationFinding = (
   row: StoredValidationFindingRow,

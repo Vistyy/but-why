@@ -28,6 +28,8 @@ export type ReviewerProcessInput = {
   readonly resourceRoot: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
+  /** The stable physical conversation identity used when starting a new continuation. */
+  readonly sessionId?: string;
   readonly resumeSession?: string;
 };
 

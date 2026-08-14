@@ -1,11 +1,16 @@
 import { NodeFileSystem } from "@effect/platform-node";
-import { Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../../agent/adapters/piReviewerProcessExecutor.js";
+import type {
+  AgentSessionPersistence,
+  AgentSessionSqlLink,
+} from "../../../agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
+import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
 import type { ReviewerSessionStore } from "../../../agent/reviewerSession/reviewerSession.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
@@ -26,6 +31,17 @@ export const candidateValidationLayer = (input: {
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
+  readonly agentPersistence?: AgentSessionPersistence;
+  readonly getAgentSession?: (
+    changeId: string,
+    producer: string,
+  ) => Effect.Effect<number | undefined, RepositoryStorageError>;
+  readonly linkAgentInvocation?: (input: {
+    readonly changeId: string;
+    readonly producer: string;
+    readonly validationRunId: string;
+    readonly phase: string;
+  }) => AgentSessionSqlLink;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -38,6 +54,15 @@ export const candidateValidationLayer = (input: {
             ? {}
             : { reviewerSessionsRoot: input.reviewerSessionsRoot }),
           ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
+          ...(input.agentPersistence === undefined
+            ? {}
+            : { agentPersistence: input.agentPersistence }),
+          ...(input.getAgentSession === undefined
+            ? {}
+            : { getAgentSession: input.getAgentSession }),
+          ...(input.linkAgentInvocation === undefined
+            ? {}
+            : { linkAgentInvocation: input.linkAgentInvocation }),
         }),
         Layer.succeed(CandidateValidationExecution, input.persistence),
         Layer.succeed(

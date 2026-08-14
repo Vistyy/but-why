@@ -28,6 +28,7 @@ import {
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import {
   type OwnedPublication,
   type OwnedPullRequestUnavailableReason,
@@ -307,17 +308,82 @@ const submitChange = (
         ...formatValidationPolicyFailure(policy.error),
       } as const;
     }
+    const fixedPolicy = yield* applyChangeReviewerConfiguration(
+      dependencies.persistence,
+      change.id,
+      policy.resolved,
+      change.reviewerConfiguration,
+    );
+    if (!fixedPolicy.ok) return fixedPolicy;
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
     return yield* validateAndPublish(
       dependencies,
       change,
       candidate,
-      policy.resolved,
+      fixedPolicy.resolved,
       target.target,
       input.now,
       input.progress,
     );
+  });
+
+const applyChangeReviewerConfiguration = (
+  persistence: ChangeSubmissionPort,
+  changeId: string,
+  resolved: ResolvedCandidateValidationPolicy,
+  configuration: ChangeReviewerConfiguration | null | undefined,
+): Effect.Effect<
+  | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
+  | {
+      readonly ok: false;
+      readonly code: "validation_policy_invalid";
+      readonly message: string;
+    },
+  RepositoryStorageError
+> =>
+  Effect.gen(function* () {
+    if (configuration === null || configuration === undefined) return { ok: true, resolved };
+    const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
+      Effect.gen(function* () {
+        const current = resolved.policy.specialistReviews.find(
+          (candidate) => candidate.id === stored.id,
+        );
+        const canCorrect =
+          current !== undefined && persistence.agentSessionConfigurationCanBeCorrected !== undefined
+            ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, stored.id)
+            : false;
+        return canCorrect && current !== undefined ? current : stored;
+      }),
+    );
+    const policy = { ...resolved.policy, specialistReviews };
+    if (!resolved.acceptanceContextSupplied)
+      return { ok: true as const, resolved: { ...resolved, policy } };
+    if (configuration.acceptanceReview === null) {
+      return {
+        ok: false as const,
+        code: "validation_policy_invalid" as const,
+        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
+      };
+    }
+    const canCorrectAcceptance =
+      resolved.policy.acceptanceReview !== undefined &&
+      persistence.agentSessionConfigurationCanBeCorrected !== undefined
+        ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, "acceptance")
+        : false;
+    return {
+      ok: true as const,
+      resolved: {
+        acceptanceContextSupplied: true as const,
+        policy: {
+          ...policy,
+          acceptanceReview:
+            canCorrectAcceptance && resolved.policy.acceptanceReview !== undefined
+              ? resolved.policy.acceptanceReview
+              : configuration.acceptanceReview,
+        },
+      },
+    };
   });
 
 const configFailureDetails = (failure: {

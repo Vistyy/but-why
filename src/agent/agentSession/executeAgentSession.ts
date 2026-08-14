@@ -1,0 +1,249 @@
+import { isAbsolute, relative, sep } from "node:path";
+
+import { Cause, Effect } from "effect";
+import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
+import { type ReviewerAgentResult, type ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
+import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
+import type { TokenUsage } from "../tokenUsage.js";
+import { RepositoryPersistedDataInvalid } from "../../contracts/repositoryStorageError.js";
+import {
+  type AgentInvocationRecord,
+  type AgentInvocationSettlementKind,
+  type AgentSessionConfiguration,
+  type AgentSessionPersistence,
+  type AgentSessionSqlLink,
+} from "./agentSession.js";
+
+export type AgentExecutionEvidence = {
+  readonly agentSessionId: number;
+  readonly invocations: readonly AgentInvocationRecord[];
+  readonly continuationId: number;
+};
+
+export type ExecuteAgentSessionInput<Output> = {
+  readonly agentSessionId?: number;
+  readonly configuration: AgentSessionConfiguration;
+  readonly agentPersistence: AgentSessionPersistence;
+  readonly linkInvocation: AgentSessionSqlLink;
+  readonly reviewerRuntime: ReviewerAgentRuntime<Output>;
+  readonly reviewerExecutor: ReviewerProcessExecutor;
+  readonly decodeOutput: (
+    output: unknown,
+    invocation: number,
+  ) => ReturnType<Parameters<ReviewerAgentRuntime<Output>["review"]>[0]["decodeOutput"]>;
+  readonly prompt: string;
+  readonly continuationPrompt: string;
+  readonly commandCwd: string;
+  readonly resourceRoot: string;
+  readonly profile: ResolvedPiAgentProfile;
+  readonly reviewer: string;
+  readonly sessionStorageRoot: string;
+  readonly agentEnvironment?: Parameters<
+    ReviewerAgentRuntime<Output>["review"]
+  >[0]["agentEnvironment"];
+  readonly settleDomain?: (input: {
+    readonly invocationId: number;
+    readonly result: ReviewerAgentResult<Output>;
+    readonly invocationNumber: number;
+  }) => AgentSessionSqlLink | undefined;
+  readonly now?: () => Date;
+};
+
+export type ExecuteAgentSessionResult<Output> = {
+  readonly result: ReviewerAgentResult<Output>;
+  readonly evidence: AgentExecutionEvidence;
+};
+
+export const executeAgentSession = <Output>(
+  input: ExecuteAgentSessionInput<Output>,
+): Effect.Effect<
+  ExecuteAgentSessionResult<Output>,
+  import("../../contracts/repositoryStorageError.js").RepositoryStorageError
+> =>
+  Effect.gen(function* () {
+    let prompt = input.prompt;
+    let resumeSession: string | undefined;
+    const invocationEvidence: AgentInvocationRecord[] = [];
+    let lastResult: ReviewerAgentResult<Output> | undefined;
+    let sessionId = input.agentSessionId;
+    let continuationId = 0;
+
+    for (let invocationNumber = 1; invocationNumber <= 3; invocationNumber += 1) {
+      const dispatch = yield* input.agentPersistence.beginInvocation({
+        ...(sessionId === undefined ? {} : { agentSessionId: sessionId }),
+        configuration: input.configuration,
+        createdAt: (input.now ?? (() => new Date()))().toISOString(),
+        linkInvocation: input.linkInvocation,
+      });
+      if (!dispatch.ok) {
+        return yield* new RepositoryPersistedDataInvalid({
+          operationName: "dispatch Agent Invocation",
+          cause: new Error("An Agent Session already has an unsettled Invocation"),
+        });
+      }
+      sessionId = dispatch.dispatch.agentSessionId;
+      continuationId = dispatch.dispatch.continuation.id;
+      resumeSession = dispatch.dispatch.resumed ? dispatch.dispatch.piSessionId : undefined;
+
+      const reviewExit = yield* Effect.exit(
+        input.reviewerRuntime.review({
+          reviewerExecutor: input.reviewerExecutor,
+          reviewer: input.reviewer,
+          decodeOutput: (output) => input.decodeOutput(output, invocationNumber),
+          prompt: dispatch.dispatch.resumed
+            ? invocationNumber === 1
+              ? input.continuationPrompt
+              : prompt
+            : input.prompt,
+          profile: input.profile,
+          commandCwd: input.commandCwd,
+          resourceRoot: input.resourceRoot,
+          ...(input.agentEnvironment === undefined
+            ? {}
+            : { agentEnvironment: input.agentEnvironment }),
+          sessionStorageRoot: input.sessionStorageRoot,
+          sessionId: dispatch.dispatch.piSessionId,
+          ...(resumeSession === undefined ? {} : { resumeSession }),
+          singleInvocation: true,
+        }),
+      );
+      const interrupted =
+        reviewExit._tag === "Failure" && Cause.isInterruptedOnly(reviewExit.cause);
+      const result: ReviewerAgentResult<Output> =
+        reviewExit._tag === "Success"
+          ? reviewExit.value
+          : {
+              ok: false,
+              failure: {
+                kind: "process_execution",
+                operationName: interrupted
+                  ? "agent_invocation_interrupted"
+                  : "agent_invocation_failed",
+                message: interrupted
+                  ? "Agent Invocation was interrupted."
+                  : "Agent Invocation failed.",
+                sessionUsability: "unknown",
+              },
+              sessionUsability: "unknown",
+              attempts: 1,
+              stdout: "",
+            };
+      lastResult = result;
+      const settlement = settlementFor(
+        result,
+        input.sessionStorageRoot,
+        interrupted ? "return_unknown" : undefined,
+        input.now,
+      );
+      const settleDomain = input.settleDomain?.({
+        invocationId: dispatch.dispatch.invocation.id,
+        result,
+        invocationNumber,
+      });
+      yield* Effect.uninterruptible(
+        settleDomain === undefined
+          ? input.agentPersistence.settleInvocation({
+              invocationId: dispatch.dispatch.invocation.id,
+              continuationId,
+              settlement,
+            })
+          : input.agentPersistence.settleInvocation({
+              invocationId: dispatch.dispatch.invocation.id,
+              continuationId,
+              settlement,
+              settleDomain,
+            }),
+      );
+      invocationEvidence.push({
+        ...dispatch.dispatch.invocation,
+        settledAt: settlement.settledAt,
+        settlementKind: settlement.kind,
+        usage: settlement.usage ?? null,
+        continuation: {
+          ...dispatch.dispatch.continuation,
+          ...(settlement.transcriptPath === undefined
+            ? {}
+            : { transcriptPath: settlement.transcriptPath }),
+          ...(settlement.unusableReason === undefined
+            ? {}
+            : { unusableReason: settlement.unusableReason }),
+        },
+      });
+
+      if (result.ok) {
+        return {
+          result,
+          evidence: {
+            agentSessionId: sessionId,
+            continuationId,
+            invocations: invocationEvidence,
+          },
+        };
+      }
+      if (result.failure.kind !== "output_contract" || result.sessionReference === undefined) break;
+      prompt = result.failure.correctionPrompt ?? result.failure.message;
+    }
+
+    if (lastResult === undefined) throw new Error("Agent Invocation produced no result");
+    return {
+      result: lastResult,
+      evidence: {
+        agentSessionId: sessionId ?? 0,
+        continuationId,
+        invocations: invocationEvidence,
+      },
+    };
+  });
+
+const settlementFor = <Output>(
+  result: ReviewerAgentResult<Output>,
+  sessionStorageRoot: string,
+  forcedKind: AgentInvocationSettlementKind | undefined,
+  now: (() => Date) | undefined,
+): {
+  readonly settledAt: string;
+  readonly kind: AgentInvocationSettlementKind;
+  readonly usage?: TokenUsage;
+  readonly transcriptPath?: string | null;
+  readonly unusableReason?: string | null;
+} => {
+  const settledAt = (now ?? (() => new Date()))().toISOString();
+  const transcriptPath = safeTranscriptPath(sessionStorageRoot, result.sessionFilePath);
+  if (result.ok) {
+    return {
+      settledAt,
+      kind: forcedKind ?? "returned",
+      ...(result.invocationUsage?.[0] === undefined || result.invocationUsage[0] === null
+        ? {}
+        : { usage: result.invocationUsage[0] }),
+      transcriptPath,
+      ...(transcriptPath === null ? { unusableReason: "transcript_capture_unavailable" } : {}),
+    };
+  }
+  return {
+    settledAt,
+    kind:
+      forcedKind ??
+      (result.failure.kind === "output_contract"
+        ? "returned"
+        : result.failure.kind === "process_execution" && transcriptPath === null
+          ? "launch_failed"
+          : "failed"),
+    ...(result.invocationUsage?.[0] === undefined || result.invocationUsage[0] === null
+      ? {}
+      : { usage: result.invocationUsage[0] }),
+    transcriptPath,
+    ...(transcriptPath === null ? { unusableReason: result.failure.message } : {}),
+  };
+};
+
+const safeTranscriptPath = (root: string, path: string | undefined): string | null => {
+  if (path === undefined) return null;
+  const candidate = relative(root, path);
+  return isAbsolute(candidate) ||
+    candidate === "" ||
+    candidate === ".." ||
+    candidate.startsWith(`..${sep}`)
+    ? null
+    : candidate;
+};
