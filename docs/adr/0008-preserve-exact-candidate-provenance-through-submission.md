@@ -25,7 +25,8 @@ Submission rejects a publication remote name that later resolves to a different 
 Submission observes an existing owned pull request before fetching a newer Change Base because terminal pull request facts take precedence.
 An exact open owned pull request continues normally.
 An open owned pull request whose only mismatch is its head commit continues through Candidate capture and validation without reusing completed publication evidence.
-If that pull request then identifies the exact current validated Candidate, publication reconfirms the Remote Change Branch, skips a duplicate push, reapplies the open state and complete current metadata, and confirms the result.
+If that pull request then identifies the exact current validated Candidate, publication reconfirms the Remote Change Branch, skips a duplicate push, preserves the pull request title, requests the open state and current generated body, and confirms the exact publication facts.
+Pull request metadata is presentation and is not Candidate identity or completed publication evidence.
 If the Remote Change Branch remains at the previously published head, publication retains the exact force-with-lease safeguard.
 An exact closed-unmerged owned pull request is reopened and updated by publication.
 An exact merged owned pull request is passed to terminal completion.
@@ -45,5 +46,5 @@ A revised Candidate must pass Submission before But Why updates the same owned p
 Each successful publication updates the owned pull request to the exact validated Candidate head without appending a separate chronology.
 A closed owned pull request blocks publication while it remains closed unless the owned pull request is exact and closed-unmerged, which publication reopens and updates.
 If the owned pull request reopens before the Change closes, a later Submission can continue through that pull request.
-Each successful publication stores the complete current Implementation Decision Log on the same pull request.
+Publication supplies the complete current Implementation Decision Log when it creates the pull request and requests the current log in the body when it updates the pull request.
 Candidate Publication chronology, its table, command, output, compatibility behavior, documentation, and tests are removed.

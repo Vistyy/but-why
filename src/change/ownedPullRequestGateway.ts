@@ -55,15 +55,6 @@ export type GitHubPullRequestReadResult =
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
 
-export type GitHubPullRequestUpdateConfirmation = GitHubPullRequest & {
-  readonly title: string;
-  readonly body: string;
-};
-
-export type GitHubPullRequestUpdateConfirmationResult =
-  | { readonly ok: true; readonly pullRequest: GitHubPullRequestUpdateConfirmation }
-  | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
-
 export type GitHubPullRequestListResult =
   | { readonly ok: true; readonly pullRequests: readonly GitHubPullRequest[] }
   | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
@@ -114,7 +105,7 @@ export type GitHubPullRequestGateway = GitHubPullRequestReader & {
     request: GitHubPullRequestRequest,
   ) => GitHubPullRequestMutationResult;
   readonly updatePullRequest: (
-    input: GitHubPullRequestRequest & {
+    input: Omit<GitHubPullRequestRequest, "title"> & {
       readonly number: number;
       readonly expectedCurrentHeadSha: string;
     },

@@ -454,8 +454,6 @@ const updatePullRequest = (
     "-f",
     "state=open",
     "-f",
-    `title=${request.title}`,
-    "-f",
     `body=${request.body}`,
   ]);
   if (!result.ok) {
