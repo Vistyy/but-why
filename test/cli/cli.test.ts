@@ -55,6 +55,8 @@ const expectedCommandPaths = [
 
 const parseOutput = (stdout: string): Record<string, unknown> =>
   JSON.parse(stdout) as Record<string, unknown>;
+const parseHelpOutput = (stdout: string): { readonly help?: unknown } =>
+  JSON.parse(stdout) as { readonly help?: unknown };
 
 describe("by CLI", () => {
   it.effect("routes every generated public command", () =>
@@ -63,7 +65,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      const help = parseOutput(result.stdout)["help"];
+      const help = parseHelpOutput(result.stdout).help;
       expect(help).toEqual(expect.any(String));
       if (typeof help !== "string") return;
       for (const commandPath of expectedCommandPaths) {
@@ -101,7 +103,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(parseOutput(result.stdout)["help"]).toEqual(
+      expect(parseHelpOutput(result.stdout).help).toEqual(
         expect.stringContaining("This is a long-running command."),
       );
     }),
@@ -117,7 +119,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(parseOutput(result.stdout)["help"]).toEqual(expect.any(String));
+      expect(parseHelpOutput(result.stdout).help).toEqual(expect.any(String));
     }),
   );
 

@@ -6,12 +6,12 @@ import {
 } from "../../contracts/configErrors.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
+import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
-import { InvalidReviewerConfig } from "../submit/submitRejectionErrors.js";
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
+import { InvalidReviewerConfig } from "../submit/submitRejectionErrors.js";
 import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 import type {
   AcceptanceContextCandidateValidationPolicy,
