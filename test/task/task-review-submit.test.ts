@@ -889,9 +889,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       "Repository Preparation started\n",
       expect.stringMatching(/^Repository Preparation passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
       "Task Review started: profile=task-review model=provider/repo-model thinking=high\n",
-      expect.stringMatching(
-        /^Task Review passed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
-      ),
+      expect.stringMatching(/^Task Review passed in \d+(?:h\d+)?(?:m\d+)?s\n$/),
     ]);
     expect(observed).toMatchObject({
       profile: {
@@ -984,9 +982,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
         files: [],
       },
     ]);
-    expect(blockedProgress.at(-1)).toMatch(
-      /^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s continuity=fresh reviewCalls=1\n$/,
-    );
+    expect(blockedProgress.at(-1)).toMatch(/^Task Review failed in \d+(?:h\d+)?(?:m\d+)?s\n$/);
   }),
 );
 
