@@ -302,20 +302,31 @@ const sessionMetadataAfterFailure = (
   output: string,
 ): { readonly sessionReference?: string; readonly sessionFilePath?: string } => {
   const outputReference = sessionReferenceFromOutput(output);
-  const candidateReference = outputReference ?? input.sessionId ?? input.resumeSession;
-  if (candidateReference === undefined) return {};
-  let sessionFilePath: string | undefined;
-  if (input.sessionStorageRoot !== undefined) {
-    try {
-      sessionFilePath = findSessionFile(input.sessionStorageRoot, candidateReference);
-    } catch {
-      sessionFilePath = undefined;
-    }
+  if (outputReference !== undefined) {
+    return {
+      sessionReference: outputReference,
+      ...sessionFileMetadata(input.sessionStorageRoot, outputReference),
+    };
   }
-  return {
-    sessionReference: candidateReference,
-    ...(sessionFilePath === undefined ? {} : { sessionFilePath }),
-  };
+  const expectedReference = input.sessionId ?? input.resumeSession;
+  if (expectedReference === undefined || input.sessionStorageRoot === undefined) return {};
+  const fileMetadata = sessionFileMetadata(input.sessionStorageRoot, expectedReference);
+  return fileMetadata.sessionFilePath === undefined
+    ? {}
+    : { sessionReference: expectedReference, ...fileMetadata };
+};
+
+const sessionFileMetadata = (
+  root: string | undefined,
+  sessionReference: string,
+): { readonly sessionFilePath?: string } => {
+  if (root === undefined) return {};
+  try {
+    const sessionFilePath = findSessionFile(root, sessionReference);
+    return sessionFilePath === undefined ? {} : { sessionFilePath };
+  } catch {
+    return {};
+  }
 };
 
 const sessionReferenceFromOutput = (output: string): string | undefined => {

@@ -178,6 +178,36 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
+  it.effect("does not infer a conversation from an unused session ID", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-unused-session-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const executor = createPiReviewerProcessExecutor(() =>
+        Effect.succeed({
+          exitCode: 1,
+          stderr: "Pi failed before creating a session.",
+          stdout: "",
+        }),
+      );
+
+      try {
+        const result = yield* Effect.either(
+          executor.execute({
+            ...input,
+            sessionStorageRoot: sessions,
+            sessionId: "by-agent-unused",
+          }),
+        );
+        expect(result).toMatchObject({ _tag: "Left" });
+        if (result._tag === "Right") return;
+        expect(result.left.sessionReference).toBeUndefined();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("rewrites a resumed session cwd and keeps each invocation usage separate", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-"));
