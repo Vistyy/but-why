@@ -235,7 +235,9 @@ const settlementFor = <Output>(
       forcedKind ??
       (result.failure.kind === "output_contract"
         ? "returned"
-        : result.failure.kind === "process_execution" && transcriptPath === null
+        : result.failure.kind === "process_execution" &&
+            transcriptPath === null &&
+            result.sessionReference === undefined
           ? "launch_failed"
           : "failed"),
     ...(result.invocationUsage?.[0] === undefined || result.invocationUsage[0] === null

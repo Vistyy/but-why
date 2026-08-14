@@ -38,8 +38,9 @@ After publication, packaged commands use the published But Why Executable instea
 ### Pinned Predecessor Executable for migration reconciliation
 
 For a prerelease migration Change, build the Pinned Predecessor Executable from canonical `main` immediately before merge.
-Preserve the self-contained bundle outside the checkout, including `bin/by`, `src`, and the Node runtime dependencies.
-Record the predecessor Git commit and the SHA-256 of the bundle executable in an external manifest.
+Preserve the self-contained executable bundle outside the checkout.
+The manifest's executable must contain the complete predecessor runtime that will execute reconciliation.
+Record the predecessor Git commit and the SHA-256 of that executable in an external manifest.
 The manifest path is supplied through `BUT_WHY_PINNED_PREDECESSOR_MANIFEST`.
 Its JSON shape is:
 
@@ -53,8 +54,7 @@ Its JSON shape is:
 }
 ```
 
-The source launcher verifies the manifest, the executable permission, and the recorded SHA-256 before it starts the bundle.
-For a source bundle, the launcher runs the bundled `src/main.ts` directly so the predecessor cannot redirect to the new canonical executable.
+The source launcher verifies the manifest, the executable permission, and the recorded SHA-256 before it starts the executable.
 The manifest is accepted only for `change reconcile <exact-merged-change-id>` and its `--discard-work` form.
 The launcher rejects every other command while this manifest is selected.
 The bundle receives the target Local Repository as its current working directory and runs only the exact reconciliation command.

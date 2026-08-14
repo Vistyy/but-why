@@ -93,29 +93,14 @@ function runSourceGuarded(commandArgs) {
 }
 
 function runPinnedPredecessor(manifest, commandArgs) {
-  const sourceBundle = sourceBundleForExecutable(manifest.executable);
-  const child =
-    sourceBundle === undefined
-      ? spawnSync(manifest.executable, commandArgs, {
-          cwd: process.cwd(),
-          env: {
-            ...process.env,
-            BUT_WHY_EXECUTABLE_PATH: manifest.executable,
-          },
-          stdio: "inherit",
-        })
-      : spawnSync(
-          process.execPath,
-          ["--import", sourceBundle.loader, sourceBundle.entrypoint, ...commandArgs],
-          {
-            cwd: process.cwd(),
-            env: {
-              ...process.env,
-              BUT_WHY_EXECUTABLE_PATH: manifest.executable,
-            },
-            stdio: "inherit",
-          },
-        );
+  const child = spawnSync(manifest.executable, commandArgs, {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      BUT_WHY_EXECUTABLE_PATH: manifest.executable,
+    },
+    stdio: "inherit",
+  });
   if (child.error !== undefined) {
     fail({
       code: "pinned_predecessor_unavailable",
@@ -129,19 +114,6 @@ function runPinnedPredecessor(manifest, commandArgs) {
     });
   }
   process.exitCode = child.status ?? 1;
-}
-
-function sourceBundleForExecutable(executable) {
-  const bundleRoot = resolve(dirname(executable), "..");
-  const loader = join(bundleRoot, "node_modules/tsx/dist/loader.mjs");
-  const entrypoint = join(bundleRoot, "src/main.ts");
-  try {
-    accessSync(loader, constants.R_OK);
-    accessSync(entrypoint, constants.R_OK);
-    return { loader, entrypoint };
-  } catch {
-    return undefined;
-  }
 }
 
 function readPinnedPredecessorManifest(path) {

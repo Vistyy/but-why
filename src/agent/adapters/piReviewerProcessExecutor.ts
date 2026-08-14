@@ -56,17 +56,23 @@ const executePiReviewerProcess = (
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
         .filter((value) => value.length > 0)
         .join("\n");
+      const sessionMetadata = sessionMetadataAfterFailure(input, commandResult.stdout);
       return yield* Effect.fail(
         reviewerProcessExecutionFailed(
           diagnostic.length > 0
             ? diagnostic
             : `Pi reviewer exited with status ${commandResult.exitCode}.`,
+          sessionMetadata,
         ),
       );
     }
     const parsed = yield* Effect.try({
       try: () => parsePiOutput(commandResult.stdout),
-      catch: (error) => reviewerProcessExecutionFailed(error),
+      catch: (error) =>
+        reviewerProcessExecutionFailed(
+          error,
+          sessionMetadataAfterFailure(input, commandResult.stdout),
+        ),
     });
 
     const sessionStorageRoot = input.sessionStorageRoot;
@@ -291,7 +297,44 @@ const nodeErrorCode = (error: unknown): string | undefined =>
     ? error.code
     : undefined;
 
-const reviewerProcessExecutionFailed = (error: unknown): ReviewerProcessExecutionFailed => {
+const sessionMetadataAfterFailure = (
+  input: ReviewerProcessInput,
+  output: string,
+): { readonly sessionReference?: string; readonly sessionFilePath?: string } => {
+  const outputReference = sessionReferenceFromOutput(output);
+  const candidateReference = outputReference ?? input.sessionId ?? input.resumeSession;
+  if (candidateReference === undefined) return {};
+  let sessionFilePath: string | undefined;
+  if (input.sessionStorageRoot !== undefined) {
+    try {
+      sessionFilePath = findSessionFile(input.sessionStorageRoot, candidateReference);
+    } catch {
+      sessionFilePath = undefined;
+    }
+  }
+  return {
+    sessionReference: candidateReference,
+    ...(sessionFilePath === undefined ? {} : { sessionFilePath }),
+  };
+};
+
+const sessionReferenceFromOutput = (output: string): string | undefined => {
+  for (const line of output.split("\n")) {
+    if (line === "") continue;
+    try {
+      const reference = decodePiSessionIdentity(decodePiJsonlObject(line));
+      if (reference !== undefined) return reference;
+    } catch {
+      // A failed process may have written a partial JSONL stream.
+    }
+  }
+  return undefined;
+};
+
+const reviewerProcessExecutionFailed = (
+  error: unknown,
+  metadata: { readonly sessionReference?: string; readonly sessionFilePath?: string } = {},
+): ReviewerProcessExecutionFailed => {
   const message = error instanceof Error ? error.message : String(error);
   return new ReviewerProcessExecutionFailed({
     message,
@@ -304,5 +347,6 @@ const reviewerProcessExecutionFailed = (error: unknown): ReviewerProcessExecutio
       /No session found matching/m.test(message)
         ? "unusable"
         : "unknown",
+    ...metadata,
   });
 };

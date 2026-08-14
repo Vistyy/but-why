@@ -142,6 +142,42 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
+  it.effect("retains session metadata when Pi exits after starting a conversation", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-failed-session-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const sessionId = "123e4567-e89b-42d3-a456-426614174001";
+      const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
+      const executor = createPiReviewerProcessExecutor(() => {
+        writeFileSync(
+          sessionFile,
+          `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+        );
+        return Effect.succeed({
+          exitCode: 1,
+          stderr: "Pi stopped after creating the session.",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n`,
+        });
+      });
+
+      try {
+        const result = yield* Effect.either(
+          executor.execute({ ...input, sessionStorageRoot: sessions, sessionId }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            sessionReference: sessionId,
+            sessionFilePath: sessionFile,
+          },
+        });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("rewrites a resumed session cwd and keeps each invocation usage separate", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-"));

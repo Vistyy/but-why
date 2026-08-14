@@ -21,6 +21,8 @@ export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecution
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 }> {}
 
 export type ReviewerOutputDecoder<Output> = (
@@ -34,6 +36,8 @@ export type ReviewerRuntimeFailure = {
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 };
 
 export type ReviewerAgentRuntime<Output = unknown> = {
@@ -239,6 +243,12 @@ const translateProcessFailure = (
           message: error.message,
           kind: "process_execution",
           sessionUsability: error.sessionUsability,
+          ...(error.sessionReference === undefined
+            ? {}
+            : { sessionReference: error.sessionReference }),
+          ...(error.sessionFilePath === undefined
+            ? {}
+            : { sessionFilePath: error.sessionFilePath }),
         }),
     ),
   );
@@ -255,6 +265,8 @@ const reviewerProcessFailure = (
   attempts,
   stdout,
   invocationUsage,
+  ...(failure.sessionReference === undefined ? {} : { sessionReference: failure.sessionReference }),
+  ...(failure.sessionFilePath === undefined ? {} : { sessionFilePath: failure.sessionFilePath }),
 });
 
 const snapshotSessionRoot = (

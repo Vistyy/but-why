@@ -8,6 +8,8 @@ export class ReviewerProcessExecutionFailed extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly sessionUsability: "unusable" | "unknown";
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 }> {}
 
 export type ReviewerProcessResult = {
