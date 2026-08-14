@@ -11,7 +11,7 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   change: {
     state: "open",
     closeReason: null,
-    taskId: "BY-236",
+    acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
     baseRef: "refs/remotes/origin/main",
   },
   currentCandidate: null,
@@ -194,7 +194,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
 const result = (stdout: string) => ({ stdout, stderr: "", code: 0, killed: false });
 
 describe("packaged Change Implement continuation extension", () => {
-  it("interrupts the first Task-backed Submission and permits an immediate retry", async () => {
+  it("interrupts the first Submission with Acceptance Context and permits an immediate retry", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     const submit = {
@@ -278,9 +278,11 @@ describe("packaged Change Implement continuation extension", () => {
     ]);
   });
 
-  it("does not interrupt Taskless Changes or Change Submit help", async () => {
+  it("does not interrupt Changes without a Task or Change Submit help", async () => {
     const harness = createHarness();
-    harness.setSnapshot(snapshot({ change: { state: "open", closeReason: null, taskId: null } }));
+    harness.setSnapshot(
+      snapshot({ change: { state: "open", closeReason: null, acceptanceContext: null } }),
+    );
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     const inspectionCallCount = harness.getExecCallCount();
     const blockerInspectionCallCount = harness.execCalls.filter(({ args }) =>
@@ -324,7 +326,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(result).toMatchObject({
       block: true,
-      reason: expect.stringContaining("could not classify reassessment eligibility"),
+      reason: expect.stringContaining("trusted Change inspection could not determine"),
     });
     expect(harness.sent).toEqual([]);
   });
@@ -696,7 +698,13 @@ describe("packaged Change Implement continuation extension", () => {
   it("automatically resumes after an external blocker Resolution and explains it before old Findings", async () => {
     const harness = createHarness();
     harness.setSnapshot(
-      snapshot({ change: { state: "open", closeReason: null, taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "open",
+          closeReason: null,
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
@@ -822,7 +830,13 @@ describe("packaged Change Implement continuation extension", () => {
     const cancelled = createHarness();
     await cancelled.emit("session_start", { type: "session_start", reason: "startup" });
     cancelled.setSnapshot(
-      snapshot({ change: { state: "closed", closeReason: "cancelled", taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "closed",
+          closeReason: "cancelled",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await cancelled.runCommand("continue-change");
     expect(cancelled.latestWidgetText()).toEqual(["✕ Change was cancelled"]);
@@ -831,7 +845,11 @@ describe("packaged Change Implement continuation extension", () => {
     await cleanup.emit("session_start", { type: "session_start", reason: "startup" });
     cleanup.setSnapshot(
       snapshot({
-        change: { state: "closed", closeReason: "completed", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
         cleanup: { state: "pending", blockingReason: "worktree" },
       }),
     );
@@ -866,7 +884,13 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setSnapshot(
-        snapshot({ change: { state: "closed", closeReason: "cancelled", taskId: "BY-236" } }),
+        snapshot({
+          change: {
+            state: "closed",
+            closeReason: "cancelled",
+            acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+          },
+        }),
       );
       await vi.advanceTimersByTimeAsync(30_000);
       const terminalInspectionCalls = harness.getExecCallCount();
@@ -886,7 +910,13 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.runCommand("pause-change");
     harness.setSnapshot(
-      snapshot({ change: { state: "closed", closeReason: "completed", taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await harness.runCommand("continue-change");
 
@@ -899,7 +929,11 @@ describe("packaged Change Implement continuation extension", () => {
     [
       "Change close reason",
       snapshot({
-        change: { state: "closed", closeReason: "not-a-close-reason", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "not-a-close-reason",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
       }),
       undefined,
     ],
@@ -974,7 +1008,11 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setSnapshot(
       snapshot({
-        change: { state: "closed", closeReason: "completed", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
         cleanup: { state: "pending", blockingReason: { opaque: true } },
       }),
     );

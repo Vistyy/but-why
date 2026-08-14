@@ -38,7 +38,9 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
 > =>
   Effect.map(RepositorySql, (repository) => ({
     prepareTask: (taskId) =>
-      repository.transaction("prepare Task-backed Change Start", (sql) => prepareTask(sql, taskId)),
+      repository.transaction("prepare Change Start linked to a Task", (sql) =>
+        prepareTask(sql, taskId),
+      ),
     create: (input) =>
       repository.transactionImmediate("create Change Start", (sql) => create(sql, input)),
     getById: (changeId) =>
@@ -117,7 +119,7 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const row = rows[0];
     if (row === undefined) return { ok: false as const, code: "task_not_found" as const };
-    const task = yield* decodePersisted("prepare Task-backed Change Start", () => ({
+    const task = yield* decodePersisted("prepare Change Start linked to a Task", () => ({
       ...decodeTaskContextRow(row),
       state: decodeTaskState(row.state),
     }));
@@ -131,7 +133,7 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       WHERE task_dependencies.dependent_task_id = ${taskId}
       ORDER BY tasks.numeric_id ASC
     `;
-    const blockedBy = (yield* decodePersisted("prepare Task-backed Change Start", () =>
+    const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
       decodeTaskDependencyFacts(dependencyRows, taskId),
     )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
@@ -146,7 +148,7 @@ const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     return rows[0] === undefined
       ? undefined
-      : yield* decodePersisted("prepare Task-backed Change Start", () => ({
+      : yield* decodePersisted("prepare Change Start linked to a Task", () => ({
           state: decodeTaskState(rows[0]?.state),
         }));
   });

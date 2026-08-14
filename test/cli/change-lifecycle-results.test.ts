@@ -25,7 +25,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
 });
 
 describe("Change lifecycle CLI results", () => {
-  it("renders successful Task-backed Change Start identity", () => {
+  it("renders successful Change Start identity for a Change linked to a Task", () => {
     expect(startResult({ ok: true, change: change() })).toEqual({
       exitCode: 0,
       stdout: {
@@ -88,10 +88,34 @@ describe("Change lifecycle CLI results", () => {
     };
     expect(prepareResult({ ok: true, change: change(failure) })).toMatchObject({
       exitCode: 0,
-      stdout: { change: { id: "change-1", taskId: "BY-197" }, prepareFailure: failure },
+      stdout: { change: { id: "change-1" }, prepareFailure: failure },
     });
+    expect(prepareResult({ ok: true, change: change(failure) }).stdout).not.toHaveProperty(
+      "change.taskId",
+    );
     expect(prepareResult({ ok: true, change: change() }).stdout).not.toHaveProperty(
       "prepareFailure",
     );
+  });
+
+  it("keeps Task ID out of linked Change Prepare recovery errors", () => {
+    const prepared = prepareResult({
+      ok: false,
+      code: "managed_branch_missing",
+      branch: change().branchRef,
+      path: change().worktreePath,
+      startingCommit: change().startingCommit,
+      change: change(),
+    });
+    expect(prepared).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        help: [
+          expect.stringContaining("by change prepare change-1"),
+          expect.stringContaining("by change cancel change-1"),
+        ],
+      },
+    });
+    expect(JSON.stringify(prepared.stdout)).not.toContain("BY-197");
   });
 });

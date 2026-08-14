@@ -68,7 +68,6 @@ export type PublishCandidateResult =
         | "validation_evidence_invalid"
         | "branch_binding_invalid"
         | "current_head_mismatch"
-        | "task_metadata_missing"
         | "commit_history_unavailable"
         | "publication_creation_unconfirmed"
         | "publication_lookup_ambiguous"
@@ -851,13 +850,11 @@ const metadataFor = (
   headSha: string,
   git: CandidatePublicationGit,
 ): Metadata | Extract<PublishCandidateResult, { readonly ok: false }> => {
-  if (change.taskId !== null)
-    return change.acceptanceContext === null
-      ? { ok: false, code: "task_metadata_missing" }
-      : {
-          title: change.acceptanceContext.title,
-          body: `Task: ${change.taskId}${implementationDecisionSection(change.implementationDecisions)}`,
-        };
+  if (change.acceptanceContext !== null)
+    return {
+      title: change.acceptanceContext.title,
+      body: implementationDecisionSection(change.implementationDecisions).trim(),
+    };
   if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
   const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
   return !subject.ok

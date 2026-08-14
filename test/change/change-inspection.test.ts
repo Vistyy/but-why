@@ -145,7 +145,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("lists open Changes by age, filters closed Changes, and shows taskless facts", () =>
+  it.effect("lists open Changes by age, filters closed Changes, and shows Change facts", () =>
     Effect.gen(function* () {
       const root = createInspectionRepository();
       const older = yield* createChangeFixture(root, "refs/heads/older", firstNow);
@@ -161,7 +161,6 @@ describe("Change inspection CLI", () => {
         changes: [
           {
             id: older.id,
-            taskId: null,
             state: "open",
             createdAt: firstNow,
             ageSeconds: 3_600,
@@ -174,9 +173,9 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(openShown.stdout)).toEqual({
         change: {
           id: older.id,
-          taskId: null,
           state: "open",
           closeReason: null,
+          acceptanceContext: null,
           branchRef: "refs/heads/older",
           baseRef: null,
           worktreePath: null,
@@ -566,7 +565,7 @@ describe("Change inspection CLI", () => {
       yield* createTaskFixture(root, {
         id: "BY-1",
         numericId: 1,
-        title: "Task-backed Change",
+        title: "Change linked to a Task",
         description: "Inspect progress",
         state: "todo",
         createdAt: firstNow,
@@ -582,7 +581,7 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(shown.stdout)).toMatchObject({
         task: {
           id: "BY-1",
-          title: "Task-backed Change",
+          title: "Change linked to a Task",
           state: "todo",
           change: { id: changeId, activity: "implementing" },
         },
@@ -634,6 +633,19 @@ describe("Change inspection CLI", () => {
         ],
       });
       yield* resolveImplementationBlockerFixture(root, activeBlocker.id, commandNow);
+      const resolvedChange = yield* runInspectionCommand(root, ["change", "show", changeId]);
+      expect(JSON.parse(resolvedChange.stdout).change).toMatchObject({
+        acceptanceContext: {
+          version: 1,
+          title: "Change linked to a Task",
+          description: "Inspect progress",
+          resolutions: [
+            "The earlier issue was resolved.",
+            "Proceed with the accepted implementation.",
+          ],
+        },
+      });
+      expect(JSON.parse(resolvedChange.stdout).change).not.toHaveProperty("taskId");
 
       expect(
         JSON.parse((yield* runInspectionCommand(root, ["task", "list", "--all"])).stdout).tasks,

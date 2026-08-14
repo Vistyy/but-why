@@ -426,10 +426,6 @@ const cases = {
     result: { ok: false, code: "branch_binding_invalid" },
     expected: genericFailure("branch_binding_invalid"),
   },
-  task_metadata_missing: {
-    result: { ok: false, code: "task_metadata_missing" },
-    expected: genericFailure("task_metadata_missing"),
-  },
   commit_history_unavailable: {
     result: { ok: false, code: "commit_history_unavailable" },
     expected: genericFailure("commit_history_unavailable"),

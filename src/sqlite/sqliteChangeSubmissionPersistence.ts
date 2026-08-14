@@ -13,7 +13,9 @@ import {
   decodeChangeRow,
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   implementationBlockerReadColumns,
+  readImplementationBlockerHistory,
   type StoredChangeRow,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
@@ -125,8 +127,13 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
       selected.publication,
       operationName,
     );
-    const activeBlocker = yield* readActiveBlocker(sql, selected.id, operationName);
-    return { ...selected, activeBlocker } satisfies SubmissionChange;
+    const blockerHistory = yield* readImplementationBlockerHistory(sql, selected.id, operationName);
+    const activeBlocker = blockerHistory.active;
+    return {
+      ...selected,
+      acceptanceContext: deriveAcceptanceContext(selected.acceptanceContext, blockerHistory),
+      activeBlocker,
+    } satisfies SubmissionChange;
   });
 const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {

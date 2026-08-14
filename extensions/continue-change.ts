@@ -37,8 +37,8 @@ export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
     readonly closeReason: ChangeCloseReason | null;
-    readonly taskId?: string | null;
-    readonly baseRef?: string;
+    readonly acceptanceContext: JsonObject | null;
+    readonly baseRef?: string | null;
   };
   readonly currentCandidate: CurrentCandidate | null;
   readonly currentValidationRun: CurrentValidationRun | null;
@@ -388,11 +388,11 @@ export const countVisibleChangeSubmits = (command: string): number => {
 export const containsVisibleChangeSubmit = (command: string): boolean =>
   countVisibleChangeSubmits(command) > 0;
 
-const submissionReassessmentMessage =
+const initialSubmissionReassessmentMessage =
   "But Why blocked the complete Bash tool call before any part of it executed. Before the first Submission, re-read the complete current Acceptance Context and reassess the complete committed implementation against it. Correct and commit any material omissions you identify, run focused verification for those corrections, and then retry Change Submit.";
 
 const inspectionFailureMessage = (message: string): string =>
-  `But Why blocked Change Submission because it could not classify reassessment eligibility from trusted Change inspection: ${message}`;
+  `But Why blocked Change Submission because trusted Change inspection could not determine whether initial Submission requires reassessment: ${message}`;
 
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   for (const entry of entries) {
@@ -447,7 +447,7 @@ export const buildContinuationMessage = (
   }
   return [
     `Resume implementation of Change ${changeId}.`,
-    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, the Managed Worktree, and the linked Task Context when present.`,
+    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
     "Implement the complete accepted intent and continue until Change Submit passes.",
   ].join(" ");
 };
@@ -780,11 +780,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     };
   };
 
-  const inspectReassessmentEligibility = async (
+  const inspectInitialSubmissionEligibility = async (
     ctx: ExtensionContext,
     id: string,
   ): Promise<
-    | { readonly ok: true; readonly taskId: string | null }
+    | { readonly ok: true; readonly hasAcceptanceContext: boolean }
     | { readonly ok: false; readonly message: string }
   > => {
     const changeResult = await inspectCommand(["change", "show", id], ctx.cwd);
@@ -804,13 +804,16 @@ export default function continueChange(pi: ExtensionAPI): void {
     } catch {
       return { ok: false, message: "But Why Change inspection returned malformed JSON" };
     }
-    if (!isSnapshot(snapshotValue) || snapshotValue.change.taskId === undefined) {
+    if (!isSnapshot(snapshotValue)) {
       return {
         ok: false,
         message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    return { ok: true, taskId: snapshotValue.change.taskId };
+    return {
+      ok: true,
+      hasAcceptanceContext: snapshotValue.change.acceptanceContext !== null,
+    };
   };
 
   const markInitialSubmissionHandled = (): void => {
@@ -849,18 +852,18 @@ export default function continueChange(pi: ExtensionAPI): void {
       };
     }
 
-    const eligibility = await inspectReassessmentEligibility(ctx, changeId);
+    const eligibility = await inspectInitialSubmissionEligibility(ctx, changeId);
     if (!eligibility.ok) {
       return { block: true, reason: inspectionFailureMessage(eligibility.message) };
     }
-    if (eligibility.taskId === null) {
+    if (!eligibility.hasAcceptanceContext) {
       markInitialSubmissionHandled();
       showValidationStarted(ctx);
       return;
     }
-    pi.sendUserMessage(submissionReassessmentMessage, { deliverAs: "steer" });
+    pi.sendUserMessage(initialSubmissionReassessmentMessage, { deliverAs: "steer" });
     markInitialSubmissionHandled();
-    return { block: true, reason: submissionReassessmentMessage };
+    return { block: true, reason: initialSubmissionReassessmentMessage };
   });
 
   const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
@@ -880,7 +883,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const explanation = resolution.content;
     const next = hasFindings
       ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, the Managed Worktree, and the linked Task Context when present. Continue implementing the complete accepted intent until Change Submit passes.`;
+      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
@@ -1286,6 +1289,20 @@ const isValidationRun = (value: unknown): value is CurrentValidationRun =>
   typeof recordValue(value, "id") === "string" &&
   (recordValue(value, "state") === "running" || recordValue(value, "state") === "complete");
 
+const isStringArray = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const isAcceptanceContext = (value: unknown): value is JsonObject | null =>
+  value === null ||
+  (isRecord(value) &&
+    recordValue(value, "version") === 1 &&
+    typeof recordValue(value, "title") === "string" &&
+    typeof recordValue(value, "description") === "string" &&
+    (recordValue(value, "comments") === undefined ||
+      isStringArray(recordValue(value, "comments"))) &&
+    (recordValue(value, "resolutions") === undefined ||
+      isStringArray(recordValue(value, "resolutions"))));
+
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;
   const change = recordValue(value, "change");
@@ -1299,7 +1316,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (recordValue(change, "closeReason") === "completed" ||
       recordValue(change, "closeReason") === "cancelled" ||
       recordValue(change, "closeReason") === null) &&
-    (recordValue(change, "taskId") === null || typeof recordValue(change, "taskId") === "string") &&
+    isAcceptanceContext(recordValue(change, "acceptanceContext")) &&
     (candidate === null || isCandidate(candidate)) &&
     (validationRun === null || isValidationRun(validationRun)) &&
     isNonNegativeInteger(recordValue(value, "findingCount")) &&

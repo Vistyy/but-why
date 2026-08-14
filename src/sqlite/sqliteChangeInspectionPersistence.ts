@@ -15,7 +15,9 @@ import {
   decodeChangeRow,
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   implementationBlockerReadColumns,
+  readImplementationBlockerHistory,
   type StoredChangeRow,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
@@ -109,10 +111,16 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
         (changes) => changes.sort(compareChanges),
       ),
   );
-const decodeChangeListRecord = (row: StoredChangeListRow): ChangeListRecord => ({
-  ...row,
-  taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-});
+const decodeChangeListRecord = (row: StoredChangeListRow): ChangeListRecord => {
+  if (row.taskId !== null) storedPublicTaskId(row.taskId);
+  return {
+    id: row.id,
+    state: row.state,
+    branchRef: row.branchRef,
+    worktreePath: row.worktreePath,
+    createdAt: row.createdAt,
+  };
+};
 const compareChanges = (
   left: Pick<ChangeListRecord, "createdAt" | "id">,
   right: Pick<ChangeListRecord, "createdAt" | "id">,
@@ -130,15 +138,19 @@ const mapRow = (
       ? Effect.succeed(undefined)
       : Effect.gen(function* () {
           const decisions = yield* listDecisions(sql, changeWithoutHistory.id);
-          const activeBlocker = yield* readActiveBlocker(
+          const blockerHistory = yield* readImplementationBlockerHistory(
             sql,
             changeWithoutHistory.id,
             operationName,
           );
           return {
             ...changeWithoutHistory,
+            acceptanceContext: deriveAcceptanceContext(
+              changeWithoutHistory.acceptanceContext,
+              blockerHistory,
+            ),
             implementationDecisions: decisions,
-            activeBlocker,
+            activeBlocker: blockerHistory.active,
           } satisfies ChangeRecord;
         }),
   );

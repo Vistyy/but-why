@@ -31,7 +31,6 @@ export const withResolvedChangeId = <E, R>(
 
 export const changeInspectionView = (change: ChangeRecord) => ({
   id: change.id,
-  taskId: change.taskId,
   state: change.state,
   closeReason: change.closeReason,
   ...(change.cancelReason === null ? {} : { cancelReason: change.cancelReason }),
@@ -39,6 +38,7 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
   startingCommit: change.startingCommit,
+  acceptanceContext: change.acceptanceContext,
   createdAt: change.createdAt,
   closedAt: change.closedAt,
   ...(change.prepareFailure === null

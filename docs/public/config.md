@@ -149,7 +149,7 @@ Later configuration changes do not alter a captured policy.
 
 ## Review and Specialists
 
-Acceptance Review is always enabled for Task-backed Changes.
+Acceptance Review is always enabled for Changes linked to a Task.
 Its instructions resolve from Repo Config, then Global Config, then the prompt shipped with But Why.
 Its Agent Profile resolves from Repo Config, then Global Config, then the Global default.
 
@@ -162,9 +162,9 @@ A definition requires `instructionsFile` and may select an Agent Profile.
 Duplicate names and unresolved definitions reject Submission before a Validation Run starts.
 Specialists execute in configured list order.
 
-For a Task-backed Change, But Why supplies the exact immutable Acceptance Context to each Specialist as an authoritative scope constraint.
+For a Change linked to a Task, But Why supplies the exact immutable Acceptance Context to each Specialist as an authoritative scope constraint.
 The Specialist uses it only to constrain Findings and required corrections.
-For a taskless Change, But Why supplies no Acceptance Context block or explanation of its absence.
+For a Change without a Task, But Why supplies no Acceptance Context block or explanation of its absence.
 The same conditional behavior applies to initial and continuation Specialist prompts.
 Each configured Specialist instruction file must positively define exactly one concern and state its applicable authority, review lenses, materiality, and concern-specific exclusions.
 But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, and output contract remain controlling.

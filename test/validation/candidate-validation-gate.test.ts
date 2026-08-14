@@ -19,7 +19,7 @@ const record = <A>(calls: string[], phase: string, result: A) =>
   });
 
 describe("Candidate Validation Gate", () => {
-  it.effect("omits Acceptance Review for a taskless Candidate", () =>
+  it.effect("omits Acceptance Review for a Change without a Task Candidate", () =>
     Effect.gen(function* () {
       const calls: string[] = [];
 

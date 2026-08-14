@@ -20,28 +20,30 @@ const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
   });
 
 describe("SQLite Change decoding", () => {
-  it.scoped("round-trips taskless Change Start data and historical snapshot arrays exactly", () =>
-    withTemporaryRepositoryState((input) =>
-      Effect.gen(function* () {
-        const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangeTestDependencies();
-        const repository = yield* RepositorySql;
-        const created = yield* starts.create({
-          id: "change-decoded",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/change-decoded",
-          baseRef: "refs/remotes/origin/main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "base-sha",
-          worktreePath: `${input.commonDirectory}/worktrees/change-decoded`,
-          prepare: { command: "just init", timeoutSeconds: 120 },
-          now: "2026-08-09T20:00:00.000Z",
-        });
-        expect(created).toMatchObject({ ok: true, change: { taskId: null } });
+  it.scoped(
+    "round-trips Change Start data for a Change without a Task and historical snapshot arrays exactly",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const starts = yield* openSqliteChangeStartPersistence();
+          const changes = yield* openSqliteChangeTestDependencies();
+          const repository = yield* RepositorySql;
+          const created = yield* starts.create({
+            id: "change-decoded",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/change-decoded",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "base-sha",
+            worktreePath: `${input.commonDirectory}/worktrees/change-decoded`,
+            prepare: { command: "just init", timeoutSeconds: 120 },
+            now: "2026-08-09T20:00:00.000Z",
+          });
+          expect(created).toMatchObject({ ok: true, change: { taskId: null } });
 
-        yield* repository.operation("install historical Acceptance Context", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`
+          yield* repository.operation("install historical Acceptance Context", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`
               INSERT INTO tasks (
                 id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
@@ -49,25 +51,25 @@ describe("SQLite Change decoding", () => {
                 '2026-08-09T20:00:00.000Z', '2026-08-09T20:00:00.000Z'
               )
             `;
-            yield* sql`
+              yield* sql`
               UPDATE changes
               SET task_id = 'BY-901', acceptance_context =
                 '{"version":1,"title":"Historical intent","description":"Preserve snapshots.","comments":["first\\ncomment","second"],"resolutions":["keep  spacing"]}'
               WHERE id = 'change-decoded'
             `;
-          }),
-        );
+            }),
+          );
 
-        const stored = yield* changes.reads.getChangeById("change-decoded");
-        expect(stored?.acceptanceContext).toEqual({
-          version: 1,
-          title: "Historical intent",
-          description: "Preserve snapshots.",
-          comments: ["first\ncomment", "second"],
-          resolutions: ["keep  spacing"],
-        });
-      }),
-    ),
+          const stored = yield* changes.reads.getChangeById("change-decoded");
+          expect(stored?.acceptanceContext).toEqual({
+            version: 1,
+            title: "Historical intent",
+            description: "Preserve snapshots.",
+            comments: ["first\ncomment", "second"],
+            resolutions: ["keep  spacing"],
+          });
+        }),
+      ),
   );
 
   it.scoped("scopes malformed Change relationship decoding", () =>
@@ -300,7 +302,7 @@ describe("SQLite Change decoding", () => {
         );
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
-          "restore taskless context",
+          "restore Change without a Task context",
           (sql) =>
             sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
         );
@@ -381,7 +383,7 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:20:00.000Z",
         });
         if (!captured.ok) throw new Error(captured.code);
-        yield* repository.operation("make captured Change task-backed", (sql) =>
+        yield* repository.operation("make captured Change linked to a Task", (sql) =>
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (

@@ -91,14 +91,12 @@ const getPublicationById = (
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => {
       const state = decodeSelectedChangeState(row, changeId);
+      const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
+      if (taskId !== null) storedPublicTaskId(taskId);
       return {
         ...state,
         branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
         startingCommit: decodeStoredNullableString(row.startingCommit, "Change starting commit"),
-        taskId:
-          row.taskId === null
-            ? null
-            : storedPublicTaskId(decodeStoredString(row.taskId, "Change Task id")),
         acceptanceContext:
           row.acceptanceContext === null
             ? null

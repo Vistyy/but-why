@@ -387,15 +387,15 @@ describe("by change reconcile", () => {
   );
 
   it.effect(
-    "completes a merged taskless Change through reconciliation",
+    "completes a merged Change without a Task through reconciliation",
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
           const starts = yield* openSqliteChangeStartPersistence();
           const created = yield* starts.create({
-            id: "change-taskless",
+            id: "change-without-task",
             repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/but-why/change-taskless",
+            branchRef: "refs/heads/but-why/change-without-task",
             baseRef: "refs/heads/main",
             baseRemoteUrl: "https://github.com/acme/repo.git",
             startingCommit: "head",
@@ -410,7 +410,7 @@ describe("by change reconcile", () => {
             candidateId: "candidate-1",
             validationRunId: "validation-run-1",
             target: publicationTarget,
-            headBranch: "but-why/change-taskless",
+            headBranch: "but-why/change-without-task",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -438,7 +438,7 @@ describe("by change reconcile", () => {
                   state: "closed",
                   merged: true,
                   baseBranch: publicationTarget.baseBranch,
-                  headBranch: "but-why/change-taskless",
+                  headBranch: "but-why/change-without-task",
                   headSha: "head",
                 }),
             },

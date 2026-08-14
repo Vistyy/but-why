@@ -36,7 +36,7 @@ const candidate = {
   headSha: "head",
   trackedTreeMatchesChangeBase: false,
 } as const;
-const tasklessPolicy = {
+const changeWithoutTaskPolicy = {
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   copyFiles: [],
   specialistReviews: [],
@@ -115,59 +115,67 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("uses the Agent Environment to validate and publish a passing taskless Candidate", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          agentEnvironment: ["nix", "develop", "-c"],
-          publication: {
-            publish: () => {
-              events.push("publish");
+  it.effect(
+    "uses the Agent Environment to validate and publish a passing Change without a Task Candidate",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            change: readyChange(),
+            agentEnvironment: ["nix", "develop", "-c"],
+            publication: {
+              publish: () => {
+                events.push("publish");
+                return {
+                  ok: true,
+                  created: true,
+                  pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+                };
+              },
+            },
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: (input) =>
+            Effect.sync(() => {
+              events.push("validate_changeWithoutTask");
+              expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
               return {
                 ok: true,
-                created: true,
-                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-              };
-            },
-          },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: (input) =>
-          Effect.sync(() => {
-            events.push("validate_taskless");
-            expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
-            return {
-              ok: true,
-              reused: false,
-              validationRunId: "run-1",
-              outcome: "passed",
-            } as const;
-          }),
-        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
+                reused: false,
+                validationRunId: "run-1",
+                outcome: "passed",
+              } as const;
+            }),
+          validateAcceptanceContextCandidate: () =>
+            Effect.die("Acceptance Review was not expected"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
 
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
+        const result = yield* submit
+          .submit({ changeId: "change-1", now })
+          .pipe(Effect.provide(validationLayer));
 
-      expect(result).toEqual({
-        ok: true,
-        status: "published",
-        changeId: "change-1",
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
-        created: true,
-        pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-      });
-      expect(events).toEqual(["capture", "detect_target", "validate_taskless", "publish"]);
-    }),
+        expect(result).toEqual({
+          ok: true,
+          status: "published",
+          changeId: "change-1",
+          candidateId: "candidate-1",
+          validationRunId: "run-1",
+          created: true,
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        });
+        expect(events).toEqual([
+          "capture",
+          "detect_target",
+          "validate_changeWithoutTask",
+          "publish",
+        ]);
+      }),
   );
 
   it.effect("publishes a Candidate without rerunning a recorded preparation failure", () =>
@@ -201,7 +209,7 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () =>
           Effect.sync(() => {
-            events.push("validate_taskless");
+            events.push("validate_changeWithoutTask");
             return {
               ok: true,
               reused: false,
@@ -220,7 +228,7 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result).toMatchObject({ ok: true, status: "published" });
-      expect(events).toEqual(["capture", "detect_target", "validate_taskless", "publish"]);
+      expect(events).toEqual(["capture", "detect_target", "validate_changeWithoutTask", "publish"]);
       expect(change.prepareFailure).toMatchObject({ exitCode: 7 });
     }),
   );
@@ -319,7 +327,7 @@ describe("Change Submit orchestration", () => {
                 resolved: {
                   acceptanceContextSupplied: false,
                   policy: {
-                    ...tasklessPolicy,
+                    ...changeWithoutTaskPolicy,
                     specialistReviews: [
                       {
                         id: "candidate",
@@ -344,7 +352,7 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: (input) =>
             Effect.sync(() => {
-              events.push("validate_taskless");
+              events.push("validate_changeWithoutTask");
               expect(input.policy.specialistReviews).toMatchObject([
                 {
                   id: "candidate",
@@ -381,7 +389,7 @@ describe("Change Submit orchestration", () => {
           "load_candidate_repo_config",
           "resolve_policy",
           "detect_target",
-          "validate_taskless",
+          "validate_changeWithoutTask",
           "publish",
         ]);
       }),
@@ -540,7 +548,7 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: (input) =>
           Effect.sync(() => {
-            events.push("validate_taskless");
+            events.push("validate_changeWithoutTask");
             validatedCandidates.push(input.candidateId);
             return {
               ok: true,
@@ -578,12 +586,12 @@ describe("Change Submit orchestration", () => {
         "refresh_base",
         "capture",
         "detect_target",
-        "validate_taskless",
+        "validate_changeWithoutTask",
         "publish",
         "refresh_base",
         "capture",
         "detect_target",
-        "validate_taskless",
+        "validate_changeWithoutTask",
         "publish",
       ]);
     }),
@@ -646,11 +654,11 @@ describe("Change Submit orchestration", () => {
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
         validateAcceptanceContextCandidate: (input) =>
           Effect.sync(() => {
             seenValidationInput = input;
-            events.push("validate_task_backed");
+            events.push("validate_change_linked_to_task");
             return {
               ok: true,
               reused: false,
@@ -680,7 +688,7 @@ describe("Change Submit orchestration", () => {
         "observe_pull_request",
         "capture",
         "detect_target",
-        "validate_task_backed",
+        "validate_change_linked_to_task",
         "publish",
       ]);
     }),
@@ -724,7 +732,7 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () =>
           Effect.sync(() => {
-            events.push("validate_taskless");
+            events.push("validate_changeWithoutTask");
             return {
               ok: true,
               reused: false,
@@ -750,51 +758,58 @@ describe("Change Submit orchestration", () => {
         "observe_pull_request",
         "capture",
         "detect_target",
-        "validate_taskless",
+        "validate_changeWithoutTask",
         "publish",
       ]);
     }),
   );
 
-  it.effect("selects authority-backed validation for a Task-backed Candidate", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = readyChange({
-        taskId: publicTaskId("BY-1"),
-        acceptanceContext: {
-          version: 1,
-          title: "Approved intent",
-          description: "Deliver it",
-        },
-      });
-      const submit = openChangeSubmit(
-        dependencies({ events, change, acceptanceContextSupplied: true }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateAcceptanceContextCandidate: (input) =>
-          Effect.sync(() => {
-            events.push("validate_task_backed");
-            expect(input.changeId).toBe(change.id);
-            return {
-              ok: true,
-              reused: false,
-              validationRunId: "run-1",
-              outcome: "passed",
-            } as const;
-          }),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
+  it.effect(
+    "selects authority-backed validation for a Candidate from a Change linked to a Task",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const change = readyChange({
+          taskId: publicTaskId("BY-1"),
+          acceptanceContext: {
+            version: 1,
+            title: "Approved intent",
+            description: "Deliver it",
+          },
+        });
+        const submit = openChangeSubmit(
+          dependencies({ events, change, acceptanceContextSupplied: true }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
+          validateAcceptanceContextCandidate: (input) =>
+            Effect.sync(() => {
+              events.push("validate_change_linked_to_task");
+              expect(input.changeId).toBe(change.id);
+              return {
+                ok: true,
+                reused: false,
+                validationRunId: "run-1",
+                outcome: "passed",
+              } as const;
+            }),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
 
-      const result = yield* submit
-        .submit({ changeId: change.id, now })
-        .pipe(Effect.provide(validationLayer));
+        const result = yield* submit
+          .submit({ changeId: change.id, now })
+          .pipe(Effect.provide(validationLayer));
 
-      expect(result.ok).toBe(true);
-      expect(events).toEqual(["capture", "detect_target", "validate_task_backed", "publish"]);
-    }),
+        expect(result.ok).toBe(true);
+        expect(events).toEqual([
+          "capture",
+          "detect_target",
+          "validate_change_linked_to_task",
+          "publish",
+        ]);
+      }),
   );
 
   it.effect("completes an exact merged owned pull request through terminal completion", () =>
@@ -888,7 +903,7 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () =>
           Effect.sync(() => {
-            events.push("validate_taskless");
+            events.push("validate_changeWithoutTask");
             return {
               ok: true,
               reused: false,
@@ -909,7 +924,7 @@ describe("Change Submit orchestration", () => {
         "observe_pull_request",
         "capture",
         "detect_target",
-        "validate_taskless",
+        "validate_changeWithoutTask",
         "publish",
       ]);
     }),
@@ -963,10 +978,10 @@ describe("Change Submit orchestration", () => {
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
         validateAcceptanceContextCandidate: () =>
           Effect.sync(() => {
-            events.push("validate_task_backed");
+            events.push("validate_change_linked_to_task");
             return {
               ok: true,
               reused: false,
@@ -1006,12 +1021,12 @@ describe("Change Submit orchestration", () => {
         "observe_pull_request",
         "capture",
         "detect_target",
-        "validate_task_backed",
+        "validate_change_linked_to_task",
         "publish:candidate-1",
         "observe_pull_request",
         "capture",
         "detect_target",
-        "validate_task_backed",
+        "validate_change_linked_to_task",
         "publish:candidate-2",
       ]);
     }),
@@ -1219,7 +1234,7 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () =>
           Effect.sync(() => {
-            events.push("validate_taskless");
+            events.push("validate_changeWithoutTask");
             return {
               ok: true,
               reused: false,
@@ -1248,7 +1263,7 @@ describe("Change Submit orchestration", () => {
         "read_publication_evidence",
         "capture",
         "detect_target",
-        "validate_taskless",
+        "validate_changeWithoutTask",
         "publish",
       ]);
     }),
@@ -1256,7 +1271,7 @@ describe("Change Submit orchestration", () => {
 
   it.effect.each([
     {
-      name: "unchanged taskless work",
+      name: "unchanged work without a Task",
       captureResult: {
         ...candidate,
         headSha: "base",
@@ -1417,7 +1432,7 @@ describe("Change Submit orchestration", () => {
         dependencies({ change, acceptanceContextSupplied: true, findings: [finding] }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
         validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: true,
@@ -1463,7 +1478,7 @@ describe("Change Submit orchestration", () => {
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
         validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: false,
@@ -1618,7 +1633,7 @@ const dependencies = (input: {
             resolved: {
               acceptanceContextSupplied: true,
               policy: {
-                ...tasklessPolicy,
+                ...changeWithoutTaskPolicy,
                 acceptanceReview: {
                   instructions: "Review intent",
                   instructionsSource: "built_in",
@@ -1636,7 +1651,7 @@ const dependencies = (input: {
             resolved: {
               acceptanceContextSupplied: false,
               policy: {
-                ...tasklessPolicy,
+                ...changeWithoutTaskPolicy,
                 ...(input.agentEnvironment === undefined
                   ? {}
                   : { agentEnvironment: input.agentEnvironment }),

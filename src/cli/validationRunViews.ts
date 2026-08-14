@@ -65,7 +65,6 @@ const candidateValidationChangeView = (change: ChangeRecord): StructuredObject =
   id: change.id,
   branchRef: change.branchRef,
   baseRef: change.baseRef,
-  taskId: change.taskId,
   state: change.state,
 });
 

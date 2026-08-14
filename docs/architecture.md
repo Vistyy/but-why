@@ -11,7 +11,7 @@ The [Context Map](../CONTEXT-MAP.md) and its linked contexts define canonical do
 [Repository Runtime](context/repository-runtime/CONTEXT.md) owns Local Repository identity, Shared Repository State, configuration resolution, executable selection, preparation, and agent runtime configuration.
 
 A Change can link one approved Task and capture its Acceptance Context.
-Task-backed and taskless Changes use the same Change-owned validation and delivery path.
+Changes linked to a Task and Changes without a Task use the same Change-owned validation and delivery path.
 
 ## Module boundaries
 

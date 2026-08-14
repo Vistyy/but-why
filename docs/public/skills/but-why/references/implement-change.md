@@ -20,10 +20,9 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 ## 1. Read the accepted context
 
 Run `<but-why> change show <change-id>`.
-For a Task-backed Change, run `<but-why> task context <task-id>`.
-Treat the returned Task Context and approved Resolutions as the Change's Acceptance Context and accepted implementation intent.
-For a taskless Change, no Acceptance Context exists.
-In a fresh taskless Interactive Session, use the authorized outcome in the initial Implementer Prompt as current implementation direction without treating it as durable intent.
+For a Change linked to a Task, use the complete `acceptanceContext` in the Change inspection as the accepted implementation intent.
+For a Change without a Task, no Acceptance Context exists.
+In a fresh Interactive Session for a Change without a Task, use the authorized outcome in the initial Implementer Prompt as current implementation direction without treating it as durable intent.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
 This step is complete when the Change, accepted intent, and Managed Worktree are known.
@@ -31,7 +30,7 @@ This step is complete when the Change, accepted intent, and Managed Worktree are
 ## 2. Implement and commit
 
 Follow the repository instructions in the Managed Worktree.
-Use explicit verification constraints in accepted Task Context when present.
+Use explicit verification constraints in accepted Acceptance Context when present.
 Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Before selecting or adding verification evidence, read [Task verification](task-verification.md) completely.
 Select proportionate evidence after the implementation shape is known.
@@ -74,8 +73,8 @@ The UTF-8 text report must state the unresolved issue, why continuing is unsafe,
 The report is non-authoritative evidence and does not amend Acceptance Context.
 The main operator inspects the blocker with `<but-why> change blocker list <change-id>` and records an approved Resolution with `<but-why> change blocker resolve <change-id> --file <path|->`.
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
-For a Task-backed Change, the Resolution appends to the current Acceptance Context.
-For a taskless Change, the Resolution remains Change history and creates no Acceptance Context.
+For a Change linked to a Task, the Resolution becomes part of the current Acceptance Context.
+For a Change without a Task, the Resolution remains Change history and creates no Acceptance Context.
 
 Candidate Publication is a delivery state, not durable Change completion.
 After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.

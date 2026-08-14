@@ -122,7 +122,7 @@ Conflict remediation should merge the latest base into the PR branch, then run t
 
 ## How should Candidate Publication present the complete work to a human reviewer?
 
-The current owned pull-request body exposes the Task identity and Implementation Decision Log, but it does not synthesize the Task and Change lifecycle into a review experience.
+The current owned pull-request body exposes the Implementation Decision Log but not Task identity, and it does not synthesize the Task and Change lifecycle into a review experience.
 Future design should determine how an agent examines the approved Task intent, Task Review history, Task Dependencies, Acceptance Context, Implementation Decisions, Implementation Blockers and Resolutions, historical Candidates and Findings, the exact passing Validation Run, selected evidence, and the final code to explain the complete Change without dumping those records.
 
 The presentation should help a human understand the behavior, affected code beyond the changed lines, and the material path by which the exact Candidate became publishable.
@@ -153,7 +153,7 @@ A concise comparison could help a human notice that the work differed materially
 Preserved expectations and observed outcomes could later support analysis across completed Changes outside the publication lifecycle.
 
 Do not include Initial Delivery Expectations or expectation-versus-outcome comparison in the first publication-presentation version.
-Before implementation, determine which concepts are useful, when an expectation is recorded, who produces or accepts it, whether it belongs to Task Intent or Change Delivery, how taskless Changes participate, which observations are authoritative, and how confidence and changed understanding are represented without one misleading mutable score.
+Before implementation, determine which concepts are useful, when an expectation is recorded, who produces or accepts it, whether it belongs to Task Intent or Change Delivery, how Changes without a Task participate, which observations are authoritative, and how confidence and changed understanding are represented without one misleading mutable score.
 Keep delivery difficulty, impact, uncertainty, review effort, review scrutiny, and merge safety distinct unless evidence supports a defined relationship.
 Counts of Decisions, Findings, attempts, elapsed time, or usage must not by themselves imply risk or process failure.
 Any later publication presentation should only flag a material per-Change divergence and should not own cross-Change diagnosis or recommendations about systemic causes.
@@ -200,8 +200,8 @@ Reconsider publishing unvalidated implementation only after dogfooding establish
 
 ## Should exploratory work be imported into a Change?
 
-V1 requires the user to commit exploratory work, start a Taskless Change, and cherry-pick the commit into its Managed Worktree.
-A future `by change import` command may copy committed and uncommitted work into a new Taskless Change without modifying the source checkout.
+V1 requires the user to commit exploratory work, start a Change without a Task, and cherry-pick the commit into its Managed Worktree.
+A future `by change import` command may copy committed and uncommitted work into a new Change without a Task without modifying the source checkout.
 Do not extend Change Start with import behavior because clean Change creation and existing-work import have different safety and recovery contracts.
 Before implementation, define support for staged, unstaged, untracked, ignored, binary, conflicted, submodule, and concurrently modified work.
 

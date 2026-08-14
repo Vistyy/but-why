@@ -7,7 +7,7 @@ Treat historical material only as evidence unless the Operator approves it as a 
 
 ## Authority
 
-Work Route Selection is the Operator's explicit choice of a Task-backed Change, a taskless Change, or a direct edit.
+Work Route Selection is the Operator's explicit choice of a Change linked to a Task, a Change without a Task, or a direct edit.
 Task Recording Authorization permits recording agreed Task outcomes and actual Task Dependencies, but does not permit Task Submission, Change Start, or implementation.
 Task Submission Authorization permits submission of one selected New Task proposal for Task Review toward a passing Task Review and transition to Todo.
 It is distinct from Task Recording Authorization and Implementation Authorization and is not persisted.
@@ -22,7 +22,7 @@ Do not start a Change or begin implementation without Implementation Authorizati
    Resolve consequential uncertainty before splitting Tasks or implementing affected work.
    Ask the Operator when repository evidence cannot resolve an uncertainty that could change Task boundaries, observable behavior, or implementation.
 2. Recommend a Work Route.
-   Use a Task-backed Change for durable approved intent, a taskless Change for a validated code change without Task intent, or a direct edit when But Why is not required.
+   Use a Change linked to a Task for durable approved intent, a Change without a Task for a validated code change without Task intent, or a direct edit when But Why is not required.
 3. Obtain the Operator's explicit Work Route Selection.
    Follow the selected route unless it conflicts with a higher-priority instruction, supported interface, safety constraint, or approved Task intent.
    Report such a conflict and request direction instead of substituting another route.
@@ -91,18 +91,18 @@ When the Operator gives Implementation Authorization, confirm the selected work 
 For a direct edit, implement only the authorized work in the current repository according to target-repository instructions.
 A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.
 
-For a Task-backed Change, confirm that the selected Task is approved and start or resume its Change with `<but-why> change start --task <task-id>`.
+For a Change linked to a Task, confirm that the selected Task is approved and start or resume its Change with `<but-why> change start --task <task-id>`.
 Then start or verify a fresh Implementer Interactive Session.
 
-For a taskless Change, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a fresh Implementer Interactive Session.
+For a Change without a Task, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a fresh Implementer Interactive Session.
 
 This section is complete when a direct edit is authorized or the exact Open Change and required session behavior are established for the selected work item.
 
 ## Start or verify an Implementer Interactive Session
 
 The Implementer Prompt carries current non-authoritative information that Change inspection and packaged instructions do not supply.
-For a Task-backed Change, the captured Task Context supplies accepted intent, so provide a prompt only for additional current information.
-For a fresh taskless Interactive Session, provide a prompt that states the authorized implementation outcome and applicable constraints because the Change has no Task Context.
+For a Change linked to a Task, the captured Acceptance Context supplies accepted intent, so provide a prompt only for additional current information.
+For a fresh Interactive Session for a Change without a Task, provide a prompt that states the authorized implementation outcome and applicable constraints because the Change has no Acceptance Context.
 Do not repeat bound identifiers, state, accepted context, or packaged instructions.
 Record facts that require durable authority through the applicable Task or Change operation.
 Do not include sensitive information.
