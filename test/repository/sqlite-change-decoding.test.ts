@@ -20,7 +20,7 @@ const expectPersistedDataInvalid = <A, E>(effect: Effect.Effect<A, E>) =>
   });
 
 describe("SQLite Change decoding", () => {
-  it.scoped("round-trips taskless Change Start data and historical snapshot arrays exactly", () =>
+  it.scoped("round-trips Change Start data for a Change without a Task and historical snapshot arrays exactly", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
@@ -300,7 +300,7 @@ describe("SQLite Change decoding", () => {
         );
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
-          "restore taskless context",
+          "restore Change without a Task context",
           (sql) =>
             sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
         );
@@ -381,7 +381,7 @@ describe("SQLite Change decoding", () => {
           now: "2026-08-09T20:20:00.000Z",
         });
         if (!captured.ok) throw new Error(captured.code);
-        yield* repository.operation("make captured Change task-backed", (sql) =>
+        yield* repository.operation("make captured Change linked to a Task", (sql) =>
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (

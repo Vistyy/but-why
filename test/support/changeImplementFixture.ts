@@ -35,7 +35,7 @@ export const createChangeImplementFixture = (
         if (options.taskId !== undefined) {
           const numericId = Number(/[0-9]+$/u.exec(options.taskId)?.[0] ?? "1");
           yield* repository.operation(
-            "create Task-backed Change Implement fixture Task",
+            "create Change Implement fixture Task for a Change linked to a Task",
             (sql) => sql`
               INSERT INTO tasks (
                 id, numeric_id, title, description, state, created_at, updated_at

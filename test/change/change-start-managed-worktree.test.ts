@@ -32,7 +32,7 @@ afterAll(() => {
 const repositoryCopy = () => cloneInitializedTestRepository(initializedRepositoryTemplate);
 
 describe("Change Start Managed Worktree boundaries", () => {
-  it.effect("creates a ready taskless Change from the freshly fetched remote default branch", () =>
+  it.effect("creates a ready Change without a Task from the freshly fetched remote default branch", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");

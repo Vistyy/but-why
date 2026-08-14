@@ -29,7 +29,7 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cancellation", () => {
   it.effect(
-    "cancels a Task-backed Change through Change Cancel and stores the reason on the Task",
+    "cancels a Change linked to a Task through Change Cancel and stores the reason on the Task",
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
@@ -83,7 +83,7 @@ describe("Change cancellation", () => {
       }),
   );
 
-  it.effect("cancels a Task-backed Change through Task Cancel and closes its linked Change", () =>
+  it.effect("cancels a Change linked to a Task through Task Cancel and closes its linked Change", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -155,7 +155,7 @@ describe("Change cancellation", () => {
     }),
   );
 
-  it.effect("cancels a Taskless Change and exposes its reason through inspection", () =>
+  it.effect("cancels a Change without a Task and exposes its reason through inspection", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -232,7 +232,7 @@ describe("Change cancellation", () => {
     }),
   );
 
-  it.effect("retries a repeated Taskless Change cancellation without changing its reason", () =>
+  it.effect("retries a repeated Change without a Task cancellation without changing its reason", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);

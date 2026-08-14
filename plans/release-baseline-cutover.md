@@ -417,7 +417,7 @@ Task and Change storage simplification remain separate after their ownership bou
 
 1. Make Change-owned Acceptance Context and public inspection sufficient for implementation, remove live Task Context reads from Change execution, and update the extension and portable interfaces together.
    `by change show` returns the complete current Acceptance Context derived from the initial context and ordered approved Blocker Resolutions.
-   Remove Task Context calls from `continue-change`, Task ID from Change-only and Validation output and publication presentation, and categorical “Task-backed” or “taskless” terminology.
+   Remove Task Context calls from `continue-change`, Task ID from Change-only and Validation output and publication presentation, and categorical “Change linked to a Task” or “Change without a Task” terminology.
    Update the extension, Change inspection, portable skills and documentation, structured-output tests, and package-content tests together.
    Task inspection may continue to expose its joined Change projection.
    This Task needs no schema migration.

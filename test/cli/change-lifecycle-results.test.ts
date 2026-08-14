@@ -25,7 +25,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
 });
 
 describe("Change lifecycle CLI results", () => {
-  it("renders successful Task-backed Change Start identity", () => {
+  it("renders successful Change Start identity for a Change linked to a Task", () => {
     expect(startResult({ ok: true, change: change() })).toEqual({
       exitCode: 0,
       stdout: {

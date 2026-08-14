@@ -285,7 +285,7 @@ describe("Candidate validation", () => {
   );
 
   it.scoped(
-    "runs the fixed task-backed Validation Gate and hands a Specialist Finding to its outcome",
+    "runs the fixed Validation Gate for a Change linked to a Task and hands a Specialist Finding to its outcome",
     () =>
       Effect.gen(function* () {
         const mainCheckout = candidateReadyRepo();

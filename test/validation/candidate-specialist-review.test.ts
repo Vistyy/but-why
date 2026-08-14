@@ -240,11 +240,11 @@ describe("Candidate Specialist Review phase", () => {
           );
         }
 
-        const tasklessReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        const changeWithoutTaskReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
-        yield* harness.run({ review: tasklessReview }, {}, false);
-        expect(tasklessReview.mock.calls[0]?.[0].prompt).not.toContain(
+        yield* harness.run({ review: changeWithoutTaskReview }, {}, false);
+        expect(changeWithoutTaskReview.mock.calls[0]?.[0].prompt).not.toContain(
           acceptanceContext.description,
         );
       }),

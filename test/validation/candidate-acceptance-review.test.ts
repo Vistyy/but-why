@@ -92,7 +92,7 @@ const passingValidationPolicy = {
   specialistReviews: [],
 };
 
-layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) => {
+layer(acceptanceTemplateLayer)("Candidate Acceptance Review for a Change linked to a Task", (it) => {
   it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
     Effect.gen(function* () {
       const ready = yield* acceptanceReadyRepo({

@@ -748,7 +748,7 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
-  it.effect("upgrades a Taskless Change with cancellation reason storage", () =>
+  it.effect("upgrades a Change without a Task with cancellation reason storage", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
       (directory) =>
@@ -776,7 +776,7 @@ describe("Shared Repository State migrations", () => {
             Effect.gen(function* () {
               const repository = yield* RepositorySql;
               const rows = yield* repository.operation(
-                "read migrated Taskless Change cancellation facts",
+                "read migrated Change without a Task cancellation facts",
                 (sql) => sql<{
                   readonly id: string;
                   readonly taskId: string | null;

@@ -71,7 +71,7 @@ const publicationTemplateLayer = Layer.effect(
 );
 
 layer(publicationTemplateLayer)("Candidate publication", (it) => {
-  it.scoped("publishes exact taskless metadata from Candidate-based evidence", () =>
+  it.scoped("publishes exact metadata for a Change without a Task from Candidate-based evidence", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const requests: unknown[] = [];
@@ -82,7 +82,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({
               ok: true,
-              subject: "Add taskless publication",
+              subject: "Add Change without a Task publication",
             }),
           },
           github: successfulCreation(requests),
@@ -98,7 +98,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             headBranch: "feature",
             branchRef: "refs/heads/feature",
             expectedHeadSha: fixture.captured.headSha,
-            title: "Add taskless publication",
+            title: "Add Change without a Task publication",
             body: "",
           },
         ]);
@@ -208,7 +208,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("uses taskless fallback metadata and reports unavailable history", () =>
+  it.scoped("uses fallback metadata for a Change without a Task and reports unavailable history", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const requests: unknown[] = [];
@@ -333,7 +333,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => {
-              throw new Error("Task-backed metadata must not read commit history");
+              throw new Error("metadata for a Change linked to a Task must not read commit history");
             },
           },
           github: successfulCreation(requests),
@@ -993,7 +993,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => ({
               ok: true,
-              subject: "Add taskless publication",
+              subject: "Add Change without a Task publication",
             }),
           },
           github: {

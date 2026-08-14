@@ -203,7 +203,7 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("names a Task-backed session from its Task ID and immutable title", () =>
+  it.effect("names a session for a Change linked to a Task from its Task ID and immutable title", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const taskId = "BY-172";

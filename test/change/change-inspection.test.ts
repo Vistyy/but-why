@@ -565,7 +565,7 @@ describe("Change inspection CLI", () => {
       yield* createTaskFixture(root, {
         id: "BY-1",
         numericId: 1,
-        title: "Task-backed Change",
+        title: "Change linked to a Task",
         description: "Inspect progress",
         state: "todo",
         createdAt: firstNow,
@@ -581,7 +581,7 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(shown.stdout)).toMatchObject({
         task: {
           id: "BY-1",
-          title: "Task-backed Change",
+          title: "Change linked to a Task",
           state: "todo",
           change: { id: changeId, activity: "implementing" },
         },
@@ -637,7 +637,7 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(resolvedChange.stdout).change).toMatchObject({
         acceptanceContext: {
           version: 1,
-          title: "Task-backed Change",
+          title: "Change linked to a Task",
           description: "Inspect progress",
           resolutions: [
             "The earlier issue was resolved.",
