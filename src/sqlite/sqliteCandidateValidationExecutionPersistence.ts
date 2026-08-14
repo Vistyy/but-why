@@ -127,6 +127,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
           roundStatus: input.roundStatus,
           artifactRecords: input.artifactRecords,
           findings: input.findings,
+          ...(input.toolingFailure === undefined ? {} : { toolingFailure: input.toolingFailure }),
           now: input.now,
         }),
       listRounds: (validationRunId) =>
@@ -405,6 +406,16 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
       `,
       { discard: true },
     );
+    if (input.toolingFailure !== undefined) {
+      yield* sql`
+        INSERT INTO candidate_validation_tooling_failures (
+          validation_run_id, error_kind, operation_name, error_message, created_at
+        ) VALUES (
+          ${input.toolingFailure.validationRunId}, ${input.toolingFailure.errorKind},
+          ${input.toolingFailure.operationName}, ${input.toolingFailure.errorMessage}, ${input.now}
+        )
+      `;
+    }
   });
 
 const listRounds = listValidationRounds;

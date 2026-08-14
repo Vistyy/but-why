@@ -27,6 +27,7 @@ import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
+import type { ValidationToolingFailureRecordInput } from "./validationToolingFailures.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 
@@ -59,6 +60,9 @@ export type CandidateValidationExecutionPort = {
     readonly roundStatus: "passed" | "failed";
     readonly findings: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
     readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
+    readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+      readonly validationRunId: string;
+    };
     readonly now: string;
   }) => AgentSessionSqlLink;
   readonly listRounds: (

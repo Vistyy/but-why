@@ -21,6 +21,9 @@ export type RecordCandidateValidationCommandRoundInput = {
   readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
   readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
   readonly findings?: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
+  readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+    readonly validationRunId: string;
+  };
   readonly now: string;
 };
 

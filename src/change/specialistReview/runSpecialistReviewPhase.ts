@@ -45,6 +45,7 @@ import type { CandidateValidationExecutionPort } from "../validation/changeValid
 import {
   ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
+  validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
@@ -157,7 +158,7 @@ export type SpecialistReviewerContinuityEvidence = ReviewerExecutionEvidence & {
 
 export type RunSpecialistReviewPhaseResult = {
   readonly findings: 0 | 1;
-  readonly requiresAbandonment?: boolean;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
   readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
 };
@@ -171,6 +172,7 @@ export const runSpecialistReviewPhase = (
 > =>
   Effect.gen(function* () {
     let hasFindings = false;
+    const persistedToolingFailures: ValidationToolingFailure[] = [];
     const toolingFailures: ValidationToolingFailure[] = [];
     const reviewerEvidence: SpecialistReviewerContinuityEvidence[] = [];
 
@@ -201,20 +203,16 @@ export const runSpecialistReviewPhase = (
         }),
       });
       if (result.hasFindings) hasFindings = true;
-      if (result.toolingFailure !== undefined) toolingFailures.push(result.toolingFailure);
-      if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
-      if (result.requiresAbandonment) {
-        return {
-          findings: hasFindings ? 1 : 0,
-          requiresAbandonment: true,
-          toolingFailures,
-          reviewerEvidence,
-        };
+      if (result.toolingFailure !== undefined) {
+        toolingFailures.push(result.toolingFailure);
+        if (result.toolingFailurePersisted) persistedToolingFailures.push(result.toolingFailure);
       }
+      if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
     }
 
     return {
       findings: hasFindings ? 1 : 0,
+      ...(persistedToolingFailures.length === 0 ? {} : { persistedToolingFailures }),
       toolingFailures,
       reviewerEvidence,
     };
@@ -227,8 +225,8 @@ const runSpecialist = (
 ): Effect.Effect<
   {
     readonly hasFindings: boolean;
-    readonly requiresAbandonment?: boolean;
     readonly toolingFailure?: ValidationToolingFailure;
+    readonly toolingFailurePersisted?: boolean;
     readonly reviewerEvidence?: SpecialistReviewerContinuityEvidence;
   },
   ValidationToolingFailure | RepositoryStorageError,
@@ -322,6 +320,7 @@ const runSpecialist = (
       input.agentPersistence !== undefined &&
       input.linkAgentInvocation !== undefined &&
       input.settleAgentInvocationRound !== undefined;
+    let artifactPersistenceFailure: ValidationToolingFailure | undefined;
     const execution = usingAgentSettlement
       ? yield* executeAgentSession<ReviewerOutput, ValidationToolingFailure, FileSystem.FileSystem>(
           {
@@ -371,7 +370,29 @@ const runSpecialist = (
                     ? {}
                     : { artifactMaxBytes: input.artifactMaxBytes }),
                   executionEvidence: reviewerEvidenceFromAgentSession(evidence),
-                });
+                }).pipe(
+                  Effect.map((artifactRecords) => ({ ok: true as const, artifactRecords })),
+                  Effect.catchTag("InfrastructureToolingFailed", (failure) =>
+                    Effect.succeed({ ok: false as const, failure }),
+                  ),
+                );
+                if (!artifacts.ok) {
+                  artifactPersistenceFailure = artifacts.failure;
+                  return input.settleAgentInvocationRound?.({
+                    validationRunId: input.validationRunId,
+                    phase: validationPhase.specialistReview,
+                    producer: policy.id,
+                    roundNumber,
+                    roundStatus: "failed",
+                    findings: [],
+                    artifactRecords: [],
+                    toolingFailure: {
+                      ...validationToolingFailureRecord(artifacts.failure),
+                      validationRunId: input.validationRunId,
+                    },
+                    now: input.now,
+                  });
+                }
                 return input.settleAgentInvocationRound?.({
                   validationRunId: input.validationRunId,
                   phase: validationPhase.specialistReview,
@@ -379,15 +400,11 @@ const runSpecialist = (
                   roundNumber,
                   roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
                   findings,
-                  artifactRecords: artifacts,
+                  artifactRecords: artifacts.artifactRecords,
                   now: input.now,
                 });
               }),
           },
-        ).pipe(
-          Effect.catchTag("InfrastructureToolingFailed", (toolingFailure) =>
-            Effect.succeed({ artifactPersistenceFailure: toolingFailure } as const),
-          ),
         )
       : yield* executeReviewerSession({
           identity,
@@ -418,13 +435,6 @@ const runSpecialist = (
               return result;
             }),
         });
-    if ("artifactPersistenceFailure" in execution) {
-      return {
-        hasFindings: false,
-        requiresAbandonment: true,
-        toolingFailure: execution.artifactPersistenceFailure,
-      };
-    }
     const result = translateRuntimeResult(execution.result, policy.id);
     const reviewerEvidence: SpecialistReviewerContinuityEvidence = {
       producer: policy.id,
@@ -436,6 +446,14 @@ const runSpecialist = (
           })
         : (execution.evidence as ReviewerExecutionEvidence)),
     };
+    if (artifactPersistenceFailure !== undefined) {
+      return {
+        hasFindings: false,
+        toolingFailure: artifactPersistenceFailure,
+        toolingFailurePersisted: true,
+        reviewerEvidence,
+      };
+    }
     const artifacts = usingAgentSettlement
       ? undefined
       : yield* writeReviewerArtifacts({

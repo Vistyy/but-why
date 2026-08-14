@@ -251,12 +251,16 @@ describe("Acceptance Review phase", () => {
     }),
   );
 
-  it.scoped("requests Validation Run abandonment when Agent Artifact persistence fails", () =>
+  it.scoped("settles a returned Agent Invocation when Artifact persistence fails", () =>
     Effect.gen(function* () {
       const workspace = createTestWorkspace();
       const artifactsRoot = join(workspace, "artifact-root-file");
       writeFileSync(artifactsRoot, "not a directory");
       const settledInvocationIds: number[] = [];
+      const settlementKinds: string[] = [];
+      const rounds: Parameters<
+        NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]>
+      >[0][] = [];
       const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
         beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
           const sessionId = agentSessionId ?? 1;
@@ -289,9 +293,10 @@ describe("Acceptance Review phase", () => {
             },
           });
         },
-        settleInvocation: ({ invocationId }) =>
+        settleInvocation: ({ invocationId, settlement }) =>
           Effect.sync(() => {
             settledInvocationIds.push(invocationId);
+            settlementKinds.push(settlement.kind);
           }),
         readInvocationHistory: () => Effect.succeed([]),
       };
@@ -300,7 +305,10 @@ describe("Acceptance Review phase", () => {
         {
           agentPersistence,
           linkAgentInvocation: () => () => Effect.void,
-          settleAgentInvocationRound: () => () => Effect.void,
+          settleAgentInvocationRound: (round) => {
+            rounds.push(round);
+            return () => Effect.void;
+          },
           artifactsRoot,
         },
       );
@@ -309,10 +317,25 @@ describe("Acceptance Review phase", () => {
 
       expect(result).toMatchObject({
         findings: 0,
-        requiresAbandonment: true,
+        reviewerEvidence: {
+          invocations: [{ settlementKind: "returned" }],
+        },
         toolingFailure: { _tag: "InfrastructureToolingFailed" },
       });
-      expect(settledInvocationIds).toEqual([]);
+      expect(settledInvocationIds).toEqual([1]);
+      expect(settlementKinds).toEqual(["returned"]);
+      expect(rounds).toMatchObject([
+        {
+          roundStatus: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: {
+            validationRunId: "validation-1",
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "record_reviewer_artifacts",
+          },
+        },
+      ]);
       expect(fixture.rounds).toEqual([]);
     }),
   );

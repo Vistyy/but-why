@@ -286,20 +286,15 @@ const makeCandidateValidation = (dependencies: {
     }
 
     const activeResult = workspace.activeWorkspaceResult;
-    if (activeResult?.requiresAbandonment === true) {
-      return {
-        ok: false,
-        code: "active_validation_run",
-        validationRunId: started.validationRunId,
-      } as const;
-    }
     const toolingFailures =
       (
         activeResult as
           | { readonly toolingFailures?: readonly ValidationToolingFailure[] }
           | undefined
       )?.toolingFailures ?? [];
+    const persistedToolingFailures = activeResult?.persistedToolingFailures ?? [];
     for (const toolingFailure of toolingFailures) {
+      if (persistedToolingFailures.includes(toolingFailure)) continue;
       yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...validationToolingFailureRecord(toolingFailure),
@@ -369,6 +364,7 @@ const runCandidatePhases = (
 ): Effect.Effect<
   {
     readonly outcome: CandidateValidationOutcome;
+    readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
     readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     readonly toolingFailures: readonly ValidationToolingFailure[];

@@ -16,7 +16,7 @@ export type ActiveSnapshotWorkspace = {
 
 export type ActiveSnapshotWorkspaceResult = {
   readonly outcome: CandidateValidationOutcome;
-  readonly requiresAbandonment?: boolean;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];

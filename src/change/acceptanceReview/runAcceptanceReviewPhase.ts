@@ -46,6 +46,7 @@ import type { CandidateValidationExecutionPort } from "../validation/changeValid
 import {
   ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
+  validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
@@ -155,7 +156,7 @@ export type RunAcceptanceReviewPhaseInput = {
 };
 export type RunAcceptanceReviewPhaseResult = {
   readonly findings: 0 | 1;
-  readonly requiresAbandonment?: boolean;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
@@ -278,6 +279,7 @@ const runAcceptanceReviewPhaseImpl = (
       input.agentPersistence !== undefined &&
       input.linkAgentInvocation !== undefined &&
       input.settleAgentInvocationRound !== undefined;
+    let artifactPersistenceFailure: ValidationToolingFailure | undefined;
     const execution = usingAgentSettlement
       ? yield* executeAgentSession<ReviewerOutput, ValidationToolingFailure, FileSystem.FileSystem>(
           {
@@ -327,7 +329,29 @@ const runAcceptanceReviewPhaseImpl = (
                     ? {}
                     : { artifactMaxBytes: input.artifactMaxBytes }),
                   executionEvidence: reviewerEvidenceFromAgentSession(evidence),
-                });
+                }).pipe(
+                  Effect.map((artifactRecords) => ({ ok: true as const, artifactRecords })),
+                  Effect.catchTag("InfrastructureToolingFailed", (failure) =>
+                    Effect.succeed({ ok: false as const, failure }),
+                  ),
+                );
+                if (!artifacts.ok) {
+                  artifactPersistenceFailure = artifacts.failure;
+                  return input.settleAgentInvocationRound?.({
+                    validationRunId: input.validationRunId,
+                    phase: validationPhase.acceptanceReview,
+                    producer: "acceptance",
+                    roundNumber: 1,
+                    roundStatus: "failed",
+                    findings: [],
+                    artifactRecords: [],
+                    toolingFailure: {
+                      ...validationToolingFailureRecord(artifacts.failure),
+                      validationRunId: input.validationRunId,
+                    },
+                    now: input.now,
+                  });
+                }
                 return input.settleAgentInvocationRound?.({
                   validationRunId: input.validationRunId,
                   phase: validationPhase.acceptanceReview,
@@ -335,15 +359,11 @@ const runAcceptanceReviewPhaseImpl = (
                   roundNumber: 1,
                   roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
                   findings,
-                  artifactRecords: artifacts,
+                  artifactRecords: artifacts.artifactRecords,
                   now: input.now,
                 });
               }),
           },
-        ).pipe(
-          Effect.catchTag("InfrastructureToolingFailed", (toolingFailure) =>
-            Effect.succeed({ artifactPersistenceFailure: toolingFailure } as const),
-          ),
         )
       : yield* executeReviewerSession({
           identity,
@@ -361,13 +381,6 @@ const runAcceptanceReviewPhaseImpl = (
           completeReview: ({ initialResult }) =>
             verifyIntegrity(input).pipe(Effect.as(initialResult)),
         });
-    if ("artifactPersistenceFailure" in execution) {
-      return {
-        findings: 0,
-        requiresAbandonment: true,
-        toolingFailure: execution.artifactPersistenceFailure,
-      };
-    }
     const result = translateRuntimeResult(execution.result, "acceptance");
     const reviewerEvidence: ReviewerExecutionEvidence =
       execution.evidence.invocations !== undefined
@@ -377,6 +390,14 @@ const runAcceptanceReviewPhaseImpl = (
             invocations: execution.evidence.invocations,
           })
         : (execution.evidence as ReviewerExecutionEvidence);
+    if (artifactPersistenceFailure !== undefined) {
+      return {
+        findings: 0,
+        persistedToolingFailures: [artifactPersistenceFailure],
+        reviewerEvidence,
+        toolingFailure: artifactPersistenceFailure,
+      };
+    }
     const artifacts = usingAgentSettlement
       ? undefined
       : yield* writeReviewerArtifacts({
