@@ -7,8 +7,8 @@ import type {
   AgentSessionSqlLink,
 } from "../../agent/agentSession/agentSession.js";
 import {
-  ReviewerExecutionFailed,
   type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import {
@@ -32,8 +32,8 @@ import {
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
+import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";

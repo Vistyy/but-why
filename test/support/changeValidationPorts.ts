@@ -10,8 +10,8 @@ import type {
 } from "../../src/change/validation/changeValidationPorts.js";
 import { openSqliteActiveValidationRunPort } from "../../src/sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../../src/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";

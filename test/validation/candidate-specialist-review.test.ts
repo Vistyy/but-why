@@ -4,13 +4,13 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
+import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import {
+  piReviewerAgentRuntime,
   type ReviewerAgentResult,
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import {
@@ -20,6 +20,7 @@ import {
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
+import { repoRoot } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -28,7 +29,6 @@ import {
   git,
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
-import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 

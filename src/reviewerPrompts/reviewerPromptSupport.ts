@@ -1,4 +1,3 @@
-import type { ReviewerOutput } from "../agent/reviewerOutput.js";
 import { encodeReviewerWireValue, reviewerOutputTag } from "../agent/reviewerOutputWire.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 
@@ -49,24 +48,6 @@ export const previousFindingsPrompt = (findings: readonly unknown[]): string =>
     "Recheck them, but do not limit the current review to them.",
     "Historical Artifact references are not current Validation Run evidence and have been omitted.",
     "Final Finding artifactRefs may use only the available current Validation Run evidence.",
-  ].join("\n");
-
-export const buildReviewerRevisionPrompt = (input: {
-  readonly reviewPrompt: string;
-  readonly provisionalReport: ReviewerOutput;
-  readonly earlierFindings: readonly ReviewerFindingHistory[];
-}): string =>
-  [
-    input.reviewPrompt,
-    "",
-    "Blind provisional report:",
-    encodeReviewerWireValue(input.provisionalReport),
-    "",
-    previousFindingsPrompt(input.earlierFindings),
-    "",
-    "Recheck the Candidate against the applicable instructions.",
-    "Confirm whether each earlier Finding remains open.",
-    "Return one final report with every open earlier Finding and every new Finding.",
   ].join("\n");
 
 export const buildReviewerOutputCorrectionPrompt = (failure: {

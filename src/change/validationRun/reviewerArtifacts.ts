@@ -1,8 +1,8 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import type { AgentExecutionEvidence } from "../../agent/agentSession/executeAgentSession.js";
-import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
+import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 
 export type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 

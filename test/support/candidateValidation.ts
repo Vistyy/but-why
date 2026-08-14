@@ -16,12 +16,12 @@ import {
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,
 } from "../support/changeValidationPorts.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 
 export const candidateValidationForTest = (input: {
   readonly localRepositoryMainCheckoutRoot: string;

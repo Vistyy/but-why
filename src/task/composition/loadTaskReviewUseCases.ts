@@ -106,10 +106,6 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
             abandonTaskReview(
               {
                 mainCheckoutRoot: context.mainCheckoutRoot,
-                reviewerSessionStorageRoot: join(
-                  context.paths.operationalDir,
-                  "task-review-sessions",
-                ),
                 persistence,
                 verifyReviewBase: verifyRecordedTaskReviewBase,
                 cleanupWorkspace: cleanupExactDisposableWorkspace,

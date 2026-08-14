@@ -1,16 +1,16 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
   AgentSessionSqlLink,
 } from "../../agent/agentSession/agentSession.js";
 import {
-  executeAgentSession,
   type AgentExecutionEvidence,
+  executeAgentSession,
 } from "../../agent/agentSession/executeAgentSession.js";
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
@@ -20,12 +20,6 @@ import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { ReviewerOutputContractFailed } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ValidationToolingFailure } from "./validationToolingFailures.js";
-import {
-  ReviewerProcessToolingFailed,
-  validationToolingFailureRecord,
-} from "./validationToolingFailures.js";
-import { verifyCandidateIntegrity } from "./verifyCandidateIntegrity.js";
 import {
   reviewerEvidenceFromAgentSession,
   writeReviewerArtifacts,
@@ -35,6 +29,12 @@ import type {
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
 import type { CandidateValidationExecutionPort } from "./changeValidationPorts.js";
+import type { ValidationToolingFailure } from "./validationToolingFailures.js";
+import {
+  ReviewerProcessToolingFailed,
+  validationToolingFailureRecord,
+} from "./validationToolingFailures.js";
+import { verifyCandidateIntegrity } from "./verifyCandidateIntegrity.js";
 
 export type TranslatedReviewerResult<Output> =
   | Extract<ReviewerAgentResult<Output>, { readonly ok: true }>
