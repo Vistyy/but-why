@@ -104,7 +104,7 @@ But Why deterministically renders the outer body structure:
 <summary>Publication provenance</summary>
 
 Change: `...`
-Task: `...` when Change linked to a Task
+Task: `...` when Task-backed
 Candidate: `...`
 Validation Run: `...`
 Head: `...`
@@ -141,7 +141,7 @@ Every Risk value requires a concise Candidate-specific rationale.
 
 The synthesis input includes:
 
-- Compact Task ID for a Change linked to a Task.
+- Compact Task ID for a Task-backed Change.
 - Exact Acceptance Context.
 - Task Review records with the exact proposal, outcome, Findings, and whether the Review applies to the approved Task.
 - Complete Implementation Decision history.
@@ -156,8 +156,8 @@ The synthesis input includes:
 - Any lifecycle-input truncation disclosure.
 
 Task Review history is included experimentally.
-For a Change linked to a Task, publication reads the existing immutable Task Review records when synthesis needs them and does not copy them into the Change at Change Start.
-Changes without a Task have no Task Review input.
+For a Task-backed Change, publication reads the existing immutable Task Review records when synthesis needs them and does not copy them into the Change at Change Start.
+Taskless Changes have no Task Review input.
 The agent must include Task Review history in the pull request only when it materially improves understanding.
 Dogfooding should determine whether it is useful or noisy.
 

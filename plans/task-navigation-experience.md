@@ -66,7 +66,7 @@ It does not distinguish reviewable, startable, waiting, or Change-linked work.
 ## Usage evidence
 
 A reproducible transcript study inspected Pi session headers from July 28 through August 12, 2026.
-The corpus contained 494 sessions, of which 321 contained an in-scope Task invocation or Change Start invocation for a Change linked to a Task.
+The corpus contained 494 sessions, of which 321 contained an in-scope Task or Task-backed Change Start CLI invocation.
 The study parsed assistant `bash` and `bg_run` tool calls and did not treat user text, injected prompts, documentation examples, or tool output as command execution.
 
 Observed use included:
@@ -78,7 +78,7 @@ Observed use included:
 - 152 Task Create invocations across 59 sessions.
 - 20 Task Submit invocations across 6 sessions.
 - 40 Task Dependency mutation invocations across 26 sessions.
-- 159 Change Start invocations for Changes linked to a Task.
+- 159 Task-backed Change Start invocations.
 
 Task List was post-processed through a pipeline, redirection, or command substitution in 79 of 272 invocations.
 Common processors included `head`, `jq`, `rg`, `grep`, and Python scripts.
