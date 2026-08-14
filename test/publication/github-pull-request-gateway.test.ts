@@ -146,7 +146,6 @@ describe("GitHub pull request gateway", () => {
         expectedHeadSha: "candidate-sha",
         expectedCurrentHeadSha: "previous-candidate-sha",
         number: 42,
-        title: "Publish Candidate",
         body: "Validation facts",
       }),
     ).toMatchObject({
@@ -177,14 +176,12 @@ describe("GitHub pull request gateway", () => {
         "-f",
         "state=open",
         "-f",
-        "title=Publish Candidate",
-        "-f",
         "body=Validation facts",
       ],
     ]);
   });
 
-  it("updates pull request metadata without pushing when the Remote Change Branch is exact", () => {
+  it("updates the pull request body without replacing its title when the Remote Change Branch is exact", () => {
     const gitCalls: (readonly string[])[] = [];
     const ghCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({
@@ -216,7 +213,6 @@ describe("GitHub pull request gateway", () => {
         expectedCurrentHeadSha: "previous-candidate-sha",
         allowExistingRemoteHead: true,
         number: 42,
-        title: "Revised Candidate",
         body: "Complete decision log",
       }),
     ).toMatchObject({
@@ -237,8 +233,6 @@ describe("GitHub pull request gateway", () => {
         "repos/acme/widgets/pulls/42",
         "-f",
         "state=open",
-        "-f",
-        "title=Revised Candidate",
         "-f",
         "body=Complete decision log",
       ],
@@ -287,7 +281,6 @@ describe("GitHub pull request gateway", () => {
         expectedCurrentHeadSha: publishedHead,
         allowExistingRemoteHead: true,
         number: 42,
-        title: "Revised Candidate",
         body: "Complete decision log",
       }),
     ).toMatchObject({ ok: true, pullRequest: { headSha: candidateHead } });
@@ -329,7 +322,6 @@ describe("GitHub pull request gateway", () => {
         expectedCurrentHeadSha: "previous-candidate-sha",
         allowExistingRemoteHead: true,
         number: 42,
-        title: "Revised Candidate",
         body: "Complete decision log",
       }),
     ).toEqual({
@@ -666,7 +658,6 @@ describe("GitHub pull request gateway", () => {
         expectedHeadSha: "candidate-sha",
         expectedCurrentHeadSha: "previous-candidate-sha",
         number: 42,
-        title: "Publish Candidate",
         body: "Validation facts",
       }),
     ).toEqual({ ok: false, code: "local_head_mismatch" });

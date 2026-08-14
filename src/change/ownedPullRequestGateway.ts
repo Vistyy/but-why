@@ -38,7 +38,7 @@ export type PublicationFailureEvidence = {
   readonly exitStatus?: number;
 };
 
-export type GitHubPullRequestRequest = {
+export type GitHubPullRequestCoordinates = {
   readonly owner: string;
   readonly repo: string;
   readonly remoteName: string;
@@ -47,21 +47,23 @@ export type GitHubPullRequestRequest = {
   readonly branchRef: string;
   readonly expectedHeadSha: string;
   readonly allowExistingRemoteHead?: boolean;
-  readonly title: string;
+};
+
+export type GitHubPullRequestMutationRequest = GitHubPullRequestCoordinates & {
   readonly body: string;
+};
+
+export type GitHubPullRequestCreationRequest = GitHubPullRequestMutationRequest & {
+  readonly title: string;
+};
+
+export type GitHubPullRequestUpdateRequest = GitHubPullRequestMutationRequest & {
+  readonly number: number;
+  readonly expectedCurrentHeadSha: string;
 };
 
 export type GitHubPullRequestReadResult =
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
-  | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
-
-export type GitHubPullRequestUpdateConfirmation = GitHubPullRequest & {
-  readonly title: string;
-  readonly body: string;
-};
-
-export type GitHubPullRequestUpdateConfirmationResult =
-  | { readonly ok: true; readonly pullRequest: GitHubPullRequestUpdateConfirmation }
   | { readonly ok: false; readonly evidence: PublicationFailureEvidence };
 
 export type GitHubPullRequestListResult =
@@ -111,12 +113,9 @@ export type GitHubPullRequestGateway = GitHubPullRequestReader & {
     headBranch: string,
   ) => GitHubPullRequestListResult;
   readonly createPullRequest: (
-    request: GitHubPullRequestRequest,
+    request: GitHubPullRequestCreationRequest,
   ) => GitHubPullRequestMutationResult;
   readonly updatePullRequest: (
-    input: GitHubPullRequestRequest & {
-      readonly number: number;
-      readonly expectedCurrentHeadSha: string;
-    },
+    input: GitHubPullRequestUpdateRequest,
   ) => GitHubPullRequestMutationResult;
 };

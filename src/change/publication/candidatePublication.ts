@@ -20,12 +20,11 @@ import {
 } from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
+  GitHubPullRequestCoordinates,
   GitHubPullRequestGateway,
   GitHubPullRequestListResult,
   GitHubPullRequestMutationResult,
   GitHubPullRequestReadResult,
-  GitHubPullRequestRequest,
-  GitHubPullRequestUpdateConfirmationResult,
   PublicationFailureEvidence,
 } from "../ownedPullRequestGateway.js";
 export type CommitSubjectResult =
@@ -111,10 +110,10 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     const publicationInput = { ...input, changeBaseSha: evidence.changeBaseSha };
     const headBranch = branchNameForRef(change.branchRef);
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
-    const metadata = metadataFor(change, evidence.headSha, dependencies.git);
-    if ("ok" in metadata) return metadata;
     const publication = change.publication;
-    if (publication === null)
+    if (publication === null) {
+      const metadata = metadataFor(change, evidence.headSha, dependencies.git);
+      if ("ok" in metadata) return metadata;
       return yield* create(
         dependencies,
         publicationInput,
@@ -123,6 +122,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
         evidence.headSha,
         metadata,
       );
+    }
     if (publication.pullRequest === null)
       return yield* recover(
         dependencies,
@@ -137,7 +137,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
       { ...change, publication: { ...publication, pullRequest: publication.pullRequest } },
       headBranch,
       evidence.headSha,
-      metadata,
+      bodyFor(change),
     );
   });
 
@@ -319,8 +319,6 @@ const recover = (
       ...marker,
       pullRequest: { number: selected.pullRequest.number, url: selected.pullRequest.url },
     };
-    const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
-    if ("ok" in metadata) return metadata;
     return yield* executePullRequestUpdate(
       dependencies,
       input,
@@ -328,7 +326,7 @@ const recover = (
       owned,
       headBranch,
       expectedHeadSha,
-      metadata,
+      bodyFor(change),
     );
   });
 
@@ -472,7 +470,7 @@ const updateOrReuse = (
   change: PublishedCandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
-  metadata: Metadata,
+  body: string,
 ): PublicationEffect => {
   const prepared = preparePullRequestUpdate(
     dependencies,
@@ -489,7 +487,7 @@ const updateOrReuse = (
       prepared.owned,
       headBranch,
       expectedHeadSha,
-      metadata,
+      body,
       prepared.allowExistingRemoteHead,
     );
   }
@@ -605,46 +603,23 @@ const executePullRequestUpdate = (
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
-  metadata: Metadata,
+  body: string,
   allowExistingRemoteHead = false,
 ): PublicationEffect => {
   const updated = dependencies.github.updatePullRequest({
     ...request(input.target, change.branchRef, headBranch, expectedHeadSha),
-    ...metadata,
+    body,
     number: owned.pullRequest.number,
     expectedCurrentHeadSha: owned.expectedHeadSha,
     ...(allowExistingRemoteHead ? { allowExistingRemoteHead: true } : {}),
   });
-  const confirmationMetadata = allowExistingRemoteHead ? metadata : undefined;
   if (!updated.ok) {
-    return updateFailure(
-      dependencies,
-      input,
-      owned,
-      headBranch,
-      expectedHeadSha,
-      updated,
-      confirmationMetadata,
-    );
+    return updateFailure(dependencies, input, owned, headBranch, expectedHeadSha, updated);
   }
   if (
-    !isExpectedUpdatedPullRequest(
-      updated.pullRequest,
-      owned,
-      input,
-      headBranch,
-      expectedHeadSha,
-      confirmationMetadata,
-    )
+    !isExpectedUpdatedPullRequest(updated.pullRequest, owned, input, headBranch, expectedHeadSha)
   ) {
-    return confirmUpdatedPullRequest(
-      dependencies,
-      input,
-      owned,
-      headBranch,
-      expectedHeadSha,
-      confirmationMetadata,
-    );
+    return confirmUpdatedPullRequest(dependencies, input, owned, headBranch, expectedHeadSha);
   }
   return record(dependencies, input, headBranch, expectedHeadSha, updated.pullRequest, owned);
 };
@@ -655,7 +630,6 @@ const confirmUpdatedPullRequest = (
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
-  metadata?: Metadata,
 ): PublicationEffect =>
   readBackUpdatedPullRequest(
     dependencies,
@@ -665,7 +639,6 @@ const confirmUpdatedPullRequest = (
     expectedHeadSha,
     conflictingMutationEvidence("pull_request_update"),
     true,
-    metadata,
   );
 
 const isExpectedUpdatedPullRequest = (
@@ -674,7 +647,6 @@ const isExpectedUpdatedPullRequest = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
-  metadata?: Metadata,
 ): boolean =>
   isExpectedPullRequest(
     pullRequest,
@@ -682,9 +654,7 @@ const isExpectedUpdatedPullRequest = (
     input.target,
     headBranch,
     expectedHeadSha,
-  ) &&
-  (metadata === undefined ||
-    (pullRequest.title === metadata.title && pullRequest.body === metadata.body));
+  );
 
 const isExpectedPullRequest = (
   pullRequest: GitHubPullRequest,
@@ -703,7 +673,6 @@ const updateFailure = (
   headBranch: string,
   expectedHeadSha: string,
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
-  metadata?: Metadata,
 ): PublicationEffect => {
   if (failure.code === "local_head_mismatch") {
     return Effect.succeed({
@@ -732,7 +701,6 @@ const updateFailure = (
         expectedHeadSha,
         failure.evidence,
         false,
-        metadata,
       )
     : Effect.succeed({
         ok: false,
@@ -757,7 +725,6 @@ const readBackUpdatedPullRequest = (
   expectedHeadSha: string,
   failureEvidence: PublicationFailureEvidence | undefined,
   delayBeforeRead: boolean,
-  metadata?: Metadata,
 ): PublicationEffect =>
   Effect.gen(function* () {
     if (delayBeforeRead) {
@@ -766,14 +733,7 @@ const readBackUpdatedPullRequest = (
         ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
       yield* delay(100);
     }
-    const recovered =
-      metadata === undefined
-        ? readPullRequest(dependencies.github, input.target, owned.pullRequest.number)
-        : readPullRequestUpdateConfirmation(
-            dependencies.github,
-            input.target,
-            owned.pullRequest.number,
-          );
+    const recovered = readPullRequest(dependencies.github, input.target, owned.pullRequest.number);
     if (!recovered.ok) {
       return {
         ok: false,
@@ -788,7 +748,6 @@ const readBackUpdatedPullRequest = (
       input,
       headBranch,
       expectedHeadSha,
-      metadata,
     )
       ? yield* record(
           dependencies,
@@ -845,6 +804,9 @@ const implementationDecisionSection = (
     ? ""
     : `\n\n## Implementation Decision Log\n\n${implementationDecisionMarkdown(decisions)}`;
 
+const bodyFor = (change: CandidatePublicationChange): string =>
+  implementationDecisionSection(change.implementationDecisions).trim();
+
 const metadataFor = (
   change: CandidatePublicationChange,
   headSha: string,
@@ -853,7 +815,7 @@ const metadataFor = (
   if (change.acceptanceContext !== null)
     return {
       title: change.acceptanceContext.title,
-      body: implementationDecisionSection(change.implementationDecisions).trim(),
+      body: bodyFor(change),
     };
   if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
   const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
@@ -861,7 +823,7 @@ const metadataFor = (
     ? { ok: false, code: "commit_history_unavailable" }
     : {
         title: subject.subject ?? "Change publication",
-        body: implementationDecisionSection(change.implementationDecisions).trim(),
+        body: bodyFor(change),
       };
 };
 
@@ -884,32 +846,6 @@ const readPullRequest = (
   } catch {
     return { ok: false, evidence: unavailableRecoveryEvidence };
   }
-};
-
-const readPullRequestUpdateConfirmation = (
-  github: GitHubPullRequestGateway,
-  target: ChangePublicationTarget,
-  number: number,
-): GitHubPullRequestUpdateConfirmationResult => {
-  const result = readPullRequest(github, target, number);
-  if (!result.ok) return result;
-  return result.pullRequest.title === undefined || result.pullRequest.body === undefined
-    ? {
-        ok: false,
-        evidence: {
-          operation: "remote_lookup",
-          classification: "response_parse_failure",
-          reason: "malformed",
-        },
-      }
-    : {
-        ok: true,
-        pullRequest: {
-          ...result.pullRequest,
-          title: result.pullRequest.title,
-          body: result.pullRequest.body,
-        },
-      };
 };
 
 const readPullRequestList = (
@@ -948,7 +884,7 @@ const request = (
   branchRef: string,
   headBranch: string,
   expectedHeadSha: string,
-): Omit<GitHubPullRequestRequest, "title" | "body"> => ({
+): GitHubPullRequestCoordinates => ({
   owner: target.owner,
   repo: target.repo,
   remoteName: target.remoteName,

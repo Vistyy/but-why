@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   type ExtensionAPI,
   type ExtensionContext,
-  isBashToolResult,
   isToolCallEventType,
   type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
@@ -70,25 +69,12 @@ export type RetryState = {
   readonly unchangedRestarts: number;
 };
 
-type ReassessmentEvidence = {
-  readonly change: boolean;
-  readonly acceptanceContext: boolean;
-  readonly worktreeStatus: boolean;
-  readonly candidateDiff: boolean;
-};
-
-type SubmissionReassessment = {
-  readonly state: "awaiting-settle" | "awaiting-restart" | "running" | "complete" | "not-required";
-  readonly baseRef: string | null;
-  readonly evidence: ReassessmentEvidence;
-};
-
 type PersistedContinuationState = RetryState & {
   readonly changeId: string;
   readonly paused: boolean;
   readonly resolutionId?: string | null;
   readonly pendingResolutionId?: string | null;
-  readonly submissionReassessment?: SubmissionReassessment;
+  readonly initialSubmissionHandled?: boolean;
 };
 
 type WatcherDisplay =
@@ -402,78 +388,11 @@ export const countVisibleChangeSubmits = (command: string): number => {
 export const containsVisibleChangeSubmit = (command: string): boolean =>
   countVisibleChangeSubmits(command) > 0;
 
-const interruptedSubmissionMessage =
-  "But Why blocked the complete Bash tool call before any part of it executed. The required reassessment starts after this agent run settles. Do not retry Change Submission in this run.";
-
-const pendingReassessmentMessage =
-  "But Why blocked Change Submission because the required separate reassessment run has not settled.";
+const initialSubmissionReassessmentMessage =
+  "But Why blocked the complete Bash tool call before any part of it executed. Before the first Submission, re-read the complete current Acceptance Context and reassess the complete committed implementation against it. Correct and commit any material omissions you identify, run focused verification for those corrections, and then retry Change Submit.";
 
 const inspectionFailureMessage = (message: string): string =>
-  `But Why blocked Change Submission because it could not classify reassessment eligibility from trusted Change inspection: ${message}`;
-
-const emptyReassessmentEvidence = (): ReassessmentEvidence => ({
-  change: false,
-  acceptanceContext: false,
-  worktreeStatus: false,
-  candidateDiff: false,
-});
-
-const reassessmentEvidenceComplete = (reassessment: SubmissionReassessment): boolean =>
-  reassessment.evidence.change &&
-  reassessment.evidence.acceptanceContext &&
-  reassessment.evidence.worktreeStatus &&
-  reassessment.evidence.candidateDiff;
-
-const commandReassessmentEvidence = (
-  command: string,
-  changeId: string,
-  baseRef: string,
-): ReassessmentEvidence => {
-  const visible = visibleShellText(command).trim();
-  const prefixes = ["just by", "pnpx but-why", "npx -y but-why"];
-  return {
-    change: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
-    acceptanceContext: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
-    worktreeStatus: visible === "git status --short",
-    candidateDiff: visible === `git diff ${baseRef}...HEAD`,
-  };
-};
-
-const incompleteReassessmentMessage = (
-  reassessment: SubmissionReassessment,
-  changeId: string,
-  commandPrefix: ButWhyCommandPrefix,
-): string => {
-  const commands = [
-    ...(!reassessment.evidence.change || !reassessment.evidence.acceptanceContext
-      ? [butWhyCommand(commandPrefix, "change", "show", changeId)]
-      : []),
-    ...(reassessment.evidence.worktreeStatus ? [] : ["git status --short"]),
-    ...(reassessment.evidence.candidateDiff || reassessment.baseRef === null
-      ? []
-      : [`git diff ${reassessment.baseRef}...HEAD`]),
-  ];
-  return `The reassessment cannot complete from confirmation alone. Continue the same reassessment run and successfully execute the missing required inspections: ${commands.map((command) => `\`${command}\``).join(", ")}. Then complete the comparison, corrections, commits, and focused verification required by the reassessment instructions.`;
-};
-
-const submissionReassessmentMessage = (
-  changeId: string,
-  commandPrefix: ButWhyCommandPrefix,
-  baseRef: string,
-): string =>
-  [
-    `But Why started the required separate reassessment run for Change ${changeId}.`,
-    "Do not call Change Submit during this run.",
-    `Inspect the Change with \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and use its complete current Acceptance Context when present.`,
-    "Inspect the Managed Worktree status with `git status --short`.",
-    `Inspect the complete committed Candidate diff against the current Change Base with \`git diff ${baseRef}...HEAD\`.`,
-
-    "Compare the complete committed implementation with every accepted outcome, criterion, constraint, and verification requirement.",
-    "Correct and commit each material discrepancy.",
-    "Run focused verification for any corrections.",
-    "Do not run configured blocking Checks or reviews, a repository-wide quality command, or an unfiltered test or coverage workload.",
-    "When the reassessment is complete, end this run without submitting. The extension will complete the reassessment boundary after this run settles and will permit later Submission attempts.",
-  ].join(" ");
+  `But Why blocked Change Submission because trusted Change inspection could not determine whether initial Submission requires reassessment: ${message}`;
 
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   for (const entry of entries) {
@@ -569,7 +488,6 @@ export default function continueChange(pi: ExtensionAPI): void {
   let activeInspectionAbortController: AbortController | undefined;
   let pollingTimer: ReturnType<typeof setTimeout> | undefined;
   let watcherDisplay: WatcherDisplay = { kind: "implementing", pullRequestUrl: null };
-  const pendingReassessmentEvidence = new Map<string, ReassessmentEvidence>();
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
@@ -862,15 +780,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     };
   };
 
-  const inspectReassessmentEligibility = async (
+  const inspectInitialSubmissionEligibility = async (
     ctx: ExtensionContext,
     id: string,
   ): Promise<
-    | {
-        readonly ok: true;
-        readonly hasAcceptanceContext: boolean;
-        readonly baseRef: string | null;
-      }
+    | { readonly ok: true; readonly hasAcceptanceContext: boolean }
     | { readonly ok: false; readonly message: string }
   > => {
     const changeResult = await inspectCommand(["change", "show", id], ctx.cwd);
@@ -896,20 +810,13 @@ export default function continueChange(pi: ExtensionAPI): void {
         message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    if (snapshotValue.change.acceptanceContext === null) {
-      return { ok: true, hasAcceptanceContext: false, baseRef: null };
-    }
-    if (snapshotValue.change.baseRef === undefined || snapshotValue.change.baseRef === null) {
-      return { ok: false, message: "But Why inspection omitted the Change Base reference" };
-    }
     return {
       ok: true,
-      hasAcceptanceContext: true,
-      baseRef: snapshotValue.change.baseRef,
+      hasAcceptanceContext: snapshotValue.change.acceptanceContext !== null,
     };
   };
 
-  const saveSubmissionReassessment = (state: SubmissionReassessment): void => {
+  const markInitialSubmissionHandled = (): void => {
     if (changeId === undefined) return;
     const previous = persisted ?? {
       changeId,
@@ -918,7 +825,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       paused: false,
       resolutionId: null,
     };
-    saveState({ ...previous, submissionReassessment: state });
+    saveState({ ...previous, initialSubmissionHandled: true });
   };
 
   const showValidationStarted = (ctx: ExtensionContext): void => {
@@ -933,29 +840,10 @@ export default function continueChange(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event, ctx) => {
     if (!isToolCallEventType("bash", event)) return;
-    const runningReassessment = persisted?.submissionReassessment;
-    if (runningReassessment?.state === "running" && runningReassessment.baseRef !== null) {
-      const evidence = commandReassessmentEvidence(
-        event.input.command,
-        changeId ?? "",
-        runningReassessment.baseRef,
-      );
-      if (Object.values(evidence).some(Boolean)) {
-        pendingReassessmentEvidence.set(event.toolCallId, evidence);
-      }
-    }
     if (!containsVisibleChangeSubmit(event.input.command)) return;
-    const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state === "complete" || reassessment?.state === "not-required") {
+    if (persisted?.initialSubmissionHandled === true) {
       showValidationStarted(ctx);
       return;
-    }
-    if (
-      reassessment?.state === "awaiting-settle" ||
-      reassessment?.state === "awaiting-restart" ||
-      reassessment?.state === "running"
-    ) {
-      return { block: true, reason: pendingReassessmentMessage };
     }
     if (changeId === undefined) {
       return {
@@ -964,43 +852,18 @@ export default function continueChange(pi: ExtensionAPI): void {
       };
     }
 
-    const eligibility = await inspectReassessmentEligibility(ctx, changeId);
+    const eligibility = await inspectInitialSubmissionEligibility(ctx, changeId);
     if (!eligibility.ok) {
       return { block: true, reason: inspectionFailureMessage(eligibility.message) };
     }
     if (!eligibility.hasAcceptanceContext) {
-      saveSubmissionReassessment({
-        state: "not-required",
-        baseRef: null,
-        evidence: emptyReassessmentEvidence(),
-      });
+      markInitialSubmissionHandled();
       showValidationStarted(ctx);
       return;
     }
-    saveSubmissionReassessment({
-      state: "awaiting-settle",
-      baseRef: eligibility.baseRef,
-      evidence: emptyReassessmentEvidence(),
-    });
-    return { block: true, reason: interruptedSubmissionMessage };
-  });
-
-  pi.on("tool_result", (event) => {
-    if (!isBashToolResult(event)) return;
-    const observed = pendingReassessmentEvidence.get(event.toolCallId);
-    pendingReassessmentEvidence.delete(event.toolCallId);
-    if (observed === undefined || event.isError) return;
-    const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state !== "running") return;
-    saveSubmissionReassessment({
-      ...reassessment,
-      evidence: {
-        change: reassessment.evidence.change || observed.change,
-        acceptanceContext: reassessment.evidence.acceptanceContext || observed.acceptanceContext,
-        worktreeStatus: reassessment.evidence.worktreeStatus || observed.worktreeStatus,
-        candidateDiff: reassessment.evidence.candidateDiff || observed.candidateDiff,
-      },
-    });
+    pi.sendUserMessage(initialSubmissionReassessmentMessage, { deliverAs: "steer" });
+    markInitialSubmissionHandled();
+    return { block: true, reason: initialSubmissionReassessmentMessage };
   });
 
   const latestResolution = (history: BlockerHistory): BlockerResolution | null => {
@@ -1085,9 +948,9 @@ export default function continueChange(pi: ExtensionAPI): void {
       paused: false,
       resolutionId: handledResolutionId,
       pendingResolutionId,
-      ...(previous?.submissionReassessment === undefined
+      ...(previous?.initialSubmissionHandled === undefined
         ? {}
-        : { submissionReassessment: previous.submissionReassessment }),
+        : { initialSubmissionHandled: previous.initialSubmissionHandled }),
     };
     saveState(initializedState);
     showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
@@ -1327,19 +1190,6 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const startSubmissionReassessment = (
-    ctx: ExtensionContext,
-    reassessment: SubmissionReassessment,
-  ): void => {
-    if (changeId === undefined || reassessment.baseRef === null) {
-      return;
-    }
-    saveSubmissionReassessment({ ...reassessment, state: "running" });
-    pi.sendUserMessage(
-      submissionReassessmentMessage(changeId, commandPrefixFor(ctx.cwd), reassessment.baseRef),
-    );
-  };
-
   pi.on("session_start", async (_event, ctx) => {
     changeId ??= findChangeId(ctx.sessionManager.getBranch());
     restoreState(ctx);
@@ -1366,20 +1216,8 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       if (persisted?.paused) {
-        const reassessment = persisted.submissionReassessment;
-        if (reassessment?.state === "awaiting-restart" && !ctx.isIdle()) {
-          ctx.ui.notify(
-            "But Why cannot restart the reassessment while an agent run is active.",
-            "warning",
-          );
-          return;
-        }
         pauseGeneration += 1;
         saveState({ ...persisted, paused: false, unchangedRestarts: 0 });
-        if (reassessment?.state === "awaiting-restart") {
-          startSubmissionReassessment(ctx, reassessment);
-          return;
-        }
       }
       await continueWatching(ctx, true);
     },
@@ -1402,7 +1240,6 @@ export default function continueChange(pi: ExtensionAPI): void {
     clearBlockedPolling();
     activeInspectionAbortController?.abort();
     activeInspectionAbortController = undefined;
-    pendingReassessmentEvidence.clear();
   });
 
   pi.on("agent_end", (event, ctx) => {
@@ -1412,28 +1249,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       ) &&
       changeId !== undefined
     ) {
-      const reassessment = persisted?.submissionReassessment;
-      if (reassessment?.state === "awaiting-settle") return;
-      if (reassessment?.state === "running") {
-        saveSubmissionReassessment({
-          ...reassessment,
-          state: "awaiting-restart",
-          evidence: emptyReassessmentEvidence(),
-        });
-      }
       pause(ctx);
-      return;
-    }
-    const reassessment = persisted?.submissionReassessment;
-    if (
-      reassessment?.state === "running" &&
-      !reassessmentEvidenceComplete(reassessment) &&
-      changeId !== undefined
-    ) {
-      pi.sendUserMessage(
-        incompleteReassessmentMessage(reassessment, changeId, commandPrefixFor(ctx.cwd)),
-        { deliverAs: "followUp" },
-      );
     }
   });
 
@@ -1441,15 +1257,6 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (persisted?.paused) {
       await continueWatching(ctx, false);
       return;
-    }
-    const reassessment = persisted?.submissionReassessment;
-    if (reassessment?.state === "awaiting-settle") {
-      startSubmissionReassessment(ctx, reassessment);
-      return;
-    }
-    if (reassessment?.state === "running") {
-      if (!reassessmentEvidenceComplete(reassessment)) return;
-      saveSubmissionReassessment({ ...reassessment, state: "complete" });
     }
     await continueWatching(ctx, false);
   });
@@ -1461,23 +1268,6 @@ const isNonNegativeInteger = (value: unknown): value is number =>
 const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
   value === undefined || value === null || typeof value === "string";
 
-const isReassessmentEvidence = (value: unknown): value is ReassessmentEvidence =>
-  isRecord(value) &&
-  typeof recordValue(value, "change") === "boolean" &&
-  typeof recordValue(value, "acceptanceContext") === "boolean" &&
-  typeof recordValue(value, "worktreeStatus") === "boolean" &&
-  typeof recordValue(value, "candidateDiff") === "boolean";
-
-const isSubmissionReassessment = (value: unknown): value is SubmissionReassessment =>
-  isRecord(value) &&
-  (recordValue(value, "state") === "awaiting-settle" ||
-    recordValue(value, "state") === "awaiting-restart" ||
-    recordValue(value, "state") === "running" ||
-    recordValue(value, "state") === "complete" ||
-    recordValue(value, "state") === "not-required") &&
-  (recordValue(value, "baseRef") === null || typeof recordValue(value, "baseRef") === "string") &&
-  isReassessmentEvidence(recordValue(value, "evidence"));
-
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
   typeof recordValue(value, "changeId") === "string" &&
@@ -1486,8 +1276,8 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
   typeof recordValue(value, "paused") === "boolean" &&
   isOptionalNullableString(recordValue(value, "resolutionId")) &&
   isOptionalNullableString(recordValue(value, "pendingResolutionId")) &&
-  (recordValue(value, "submissionReassessment") === undefined ||
-    isSubmissionReassessment(recordValue(value, "submissionReassessment")));
+  (recordValue(value, "initialSubmissionHandled") === undefined ||
+    typeof recordValue(value, "initialSubmissionHandled") === "boolean");
 
 const isCandidate = (value: unknown): value is CurrentCandidate =>
   isRecord(value) &&

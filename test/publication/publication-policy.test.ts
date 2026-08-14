@@ -5,7 +5,7 @@ import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   GitHubPullRequest,
-  GitHubPullRequestRequest,
+  GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
@@ -703,7 +703,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("reapplies pull request metadata for a later Candidate already on the remote", () =>
+  it.scoped("updates the generated body without making metadata a publication postcondition", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
@@ -723,8 +723,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates.push(request);
-              const staleMetadata = { ...remote, title: "Stale title", body: "Stale body" };
-              remote = { ...remote, title: request.title, body: request.body };
+              const staleMetadata = { ...remote, title: "Existing title", body: "Stale body" };
+              remote = { ...remote, body: request.body };
               return { ok: true, pullRequest: staleMetadata };
             },
           },
@@ -738,7 +738,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         yield* fixture.changes.authority.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Recover the revised publication",
-          rationale: "Reapply the complete current metadata.",
+          rationale: "Refresh the generated pull request body.",
           now: "2026-07-22T10:04:00.000Z",
         });
         const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
@@ -758,11 +758,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             expectedCurrentHeadSha: fixture.captured.headSha,
             expectedHeadSha: next.captured.headSha,
             allowExistingRemoteHead: true,
-            title: "Publication",
-            body: expect.stringContaining("Reapply the complete current metadata."),
+            body: expect.stringContaining("Refresh the generated pull request body."),
           }),
         ]);
-        expect(confirmationDelays).toEqual([100]);
+        expect(updates[0]).not.toHaveProperty("title");
+        expect(confirmationDelays).toEqual([]);
         expect(yield* fixture.changes.reads.getChangeById(fixture.captured.changeId)).toMatchObject(
           {
             publication: {
@@ -776,7 +776,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("reports missing recovery metadata as an unusable GitHub response", () =>
+  it.scoped("confirms an updated Candidate without requiring recovery metadata", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
@@ -794,7 +794,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: () => ({
               ok: true,
-              pullRequest: { ...remote, title: "Stale title", body: "Stale body" },
+              pullRequest: { ...remote, headSha: fixture.captured.headSha },
             }),
           },
           delayBeforeConfirmation: () => Effect.void,
@@ -811,15 +811,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             validationRunId: next.validationRunId,
             now: "2026-07-22T10:05:00.000Z",
           }),
-        ).toMatchObject({
-          ok: false,
-          code: "publication_tooling_failed",
-          recoveryEvidence: {
-            operation: "remote_lookup",
-            classification: "response_parse_failure",
-            reason: "malformed",
-          },
-        });
+        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
       }),
     ),
   );
@@ -1580,7 +1572,7 @@ const pullRequestList = (pullRequests: readonly GitHubPullRequest[]) =>
 const successfulCreation = (requests: unknown[]) => ({
   findPullRequests: () => pullRequestList([]),
   getPullRequest: () => pullRequestRead(undefined),
-  createPullRequest: (request: GitHubPullRequestRequest) => {
+  createPullRequest: (request: GitHubPullRequestCreationRequest) => {
     requests.push(request);
     return { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
   },
