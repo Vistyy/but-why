@@ -6,7 +6,7 @@ import { type CliResult, runtimeError, success } from "../../cliResults.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult): CliResult => {
-  if (result.ok) return success(changeView(result.change));
+  if (result.ok) return success(changeView(result.change, true));
   if (result.code === "task_dependencies_unsatisfied") {
     return runtimeError({
       code: result.code,
@@ -60,7 +60,7 @@ export const startResult = (result: ChangeStartResult): CliResult => {
 };
 
 export const prepareResult = (result: ChangePrepareResult): CliResult => {
-  if (result.ok) return success(changeView(result.change));
+  if (result.ok) return success(changeView(result.change, false));
   if (result.code === "change_not_found" || result.code === "change_not_open") {
     return runtimeError({
       code: result.code,
@@ -71,8 +71,8 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
   return operationalError(result);
 };
 
-export const changeView = (change: ChangeStartRecord) => ({
-  change: { id: change.id, taskId: change.taskId },
+export const changeView = (change: ChangeStartRecord, includeTaskId: boolean) => ({
+  change: { id: change.id, ...(includeTaskId ? { taskId: change.taskId } : {}) },
   branch: change.branchRef,
   baseRef: change.baseRef,
   startingCommit: change.startingCommit,
