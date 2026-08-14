@@ -28,4 +28,4 @@ Each workflow receives one cohesive port or operation set that it uses, rather t
 Ports exist only where behavior varies, an external boundary requires one, or one owner must preserve an invariant atomically.
 An operation that crosses Task and Change state belongs to the owner whose invariant requires the coordination.
 Change owns named atomic operations that cross persisted concepts for Change Start, Candidate capture, validation authority, publication, and completion.
-Task-backed and taskless Changes use the same Change-owned validation and delivery path.
+Changes linked to a Task and Changes without a Task use the same Change-owned validation and delivery path.

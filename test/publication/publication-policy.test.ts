@@ -300,7 +300,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("publishes Task-backed metadata without reading commit history", () =>
+  it.scoped("publishes metadata for a Change linked to a Task without reading commit history", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
@@ -347,7 +347,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(requests).toContainEqual(
           expect.objectContaining({
             title: "Publish exact Candidate",
-            body: "Task: BY-1",
+            body: "",
           }),
         );
       }),

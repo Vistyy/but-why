@@ -9,6 +9,7 @@ import type {
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
@@ -189,6 +190,38 @@ export const implementationBlockerReadColumns = `
   resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt,
   resolution_content AS resolutionContent
 `;
+
+export const readImplementationBlockerHistory = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+) =>
+  Effect.flatMap(
+    sql.unsafe<StoredImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
+      [changeId],
+    ),
+    (rows) =>
+      decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
+  );
+
+export const deriveAcceptanceContext = (
+  initial: AcceptanceContextSnapshotV1 | null,
+  history: ImplementationBlockerHistory,
+): AcceptanceContextSnapshotV1 | null => {
+  if (initial === null) return null;
+  const resolutions =
+    history.resolutions.length === 0
+      ? (initial.resolutions ?? [])
+      : history.resolutions.map((resolution) => resolution.content);
+  return {
+    version: initial.version,
+    title: initial.title,
+    description: initial.description,
+    ...(initial.comments === undefined ? {} : { comments: [...initial.comments] }),
+    ...(resolutions.length === 0 ? {} : { resolutions }),
+  };
+};
 
 export type StoredImplementationBlockerRow = {
   readonly sequence: number;

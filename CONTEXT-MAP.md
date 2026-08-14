@@ -8,7 +8,7 @@
 
 ## Relationships
 
-- **Task Intent -> Change Delivery**: Change Start can link one approved Task, capture its Acceptance Context, and create a Task-backed Change.
-- **Change Delivery -> Task Intent**: Change state advances the linked Task lifecycle, and an approved Implementation Blocker Resolution creates a new Acceptance Context version.
+- **Task Intent -> Change Delivery**: Change Start can link one approved Task, capture its Acceptance Context, and create a Change linked to a Task.
+- **Change Delivery -> Task Intent**: Change state advances the linked Task lifecycle, and an approved Implementation Blocker Resolution becomes part of the current derived Acceptance Context.
 - **Repository Runtime -> Task Intent**: Shared Repository State persists Tasks.
 - **Repository Runtime -> Change Delivery**: Shared Repository State persists Changes and validation evidence, while resolved configuration supplies preparation, validation, reviewer, and Interactive Session behavior.

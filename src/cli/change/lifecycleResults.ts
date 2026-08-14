@@ -33,7 +33,7 @@ export const startResult = (result: ChangeStartResult): CliResult => {
   if (result.code === "requested_base_conflict") {
     return runtimeError({
       code: result.code,
-      message: "The existing Task-backed Change uses a different Change Base branch.",
+      message: "The existing Change linked to a Task uses a different Change Base branch.",
       details: {
         ...(result.requestedBaseBranch === undefined
           ? {}

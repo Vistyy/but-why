@@ -384,7 +384,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           id: fixture.changeId,
           branchRef: "refs/heads/feature",
           baseRef: "refs/remotes/origin/main",
-          taskId: null,
           state: "open",
         },
         candidate: {
