@@ -21,6 +21,7 @@ import {
   type SubmissionRepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import {
@@ -105,10 +106,6 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
             abandonTaskReview(
               {
                 mainCheckoutRoot: context.mainCheckoutRoot,
-                reviewerSessionStorageRoot: join(
-                  context.paths.operationalDir,
-                  "task-review-sessions",
-                ),
                 persistence,
                 verifyReviewBase: verifyRecordedTaskReviewBase,
                 cleanupWorkspace: cleanupExactDisposableWorkspace,
@@ -184,8 +181,11 @@ const submitFreshTaskReview = <A, E, R>(
   if (!resolved.ok)
     return use(resolved).pipe(Effect.map((value) => ({ ok: true as const, value })));
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence().pipe(
-      Effect.flatMap((persistence) =>
+    Effect.all({
+      persistence: openSqliteTaskReviewPersistence(),
+      agentPersistence: openSqliteAgentSessionPersistence(),
+    }).pipe(
+      Effect.flatMap(({ persistence, agentPersistence }) =>
         openTaskReviewUseCases({
           mainCheckoutRoot: context.mainCheckoutRoot,
           reviewerSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
@@ -238,6 +238,7 @@ const submitFreshTaskReview = <A, E, R>(
             });
           },
           persistence,
+          agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
           readReviewBase: readCanonicalMainReviewBase,

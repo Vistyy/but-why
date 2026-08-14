@@ -64,3 +64,9 @@ _Avoid_: Repository policy, detected Git fact
 A named reusable configuration of an agent runtime, including its model, thinking level, and runtime-specific execution resources.
 An Agent Profile does not define an agent role's lifecycle or safety invariants.
 _Avoid_: Reviewer instructions, agent role, validation phase
+
+**Pinned Predecessor Executable**:
+The Trusted But Why Executable selected from the canonical main checkout while the source repository is unreleased.
+Every source-repository But Why command uses this executable rather than the Candidate worktree's code.
+After publication, the published But Why Executable replaces this temporary rule.
+_Avoid_: Candidate executable, current-worktree executable, published package before publication

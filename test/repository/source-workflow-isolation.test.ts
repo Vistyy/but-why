@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -76,6 +77,77 @@ test("source workflow delegates a Candidate worktree to the canonical executable
   });
   expect(readMigrationIds(main)).not.toContain("candidate_probe");
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
+}, 30_000);
+
+test("source workflow uses an integrity-checked predecessor only for exact reconciliation", () => {
+  const { candidate } = prepareLauncherRepository();
+  const bundle = createTestWorkspace();
+  const executable = join(bundle, "pinned-by");
+  writeFileSync(
+    executable,
+    '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ args: process.argv.slice(2), executable: process.env.BUT_WHY_EXECUTABLE_PATH }) + "\\n");\n',
+  );
+  chmodSync(executable, 0o755);
+  const manifest = join(bundle, "predecessor.json");
+  writeFileSync(
+    manifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+      executable: "pinned-by",
+    })}\n`,
+  );
+
+  const reconciled = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: manifest },
+  });
+  expect(reconciled.status).toBe(0);
+  expect(JSON.parse(reconciled.stdout)).toEqual({
+    args: ["change", "reconcile", "BY-1"],
+    executable,
+  });
+
+  const rejected = runTestProcess("just", ["by", "task", "list"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: manifest },
+  });
+  expect(rejected.status).toBe(1);
+  expect(JSON.parse(rejected.stdout)).toMatchObject({
+    error: { code: "pinned_predecessor_scope", changeId: "BY-1" },
+  });
+
+  const tamperedBundle = createTestWorkspace();
+  mkdirSync(join(tamperedBundle, "src"));
+  writeFileSync(
+    join(tamperedBundle, "src", "main.ts"),
+    'process.stdout.write(JSON.stringify({ source: "unhashed-source" }) + "\\n");\n',
+  );
+  const tamperedExecutable = join(tamperedBundle, "pinned-by");
+  writeFileSync(
+    tamperedExecutable,
+    '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ source: "hashed-executable" }) + "\\n");\n',
+  );
+  chmodSync(tamperedExecutable, 0o755);
+  const tamperedManifest = join(bundle, "tampered-predecessor.json");
+  writeFileSync(
+    tamperedManifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(tamperedExecutable)).digest("hex"),
+      executable: tamperedExecutable,
+    })}\n`,
+  );
+  const tamperedReconciled = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: tamperedManifest },
+  });
+  expect(tamperedReconciled.status).toBe(0);
+  expect(JSON.parse(tamperedReconciled.stdout)).toEqual({ source: "hashed-executable" });
 }, 30_000);
 
 test("source workflow fails without Candidate fallback when the main checkout is unavailable", () => {

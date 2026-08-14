@@ -13,13 +13,19 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  repositorySqlLayer as productionRepositorySqlLayer,
+  RepositorySql,
+} from "../../src/sqlite/repositorySql.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import {
   migrateTestRepositoryThrough,
   testRepositoryMigrationLedger,
 } from "../support/repositoryMigrations.js";
+
+const repositorySqlLayer = (config: Parameters<typeof productionRepositorySqlLayer>[0]) =>
+  productionRepositorySqlLayer({ ...config, migrationTarget: 39 });
 
 const createPreNativeCleanupTable = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -165,6 +171,67 @@ describe("Shared Repository State migrations", () => {
           })),
         );
       }),
+    ),
+  );
+
+  it.effect("keeps prerelease state unchanged when Agent storage installation is blocked", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(39);
+              yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, state, created_at, updated_at,
+                  cleanup_state
+                ) VALUES (
+                  'open-before-agent-migration', ${directory}, 'refs/heads/open', 'open',
+                  '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z', 'complete'
+                )
+              `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          const migration = yield* Effect.exit(
+            Effect.scoped(
+              RepositorySql.pipe(
+                Effect.provide(
+                  productionRepositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    lifecycle: "initialize",
+                  }),
+                ),
+              ),
+            ),
+          );
+          expect(migration._tag).toBe("Failure");
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const ledger = yield* sql<{ readonly migrationId: number }>`
+                SELECT migration_id AS migrationId
+                FROM effect_sql_migrations ORDER BY migration_id DESC LIMIT 1
+              `;
+              const agentTables = yield* sql<{ readonly name: string }>`
+                SELECT name FROM sqlite_schema
+                WHERE type = 'table' AND name IN ('agent_sessions', 'agent_invocations')
+              `;
+              const taskColumns = yield* sql<{ readonly name: string }>`
+                PRAGMA table_info(tasks)
+              `;
+              expect(ledger).toEqual([{ migrationId: 39 }]);
+              expect(agentTables).toEqual([]);
+              expect(taskColumns.map(({ name }) => name)).not.toContain("reviewer_configuration");
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
     ),
   );
 

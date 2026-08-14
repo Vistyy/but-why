@@ -8,7 +8,10 @@ import { afterAll, beforeAll, describe } from "vitest";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {
@@ -79,6 +82,55 @@ describe("Candidate-owned Validation Run inspection", () => {
       ]);
       expect(repeated.status).toBe(0);
       expect(JSON.parse(repeated.stdout).status).toBe("already_complete");
+    }),
+  );
+
+  it.effect("settles linked Agent Invocations when a Validation Run is abandoned", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const result = yield* withTestRepository(
+        fixture.root,
+        Effect.gen(function* () {
+          const agents = yield* openSqliteAgentSessionPersistence();
+          const reviewerSessions = yield* openSqliteChangeReviewerSessionPort();
+          const abandonment = yield* openSqliteValidationRunAbandonmentPort();
+          const linkAgentInvocation = reviewerSessions.linkAgentInvocation;
+          if (linkAgentInvocation === undefined)
+            throw new Error("Change Agent linking is unavailable");
+          const started = yield* agents.beginInvocation({
+            configuration: { harness: "pi", model: "test-model", thinking: "off" },
+            createdAt: now,
+            linkInvocation: linkAgentInvocation({
+              changeId: fixture.changeId,
+              producer: "acceptance",
+              validationRunId: fixture.validationRunId,
+              phase: "acceptance_review",
+              configurationSnapshot: {},
+            }),
+          });
+          if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
+          yield* abandonment.abandon({
+            validationRunId: fixture.validationRunId,
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "validation_run_abandonment",
+            errorMessage: "Reviewer process stopped",
+            now: later,
+          });
+          const history = yield* agents.readInvocationHistory(started.dispatch.agentSessionId);
+          return history;
+        }),
+      );
+
+      expect(result).toMatchObject([
+        {
+          settlementKind: "return_unknown",
+          settledAt: later,
+          usage: null,
+          continuation: {
+            unusableReason: expect.stringContaining("Reviewer process stopped"),
+          },
+        },
+      ]);
     }),
   );
 

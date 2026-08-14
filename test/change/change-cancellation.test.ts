@@ -27,6 +27,20 @@ import {
 } from "../support/terminalCleanup.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
+const writeDefaultReviewConfig = (root: string): void => {
+  writeFileSync(
+    join(root, ".test-global-config.json"),
+    `${JSON.stringify(
+      {
+        defaultAgentProfile: { scope: "global", name: "test" },
+        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+};
+
 describe("Change cancellation", () => {
   it.effect(
     "cancels a Change linked to a Task through Change Cancel and stores the reason on the Task",
@@ -36,6 +50,7 @@ describe("Change cancellation", () => {
         const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
         expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
+        writeDefaultReviewConfig(root);
         writeFileSync(join(root, "task.md"), "Implement the requested change.");
 
         expect(
@@ -91,6 +106,7 @@ describe("Change cancellation", () => {
         const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
         expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
+        writeDefaultReviewConfig(root);
         writeFileSync(join(root, "task.md"), "Implement the requested change.");
 
         expect(
@@ -294,14 +310,7 @@ describe("Change cancellation", () => {
 
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout).status).toBe("cancelled");
-      expect(events).toEqual([
-        "read-pr",
-        "close-pr",
-        "cancel-change",
-        "cleanup",
-        "record-cleanup",
-        "remove-reviewer-sessions",
-      ]);
+      expect(events).toEqual(["read-pr", "close-pr", "cancel-change", "cleanup", "record-cleanup"]);
       expect(dependencies.closePullRequestInputs).toEqual([{ target, number: 42 }]);
     }),
   );
@@ -555,7 +564,6 @@ describe("Change cancellation", () => {
             "cancel-change",
             "cleanup",
             "record-cleanup",
-            "remove-reviewer-sessions",
           ]);
           expect(cleanupRemoteBranches).toEqual([
             {
@@ -615,7 +623,6 @@ describe("Change cancellation", () => {
             "cancel-change",
             "cleanup",
             "record-cleanup",
-            "remove-reviewer-sessions",
           ]);
           return result;
         }),
@@ -828,10 +835,6 @@ const cancellationDependencies = (input: {
         changed: true,
         cleanup: currentChange.cleanup,
       });
-    },
-    removeReviewerSessions: () => {
-      input.events.push("remove-reviewer-sessions");
-      return Effect.void;
     },
   };
   return {

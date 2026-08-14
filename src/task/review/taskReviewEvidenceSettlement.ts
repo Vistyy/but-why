@@ -1,6 +1,4 @@
 import { Effect } from "effect";
-import { reviewerSessionsOwnerRoot } from "../../agent/reviewerSession/reviewerSession.js";
-import { discoverObservedReviewerTranscripts } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
   ExactDisposableWorkspaceCleanupInput,
@@ -15,7 +13,7 @@ import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 type TaskReviewEvidencePersistence = Pick<
   TaskReviewPersistence,
-  "recordCleanup" | "recordExecution" | "recordTranscripts" | "recordActiveFailure" | "getById"
+  "recordCleanup" | "recordActiveFailure" | "getById"
 >;
 
 export type TaskReviewEvidenceSettlementResult =
@@ -29,7 +27,6 @@ export type TaskReviewEvidenceSettlementResult =
 export const settleTaskReviewEvidence = (
   input: {
     readonly mainCheckoutRoot: string;
-    readonly reviewerSessionStorageRoot: string;
     readonly persistence: TaskReviewEvidencePersistence;
     readonly verifyReviewBase: (
       mainCheckoutRoot: string,
@@ -99,64 +96,6 @@ export const settleTaskReviewEvidence = (
       );
     }
 
-    if (requiredExecution !== undefined) {
-      const recordedExecution = yield* Effect.either(
-        recordTaskReviewExecutionWithRetry(input.persistence.recordExecution, {
-          reviewId: review.id,
-          execution: requiredExecution,
-        }),
-      );
-      if (recordedExecution._tag === "Left") {
-        return yield* settlementFailed(
-          input.persistence,
-          review,
-          {
-            operation: "record_task_review_execution",
-            message: repositoryStorageErrorMessage("Task Review execution", recordedExecution.left),
-            pendingExecution: requiredExecution,
-          },
-          now,
-          requiredExecution,
-        );
-      }
-    }
-
-    const transcriptDiscovery = discoverObservedReviewerTranscripts(
-      reviewerSessionsOwnerRoot(input.reviewerSessionStorageRoot, review.taskId),
-      review.taskId,
-    );
-    if (!transcriptDiscovery.ok) {
-      return yield* settlementFailed(
-        input.persistence,
-        review,
-        {
-          operation: "index_task_reviewer_transcripts",
-          message: transcriptDiscovery.reason,
-        },
-        now,
-        requiredExecution,
-      );
-    }
-    const indexed = yield* Effect.either(
-      input.persistence.recordTranscripts({
-        reviewId: review.id,
-        taskId: review.taskId,
-        transcripts: transcriptDiscovery.transcripts,
-      }),
-    );
-    if (indexed._tag === "Left") {
-      return yield* settlementFailed(
-        input.persistence,
-        review,
-        {
-          operation: "index_task_reviewer_transcripts",
-          message: repositoryStorageErrorMessage("Task Reviewer Transcript", indexed.left),
-        },
-        now,
-        requiredExecution,
-      );
-    }
-
     return { ok: true } as const;
   });
 
@@ -180,14 +119,6 @@ const settlementFailed = (
       message: retainedFailure.message,
     } as const;
   });
-
-export const recordTaskReviewExecutionWithRetry = (
-  recordExecution: TaskReviewPersistence["recordExecution"],
-  input: Parameters<TaskReviewPersistence["recordExecution"]>[0],
-): Effect.Effect<void, RepositoryStorageError> =>
-  recordExecution(input).pipe(
-    Effect.catchTag("RepositorySqlOperationFailed", () => recordExecution(input)),
-  );
 
 const repositoryStorageErrorMessage = (subject: string, error: RepositoryStorageError): string =>
   "operationName" in error

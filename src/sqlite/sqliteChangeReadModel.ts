@@ -3,12 +3,13 @@ import { Effect } from "effect";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
 import type { ChangeRecord } from "../change/change.js";
+import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,
   ImplementationBlockerHistory,
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
+import type { LegacyReviewerTranscriptReference } from "../change/legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -37,6 +38,7 @@ export const changeReadColumns = [
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
+  "reviewer_configuration AS reviewerConfiguration",
   "prepare_command AS prepareCommand",
   "prepare_timeout_seconds AS prepareTimeoutSeconds",
   "prepare_failure AS prepareFailure",
@@ -70,6 +72,7 @@ export type StoredChangeRow = {
   readonly startingCommit: unknown;
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
+  readonly reviewerConfiguration: unknown;
   readonly prepareCommand: unknown;
   readonly prepareTimeoutSeconds: unknown;
   readonly prepareFailure: unknown;
@@ -128,6 +131,10 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
   if (cancelReason !== null && lifecycle.closeReason !== "cancelled") {
     throw new Error("Stored Change cancellation relationship is invalid");
   }
+  const encodedReviewerConfiguration = decodeStoredNullableString(
+    row.reviewerConfiguration,
+    "Change Reviewer Configuration",
+  );
   return {
     id: decodeStoredString(row.id, "Change id"),
     repositoryCommonDirectory: decodeStoredString(
@@ -144,6 +151,10 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
+    reviewerConfiguration:
+      encodedReviewerConfiguration === null
+        ? null
+        : decodeChangeReviewerConfiguration(encodedReviewerConfiguration),
     prepare:
       prepareCommand === null || prepareTimeoutSeconds === null
         ? null
@@ -160,6 +171,25 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
     updatedAt: decodeStoredString(row.updatedAt, "Change update time"),
     closedAt,
   };
+};
+
+const decodeChangeReviewerConfiguration = (source: string): ChangeReviewerConfiguration => {
+  const value: unknown = JSON.parse(source) as unknown;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !Array.isArray((value as { specialistReviews?: unknown }).specialistReviews)
+  ) {
+    throw new Error("Stored Change Reviewer Configuration is invalid");
+  }
+  const configuration = value as ChangeReviewerConfiguration;
+  if (
+    configuration.acceptanceReview !== null &&
+    typeof configuration.acceptanceReview !== "object"
+  ) {
+    throw new Error("Stored Change Acceptance Reviewer Configuration is invalid");
+  }
+  return configuration;
 };
 
 export type StoredImplementationDecisionRow = {
@@ -316,7 +346,7 @@ export type StoredReviewerTranscriptRow = {
 export const decodeReviewerTranscript = (
   row: StoredReviewerTranscriptRow,
   changeId: string,
-): ReviewerTranscript => {
+): LegacyReviewerTranscriptReference => {
   if (row.changeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
   return row;
 };

@@ -1,5 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
+import type {
+  AgentInvocationRecord,
+  AgentSessionSqlLink,
+} from "../agent/agentSession/agentSession.js";
 import type { TokenUsage } from "../agent/tokenUsage.js";
 import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -18,6 +22,7 @@ import type {
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
 import { RepositorySql } from "./repositorySql.js";
+import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
 type ReviewRow = {
   readonly id: string;
@@ -54,6 +59,25 @@ type TranscriptRow = {
   readonly producer: string;
   readonly piSessionId: string;
   readonly filePath: string;
+};
+
+type AgentInvocationRow = {
+  readonly id: number;
+  readonly agentSessionId: number;
+  readonly continuationId: number;
+  readonly createdAt: string;
+  readonly settledAt: string | null;
+  readonly settlementKind: string | null;
+  readonly inputTokens: number | null;
+  readonly cachedInputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly harness: string;
+  readonly provider: string | null;
+  readonly model: string;
+  readonly thinking: string | null;
+  readonly transcriptPath: string | null;
+  readonly unusableReason: string | null;
 };
 
 export const openSqliteTaskReviewPersistence = (): Effect.Effect<
@@ -120,18 +144,32 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           input.toolingFailure,
           undefined,
           input.now,
+          input.agentSettlement === true,
         ),
       ),
     abandon: (reviewId, reason, now) =>
       repository.transactionImmediate("abandon Task Review", (sql) =>
-        completeReview(
-          sql,
-          reviewId,
-          [],
-          { operation: "task_review_abandoned", message: reason },
-          reason,
-          now,
-        ),
+        Effect.gen(function* () {
+          const linked = yield* sql<{ readonly invocationId: number }>`
+            SELECT agent_invocation_id AS invocationId
+            FROM task_review_agent_invocations
+            WHERE review_id = ${reviewId}
+          `;
+          yield* settleUnsettledAgentInvocations(
+            sql,
+            linked.map(({ invocationId }) => invocationId),
+            now,
+            `Task Review abandonment confirmed that the reviewer process stopped. ${reason}`,
+          );
+          return yield* completeReview(
+            sql,
+            reviewId,
+            [],
+            { operation: "task_review_abandoned", message: reason },
+            reason,
+            now,
+          );
+        }),
       ),
     getById: (reviewId) =>
       repository.transaction("read Task Review", (sql) => getReview(sql, reviewId)),
@@ -142,8 +180,209 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           return yield* Effect.forEach(rows, (row) => decodeReview(sql, row));
         }),
       ),
+    getReviewerAgentSession: (taskId) =>
+      repository.transaction("read Task Agent Session", (sql) =>
+        Effect.map(
+          sql<{ readonly agentSessionId: number | null }>`
+            SELECT reviewer_agent_session_id AS agentSessionId
+            FROM tasks WHERE id = ${taskId}
+          `,
+          (rows) => rows[0]?.agentSessionId ?? undefined,
+        ),
+      ),
+    getReviewerConfiguration: (taskId) =>
+      repository.transaction("read Task Reviewer configuration", (sql) =>
+        Effect.gen(function* () {
+          const rows = yield* sql<{ readonly configuration: string | null }>`
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${taskId}
+          `;
+          const configuration = rows[0]?.configuration;
+          if (configuration === undefined || configuration === null) return undefined;
+          return yield* Effect.try({
+            try: () => parsePolicy(configuration),
+            catch: (cause) =>
+              new RepositoryPersistedDataInvalid({
+                operationName: "read Task Reviewer configuration",
+                cause,
+              }),
+          });
+        }),
+      ),
+    reviewerConfigurationCanBeCorrected: (taskId) =>
+      repository.transaction("check Task Reviewer configuration correction", (sql) =>
+        Effect.gen(function* () {
+          const sessions = yield* sql<{ readonly agentSessionId: number | null }>`
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${taskId}
+          `;
+          const sessionId = sessions[0]?.agentSessionId;
+          if (sessionId === undefined || sessionId === null) return false;
+          const latest = yield* sql<{
+            readonly settlementKind: string | null;
+            readonly transcriptPath: string | null;
+          }>`
+            SELECT invocation.settlement_kind AS settlementKind,
+              continuation.transcript_path AS transcriptPath
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation
+              ON continuation.id = invocation.continuation_id
+            WHERE continuation.agent_session_id = ${sessionId}
+            ORDER BY invocation.id DESC LIMIT 1
+          `;
+          const transcript = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM agent_continuations
+            WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
+          `;
+          const returned = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation
+              ON continuation.id = invocation.continuation_id
+            WHERE continuation.agent_session_id = ${sessionId}
+              AND invocation.settlement_kind = 'returned'
+          `;
+          return (
+            latest[0]?.settlementKind === "launch_failed" &&
+            latest[0]?.transcriptPath === null &&
+            (transcript[0]?.count ?? 0) === 0 &&
+            (returned[0]?.count ?? 0) === 0
+          );
+        }),
+      ),
+    linkAgentInvocation:
+      (input): AgentSessionSqlLink =>
+      (sql, invocationId) =>
+        Effect.gen(function* () {
+          const sessions = yield* sql<{ readonly agentSessionId: number }>`
+          SELECT continuation.agent_session_id AS agentSessionId
+          FROM agent_invocations AS invocation
+          JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+          WHERE invocation.id = ${invocationId}
+        `;
+          const sessionId = sessions[0]?.agentSessionId;
+          if (sessionId === undefined)
+            return yield* invalid("link Task Agent Invocation", "Invocation Session is missing");
+          const taskSession = yield* sql<{ readonly agentSessionId: number | null }>`
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${input.taskId}
+          `;
+          if (
+            taskSession[0]?.agentSessionId !== undefined &&
+            taskSession[0].agentSessionId !== null &&
+            taskSession[0].agentSessionId !== sessionId
+          )
+            return yield* invalid(
+              "link Task Agent Invocation",
+              "Task already has another Agent Session",
+            );
+          const changeOwners = yield* sql<{ readonly changeId: string }>`
+            SELECT change_id AS changeId FROM change_agent_sessions
+            WHERE agent_session_id = ${sessionId}
+          `;
+          const taskOwners = yield* sql<{ readonly taskId: string }>`
+            SELECT id AS taskId FROM tasks
+            WHERE reviewer_agent_session_id = ${sessionId} AND id <> ${input.taskId}
+          `;
+          if (changeOwners.length > 0 || taskOwners.length > 0)
+            return yield* invalid(
+              "link Task Agent Invocation",
+              "Agent Session already has another owner",
+            );
+          const stored = yield* sql<{ readonly configuration: string | null }>`
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${input.taskId}
+          `;
+          const latest = yield* sql<{
+            readonly settlementKind: string | null;
+            readonly transcriptPath: string | null;
+          }>`
+            SELECT invocation.settlement_kind AS settlementKind,
+              continuation.transcript_path AS transcriptPath
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation
+              ON continuation.id = invocation.continuation_id
+            WHERE continuation.agent_session_id = ${sessionId}
+              AND invocation.id <> ${invocationId}
+            ORDER BY invocation.id DESC LIMIT 1
+          `;
+          const transcript = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM agent_continuations
+            WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
+          `;
+          const returned = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation
+              ON continuation.id = invocation.continuation_id
+            WHERE continuation.agent_session_id = ${sessionId}
+              AND invocation.id <> ${invocationId}
+              AND invocation.settlement_kind = 'returned'
+          `;
+          const canCorrect =
+            stored[0]?.configuration !== undefined &&
+            stored[0]?.configuration !== null &&
+            latest[0]?.settlementKind === "launch_failed" &&
+            latest[0]?.transcriptPath === null &&
+            (transcript[0]?.count ?? 0) === 0 &&
+            (returned[0]?.count ?? 0) === 0;
+          const configuration =
+            stored[0]?.configuration === undefined ||
+            stored[0]?.configuration === null ||
+            canCorrect
+              ? JSON.stringify(input.configurationSnapshot ?? input.configuration)
+              : stored[0].configuration;
+          yield* sql`
+          UPDATE tasks
+          SET reviewer_configuration = ${configuration},
+              reviewer_agent_session_id = COALESCE(reviewer_agent_session_id, ${sessionId})
+          WHERE id = ${input.taskId}
+        `;
+          yield* sql`
+          INSERT INTO task_review_agent_invocations (review_id, agent_invocation_id)
+          VALUES (${input.reviewId}, ${invocationId})
+        `;
+        }).pipe(Effect.asVoid),
+    settleAgentReview:
+      (input): AgentSessionSqlLink =>
+      (sql, invocationId) =>
+        Effect.gen(function* () {
+          const linked = yield* sql<{ readonly reviewId: string }>`
+            SELECT review_id AS reviewId FROM task_review_agent_invocations
+            WHERE review_id = ${input.reviewId} AND agent_invocation_id = ${invocationId}
+          `;
+          if (linked.length === 0)
+            return yield* invalid(
+              "settle Task Review with Agent Invocation",
+              "Invocation is not linked to the Task Review",
+            );
+          if (input.complete) {
+            const completed = yield* completeReview(
+              sql,
+              input.reviewId,
+              input.findings,
+              input.toolingFailure,
+              undefined,
+              input.now,
+              true,
+            );
+            if (!completed.ok)
+              return yield* invalid(
+                "settle Task Review with Agent Invocation",
+                `Task Review did not complete: ${completed.code}`,
+              );
+          } else {
+            const failure = input.toolingFailure;
+            if (failure === undefined)
+              return yield* invalid(
+                "settle Task Review with Agent Invocation",
+                "Active Agent Task Review settlement requires a Tooling Failure",
+              );
+            yield* sql`
+              UPDATE task_reviews
+              SET tooling_failure = ${JSON.stringify(failure)}, updated_at = ${input.now}
+              WHERE id = ${input.reviewId} AND state = 'running'
+            `;
+          }
+        }).pipe(Effect.asVoid),
     getReviewerSession: (taskId, producer) =>
-      repository.transaction("read Task Reviewer Session", (sql) =>
+      repository.transaction("read legacy Task Reviewer Session", (sql) =>
         Effect.map(
           sql<{ readonly fingerprint: string; readonly sessionReference: string }>`
             SELECT fingerprint, session_reference AS sessionReference
@@ -154,56 +393,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             return row === undefined ? undefined : { ownerId: taskId, producer, ...row };
           },
         ),
-      ),
-    saveReviewerSession: (session) =>
-      repository.transactionImmediate("save Task Reviewer Session", (sql) =>
-        Effect.asVoid(sql`
-          INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
-          VALUES (${session.ownerId}, ${session.fingerprint}, ${session.sessionReference})
-          ON CONFLICT(task_id) DO UPDATE SET fingerprint = excluded.fingerprint,
-            session_reference = excluded.session_reference
-        `),
-      ),
-    removeReviewerSession: (taskId) =>
-      repository.transactionImmediate("remove Task Reviewer Session", (sql) =>
-        Effect.asVoid(sql`DELETE FROM task_reviewer_sessions WHERE task_id = ${taskId}`),
-      ),
-    recordExecution: (input) =>
-      repository.transactionImmediate("record Task Review execution", (sql) =>
-        Effect.asVoid(sql`
-          INSERT INTO task_review_executions (
-            review_id, continuity, identity_fingerprint, restart_reason, duration_ms,
-            review_calls, invocation_usage, session_reference
-          ) VALUES (
-            ${input.reviewId}, ${input.execution.continuity},
-            ${input.execution.identityFingerprint}, ${input.execution.restartReason ?? null},
-            ${input.execution.durationMs}, ${input.execution.reviewCalls},
-            ${JSON.stringify(input.execution.invocationUsage)},
-            ${input.execution.sessionReference}
-          ) ON CONFLICT(review_id) DO NOTHING
-        `),
-      ),
-    recordTranscripts: (input) =>
-      repository.transactionImmediate("record Task Review transcripts", (sql) =>
-        Effect.gen(function* () {
-          for (const transcript of input.transcripts) {
-            yield* sql`
-              INSERT INTO task_reviewer_transcripts (
-                task_id, producer, pi_session_id, file_path
-              ) VALUES (
-                ${input.taskId}, ${transcript.producer}, ${transcript.piSessionId},
-                ${transcript.filePath}
-              ) ON CONFLICT(task_id, producer, file_path) DO NOTHING
-            `;
-            yield* sql`
-              INSERT INTO task_review_transcript_observations (review_id, transcript_sequence)
-              SELECT ${input.reviewId}, sequence FROM task_reviewer_transcripts
-              WHERE task_id = ${input.taskId} AND producer = ${transcript.producer}
-                AND file_path = ${transcript.filePath}
-              ON CONFLICT(review_id, transcript_sequence) DO NOTHING
-            `;
-          }
-        }),
       ),
     recordActiveFailure: (reviewId, failure, now) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>
@@ -319,6 +508,60 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
     return undefined;
   });
 
+const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord => {
+  const kinds = ["returned", "launch_failed", "failed", "return_unknown"] as const;
+  if (
+    row.settlementKind !== null &&
+    !kinds.includes(row.settlementKind as (typeof kinds)[number])
+  ) {
+    throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
+  }
+  const tokenValues = [row.inputTokens, row.cachedInputTokens, row.outputTokens, row.totalTokens];
+  const hasTokens = tokenValues.some((value) => value !== null);
+  if (
+    hasTokens &&
+    tokenValues.some((value) => value === null || !Number.isSafeInteger(value) || value < 0)
+  ) {
+    throw new Error("Incomplete Agent Invocation token evidence");
+  }
+  return {
+    id: row.id,
+    continuationId: row.continuationId,
+    createdAt: row.createdAt,
+    settledAt: row.settledAt,
+    settlementKind: row.settlementKind as AgentInvocationRecord["settlementKind"],
+    usage: hasTokens
+      ? {
+          inputTokens: row.inputTokens as number,
+          cachedInputTokens: row.cachedInputTokens as number,
+          outputTokens: row.outputTokens as number,
+          totalTokens: row.totalTokens as number,
+        }
+      : null,
+    continuation: {
+      id: row.continuationId,
+      agentSessionId: row.agentSessionId,
+      harness: decodeAgentHarness(row.harness),
+      provider: row.provider,
+      model: row.model,
+      thinking: row.thinking === null ? null : decodeAgentThinking(row.thinking),
+      transcriptPath: row.transcriptPath,
+      unusableReason: row.unusableReason,
+    },
+  };
+};
+
+const decodeAgentHarness = (value: string): "pi" => {
+  if (value !== "pi") throw new Error(`Invalid Agent Harness: ${value}`);
+  return "pi";
+};
+
+const decodeAgentThinking = (value: string) => {
+  if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(value))
+    throw new Error(`Invalid Agent thinking level: ${value}`);
+  return value as "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+};
+
 const decodeProposalSnapshot = (source: string) =>
   Effect.try({
     try: () => parseProposal(source),
@@ -361,6 +604,7 @@ const completeReview = (
   toolingFailure: TaskReviewToolingFailure | undefined,
   abandonReason: string | undefined,
   now: string,
+  allowAlreadyComplete = false,
 ) =>
   Effect.gen(function* () {
     const current = yield* getReview(sql, reviewId);
@@ -368,7 +612,10 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      if (abandonReason !== undefined || current.outcome !== "tooling_failed") {
+      if (
+        abandonReason !== undefined ||
+        (!allowAlreadyComplete && current.outcome !== "tooling_failed")
+      ) {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
       const taskState = yield* readTaskState(sql, current.taskId);
@@ -578,6 +825,40 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
         session_reference AS sessionReference
       FROM task_review_executions WHERE review_id = ${row.id}
     `;
+    const agentSession = yield* sql<{
+      readonly agentSessionId: number | null;
+      readonly configuration: string | null;
+    }>`
+      SELECT reviewer_agent_session_id AS agentSessionId,
+        reviewer_configuration AS configuration
+      FROM tasks WHERE id = ${row.taskId}
+    `;
+    const agentSessionId = agentSession[0]?.agentSessionId ?? undefined;
+    const reviewerConfiguration =
+      agentSession[0]?.configuration === undefined || agentSession[0].configuration === null
+        ? undefined
+        : yield* decodeReviewerConfiguration(agentSession[0].configuration);
+    const agentInvocations = yield* sql<AgentInvocationRow>`
+      SELECT invocation.id, continuation.agent_session_id AS agentSessionId,
+        invocation.continuation_id AS continuationId,
+        invocation.created_at AS createdAt, invocation.settled_at AS settledAt,
+        invocation.settlement_kind AS settlementKind,
+        invocation.input_tokens AS inputTokens,
+        invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.output_tokens AS outputTokens,
+        invocation.total_tokens AS totalTokens,
+        continuation.harness,
+        continuation.provider,
+        continuation.model,
+        continuation.thinking,
+        continuation.transcript_path AS transcriptPath,
+        continuation.unusable_reason AS unusableReason
+      FROM task_review_agent_invocations link
+      JOIN agent_invocations invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations continuation ON continuation.id = invocation.continuation_id
+      WHERE link.review_id = ${row.id}
+      ORDER BY invocation.id ASC
+    `;
     const transcripts = yield* sql<TranscriptRow>`
       SELECT transcript.producer, transcript.pi_session_id AS piSessionId,
         transcript.file_path AS filePath
@@ -614,6 +895,13 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           invocationUsage: parseInvocationUsage(execution.invocationUsage),
         })),
         transcripts,
+        ...(agentSessionId === undefined && agentInvocations.length === 0
+          ? {}
+          : {
+              ...(agentSessionId === undefined ? {} : { agentSessionId }),
+              agentInvocations: agentInvocations.map(decodeAgentInvocation),
+              ...(reviewerConfiguration === undefined ? {} : { reviewerConfiguration }),
+            }),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
       }),
@@ -714,6 +1002,16 @@ const parseDependencies = (source: string): readonly TaskReviewDependencyEvidenc
     };
   });
 };
+const decodeReviewerConfiguration = (source: string) =>
+  Effect.try({
+    try: () => parsePolicy(source),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "read Task Reviewer configuration",
+        cause,
+      }),
+  });
+
 const parsePolicy = (source: string): TaskReviewPolicySnapshot => {
   const value = parseObject(source);
   const profile = parseObject(JSON.stringify(value.profile));

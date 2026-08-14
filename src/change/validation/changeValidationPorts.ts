@@ -1,9 +1,11 @@
 import type { Effect } from "effect";
+import type { AgentSessionSqlLink } from "../../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type {
   AbandonCandidateValidationRunInput,
   ActiveCandidateValidationRun,
+  CandidateValidationAgentInvocation,
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
@@ -20,7 +22,12 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
-import type { ValidationPhase } from "../validationRun/validationRun.js";
+import type {
+  ValidationPhase,
+  ValidationRunArtifactRecord,
+  ValidationRunFindingRecord,
+} from "../validationRun/validationRun.js";
+import type { ValidationToolingFailureRecordInput } from "./validationToolingFailures.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 
@@ -45,6 +52,19 @@ export type CandidateValidationExecutionPort = {
   readonly recordSpecialistRound: (
     input: RecordCandidateSpecialistRoundInput,
   ) => StorageEffect<void>;
+  readonly settleAgentInvocationRound: (input: {
+    readonly validationRunId: string;
+    readonly phase: ValidationPhase;
+    readonly producer: string;
+    readonly roundNumber: number;
+    readonly roundStatus: "passed" | "failed";
+    readonly findings: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
+    readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
+    readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+      readonly validationRunId: string;
+    };
+    readonly now: string;
+  }) => AgentSessionSqlLink;
   readonly listRounds: (
     validationRunId: string,
   ) => StorageEffect<readonly CandidateValidationRound[]>;
@@ -80,6 +100,9 @@ export type ChangeValidationReadPort = {
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
   readonly listArtifacts: CandidateValidationExecutionPort["listArtifacts"];
+  readonly listAgentInvocations?: (
+    validationRunId: string,
+  ) => StorageEffect<readonly CandidateValidationAgentInvocation[]>;
 };
 
 export type ActiveValidationRunPort = {

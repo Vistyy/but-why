@@ -41,7 +41,10 @@ export const candidateValidationRunInspectionView = (
   },
   change: candidateValidationChangeView(inspection.change),
   candidate: candidateView(inspection.candidate),
-  policy: structuredValue(inspection.validationRun.policy),
+  ...(inspection.change.reviewerConfiguration === null ||
+  inspection.change.reviewerConfiguration === undefined
+    ? { policy: structuredValue(inspection.validationRun.policy) }
+    : { reviewerConfiguration: structuredValue(inspection.change.reviewerConfiguration) }),
   phases: [
     { phase: validationPhase.prepare, rounds: inspection.prepareRounds },
     { phase: validationPhase.checks, rounds: inspection.checkRounds },
@@ -50,6 +53,10 @@ export const candidateValidationRunInspectionView = (
   ],
   findings: inspection.findings.map(validationRunFindingView),
   toolingFailures: inspection.toolingFailures,
+  ...(inspection.change.reviewerConfiguration === null ||
+  inspection.change.reviewerConfiguration === undefined
+    ? {}
+    : { agentInvocations: structuredValue(inspection.agentInvocations) }),
   artifacts: inspection.artifacts.map(candidateValidationArtifactView),
 });
 
@@ -66,6 +73,9 @@ const candidateValidationChangeView = (change: ChangeRecord): StructuredObject =
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   state: change.state,
+  ...(change.reviewerConfiguration === null || change.reviewerConfiguration === undefined
+    ? {}
+    : { reviewerConfiguration: structuredValue(change.reviewerConfiguration) }),
 });
 
 const candidateView = (candidate: CandidateRecord): StructuredObject => ({

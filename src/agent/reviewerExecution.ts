@@ -8,6 +8,8 @@ export class ReviewerProcessExecutionFailed extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly sessionUsability: "unusable" | "unknown";
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 }> {}
 
 export type ReviewerProcessResult = {
@@ -28,6 +30,8 @@ export type ReviewerProcessInput = {
   readonly resourceRoot: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
+  /** The stable physical conversation identity used when starting a new continuation. */
+  readonly sessionId?: string;
   readonly resumeSession?: string;
 };
 

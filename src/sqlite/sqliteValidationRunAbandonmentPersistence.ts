@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
 import { RepositorySql } from "./repositorySql.js";
+import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
@@ -84,6 +85,17 @@ const abandon = (
   },
 ) =>
   Effect.gen(function* () {
+    const linked = yield* sql<{ readonly invocationId: number }>`
+      SELECT agent_invocation_id AS invocationId
+      FROM validation_phase_agent_invocations
+      WHERE validation_run_id = ${input.validationRunId}
+    `;
+    yield* settleUnsettledAgentInvocations(
+      sql,
+      linked.map(({ invocationId }) => invocationId),
+      input.now,
+      `Validation Run abandonment confirmed that the reviewer process stopped. ${input.errorMessage}`,
+    );
     yield* sql`
       UPDATE candidate_snapshot_workspaces
       SET cleanup_workspace = 'removed'

@@ -15,7 +15,11 @@ import {
   RestoredTransientStateError,
 } from "../contracts/repositoryStorageError.js";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
-import { migrateRepositoryState, repositoryMigrationIds } from "./repositoryMigrations.js";
+import {
+  migrateRepositoryState,
+  migrateRepositoryStateThrough,
+  repositoryMigrationIds,
+} from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 
 type RepositorySqlService = {
@@ -59,6 +63,8 @@ export type RepositorySqlConfig = {
   readonly sqliteBusyTimeoutMs?: number;
   readonly migrationContentionTimeoutMs?: number;
   readonly migrationContentionRetryDelayMs?: number;
+  /** Test-only compatibility target for inspecting a pre-baseline schema. */
+  readonly migrationTarget?: number;
 };
 
 const defaultSqliteBusyTimeoutMs = 5_000;
@@ -113,6 +119,7 @@ type MigrationLedgerState = "current" | "known_older";
 const classifyRepositoryMigrationLedger = (
   sql: SqlClient.SqlClient,
   lifecycle: "initialize" | "open",
+  expectedMigrationIds: readonly number[],
 ): Effect.Effect<MigrationLedgerState, SqlError | RepositoryMigrationFailed> =>
   sql<{ readonly migrationId: unknown }>`
     SELECT migration_id AS migrationId
@@ -128,9 +135,9 @@ const classifyRepositoryMigrationLedger = (
             }
             return row.migrationId;
           });
-          const expectedPrefix = repositoryMigrationIds.slice(0, applied.length);
+          const expectedPrefix = expectedMigrationIds.slice(0, applied.length);
           if (
-            applied.length > repositoryMigrationIds.length ||
+            applied.length > expectedMigrationIds.length ||
             applied.some((id, index) => id !== expectedPrefix[index])
           ) {
             throw new Error(
@@ -140,7 +147,7 @@ const classifyRepositoryMigrationLedger = (
           if (applied.length === 0 && lifecycle === "open") {
             throw new Error("Shared Repository State has no known schema");
           }
-          return applied.length === repositoryMigrationIds.length ? "current" : "known_older";
+          return applied.length === expectedMigrationIds.length ? "current" : "known_older";
         },
         catch: (cause) => new RepositoryMigrationFailed({ statePath: "<repository-state>", cause }),
       }),
@@ -171,8 +178,14 @@ const isMissingMigrationLedger = (error: SqlError): boolean => {
 const readMigrationLedgerState = (
   sql: SqlClient.SqlClient,
   config: RepositorySqlConfig,
+  expectedMigrationIds: readonly number[] = (() => {
+    const target = config.migrationTarget;
+    return target === undefined
+      ? repositoryMigrationIds
+      : repositoryMigrationIds.filter((id) => id <= target);
+  })(),
 ): Effect.Effect<MigrationLedgerState, RepositoryStorageError> =>
-  classifyRepositoryMigrationLedger(sql, config.lifecycle ?? "open").pipe(
+  classifyRepositoryMigrationLedger(sql, config.lifecycle ?? "open", expectedMigrationIds).pipe(
     Effect.catchTag("SqlError", (error) =>
       (config.lifecycle ?? "open") === "initialize" && isMissingMigrationLedger(error)
         ? Effect.succeed("known_older" as const)
@@ -202,9 +215,18 @@ const migrateRepositoryStateWithContention = (
     config.migrationContentionTimeoutMs ?? defaultMigrationContentionTimeoutMs;
   const retryDelayMs =
     config.migrationContentionRetryDelayMs ?? defaultMigrationContentionRetryDelayMs;
+  const migrationTarget = config.migrationTarget;
+  const expectedMigrationIds =
+    migrationTarget === undefined
+      ? repositoryMigrationIds
+      : repositoryMigrationIds.filter((id) => id <= migrationTarget);
+  const migration =
+    migrationTarget === undefined
+      ? migrateRepositoryState
+      : migrateRepositoryStateThrough(migrationTarget);
 
   const attempt = Effect.gen(function* () {
-    yield* migrateRepositoryState.pipe(
+    yield* migration.pipe(
       Effect.catchTag("SqlError", (error) =>
         isMigrationContentionError(error)
           ? Effect.void
@@ -217,7 +239,7 @@ const migrateRepositoryStateWithContention = (
         Effect.fail(migrationFailureToStorageError(Cause.die(defect), config.statePath)),
       ),
     );
-    return yield* readMigrationLedgerState(sql, config);
+    return yield* readMigrationLedgerState(sql, config, expectedMigrationIds);
   });
 
   const migrateWithBound = (
@@ -238,7 +260,7 @@ const migrateRepositoryStateWithContention = (
       return yield* migrateWithBound(startedAt);
     });
 
-  return readMigrationLedgerState(sql, config).pipe(
+  return readMigrationLedgerState(sql, config, expectedMigrationIds).pipe(
     Effect.flatMap((state) =>
       state === "current" ? Effect.void : Effect.flatMap(Clock.currentTimeMillis, migrateWithBound),
     ),

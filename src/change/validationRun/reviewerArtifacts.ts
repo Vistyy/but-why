@@ -1,9 +1,17 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
+import type { AgentExecutionEvidence } from "../../agent/agentSession/executeAgentSession.js";
+import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
-import type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
 
-export type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
+export type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
+
+export const reviewerEvidenceFromAgentSession = (
+  evidence: AgentExecutionEvidence,
+): ReviewerExecutionEvidence => ({
+  agentSessionId: evidence.agentSessionId,
+  invocations: evidence.invocations,
+});
 
 import {
   InfrastructureToolingFailed,
@@ -48,7 +56,7 @@ export const writeReviewerArtifacts = (input: {
       },
       {
         fileName: "execution.json",
-        content: `${encodeReviewerWireValue({ ...input.executionEvidence, attempts: input.result.attempts })}\n`,
+        content: `${encodeReviewerWireValue(executionArtifact(input.executionEvidence, input.result.attempts))}\n`,
       },
     ] as const;
 
@@ -81,6 +89,15 @@ export const writeReviewerArtifacts = (input: {
         }),
     ),
   );
+
+const executionArtifact = (evidence: ReviewerExecutionEvidence, attempts: number): unknown =>
+  evidence.invocations === undefined
+    ? { ...evidence, attempts }
+    : {
+        agentSessionId: evidence.agentSessionId,
+        invocations: evidence.invocations,
+        attempts,
+      };
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

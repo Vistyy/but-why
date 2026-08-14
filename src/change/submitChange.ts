@@ -28,6 +28,7 @@ import {
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import {
   type OwnedPublication,
   type OwnedPullRequestUnavailableReason,
@@ -189,6 +190,7 @@ export const openChangeSubmit = (dependencies: {
     repoConfig: RepoConfig,
     worktreePath: string,
     validationRepoConfig?: RepoConfig,
+    reviewerConfiguration?: ChangeReviewerConfiguration,
   ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -294,11 +296,29 @@ const submitChange = (
           : { details: configFailureDetails(candidateRepoConfig) }),
       } as const;
     }
+    if (change.reviewerConfiguration === null || change.reviewerConfiguration === undefined) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "This Change has no stored reviewer configuration and cannot be submitted.",
+      } as const;
+    }
+    if (
+      change.acceptanceContext !== null &&
+      change.reviewerConfiguration.acceptanceReview === null
+    ) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
+      } as const;
+    }
     const policy = dependencies.resolvePolicy(
       change.acceptanceContext !== null,
       candidateRepoConfig.config,
       change.worktreePath,
       baselineRepoConfig.config,
+      change.reviewerConfiguration,
     );
     if (!policy.ok) {
       return {
@@ -307,17 +327,106 @@ const submitChange = (
         ...formatValidationPolicyFailure(policy.error),
       } as const;
     }
+    const fixedPolicy = yield* applyChangeReviewerConfiguration(
+      dependencies.persistence,
+      change.id,
+      policy.resolved,
+      change.reviewerConfiguration,
+      () =>
+        dependencies.resolvePolicy(
+          change.acceptanceContext !== null,
+          candidateRepoConfig.config,
+          change.worktreePath,
+          baselineRepoConfig.config,
+        ),
+    );
+    if (!fixedPolicy.ok) return fixedPolicy;
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
     return yield* validateAndPublish(
       dependencies,
       change,
       candidate,
-      policy.resolved,
+      fixedPolicy.resolved,
       target.target,
       input.now,
       input.progress,
     );
+  });
+
+const applyChangeReviewerConfiguration = (
+  persistence: ChangeSubmissionPort,
+  changeId: string,
+  resolved: ResolvedCandidateValidationPolicy,
+  configuration: ChangeReviewerConfiguration | null | undefined,
+  resolveCurrentPolicy: () => CandidateValidationPolicyResolution,
+): Effect.Effect<
+  | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
+  | {
+      readonly ok: false;
+      readonly code: "validation_policy_invalid";
+      readonly message: string;
+    },
+  RepositoryStorageError
+> =>
+  Effect.gen(function* () {
+    if (configuration === null || configuration === undefined) {
+      return {
+        ok: false as const,
+        code: "validation_policy_invalid" as const,
+        message: "This Change has no stored reviewer configuration and cannot be submitted.",
+      };
+    }
+    let currentPolicy: ResolvedCandidateValidationPolicy | undefined;
+    let currentPolicyLoaded = false;
+    const current = () => {
+      if (currentPolicyLoaded) return currentPolicy;
+      currentPolicyLoaded = true;
+      const result = resolveCurrentPolicy();
+      currentPolicy = result.ok ? result.resolved : undefined;
+      return currentPolicy;
+    };
+    const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
+      Effect.gen(function* () {
+        const canCorrect =
+          persistence.agentSessionConfigurationCanBeCorrected !== undefined
+            ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, stored.id)
+            : false;
+        const replacement = canCorrect
+          ? current()?.policy.specialistReviews.find((candidate) => candidate.id === stored.id)
+          : undefined;
+        return replacement ?? stored;
+      }),
+    );
+    const policy = { ...resolved.policy, specialistReviews };
+    if (!resolved.acceptanceContextSupplied)
+      return { ok: true as const, resolved: { ...resolved, policy } };
+    if (configuration.acceptanceReview === null) {
+      return {
+        ok: false as const,
+        code: "validation_policy_invalid" as const,
+        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
+      };
+    }
+    const canCorrectAcceptance =
+      persistence.agentSessionConfigurationCanBeCorrected !== undefined
+        ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, "acceptance")
+        : false;
+    const currentResolved = canCorrectAcceptance ? current() : undefined;
+    const currentAcceptanceReview =
+      currentResolved?.acceptanceContextSupplied === true
+        ? currentResolved.policy.acceptanceReview
+        : undefined;
+    return {
+      ok: true as const,
+      resolved: {
+        acceptanceContextSupplied: true as const,
+        policy: {
+          ...policy,
+          acceptanceReview: currentAcceptanceReview ?? configuration.acceptanceReview,
+        },
+      },
+    };
   });
 
 const configFailureDetails = (failure: {

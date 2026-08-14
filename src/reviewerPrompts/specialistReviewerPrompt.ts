@@ -38,6 +38,7 @@ export const buildSpecialistReviewerPrompt = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
+  readonly previousFindings?: readonly unknown[];
   readonly acceptanceContext?: unknown;
 }): string =>
   [
@@ -59,6 +60,9 @@ export const buildSpecialistReviewerPrompt = (input: {
     "",
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
+    ...(input.previousFindings === undefined || input.previousFindings.length === 0
+      ? []
+      : [previousFindingsPrompt(input.previousFindings)]),
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,

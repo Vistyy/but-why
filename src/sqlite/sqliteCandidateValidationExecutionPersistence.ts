@@ -118,6 +118,18 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
           recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
         ),
+      settleAgentInvocationRound: (input) => (sql) =>
+        recordRound(sql, {
+          validationRunId: input.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          roundNumber: input.roundNumber,
+          roundStatus: input.roundStatus,
+          artifactRecords: input.artifactRecords,
+          findings: input.findings,
+          ...(input.toolingFailure === undefined ? {} : { toolingFailure: input.toolingFailure }),
+          now: input.now,
+        }),
       listRounds: (validationRunId) =>
         repository.transaction("list Candidate validation rounds", (sql) =>
           listRounds(sql, validationRunId),
@@ -394,6 +406,16 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
       `,
       { discard: true },
     );
+    if (input.toolingFailure !== undefined) {
+      yield* sql`
+        INSERT INTO candidate_validation_tooling_failures (
+          validation_run_id, error_kind, operation_name, error_message, created_at
+        ) VALUES (
+          ${input.toolingFailure.validationRunId}, ${input.toolingFailure.errorKind},
+          ${input.toolingFailure.operationName}, ${input.toolingFailure.errorMessage}, ${input.now}
+        )
+      `;
+    }
   });
 
 const listRounds = listValidationRounds;

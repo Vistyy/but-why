@@ -4,10 +4,6 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { type ChangeCleanup, changeState, type RemoteChangeBranch } from "./change.js";
 import type { TerminalChangeCleanupPort, TerminalCleanupChange } from "./changePorts.js";
-import type {
-  TranscriptIndexOperation,
-  TranscriptIndexResult,
-} from "./reviewerSession/reviewerTranscript.js";
 
 export type ChangeCleanupOperationResult =
   | { readonly state: "complete" }
@@ -43,8 +39,6 @@ export const openTerminalCleanup =
   (dependencies: {
     readonly persistence: TerminalChangeCleanupPort;
     readonly cleanup: ChangeCleanupOperation;
-    readonly indexTranscripts: TranscriptIndexOperation;
-    readonly reviewerSessionPathFor: (changeId: string) => string;
     readonly artifactLifecycle: ArtifactLifecycleOwner<FileSystem.FileSystem>;
   }): TerminalCleanupOperation<FileSystem.FileSystem> =>
   (change, now, discardWork) =>
@@ -61,14 +55,6 @@ const cleanupTerminalChange = (
       return { ok: true, change, cleanup: change.cleanup };
     }
     if (change.state !== changeState.closed) return { ok: false, code: "change_not_closed" };
-
-    const indexResult = yield* indexTranscripts(dependencies, change);
-    if (!indexResult.ok) {
-      return yield* recordCleanup(dependencies, change, now, {
-        state: "pending",
-        blockingReason: "transcript_index_failed",
-      });
-    }
 
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
@@ -90,9 +76,6 @@ const cleanupTerminalChange = (
       : { state: "pending", blockingReason: "artifact_content_removal_failed" };
     const recorded = yield* recordCleanup(dependencies, change, now, cleanup);
     if (!recorded.ok) return recorded;
-    if (recorded.cleanup.state === "complete") {
-      yield* dependencies.persistence.removeReviewerSessions(change.id);
-    }
     return {
       ok: true,
       change: { ...change, cleanup: recorded.cleanup },
@@ -124,13 +107,4 @@ const recordCleanup = (
       change: { ...change, cleanup: recorded.cleanup },
       cleanup: recorded.cleanup,
     };
-  });
-
-const indexTranscripts = (
-  dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: TerminalCleanupChange,
-): Effect.Effect<TranscriptIndexResult, RepositoryStorageError> =>
-  dependencies.indexTranscripts({
-    changeId: change.id,
-    reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id),
   });

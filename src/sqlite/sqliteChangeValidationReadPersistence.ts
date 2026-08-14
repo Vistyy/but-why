@@ -10,6 +10,7 @@ import {
   readCurrentCandidateForChange,
 } from "./sqliteCandidateStorage.js";
 import {
+  listValidationAgentInvocations,
   listValidationArtifacts,
   listValidationFindings,
   listValidationRounds,
@@ -56,6 +57,10 @@ export const openSqliteChangeValidationReadPort = () =>
       listArtifacts: (validationRunId) =>
         repository.transaction("list Candidate validation Artifacts", (sql) =>
           listValidationArtifacts(sql, validationRunId),
+        ),
+      listAgentInvocations: (validationRunId) =>
+        repository.transaction("list Candidate Agent Invocations", (sql) =>
+          listValidationAgentInvocations(sql, validationRunId),
         ),
     }),
   );

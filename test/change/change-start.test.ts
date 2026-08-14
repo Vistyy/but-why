@@ -15,6 +15,7 @@ import type { PublicTaskId } from "../../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const taskId = "BY-197" as PublicTaskId;
+const reviewerConfiguration = { acceptanceReview: null, specialistReviews: [] } as const;
 
 const intent = {
   repositoryCommonDirectory: "/repo/.git",
@@ -32,6 +33,7 @@ const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
     input.taskId === undefined
       ? null
       : { version: 1, title: "Accepted title", description: "Accepted description" },
+  reviewerConfiguration: input.reviewerConfiguration ?? null,
   prepare: input.prepare ?? null,
   prepareFailure: null,
   state: "open",
@@ -92,7 +94,9 @@ const fixture = (options: FixtureOptions = {}) => {
   const executor: RepositoryPreparationEffectExecutor =
     options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
   const operations = {
-    start: (input: Parameters<typeof startChange>[3]) => startChange(store, git, executor, input),
+    start: (input: Parameters<typeof startChange>[3]) =>
+      startChange(store, git, executor, { reviewerConfiguration, ...input }),
+    startWithoutReviewerConfiguration: () => startChange(store, git, executor, { now }),
     prepare: (changeId: string, preparedAt: string) =>
       prepareChange(store, git, executor, changeId, preparedAt),
   };
@@ -140,6 +144,18 @@ describe("Change Start orchestration", () => {
       }),
   );
 
+  it.effect("requires reviewer configuration before creating a new Change", () =>
+    Effect.gen(function* () {
+      const captured = fixture();
+      expect(yield* captured.operations.startWithoutReviewerConfiguration()).toEqual({
+        ok: false,
+        code: "reviewer_configuration_invalid",
+        message: "A reviewer configuration is required to create a Change.",
+      });
+      expect(captured.events).toEqual([]);
+    }),
+  );
+
   it.effect("returns Task eligibility failures before Git or persistence mutation", () =>
     Effect.gen(function* () {
       const failures: readonly ChangeStartEligibilityError[] = [
@@ -166,6 +182,7 @@ describe("Change Start orchestration", () => {
         ...intent,
         taskId,
         prepare: { command: "prepare repository", timeoutSeconds: 17 },
+        reviewerConfiguration,
         now,
       });
       const captured = fixture({ existing });
@@ -182,7 +199,13 @@ describe("Change Start orchestration", () => {
 
   it.effect("rejects a conflicting requested base before recovering the same open Change", () =>
     Effect.gen(function* () {
-      const existing = recordFrom({ id: "existing", ...intent, taskId, now });
+      const existing = recordFrom({
+        id: "existing",
+        ...intent,
+        taskId,
+        reviewerConfiguration,
+        now,
+      });
       const captured = fixture({ existing });
       expect(yield* captured.operations.start({ taskId, baseBranch: "release", now })).toEqual({
         ok: false,

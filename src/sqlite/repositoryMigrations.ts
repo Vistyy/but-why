@@ -39,6 +39,7 @@ import { unversionTaskReviewPolicySnapshotsMigration as unversionTaskReviewPolic
 import { requirePassingReviewForUnlinkedTodoTasksMigration as requirePassingReviewForUnlinkedTodoTasks } from "./migrations/0037_require_passing_review_for_unlinked_todo_tasks.js";
 import { currentCandidateSelectionMigration as currentCandidateSelection } from "./migrations/0038_current_candidate_selection.js";
 import { candidateValidationReuseMigration as candidateValidationReuse } from "./migrations/0039_candidate_validation_reuse.js";
+import { agentSessionsMigration as agentSessions } from "./migrations/0040_agent_sessions.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -80,13 +81,27 @@ const migrations = {
   "0037_require_passing_review_for_unlinked_todo_tasks": requirePassingReviewForUnlinkedTodoTasks,
   "0038_current_candidate_selection": currentCandidateSelection,
   "0039_candidate_validation_reuse": candidateValidationReuse,
+  "0040_agent_sessions": agentSessions,
 };
+
+const migrationKeys = Object.keys(migrations).sort();
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord(migrations),
 });
 
-export const repositoryMigrationIds: readonly number[] = Object.keys(migrations)
+export const migrateRepositoryStateThrough = (lastMigrationId: number) =>
+  Migrator.make({})({
+    loader: Migrator.fromRecord(
+      Object.fromEntries(
+        migrationKeys
+          .filter((key) => Number(key.slice(0, 4)) <= lastMigrationId)
+          .map((key) => [key, migrations[key as keyof typeof migrations]]),
+      ),
+    ),
+  });
+
+export const repositoryMigrationIds: readonly number[] = migrationKeys
   .map((key) => /^(\d+)_/.exec(key)?.[1])
   .filter((id): id is string => id !== undefined)
   .map(Number)

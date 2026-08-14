@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import { Effect } from "effect";
 
+import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -9,6 +10,7 @@ import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource, readRepoConfig } from "../../init/adapters/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
@@ -107,7 +109,19 @@ export const loadChangeSubmit = (input: {
         repoConfig,
         worktreePath,
         validationRepoConfig,
+        reviewerConfiguration,
       ) => {
+        if (reviewerConfiguration !== undefined) {
+          return resolveCandidateValidationPolicy({
+            context,
+            globalConfigPath: input.globalConfigPath,
+            acceptanceContextSupplied,
+            repoConfig,
+            ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
+            repoRoot: worktreePath,
+            reviewerConfiguration,
+          });
+        }
         const globalConfig = readGlobalConfig(input.globalConfigPath);
         return globalConfig.ok
           ? resolveCandidateValidationPolicy({
@@ -142,6 +156,7 @@ export const loadChangeSubmit = (input: {
   const layerFor = (
     persistence: CandidateValidationExecutionPort,
     reviewerSessions: ChangeReviewerSessionPort,
+    agentPersistence: AgentSessionPersistence,
   ) =>
     candidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
@@ -150,13 +165,10 @@ export const loadChangeSubmit = (input: {
       ...(input.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
-      sessionStore: {
-        get: reviewerSessions.getReviewerSession,
-        save: reviewerSessions.saveReviewerSession,
-        remove: (changeId: string, producer: string) =>
-          reviewerSessions.removeReviewerSession(changeId, producer),
-      },
       reviewerSessionsRoot: context.paths.operationalDir,
+      agentPersistence,
+      getAgentSession: reviewerSessions.getAgentSession,
+      linkAgentInvocation: reviewerSessions.linkAgentInvocation,
     });
 
   return {
@@ -168,12 +180,21 @@ export const loadChangeSubmit = (input: {
           validation: openSqliteCandidateValidationExecutionPort(),
           submission: openSqliteChangeSubmissionPort(),
           reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
         }).pipe(
-          Effect.flatMap(({ capture, validation, submission, reviewerSessions, publication }) =>
-            programFor(capture, submission, publication)
-              .submit(submitInput)
-              .pipe(Effect.provide(layerFor(validation, reviewerSessions))),
+          Effect.flatMap(
+            ({
+              capture,
+              validation,
+              submission,
+              reviewerSessions,
+              agentPersistence,
+              publication,
+            }) =>
+              programFor(capture, submission, publication)
+                .submit(submitInput)
+                .pipe(Effect.provide(layerFor(validation, reviewerSessions, agentPersistence))),
           ),
           loaded.runtime.provide,
         ),

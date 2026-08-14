@@ -1,4 +1,5 @@
 import type { Effect } from "effect";
+import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
@@ -12,6 +13,7 @@ import type {
   ChangeState,
   RemoteChangeBranch,
 } from "./change.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
   CancelChangeInput,
@@ -26,7 +28,7 @@ import type {
   ImplementationBlockerHistory,
 } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { ReviewerTranscript } from "./reviewerSession/reviewerTranscript.js";
+import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
@@ -133,23 +135,27 @@ export type ChangeReadPort = {
 };
 
 export type ChangeReviewerSessionPort = {
+  readonly getAgentSession: (
+    changeId: string,
+    producer: string,
+  ) => StorageEffect<number | undefined>;
+  readonly linkAgentInvocation: (input: {
+    readonly changeId: string;
+    readonly producer: string;
+    readonly validationRunId: string;
+    readonly phase: string;
+    readonly configurationSnapshot?: unknown;
+  }) => AgentSessionSqlLink;
   readonly getReviewerSession: (
     changeId: string,
     producer: string,
   ) => StorageEffect<ReviewerSessionRecord | undefined>;
-  readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
-  readonly removeReviewerSession: (changeId: string, producer: string) => StorageEffect<void>;
-  readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
 };
 
 export type ChangeReviewerTranscriptPort = {
   readonly listReviewerTranscripts: (
     changeId: string,
-  ) => StorageEffect<readonly ReviewerTranscript[]>;
-  readonly recordReviewerTranscripts: (input: {
-    readonly changeId: string;
-    readonly transcripts: readonly ReviewerTranscript[];
-  }) => StorageEffect<void>;
+  ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
 export type TerminalCleanupChange = {
@@ -172,6 +178,7 @@ export type SubmissionChange = {
   readonly baseRemoteUrl: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
   readonly publication: ChangePublication | null;
 };
 
@@ -190,6 +197,10 @@ type CompleteMergedFailure = {
 
 export type ChangeSubmissionPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<SubmissionChange | undefined>;
+  readonly agentSessionConfigurationCanBeCorrected?: (
+    changeId: string,
+    producer: string,
+  ) => StorageEffect<boolean>;
   readonly getChangeForOutputById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getCompletedPublicationEvidence: (
     changeId: string,
@@ -250,7 +261,6 @@ export type TerminalChangeCleanupPort = {
     | { readonly ok: true; readonly changed: boolean; readonly cleanup: ChangeCleanup }
     | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" }
   >;
-  readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
 };
 
 type CandidatePublicationChangeBase = {

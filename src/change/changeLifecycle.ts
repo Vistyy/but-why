@@ -14,7 +14,11 @@ import type {
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
-import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeStartStore.js";
+import type {
+  ChangeReviewerConfiguration,
+  ChangeStartEligibilityError,
+  ChangeStartRecord,
+} from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
@@ -24,6 +28,11 @@ export type { ChangeImplementResult };
 
 export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
+  | {
+      readonly ok: false;
+      readonly code: "reviewer_configuration_invalid";
+      readonly message: string;
+    }
   | ChangeStartEligibilityError
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
@@ -38,7 +47,12 @@ export const startChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
-  input: { readonly taskId?: PublicTaskId; readonly baseBranch?: string; readonly now: string },
+  input: {
+    readonly taskId?: PublicTaskId;
+    readonly baseBranch?: string;
+    readonly reviewerConfiguration?: ChangeReviewerConfiguration;
+    readonly now: string;
+  },
 ): Effect.Effect<ChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     if (input.taskId !== undefined) {
@@ -53,6 +67,14 @@ export const startChange = (
       if (resumed !== undefined) return resumed;
     }
 
+    if (input.reviewerConfiguration === undefined) {
+      return {
+        ok: false as const,
+        code: "reviewer_configuration_invalid" as const,
+        message: "A reviewer configuration is required to create a Change.",
+      };
+    }
+
     const id = randomUUID();
     const slug = input.taskId === undefined ? `change-${id}` : taskSlugForId(input.taskId);
     const gitIntent = git.resolveIntent(slug, input.baseBranch);
@@ -61,6 +83,7 @@ export const startChange = (
       id,
       ...gitIntent.intent,
       ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+      reviewerConfiguration: input.reviewerConfiguration,
       now: input.now,
     });
     if (!created.ok) return created;

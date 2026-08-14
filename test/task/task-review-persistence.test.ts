@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
@@ -518,6 +519,66 @@ it.scoped("returns the exact abandonment reason to a stale Task Submission compl
       expect(
         yield* reviews.abandon("review-completed-first", "Too late to abandon", later),
       ).toEqual({ ok: false, code: "task_review_not_active" });
+    }),
+  ),
+);
+
+it.scoped("recovers an unsettled Agent Invocation when a Task Review is abandoned", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const agents = yield* openSqliteAgentSessionPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        reviewId: "review-interrupted",
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        workspacePath: "/tmp/review-interrupted",
+        now,
+      });
+      if (!admitted.ok) throw new Error(`Could not admit Review: ${admitted.code}`);
+      const linkAgentInvocation = reviews.linkAgentInvocation;
+      if (linkAgentInvocation === undefined) throw new Error("Agent linking is unavailable");
+      const configuration = {
+        harness: "pi" as const,
+        model: "test-model",
+        thinking: "off" as const,
+      };
+      const started = yield* agents.beginInvocation({
+        configuration,
+        createdAt: now,
+        linkInvocation: linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: "review-interrupted",
+          configuration,
+          configurationSnapshot: policy,
+        }),
+      });
+      if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
+
+      yield* reviews.abandon("review-interrupted", "Reviewer process stopped", later);
+
+      const history = yield* agents.readInvocationHistory(started.dispatch.agentSessionId);
+      expect(history).toMatchObject([
+        {
+          settlementKind: "return_unknown",
+          settledAt: later,
+          usage: null,
+          continuation: {
+            unusableReason: expect.stringContaining("Reviewer process stopped"),
+          },
+        },
+      ]);
+      const replacement = yield* agents.beginInvocation({
+        agentSessionId: started.dispatch.agentSessionId,
+        configuration,
+        createdAt: later,
+        linkInvocation: () => Effect.succeed(undefined),
+      });
+      expect(replacement).toMatchObject({ ok: true, dispatch: { resumed: false } });
     }),
   ),
 );

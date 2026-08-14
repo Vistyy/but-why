@@ -308,7 +308,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("keeps non-review policy from Change Base while using Candidate reviewer config", () =>
+  it.effect("keeps non-review policy from Change Base and the fixed Change reviewer roster", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       writeFileSync(
@@ -424,9 +424,9 @@ describe("Change inspection CLI", () => {
       };
 
       expect(result.status).toBe(1);
-      expect(output.error.code).toBe("validation_findings");
-      expect(reviewedProfiles).toEqual(["candidate:candidate:candidate/model"]);
-      expect(result.stdout).toContain("Candidate reviewer selected");
+      expect(output.error.code).toBe("publication_tooling_failed");
+      expect(reviewedProfiles).toEqual([]);
+      expect(result.stdout).not.toContain("Candidate reviewer selected");
       expect(result.stdout).not.toContain("command: false");
       expect(result.stdout).not.toContain('"severity"');
     }),

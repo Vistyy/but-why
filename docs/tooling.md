@@ -30,6 +30,36 @@ Before npm publication, `just by ...` uses the Trusted But Why Executable from t
 It does not load CLI or migration code from a Candidate worktree.
 Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
 
+While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
+The command must resolve the executable from the canonical main checkout before it reads or mutates Shared Repository State.
+A Candidate worktree must not invoke its own CLI for repository state operations.
+After publication, packaged commands use the published But Why Executable instead.
+
+### Pinned Predecessor Executable for migration reconciliation
+
+For a prerelease migration Change, build the Pinned Predecessor Executable from canonical `main` immediately before merge.
+Preserve the self-contained executable bundle outside the checkout.
+The manifest's executable must contain the complete predecessor runtime that will execute reconciliation.
+Record the predecessor Git commit and the SHA-256 of that executable in an external manifest.
+The manifest path is supplied through `BUT_WHY_PINNED_PREDECESSOR_MANIFEST`.
+Its JSON shape is:
+
+```json
+{
+  "version": 1,
+  "changeId": "<exact-merged-change-id>",
+  "commit": "<pre-merge-git-commit>",
+  "sha256": "<sha-256-of-executable>",
+  "executable": "<bundle-executable-path-relative-to-this-manifest>"
+}
+```
+
+The source launcher verifies the manifest, the executable permission, and the recorded SHA-256 before it starts the executable.
+The manifest is accepted only for `change reconcile <exact-merged-change-id>` and its `--discard-work` form.
+The launcher rejects every other command while this manifest is selected.
+The bundle receives the target Local Repository as its current working directory and runs only the exact reconciliation command.
+After reconciliation succeeds, remove the temporary bundle and manifest unless the release archive requires the Task 7 predecessor.
+
 ## Check ownership
 
 Behavior tests own runtime contracts at supported interfaces.

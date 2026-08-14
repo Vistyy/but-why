@@ -60,6 +60,7 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -106,7 +107,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => {
                 throw new Error("Open Changes must not be cleaned");
@@ -156,6 +156,7 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -216,7 +217,6 @@ describe("by change reconcile", () => {
                 ...noOpTerminalCleanupDependencies,
                 persistence: {
                   recordCleanup: changes.delivery.recordCleanup,
-                  removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
                 },
                 cleanup: () => {
                   throw new Error("Rejected Changes must not be cleaned");
@@ -268,6 +268,7 @@ describe("by change reconcile", () => {
           worktreePath: join(input.commonDirectory, "uncreated-worktree"),
           taskId,
           now,
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -322,7 +323,6 @@ describe("by change reconcile", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: changes.delivery.recordCleanup,
-              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => cleanupResults[cleanupAttempts++] ?? { state: "complete" },
           }),
@@ -401,6 +401,7 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -447,7 +448,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -507,6 +507,7 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "uncreated-worktree"),
             taskId,
             now,
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -559,7 +560,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -625,6 +625,7 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "worktree"),
             taskId,
             now,
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -680,7 +681,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),

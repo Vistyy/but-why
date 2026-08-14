@@ -13,8 +13,9 @@ export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
   toolingFailure:
     review.toolingFailure === null ? null : { operation: review.toolingFailure.operation },
   workspaceCleanup: review.workspaceCleanup,
-  sessionCount: review.sessions.length,
-  transcriptCount: review.transcripts.length,
+  ...(hasAgentEvidence(review)
+    ? { agentInvocationCount: review.agentInvocations?.length ?? 0 }
+    : { sessionCount: review.sessions.length, transcriptCount: review.transcripts.length }),
   createdAt: review.createdAt,
   updatedAt: review.updatedAt,
   nextActions: [`Run \`by task-review show ${review.id}\` to inspect this Review.`],
@@ -32,7 +33,14 @@ export const taskReviewView = (
   proposal: review.proposal,
   proposalCurrent: proposalCurrent ?? null,
   dependencyEvidence: review.dependencyEvidence,
-  policy: taskReviewPolicyView(review.policy),
+  ...(hasAgentEvidence(review)
+    ? {
+        reviewerConfiguration:
+          review.reviewerConfiguration === undefined
+            ? null
+            : taskReviewPolicyView(review.reviewerConfiguration),
+      }
+    : { policy: taskReviewPolicyView(review.policy) }),
   reviewBase: { ref: review.baseRef, commit: review.baseCommit },
   workspace: { path: review.workspacePath, cleanup: review.workspaceCleanup },
   ...(identity === undefined ? {} : { identity }),
@@ -44,12 +52,24 @@ export const taskReviewView = (
     failedOperation: review.toolingFailure?.operation ?? null,
     nextActions: taskReviewRecoveryActions(review, identity),
   },
-  sessions: review.sessions,
-  transcripts: review.transcripts,
+  agentSession: {
+    id: review.agentSessionId ?? null,
+    invocations: review.agentInvocations ?? [],
+  },
+  ...(hasAgentEvidence(review)
+    ? {}
+    : { sessions: review.sessions, transcripts: review.transcripts }),
+  legacyReviewerEvidence: {
+    sessions: review.sessions,
+    transcripts: review.transcripts,
+  },
   abandonReason: review.abandonReason,
   createdAt: review.createdAt,
   updatedAt: review.updatedAt,
 });
+
+const hasAgentEvidence = (review: TaskReviewRecord): boolean =>
+  review.agentSessionId !== undefined || review.agentInvocations !== undefined;
 
 const taskReviewRecoveryActions = (
   review: TaskReviewRecord,

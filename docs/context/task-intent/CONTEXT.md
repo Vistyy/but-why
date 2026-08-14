@@ -46,7 +46,7 @@ One review of one exact Task proposal submitted from New.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
 A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
 The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
-When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Reviewer Session but always receives and judges the complete current proposal.
+When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Agent Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 Ordinary Task Submission selects the newest completed Review for the exact unchanged New Task proposal and reuses it only when it passed.
 Finding-blocked and tooling-failed Reviews remain history and are not reusable judgments.
@@ -55,14 +55,19 @@ Context and direct Task Dependency identity are the only reuse identity fields.
 Repository state, Review Base, policy, configuration, dependency content, and dependency lifecycle do not affect reuse.
 _Avoid_: Task Submission, Acceptance Review, Validation Run
 
-**Task Reviewer Session**:
-A continuing reviewer conversation owned by one Task under one compatible resolved Task Review policy.
+**Task Agent Session**:
+An Agent Session owned by one Task under one compatible resolved Task Review policy.
 It can continue across changed proposals so the reviewer can reuse repository orientation, but it does not reuse an earlier judgment.
-_Avoid_: Task Review, cross-Task reviewer conversation, reusable judgment
+_Avoid_: Task Review, cross-Task Agent Session, reusable judgment
 
-**Task Reviewer Transcript**:
-The complete Pi session conversation observed while executing a Task Reviewer Session.
-Every observed JSONL file has one immutable idempotently indexed reference and remains inspectable with Task Review history after the Task lifecycle advances.
+**Legacy Task Reviewer Session**:
+A historical Reviewer Session record retained for read-only Task Review evidence.
+Current Task Review execution does not write this record.
+_Avoid_: Task Agent Session, current execution
+
+**Task Agent Transcript**:
+The complete Pi session conversation observed while executing a Task Agent Session.
+The Agent Continuation stores its relative transcript path when the transcript is available.
 _Avoid_: Task Review outcome, Finding, retention-limited Artifact
 
 **Active Task Review**:

@@ -21,6 +21,8 @@ export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecution
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 }> {}
 
 export type ReviewerOutputDecoder<Output> = (
@@ -34,6 +36,8 @@ export type ReviewerRuntimeFailure = {
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionReference?: string;
+  readonly sessionFilePath?: string;
 };
 
 export type ReviewerAgentRuntime<Output = unknown> = {
@@ -54,7 +58,9 @@ export type ReviewerAgentInput<Output> = {
   readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
+  readonly sessionId?: string;
   readonly resumeSession?: string;
+  readonly singleInvocation?: boolean;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -111,6 +117,7 @@ const reviewWithPi = <Output>(
         ...(input.sessionStorageRoot === undefined
           ? {}
           : { sessionStorageRoot: input.sessionStorageRoot }),
+        ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
         ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
       };
       const initial = yield* Effect.either(
@@ -126,6 +133,11 @@ const reviewWithPi = <Output>(
       if (validation._tag === "Right") {
         retainSession();
         return successfulResult(validation.right, current, 1, invocationUsage);
+      }
+
+      if (input.singleInvocation === true) {
+        retainSession();
+        return failedOutputResult(validation.left, current, 1, invocationUsage);
       }
 
       let attempts = 1;
@@ -231,6 +243,12 @@ const translateProcessFailure = (
           message: error.message,
           kind: "process_execution",
           sessionUsability: error.sessionUsability,
+          ...(error.sessionReference === undefined
+            ? {}
+            : { sessionReference: error.sessionReference }),
+          ...(error.sessionFilePath === undefined
+            ? {}
+            : { sessionFilePath: error.sessionFilePath }),
         }),
     ),
   );
@@ -247,6 +265,8 @@ const reviewerProcessFailure = (
   attempts,
   stdout,
   invocationUsage,
+  ...(failure.sessionReference === undefined ? {} : { sessionReference: failure.sessionReference }),
+  ...(failure.sessionFilePath === undefined ? {} : { sessionFilePath: failure.sessionFilePath }),
 });
 
 const snapshotSessionRoot = (

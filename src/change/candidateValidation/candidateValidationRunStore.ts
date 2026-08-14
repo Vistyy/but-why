@@ -1,3 +1,4 @@
+import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
@@ -20,6 +21,9 @@ export type RecordCandidateValidationCommandRoundInput = {
   readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
   readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
   readonly findings?: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
+  readonly toolingFailure?: ValidationToolingFailureRecordInput & {
+    readonly validationRunId: string;
+  };
   readonly now: string;
 };
 
@@ -129,6 +133,11 @@ export type CandidateValidationRunRecord = {
   readonly outcome: CandidateValidationOutcome | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+};
+
+export type CandidateValidationAgentInvocation = AgentInvocationRecord & {
+  readonly phase: ValidationPhase;
+  readonly producer: string;
 };
 
 export type CandidateValidationRound = {

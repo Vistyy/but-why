@@ -1,13 +1,15 @@
 import type { Effect } from "effect";
+import type {
+  AgentSessionConfiguration,
+  AgentSessionSqlLink,
+} from "../../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../../agent/reviewerSession/reviewerSession.js";
-import type { ObservedReviewerTranscript } from "../../agent/reviewerSession/reviewerTranscript.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskState } from "../lifecycle.js";
 import type { PublicTaskId } from "../taskId.js";
 import type {
   TaskReviewDependencyEvidence,
-  TaskReviewExecution,
   TaskReviewFinding,
   TaskReviewPolicySnapshot,
   TaskReviewProposal,
@@ -49,6 +51,7 @@ export type CompleteTaskReviewInput = {
   readonly findings: readonly TaskReviewFinding[];
   readonly toolingFailure?: TaskReviewToolingFailure;
   readonly now: string;
+  readonly agentSettlement?: boolean;
 };
 
 type CompletedTaskReviewRecord = Omit<TaskReviewRecord, "state" | "outcome"> & {
@@ -129,26 +132,32 @@ export type TaskReviewPersistence = {
   readonly listForTask: (
     taskId: PublicTaskId,
   ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
+  readonly getReviewerAgentSession: (
+    taskId: string,
+  ) => Effect.Effect<number | undefined, RepositoryStorageError>;
+  readonly getReviewerConfiguration?: (
+    taskId: string,
+  ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
+  readonly reviewerConfigurationCanBeCorrected?: (
+    taskId: string,
+  ) => Effect.Effect<boolean, RepositoryStorageError>;
+  readonly linkAgentInvocation: (input: {
+    readonly taskId: string;
+    readonly reviewId: string;
+    readonly configuration: AgentSessionConfiguration;
+    readonly configurationSnapshot?: unknown;
+  }) => AgentSessionSqlLink;
+  readonly settleAgentReview: (input: {
+    readonly reviewId: string;
+    readonly findings: readonly TaskReviewFinding[];
+    readonly toolingFailure?: TaskReviewToolingFailure;
+    readonly now: string;
+    readonly complete: boolean;
+  }) => AgentSessionSqlLink;
   readonly getReviewerSession: (
     taskId: string,
     producer: string,
   ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
-  readonly saveReviewerSession: (
-    session: ReviewerSessionRecord,
-  ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly removeReviewerSession: (
-    taskId: string,
-    producer: string,
-  ) => Effect.Effect<void, RepositoryStorageError>;
-  readonly recordExecution: (input: {
-    readonly reviewId: string;
-    readonly execution: TaskReviewExecution;
-  }) => Effect.Effect<void, RepositoryStorageError>;
-  readonly recordTranscripts: (input: {
-    readonly reviewId: string;
-    readonly taskId: string;
-    readonly transcripts: readonly ObservedReviewerTranscript[];
-  }) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordActiveFailure: (
     reviewId: string,
     failure: TaskReviewToolingFailure,

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 import type { PublicTaskId } from "../task/taskId.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
@@ -79,6 +80,7 @@ export type ChangeRecord = {
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;

@@ -6,7 +6,6 @@ import {
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import type { ReviewerSessionStore } from "../../src/agent/reviewerSession/reviewerSession.js";
 import {
   CandidateReviewerExecution,
   CandidateValidationExecution,
@@ -17,6 +16,8 @@ import {
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,
@@ -27,8 +28,6 @@ export const candidateValidationForTest = (input: {
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly reviewerSessionsRoot?: string;
-  readonly sessionStore?: ReviewerSessionStore;
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
@@ -38,17 +37,25 @@ export const candidateValidationForTest = (input: {
       (dependencies) => dependencies.execution,
     ),
   ).pipe(Layer.provide(repositoryLayer));
+  const sessionLayer = Layer.effect(
+    CandidateValidationPaths,
+    Effect.gen(function* () {
+      const reviewerSessions = yield* openSqliteChangeReviewerSessionPort();
+      const agentPersistence = yield* openSqliteAgentSessionPersistence();
+      return {
+        localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
+        artifactsRoot: input.artifactsRoot,
+        reviewerSessionsRoot: input.artifactsRoot,
+        agentPersistence,
+        getAgentSession: reviewerSessions.getAgentSession,
+        linkAgentInvocation: reviewerSessions.linkAgentInvocation,
+      };
+    }),
+  ).pipe(Layer.provide(repositoryLayer));
   const layer = CandidateValidationLive.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(CandidateValidationPaths, {
-          localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
-          artifactsRoot: input.artifactsRoot,
-          ...(input.reviewerSessionsRoot === undefined
-            ? {}
-            : { reviewerSessionsRoot: input.reviewerSessionsRoot }),
-          ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
-        }),
+        sessionLayer,
         persistenceLayer,
         Layer.succeed(
           CandidateValidationWorkspace,

@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import type { ChangeRecord } from "../change/change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
+import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -39,6 +40,10 @@ export const openSqliteChangeSubmissionPort = () =>
         repository.transaction("read Change for submission", (sql) =>
           readSubmissionChange(sql, changeId),
         ),
+      agentSessionConfigurationCanBeCorrected: (changeId, producer) =>
+        repository.transaction("check Change Agent configuration correction", (sql) =>
+          agentSessionConfigurationCanBeCorrected(sql, changeId, producer),
+        ),
       getChangeForOutputById: (changeId) =>
         repository.transaction("read Change for Submit output", (sql) => getById(sql, changeId)),
       getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
@@ -56,6 +61,51 @@ export const openSqliteChangeSubmissionPort = () =>
         ),
     }),
   );
+const agentSessionConfigurationCanBeCorrected = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  producer: string,
+) =>
+  Effect.gen(function* () {
+    const sessions = yield* sql<{ readonly agentSessionId: number }>`
+      SELECT agent_session_id AS agentSessionId
+      FROM change_agent_sessions
+      WHERE change_id = ${changeId} AND producer = ${producer}
+    `;
+    const sessionId = sessions[0]?.agentSessionId;
+    if (sessionId === undefined) return false;
+    const latest = yield* sql<{
+      readonly settlementKind: string | null;
+      readonly transcriptPath: string | null;
+    }>`
+      SELECT invocation.settlement_kind AS settlementKind,
+        continuation.transcript_path AS transcriptPath
+      FROM agent_invocations AS invocation
+      JOIN agent_continuations AS continuation
+        ON continuation.id = invocation.continuation_id
+      WHERE continuation.agent_session_id = ${sessionId}
+      ORDER BY invocation.id DESC LIMIT 1
+    `;
+    const transcript = yield* sql<{ readonly count: number }>`
+      SELECT COUNT(*) AS count FROM agent_continuations
+      WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
+    `;
+    const returned = yield* sql<{ readonly count: number }>`
+      SELECT COUNT(*) AS count
+      FROM agent_invocations AS invocation
+      JOIN agent_continuations AS continuation
+        ON continuation.id = invocation.continuation_id
+      WHERE continuation.agent_session_id = ${sessionId}
+        AND invocation.settlement_kind = 'returned'
+    `;
+    return (
+      latest[0]?.settlementKind === "launch_failed" &&
+      latest[0]?.transcriptPath === null &&
+      (transcript[0]?.count ?? 0) === 0 &&
+      (returned[0]?.count ?? 0) === 0
+    );
+  });
+
 const publicationSelectionColumns = `
   id, state,
   publication_candidate_id AS publicationCandidateId,
@@ -96,7 +146,8 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
     const rows = yield* sql.unsafe<StoredSubmissionChangeRow>(
       `SELECT ${publicationSelectionColumns}, branch_ref AS branchRef, base_ref AS baseRef,
         base_remote_url AS baseRemoteUrl, worktree_path AS worktreePath,
-        acceptance_context AS acceptanceContext
+        acceptance_context AS acceptanceContext,
+        reviewer_configuration AS reviewerConfiguration
        FROM changes WHERE id = ?`,
       [changeId],
     );
@@ -118,6 +169,7 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
         acceptanceContext: decodeSelectedAcceptanceContext(
           decodeStoredNullableString(row.acceptanceContext, "Change Acceptance Context"),
         ),
+        reviewerConfiguration: decodeReviewerConfiguration(row.reviewerConfiguration),
         publication: decodeChangePublication(row),
       };
     });
@@ -151,6 +203,19 @@ const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string) =
   });
 const decodeSelectedAcceptanceContext = (value: string | null) =>
   value === null ? null : decodeSqliteAcceptanceContextSnapshot(value);
+const decodeReviewerConfiguration = (value: unknown) => {
+  const encoded = decodeStoredNullableString(value, "Change Reviewer Configuration");
+  if (encoded === null) return null;
+  const decoded: unknown = JSON.parse(encoded) as unknown;
+  if (
+    typeof decoded !== "object" ||
+    decoded === null ||
+    !Array.isArray((decoded as { specialistReviews?: unknown }).specialistReviews)
+  ) {
+    throw new Error("Stored Change Reviewer Configuration is invalid");
+  }
+  return decoded as ChangeReviewerConfiguration;
+};
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
@@ -222,4 +287,5 @@ type StoredSubmissionChangeRow = StoredChangeStateRow &
     readonly baseRemoteUrl: unknown;
     readonly worktreePath: unknown;
     readonly acceptanceContext: unknown;
+    readonly reviewerConfiguration: unknown;
   };

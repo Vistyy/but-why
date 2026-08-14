@@ -9,7 +9,6 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import type { ReviewerSessionStore } from "../../src/agent/reviewerSession/reviewerSession.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
@@ -294,8 +293,6 @@ type AcceptanceReadyRepo = {
   readonly captured: Captured;
   readonly validation: ReturnType<typeof candidateValidationForTest>;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly sessionStore?: ReviewerSessionStore;
-  readonly reviewerSessionsRoot?: string;
 };
 
 const runTaskBackedCandidate = (
@@ -364,22 +361,22 @@ const runReviewPhases = (
           ? {}
           : { agentEnvironment: policy.agentEnvironment }),
         runtime: ready.reviewerAgentRuntime,
-        ...(ready.sessionStore === undefined ? {} : { sessionStore: ready.sessionStore }),
-        ...(ready.reviewerSessionsRoot === undefined
-          ? {}
-          : { sessionStorageRoot: ready.reviewerSessionsRoot }),
         commandExecutor,
         reviewerExecutor: unusedReviewerExecutor,
         artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         artifactMaxBytes: maxValidationArtifactBytes,
         commandCwd: ready.repo,
         resourceRoot: ready.repo,
+        sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        agentPersistence: persistence.agentPersistence,
+        getAgentSession: persistence.reviewerSessions.getAgentSession,
+        linkAgentInvocation: persistence.reviewerSessions.linkAgentInvocation,
+        settleAgentInvocationRound: persistence.execution.settleAgentInvocationRound,
         allowedUntrackedFiles: [],
         now,
         listArtifacts: persistence.reads.listArtifacts,
         listPreviousCandidateReviewerFindings:
           persistence.execution.listPreviousCandidateReviewerFindings,
-        recordAcceptanceRound: persistence.execution.recordAcceptanceRound,
       }).pipe(Effect.provide(NodeFileSystem.layer));
       if (acceptance.toolingFailure !== undefined) {
         yield* persistence.execution.recordToolingFailure({
@@ -430,10 +427,6 @@ const runReviewPhases = (
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>,
-  session?: {
-    readonly sessionStore?: ReviewerSessionStore;
-    readonly reviewerSessionsRoot?: string;
-  },
 ): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
     const template = yield* AcceptanceTemplate;
@@ -444,14 +437,12 @@ const acceptanceReadyRepo = (
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       repository: repositoryConfig(repo),
       reviewerAgentRuntime,
-      ...(session === undefined ? {} : session),
     });
     return {
       repo,
       captured,
       validation,
       reviewerAgentRuntime,
-      ...(session === undefined ? {} : session),
     };
   });
 

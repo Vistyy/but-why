@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+import type {
+  AgentSessionPersistence,
+  AgentSessionSqlLink,
+} from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
-import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -95,8 +98,18 @@ type ValidateCandidateResult =
 type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly reviewerSessionsRoot?: string;
-  readonly sessionStore?: ReviewerSessionStore;
+  readonly reviewerSessionsRoot: string;
+  readonly agentPersistence: AgentSessionPersistence;
+  readonly getAgentSession: (
+    changeId: string,
+    producer: string,
+  ) => Effect.Effect<number | undefined, RepositoryStorageError>;
+  readonly linkAgentInvocation: (input: {
+    readonly changeId: string;
+    readonly producer: string;
+    readonly validationRunId: string;
+    readonly phase: string;
+  }) => AgentSessionSqlLink;
 };
 
 export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<
@@ -172,8 +185,10 @@ const makeCandidateValidation = (dependencies: {
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
-  readonly sessionStore?: ReviewerSessionStore;
-  readonly reviewerSessionsRoot?: string;
+  readonly reviewerSessionsRoot: string;
+  readonly agentPersistence: AgentSessionPersistence;
+  readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
+  readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
@@ -274,7 +289,9 @@ const makeCandidateValidation = (dependencies: {
           | { readonly toolingFailures?: readonly ValidationToolingFailure[] }
           | undefined
       )?.toolingFailures ?? [];
+    const persistedToolingFailures = activeResult?.persistedToolingFailures ?? [];
     for (const toolingFailure of toolingFailures) {
+      if (persistedToolingFailures.includes(toolingFailure)) continue;
       yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...validationToolingFailureRecord(toolingFailure),
@@ -331,8 +348,10 @@ const runCandidatePhases = (
     readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
-    readonly sessionStore?: ReviewerSessionStore;
-    readonly reviewerSessionsRoot?: string;
+    readonly reviewerSessionsRoot: string;
+    readonly agentPersistence: AgentSessionPersistence;
+    readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
+    readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   },
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
@@ -341,6 +360,7 @@ const runCandidatePhases = (
 ): Effect.Effect<
   {
     readonly outcome: CandidateValidationOutcome;
+    readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
     readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     readonly toolingFailures: readonly ValidationToolingFailure[];
@@ -368,12 +388,11 @@ const runCandidatePhases = (
           };
     const acceptanceReview = policy.acceptanceReview;
     const sessionOptions = {
-      ...(dependencies.sessionStore === undefined
-        ? {}
-        : { sessionStore: dependencies.sessionStore }),
-      ...(dependencies.reviewerSessionsRoot === undefined
-        ? {}
-        : { sessionStorageRoot: dependencies.reviewerSessionsRoot }),
+      sessionStorageRoot: dependencies.reviewerSessionsRoot,
+      agentPersistence: dependencies.agentPersistence,
+      getAgentSession: dependencies.getAgentSession,
+      linkAgentInvocation: dependencies.linkAgentInvocation,
+      settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
     };
     return yield* runCandidateValidationGate({
       ...(prepare === undefined
@@ -435,7 +454,6 @@ const runCandidatePhases = (
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
-                recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -460,7 +478,6 @@ const runCandidatePhases = (
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,
-          recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

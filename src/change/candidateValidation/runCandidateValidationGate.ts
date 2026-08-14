@@ -11,11 +11,13 @@ type FindingResult = {
 };
 
 type AcceptanceReviewResult = FindingResult & {
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
 
 type SpecialistReviewResult = FindingResult & {
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
@@ -41,6 +43,7 @@ type CandidateValidationGatePhases = {
 
 type CandidateValidationGateResult = {
   readonly outcome: CandidateValidationOutcome;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
@@ -64,6 +67,9 @@ export const runCandidateValidationGate = Effect.fn("CandidateValidation.runGate
     if (acceptance.toolingFailure !== undefined) {
       return {
         outcome: "tooling_failed",
+        ...(acceptance.persistedToolingFailures === undefined
+          ? {}
+          : { persistedToolingFailures: acceptance.persistedToolingFailures }),
         ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
         toolingFailures: [acceptance.toolingFailure],
       } satisfies CandidateValidationGateResult;
@@ -86,6 +92,9 @@ export const runCandidateValidationGate = Effect.fn("CandidateValidation.runGate
         : "passed";
   return {
     outcome,
+    ...(specialists.persistedToolingFailures === undefined
+      ? {}
+      : { persistedToolingFailures: specialists.persistedToolingFailures }),
     ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
     ...(specialists.reviewerEvidence.length === 0
       ? {}
