@@ -54,154 +54,7 @@ describe("Change-owned terminal cleanup operation", () => {
         }),
         cleanup: { state: "complete", blockingReason: null },
       });
-      expect(events).toEqual([
-        "cleanup:remote",
-        "artifact:change-1",
-        "record-cleanup",
-        "remove-reviewer-sessions:change-1",
-      ]);
-    }),
-  );
-
-  it.effect("indexes Reviewer Transcripts before delegating resource cleanup", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
-      const cleanup = openTerminalCleanup({
-        ...noOpTerminalCleanupDependencies,
-        persistence: fakePersistence(events),
-        cleanup: (input) => {
-          events.push(`cleanup:${input.remoteChangeBranch === null ? "none" : "remote"}`);
-          return { state: "complete", blockingReason: null };
-        },
-        indexTranscripts: (input) => {
-          events.push(`index:${input.changeId}:${input.reviewerSessionPath}`);
-          return Effect.succeed({ ok: true as const });
-        },
-        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
-        artifactLifecycle: {
-          removeContent: (changeId) => {
-            events.push(`artifact:${changeId}`);
-            return Effect.succeed({ ok: true as const });
-          },
-        },
-      });
-
-      const result = yield* cleanup(change, now);
-
-      expect(result).toEqual({
-        ok: true,
-        change: expect.objectContaining({
-          cleanup: { state: "complete", blockingReason: null },
-        }),
-        cleanup: { state: "complete", blockingReason: null },
-      });
-      expect(events).toEqual([
-        "index:change-1:/storage/change-1",
-        "cleanup:remote",
-        "artifact:change-1",
-        "record-cleanup",
-        "remove-reviewer-sessions:change-1",
-      ]);
-    }),
-  );
-
-  it.effect("keeps cleanup pending without resource cleanup when transcript indexing fails", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
-      const cleanup = openTerminalCleanup({
-        ...noOpTerminalCleanupDependencies,
-        persistence: fakePersistence(events, {
-          state: "pending",
-          blockingReason: "transcript_index_failed",
-        }),
-        cleanup: () => {
-          events.push("cleanup");
-          return { state: "complete", blockingReason: null };
-        },
-        indexTranscripts: () =>
-          Effect.succeed({
-            ok: false as const,
-            reason: "unidentified_reviewer_session:acceptance/review_unknown.jsonl",
-          }),
-        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
-      });
-
-      const result = yield* cleanup(change, now);
-
-      expect(result).toEqual({
-        ok: true,
-        change: expect.objectContaining({
-          cleanup: {
-            state: "pending",
-            blockingReason: "transcript_index_failed",
-          },
-        }),
-        cleanup: { state: "pending", blockingReason: "transcript_index_failed" },
-      });
-      expect(events).toEqual(["record-cleanup"]);
-    }),
-  );
-
-  it.effect("retries transcript indexing and completes cleanup after the failure clears", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      let attempts = 0;
-      let cleanupRecorded = 0;
-      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
-      const cleanup = openTerminalCleanup({
-        ...noOpTerminalCleanupDependencies,
-        persistence: {
-          recordCleanup: () => {
-            events.push("record-cleanup");
-            cleanupRecorded += 1;
-            return Effect.succeed({
-              ok: true as const,
-              changed: true,
-              cleanup:
-                cleanupRecorded === 1
-                  ? { state: "pending" as const, blockingReason: "transcript_index_failed" }
-                  : { state: "complete" as const, blockingReason: null },
-            });
-          },
-          removeReviewerSessions: (changeId) => {
-            events.push(`remove-reviewer-sessions:${changeId}`);
-            return Effect.void;
-          },
-        },
-        cleanup: () => {
-          events.push("cleanup");
-          return { state: "complete", blockingReason: null };
-        },
-        indexTranscripts: () => {
-          attempts += 1;
-          events.push(`index:${attempts}`);
-          return Effect.succeed(
-            attempts === 1 ? { ok: false as const, reason: "temporary" } : { ok: true as const },
-          );
-        },
-        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
-      });
-
-      const first = yield* cleanup(change, now);
-      expect(first).toMatchObject({
-        cleanup: { state: "pending", blockingReason: "transcript_index_failed" },
-      });
-
-      const retry = yield* cleanup(change, now);
-      expect(retry).toMatchObject({
-        ok: true,
-        cleanup: { state: "complete", blockingReason: null },
-      });
-      expect(events).toEqual([
-        "index:1",
-        "record-cleanup",
-        "index:2",
-        "cleanup",
-        "record-cleanup",
-        "remove-reviewer-sessions:change-1",
-      ]);
+      expect(events).toEqual(["cleanup:remote", "artifact:change-1", "record-cleanup"]);
     }),
   );
 
@@ -247,7 +100,6 @@ describe("Change-owned terminal cleanup operation", () => {
       yield* cleanup(change, now);
 
       expect(events[0]).toBe("cleanup:acme/widgets:head");
-      expect(events).toContain("remove-reviewer-sessions:change-1");
     }),
   );
 
@@ -380,7 +232,6 @@ describe("Change-owned terminal cleanup operation", () => {
         "cleanup:remote",
         "artifact:change-1:ok",
         "record-cleanup",
-        "remove-reviewer-sessions:change-1",
       ]);
     }),
   );
@@ -445,10 +296,6 @@ describe("Change-owned terminal cleanup operation", () => {
             events.push("record-cleanup-failed");
             return Effect.succeed({ ok: false as const, code: "change_not_closed" as const });
           },
-          removeReviewerSessions: (changeId) => {
-            events.push(`remove-reviewer-sessions:${changeId}`);
-            return Effect.void;
-          },
         },
         cleanup: () => {
           events.push("cleanup");
@@ -497,7 +344,6 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
         "read-change",
         "cleanup",
         "record-cleanup",
-        "remove-reviewer-sessions:change-1",
         "read-task",
       ]);
     }),
@@ -563,10 +409,6 @@ const fakePersistence = (
       cleanup: cleanupResult,
     });
   },
-  removeReviewerSessions: (changeId: string) => {
-    events.push(`remove-reviewer-sessions:${changeId}`);
-    return Effect.void;
-  },
 });
 
 const echoPersistence = (events: string[]) => ({
@@ -577,10 +419,6 @@ const echoPersistence = (events: string[]) => ({
       changed: true,
       cleanup: input.cleanup,
     });
-  },
-  removeReviewerSessions: (changeId: string) => {
-    events.push(`remove-reviewer-sessions:${changeId}`);
-    return Effect.void;
   },
 });
 
@@ -643,10 +481,6 @@ const cancellationDependencies = (input: {
         changed: true,
         cleanup: { state: "complete" as const, blockingReason: null },
       });
-    },
-    removeReviewerSessions: (changeId: string) => {
-      input.events.push(`remove-reviewer-sessions:${changeId}`);
-      return Effect.void;
     },
   };
   const dependencies: CancellationDependencies = {

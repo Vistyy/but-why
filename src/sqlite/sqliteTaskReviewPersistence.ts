@@ -382,7 +382,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           }
         }).pipe(Effect.asVoid),
     getReviewerSession: (taskId, producer) =>
-      repository.transaction("read Task Reviewer Session", (sql) =>
+      repository.transaction("read legacy Task Reviewer Session", (sql) =>
         Effect.map(
           sql<{ readonly fingerprint: string; readonly sessionReference: string }>`
             SELECT fingerprint, session_reference AS sessionReference
@@ -393,56 +393,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             return row === undefined ? undefined : { ownerId: taskId, producer, ...row };
           },
         ),
-      ),
-    saveReviewerSession: (session) =>
-      repository.transactionImmediate("save Task Reviewer Session", (sql) =>
-        Effect.asVoid(sql`
-          INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
-          VALUES (${session.ownerId}, ${session.fingerprint}, ${session.sessionReference})
-          ON CONFLICT(task_id) DO UPDATE SET fingerprint = excluded.fingerprint,
-            session_reference = excluded.session_reference
-        `),
-      ),
-    removeReviewerSession: (taskId) =>
-      repository.transactionImmediate("remove Task Reviewer Session", (sql) =>
-        Effect.asVoid(sql`DELETE FROM task_reviewer_sessions WHERE task_id = ${taskId}`),
-      ),
-    recordExecution: (input) =>
-      repository.transactionImmediate("record Task Review execution", (sql) =>
-        Effect.asVoid(sql`
-          INSERT INTO task_review_executions (
-            review_id, continuity, identity_fingerprint, restart_reason, duration_ms,
-            review_calls, invocation_usage, session_reference
-          ) VALUES (
-            ${input.reviewId}, ${input.execution.continuity},
-            ${input.execution.identityFingerprint}, ${input.execution.restartReason ?? null},
-            ${input.execution.durationMs}, ${input.execution.reviewCalls},
-            ${JSON.stringify(input.execution.invocationUsage)},
-            ${input.execution.sessionReference}
-          ) ON CONFLICT(review_id) DO NOTHING
-        `),
-      ),
-    recordTranscripts: (input) =>
-      repository.transactionImmediate("record Task Review transcripts", (sql) =>
-        Effect.gen(function* () {
-          for (const transcript of input.transcripts) {
-            yield* sql`
-              INSERT INTO task_reviewer_transcripts (
-                task_id, producer, pi_session_id, file_path
-              ) VALUES (
-                ${input.taskId}, ${transcript.producer}, ${transcript.piSessionId},
-                ${transcript.filePath}
-              ) ON CONFLICT(task_id, producer, file_path) DO NOTHING
-            `;
-            yield* sql`
-              INSERT INTO task_review_transcript_observations (review_id, transcript_sequence)
-              SELECT ${input.reviewId}, sequence FROM task_reviewer_transcripts
-              WHERE task_id = ${input.taskId} AND producer = ${transcript.producer}
-                AND file_path = ${transcript.filePath}
-              ON CONFLICT(review_id, transcript_sequence) DO NOTHING
-            `;
-          }
-        }),
       ),
     recordActiveFailure: (reviewId, failure, now) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>

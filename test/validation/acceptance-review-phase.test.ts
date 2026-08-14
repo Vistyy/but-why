@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -14,15 +13,10 @@ import {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import type {
-  ReviewerSessionRecord,
-  ReviewerSessionStore,
-} from "../../src/agent/reviewerSession/reviewerSession.js";
 import {
   type RunAcceptanceReviewPhaseInput,
   runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem,
 } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
-import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
 import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
@@ -127,7 +121,10 @@ describe("Acceptance Review phase", () => {
 
       expect(result).toMatchObject({
         findings: 0,
-        reviewerEvidence: { reviewCalls: 1, invocationUsage: [null] },
+        reviewerEvidence: {
+          agentSessionId: 1,
+          invocations: [{ settlementKind: "returned", usage: null }],
+        },
       });
       expect(review).toHaveBeenCalledOnce();
       const call = review.mock.calls[0]?.[0];
@@ -456,7 +453,7 @@ describe("Acceptance Review phase", () => {
     }),
   );
 
-  it.scoped("turns Artifact recording failure into Validation Tooling Failure", () =>
+  it.scoped("settles an Agent Invocation when Artifact recording fails", () =>
     Effect.gen(function* () {
       const artifactsRoot = createTestWorkspace();
       writeFileSync(join(artifactsRoot, "validation-1"), "blocks the artifact directory");
@@ -467,138 +464,54 @@ describe("Acceptance Review phase", () => {
         },
       );
 
-      const failure = yield* Effect.flip(fixture.run());
-
-      expect(failure).toMatchObject({
-        _tag: "InfrastructureToolingFailed",
-        operationName: "record_reviewer_artifacts",
-      });
-      expect(fixture.rounds).toEqual([]);
-    }),
-  );
-
-  it.scoped(
-    "resumes a compatible Acceptance Reviewer Session and preserves it on unknown failure",
-    () =>
-      Effect.gen(function* () {
-        const sessions = new Map<string, ReviewerSessionRecord>();
-        const sessionStore = memorySessionStore(sessions);
-        const firstReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-          Effect.succeed({ ...cleanReport, sessionReference: "acceptance-session" }),
-        );
-        const first = acceptancePhaseFixture({ review: firstReview }, { sessionStore });
-        const firstResult = yield* first.run();
-        expect(firstResult.reviewerEvidence).toMatchObject({ continuity: "fresh", reviewCalls: 1 });
-        const persistedFingerprint = createHash("sha256")
-          .update(
-            JSON.stringify({
-              changeId: "change-1",
-              producer: "acceptance",
-              agentProfile: policy.profile,
-              instructions: policy.instructions,
-              agentEnvironment: ["nix", "develop", "-c"],
-              resources: {},
-            }),
-          )
-          .digest("hex");
-        expect(sessions.get("change-1/acceptance")?.fingerprint).toBe(persistedFingerprint);
-
-        const temporaryFailure = new ReviewerExecutionFailed({
-          kind: "process_execution",
-          operationName: "run_reviewer_process",
-          message: "Temporary reviewer failure.",
-        });
-        const resumedReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-          Effect.succeed({
-            ok: false,
-            failure: temporaryFailure,
-            sessionUsability: "unknown",
-            attempts: 1,
-            stdout: "",
-          }),
-        );
-        const resumed = acceptancePhaseFixture(
-          { review: resumedReview },
-          {
-            sessionStore,
-            validationRunId: "validation-2",
-            candidate: {
-              ...candidate,
-              candidateId: "candidate-successor",
-              headSha: "head-successor",
-            },
-          },
-        );
-
-        const result = yield* resumed.run();
-
-        expect(result).toMatchObject({
-          findings: 0,
-          toolingFailure: { _tag: "ReviewerProcessToolingFailed" },
-          reviewerEvidence: { continuity: "resumed", reviewCalls: 1 },
-        });
-        expect(resumedReview.mock.calls[0]?.[0].resumeSession).toBe("acceptance-session");
-        expect(sessions.get("change-1/acceptance")?.sessionReference).toBe("acceptance-session");
-      }),
-  );
-
-  it.scoped("restarts one unusable resumed Acceptance Reviewer Session for one fresh result", () =>
-    Effect.gen(function* () {
-      const sessions = new Map<string, ReviewerSessionRecord>();
-      const sessionStore = memorySessionStore(sessions);
-      const initial = acceptancePhaseFixture(
-        {
-          review: () => Effect.succeed({ ...cleanReport, sessionReference: "superseded-session" }),
-        },
-        { sessionStore },
-      );
-      yield* initial.run();
-
-      const unusable = new ReviewerExecutionFailed({
-        kind: "process_execution",
-        operationName: "run_reviewer_process",
-        message: "Stored session cannot continue.",
-      });
-      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
-        input.resumeSession === undefined
-          ? Effect.succeed({ ...cleanReport, sessionReference: "fresh-session" })
-          : Effect.succeed({
-              ok: false,
-              failure: unusable,
-              sessionUsability: "unusable",
-              attempts: 1,
-              stdout: "",
-            }),
-      );
-      const successor = acceptancePhaseFixture(
-        { review },
-        {
-          sessionStore,
-          validationRunId: "validation-2",
-          candidate: {
-            ...candidate,
-            candidateId: "candidate-successor",
-            headSha: "head-successor",
-          },
-        },
-      );
-
-      const result = yield* successor.run();
+      const result = yield* fixture.run();
 
       expect(result).toMatchObject({
         findings: 0,
-        reviewerEvidence: {
-          continuity: "restarted",
-          restartReason: "session_unusable",
-          reviewCalls: 2,
-          invocationUsage: [null, null],
+        toolingFailure: {
+          _tag: "InfrastructureToolingFailed",
+          operationName: "record_reviewer_artifacts",
         },
       });
-      expect(review.mock.calls.map(([input]) => input.resumeSession)).toEqual([
-        "superseded-session",
-        undefined,
+      expect(fixture.rounds).toMatchObject([
+        {
+          roundStatus: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "record_reviewer_artifacts" },
+        },
       ]);
-      expect(sessions.get("change-1/acceptance")?.sessionReference).toBe("fresh-session");
+    }),
+  );
+
+  it.scoped("preserves post-review Snapshot Workspace integrity verification in Agent mode", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        Effect.succeed(cleanReport),
+      );
+      const fixture = acceptancePhaseFixture(
+        { review },
+        { observedHeadShas: [candidate.headSha, "different-head-sha"] },
+      );
+
+      const result = yield* fixture.run();
+
+      expect(review).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({
+        findings: 0,
+        toolingFailure: {
+          _tag: "GitToolingFailed",
+          operationName: "verify_candidate_head",
+        },
+      });
+      expect(fixture.rounds).toMatchObject([
+        {
+          roundStatus: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "verify_candidate_head" },
+        },
+      ]);
     }),
   );
 });
@@ -621,8 +534,8 @@ type FixtureOptions = {
   readonly previousFindings?: readonly ReturnType<typeof finding>[];
   readonly availableArtifactRefs?: readonly string[];
   readonly observedHeadSha?: string;
+  readonly observedHeadShas?: readonly string[];
   readonly artifactsRoot?: string;
-  readonly sessionStore?: ReviewerSessionStore;
 };
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
@@ -635,15 +548,27 @@ const acceptancePhaseFixture = (
 ) => {
   const validationRunId = options.validationRunId ?? "validation-1";
   const exactCandidate = options.candidate ?? candidate;
-  const rounds: RecordCandidateAcceptanceRoundInput[] = [];
+  const rounds: Parameters<
+    NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]>
+  >[0][] = [];
+  let integrityCheck = 0;
   const commandExecutor = () =>
     Effect.succeed({
       exitCode: 0,
-      stdout: `${options.observedHeadSha ?? exactCandidate.headSha}\n`,
+      stdout: `${options.observedHeadShas?.[integrityCheck++] ?? options.observedHeadSha ?? exactCandidate.headSha}\n`,
       stderr: "",
     });
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
   const phasePolicy = options.policy ?? policy;
+  const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();
+  const getAgentSession = options.getAgentSession ?? (() => Effect.succeed(undefined));
+  const linkAgentInvocation = options.linkAgentInvocation ?? (() => () => Effect.void);
+  const settleAgentInvocationRound =
+    options.settleAgentInvocationRound ??
+    ((round) => {
+      rounds.push(round);
+      return () => Effect.void;
+    });
 
   return {
     rounds,
@@ -663,22 +588,11 @@ const acceptancePhaseFixture = (
         artifactsRoot,
         commandCwd: options.commandCwd ?? "/captured/snapshot-workspace",
         resourceRoot: options.resourceRoot ?? "/captured/snapshot-workspace",
-        ...(options.sessionStorageRoot === undefined
-          ? {}
-          : { sessionStorageRoot: options.sessionStorageRoot }),
-        ...(options.agentPersistence === undefined
-          ? {}
-          : { agentPersistence: options.agentPersistence }),
-        ...(options.getAgentSession === undefined
-          ? {}
-          : { getAgentSession: options.getAgentSession }),
-        ...(options.linkAgentInvocation === undefined
-          ? {}
-          : { linkAgentInvocation: options.linkAgentInvocation }),
-        ...(options.settleAgentInvocationRound === undefined
-          ? {}
-          : { settleAgentInvocationRound: options.settleAgentInvocationRound }),
-        ...(options.sessionStore === undefined ? {} : { sessionStore: options.sessionStore }),
+        sessionStorageRoot: options.sessionStorageRoot ?? artifactsRoot,
+        agentPersistence,
+        getAgentSession,
+        linkAgentInvocation,
+        settleAgentInvocationRound,
         allowedUntrackedFiles: [],
         now,
         listArtifacts: () =>
@@ -695,18 +609,44 @@ const acceptancePhaseFixture = (
               updatedAt: now,
             })),
           ),
-        recordAcceptanceRound: (round) =>
-          Effect.sync(() => {
-            rounds.push(round);
-          }),
       }),
   };
 };
 
-const memorySessionStore = (
-  sessions: Map<string, ReviewerSessionRecord>,
-): ReviewerSessionStore => ({
-  get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
-  save: (record) => Effect.sync(() => sessions.set(`${record.ownerId}/${record.producer}`, record)),
-  remove: (changeId, producer) => Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
+const defaultAgentPersistence = (): NonNullable<
+  RunAcceptanceReviewPhaseInput["agentPersistence"]
+> => ({
+  beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+    const sessionId = agentSessionId ?? 1;
+    const continuation = {
+      id: 1,
+      agentSessionId: sessionId,
+      harness: "pi" as const,
+      provider: configuration.provider ?? null,
+      model: configuration.model,
+      thinking: configuration.thinking ?? null,
+      transcriptPath: null,
+      unusableReason: null,
+    };
+    return Effect.succeed({
+      ok: true as const,
+      dispatch: {
+        agentSessionId: sessionId,
+        continuation,
+        invocation: {
+          id: 1,
+          continuationId: continuation.id,
+          createdAt,
+          settledAt: null,
+          settlementKind: null,
+          usage: null,
+          continuation,
+        },
+        resumed: false,
+        piSessionId: "by-agent-1",
+      },
+    });
+  },
+  settleInvocation: () => Effect.void,
+  readInvocationHistory: () => Effect.succeed([]),
 });

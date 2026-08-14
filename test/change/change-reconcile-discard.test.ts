@@ -120,7 +120,6 @@ describe("Change reconciliation discard boundary", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: cleanupDirtyManagedWorktreeAndUniqueBranch,
             }),
@@ -181,7 +180,6 @@ describe("Change reconciliation discard boundary", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: changes.delivery.recordCleanup,
-              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: (input) => {
               cleanupInputs.push(input);
@@ -256,7 +254,6 @@ describe("Change reconciliation discard boundary", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: changes.delivery.recordCleanup,
-              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => {
               throw new Error("Open Changes must not be cleaned");
@@ -322,7 +319,6 @@ describe("Change reconciliation discard boundary", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: changes.delivery.recordCleanup,
-              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => ({ state: "complete" }),
           }),

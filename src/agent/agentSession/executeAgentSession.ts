@@ -1,6 +1,6 @@
 import { isAbsolute, relative, sep } from "node:path";
 
-import { Cause, Effect } from "effect";
+import { Cause, Clock, Effect } from "effect";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
@@ -50,7 +50,6 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
     readonly invocationNumber: number;
     readonly evidence: AgentExecutionEvidence;
   }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError, DomainRequirements>;
-  readonly now: () => Date;
 };
 
 export type ExecuteAgentSessionResult<Output> = {
@@ -77,7 +76,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       const dispatch = yield* input.agentPersistence.beginInvocation({
         ...(sessionId === undefined ? {} : { agentSessionId: sessionId }),
         configuration: input.configuration,
-        createdAt: input.now().toISOString(),
+        createdAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         linkInvocation: input.linkInvocation,
       });
       if (!dispatch.ok) {
@@ -138,7 +137,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         result,
         input.sessionStorageRoot,
         interrupted ? "return_unknown" : undefined,
-        input.now,
+        new Date(yield* Clock.currentTimeMillis).toISOString(),
       );
       const invocationEvidenceRecord: AgentInvocationRecord = {
         ...dispatch.dispatch.invocation,
@@ -219,7 +218,7 @@ const settlementFor = <Output>(
   result: ReviewerAgentResult<Output>,
   sessionStorageRoot: string,
   forcedKind: AgentInvocationSettlementKind | undefined,
-  now: () => Date,
+  settledAt: string,
 ): {
   readonly settledAt: string;
   readonly kind: AgentInvocationSettlementKind;
@@ -227,7 +226,6 @@ const settlementFor = <Output>(
   readonly transcriptPath?: string | null;
   readonly unusableReason?: string | null;
 } => {
-  const settledAt = now().toISOString();
   const transcriptPath = safeTranscriptPath(sessionStorageRoot, result.sessionFilePath);
   if (result.ok) {
     return {

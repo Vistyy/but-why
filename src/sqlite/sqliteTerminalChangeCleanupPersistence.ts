@@ -21,7 +21,6 @@ export const openSqliteTerminalChangeCleanupPort = () =>
         repository.transactionImmediate("record Change cleanup", (sql) =>
           recordCleanup(sql, input),
         ),
-      removeReviewerSessions: (_changeId) => Effect.void,
     }),
   );
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>

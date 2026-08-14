@@ -9,7 +9,6 @@ import type {
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
-import type { ReviewerSessionStore } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -99,14 +98,13 @@ type ValidateCandidateResult =
 type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly reviewerSessionsRoot?: string;
-  readonly sessionStore?: ReviewerSessionStore;
-  readonly agentPersistence?: AgentSessionPersistence;
-  readonly getAgentSession?: (
+  readonly reviewerSessionsRoot: string;
+  readonly agentPersistence: AgentSessionPersistence;
+  readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation?: (input: {
+  readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
     readonly validationRunId: string;
@@ -187,11 +185,10 @@ const makeCandidateValidation = (dependencies: {
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
-  readonly sessionStore?: ReviewerSessionStore;
-  readonly reviewerSessionsRoot?: string;
-  readonly agentPersistence?: AgentSessionPersistence;
-  readonly getAgentSession?: CandidateValidationPathsValue["getAgentSession"];
-  readonly linkAgentInvocation?: CandidateValidationPathsValue["linkAgentInvocation"];
+  readonly reviewerSessionsRoot: string;
+  readonly agentPersistence: AgentSessionPersistence;
+  readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
+  readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
@@ -351,11 +348,10 @@ const runCandidatePhases = (
     readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
-    readonly sessionStore?: ReviewerSessionStore;
-    readonly reviewerSessionsRoot?: string;
-    readonly agentPersistence?: AgentSessionPersistence;
-    readonly getAgentSession?: CandidateValidationPathsValue["getAgentSession"];
-    readonly linkAgentInvocation?: CandidateValidationPathsValue["linkAgentInvocation"];
+    readonly reviewerSessionsRoot: string;
+    readonly agentPersistence: AgentSessionPersistence;
+    readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
+    readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   },
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
@@ -392,21 +388,11 @@ const runCandidatePhases = (
           };
     const acceptanceReview = policy.acceptanceReview;
     const sessionOptions = {
-      ...(dependencies.sessionStore === undefined
-        ? {}
-        : { sessionStore: dependencies.sessionStore }),
-      ...(dependencies.reviewerSessionsRoot === undefined
-        ? {}
-        : { sessionStorageRoot: dependencies.reviewerSessionsRoot }),
-      ...(dependencies.agentPersistence === undefined
-        ? {}
-        : { agentPersistence: dependencies.agentPersistence }),
-      ...(dependencies.getAgentSession === undefined
-        ? {}
-        : { getAgentSession: dependencies.getAgentSession }),
-      ...(dependencies.linkAgentInvocation === undefined
-        ? {}
-        : { linkAgentInvocation: dependencies.linkAgentInvocation }),
+      sessionStorageRoot: dependencies.reviewerSessionsRoot,
+      agentPersistence: dependencies.agentPersistence,
+      getAgentSession: dependencies.getAgentSession,
+      linkAgentInvocation: dependencies.linkAgentInvocation,
+      settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
     };
     return yield* runCandidateValidationGate({
       ...(prepare === undefined
@@ -468,13 +454,6 @@ const runCandidatePhases = (
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
-                recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
-                ...(dependencies.persistence.settleAgentInvocationRound === undefined
-                  ? {}
-                  : {
-                      settleAgentInvocationRound:
-                        dependencies.persistence.settleAgentInvocationRound,
-                    }),
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -499,12 +478,6 @@ const runCandidatePhases = (
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,
-          recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
-          ...(dependencies.persistence.settleAgentInvocationRound === undefined
-            ? {}
-            : {
-                settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
-              }),
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

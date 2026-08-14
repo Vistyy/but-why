@@ -122,7 +122,6 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: fixture.changes.delivery.recordCleanup,
-              removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => ({ state: "complete", blockingReason: null }),
             artifactLifecycle: openArtifactLifecycleForTest({
@@ -268,7 +267,6 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: fixture.changes.delivery.recordCleanup,
-                removeReviewerSessions: fixture.changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete" }),
               artifactLifecycle: openArtifactLifecycleForTest({

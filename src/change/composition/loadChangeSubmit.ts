@@ -165,20 +165,10 @@ export const loadChangeSubmit = (input: {
       ...(input.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
-      sessionStore: {
-        get: reviewerSessions.getReviewerSession,
-        save: reviewerSessions.saveReviewerSession,
-        remove: (changeId: string, producer: string) =>
-          reviewerSessions.removeReviewerSession(changeId, producer),
-      },
       reviewerSessionsRoot: context.paths.operationalDir,
       agentPersistence,
-      ...(reviewerSessions.getAgentSession === undefined
-        ? {}
-        : { getAgentSession: reviewerSessions.getAgentSession }),
-      ...(reviewerSessions.linkAgentInvocation === undefined
-        ? {}
-        : { linkAgentInvocation: reviewerSessions.linkAgentInvocation }),
+      getAgentSession: reviewerSessions.getAgentSession,
+      linkAgentInvocation: reviewerSessions.linkAgentInvocation,
     });
 
   return {

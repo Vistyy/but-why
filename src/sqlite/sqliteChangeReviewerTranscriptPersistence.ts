@@ -33,25 +33,6 @@ export const openSqliteChangeReviewerTranscriptPort = () =>
               ),
           ),
         ),
-      recordReviewerTranscripts: (input) =>
-        repository.transactionImmediate("record Reviewer Transcripts", (sql) =>
-          input.transcripts.length === 0
-            ? Effect.void
-            : Effect.asVoid(
-                sql`
-                INSERT INTO reviewer_transcripts
-                ${sql.insert(
-                  input.transcripts.map((transcript) => ({
-                    change_id: input.changeId,
-                    producer: transcript.producer,
-                    pi_session_id: transcript.piSessionId,
-                    file_path: transcript.filePath,
-                  })),
-                )}
-                ON CONFLICT(change_id, producer, file_path) DO NOTHING
-              `,
-              ),
-        ),
     }),
   );
 const compareStoredStrings = (left: string, right: string): number =>

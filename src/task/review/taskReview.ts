@@ -1,6 +1,6 @@
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
-import type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/executeReviewerSession.js";
+import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import type { PiAgentProfileConfig } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";

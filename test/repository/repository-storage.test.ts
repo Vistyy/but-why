@@ -2081,34 +2081,17 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
-          changeId: "change-transcript-a",
-          transcripts: [
-            {
-              changeId: "change-transcript-a",
-              producer: "acceptance",
-              piSessionId: "session-a-1",
-              filePath: "reviewer-sessions/review_session-a-1.jsonl",
-            },
-            {
-              changeId: "change-transcript-a",
-              producer: "standards",
-              piSessionId: "session-a-2",
-              filePath: "reviewer-sessions/review_session-a-2.jsonl",
-            },
-          ],
-        });
-        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
-          changeId: "change-transcript-b",
-          transcripts: [
-            {
-              changeId: "change-transcript-b",
-              producer: "acceptance",
-              piSessionId: "session-b-1",
-              filePath: "reviewer-sessions/review_session-b-1.jsonl",
-            },
-          ],
-        });
+        yield* repository.operation("seed legacy Reviewer Transcripts", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
+              VALUES
+                ('change-transcript-a', 'acceptance', 'session-a-1', 'reviewer-sessions/review_session-a-1.jsonl'),
+                ('change-transcript-a', 'standards', 'session-a-2', 'reviewer-sessions/review_session-a-2.jsonl'),
+                ('change-transcript-b', 'acceptance', 'session-b-1', 'reviewer-sessions/review_session-b-1.jsonl')
+            `;
+          }),
+        );
 
         const first =
           yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-a");
@@ -2141,7 +2124,7 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("keeps Reviewer Transcript references after active Reviewer Sessions are removed", () =>
+  it.scoped("reads legacy Reviewer evidence without mutation", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
@@ -2159,31 +2142,29 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        yield* changes.reviewerSessions.saveReviewerSession({
-          ownerId: "change-transcript-retained",
-          producer: "acceptance",
-          fingerprint: "fingerprint",
-          sessionReference: "session-live",
-        });
-        yield* changes.reviewerTranscripts.recordReviewerTranscripts({
-          changeId: "change-transcript-retained",
-          transcripts: [
-            {
-              changeId: "change-transcript-retained",
-              producer: "acceptance",
-              piSessionId: "session-live",
-              filePath: "reviewer-sessions/review_session-live.jsonl",
-            },
-          ],
-        });
-
-        yield* changes.reviewerSessions.removeReviewerSessions("change-transcript-retained");
+        yield* repository.operation("seed legacy Reviewer evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
+              VALUES ('change-transcript-retained', 'acceptance', 'fingerprint', 'session-live')
+            `;
+            yield* sql`
+              INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
+              VALUES ('change-transcript-retained', 'acceptance', 'session-live', 'reviewer-sessions/review_session-live.jsonl')
+            `;
+          }),
+        );
 
         const live = yield* changes.reviewerSessions.getReviewerSession(
           "change-transcript-retained",
           "acceptance",
         );
-        expect(live).toBeUndefined();
+        expect(live).toEqual({
+          ownerId: "change-transcript-retained",
+          producer: "acceptance",
+          fingerprint: "fingerprint",
+          sessionReference: "session-live",
+        });
         const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
           "change-transcript-retained",
         );

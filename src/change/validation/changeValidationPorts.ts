@@ -52,7 +52,7 @@ export type CandidateValidationExecutionPort = {
   readonly recordSpecialistRound: (
     input: RecordCandidateSpecialistRoundInput,
   ) => StorageEffect<void>;
-  readonly settleAgentInvocationRound?: (input: {
+  readonly settleAgentInvocationRound: (input: {
     readonly validationRunId: string;
     readonly phase: ValidationPhase;
     readonly producer: string;

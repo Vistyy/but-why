@@ -135,11 +135,11 @@ export type ChangeReadPort = {
 };
 
 export type ChangeReviewerSessionPort = {
-  readonly getAgentSession?: (
+  readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => StorageEffect<number | undefined>;
-  readonly linkAgentInvocation?: (input: {
+  readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
     readonly validationRunId: string;
@@ -150,19 +150,12 @@ export type ChangeReviewerSessionPort = {
     changeId: string,
     producer: string,
   ) => StorageEffect<ReviewerSessionRecord | undefined>;
-  readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
-  readonly removeReviewerSession: (changeId: string, producer: string) => StorageEffect<void>;
-  readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
 };
 
 export type ChangeReviewerTranscriptPort = {
   readonly listReviewerTranscripts: (
     changeId: string,
   ) => StorageEffect<readonly ReviewerTranscript[]>;
-  readonly recordReviewerTranscripts: (input: {
-    readonly changeId: string;
-    readonly transcripts: readonly ReviewerTranscript[];
-  }) => StorageEffect<void>;
 };
 
 export type TerminalCleanupChange = {
@@ -268,7 +261,6 @@ export type TerminalChangeCleanupPort = {
     | { readonly ok: true; readonly changed: boolean; readonly cleanup: ChangeCleanup }
     | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" }
   >;
-  readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
 };
 
 type CandidatePublicationChangeBase = {

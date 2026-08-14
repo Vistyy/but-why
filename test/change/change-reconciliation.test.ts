@@ -107,7 +107,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => {
                 throw new Error("Open Changes must not be cleaned");
@@ -218,7 +217,6 @@ describe("by change reconcile", () => {
                 ...noOpTerminalCleanupDependencies,
                 persistence: {
                   recordCleanup: changes.delivery.recordCleanup,
-                  removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
                 },
                 cleanup: () => {
                   throw new Error("Rejected Changes must not be cleaned");
@@ -325,7 +323,6 @@ describe("by change reconcile", () => {
             ...noOpTerminalCleanupDependencies,
             persistence: {
               recordCleanup: changes.delivery.recordCleanup,
-              removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
             },
             cleanup: () => cleanupResults[cleanupAttempts++] ?? { state: "complete" },
           }),
@@ -451,7 +448,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -564,7 +560,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),
@@ -686,7 +681,6 @@ describe("by change reconcile", () => {
               ...noOpTerminalCleanupDependencies,
               persistence: {
                 recordCleanup: changes.delivery.recordCleanup,
-                removeReviewerSessions: changes.reviewerSessions.removeReviewerSessions,
               },
               cleanup: () => ({ state: "complete", blockingReason: null }),
             }),

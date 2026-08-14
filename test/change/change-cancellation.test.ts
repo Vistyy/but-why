@@ -310,14 +310,7 @@ describe("Change cancellation", () => {
 
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout).status).toBe("cancelled");
-      expect(events).toEqual([
-        "read-pr",
-        "close-pr",
-        "cancel-change",
-        "cleanup",
-        "record-cleanup",
-        "remove-reviewer-sessions",
-      ]);
+      expect(events).toEqual(["read-pr", "close-pr", "cancel-change", "cleanup", "record-cleanup"]);
       expect(dependencies.closePullRequestInputs).toEqual([{ target, number: 42 }]);
     }),
   );
@@ -571,7 +564,6 @@ describe("Change cancellation", () => {
             "cancel-change",
             "cleanup",
             "record-cleanup",
-            "remove-reviewer-sessions",
           ]);
           expect(cleanupRemoteBranches).toEqual([
             {
@@ -631,7 +623,6 @@ describe("Change cancellation", () => {
             "cancel-change",
             "cleanup",
             "record-cleanup",
-            "remove-reviewer-sessions",
           ]);
           return result;
         }),
@@ -844,10 +835,6 @@ const cancellationDependencies = (input: {
         changed: true,
         cleanup: currentChange.cleanup,
       });
-    },
-    removeReviewerSessions: () => {
-      input.events.push("remove-reviewer-sessions");
-      return Effect.void;
     },
   };
   return {
