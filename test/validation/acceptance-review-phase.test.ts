@@ -201,9 +201,6 @@ describe("Acceptance Review phase", () => {
       const settleAgentInvocationRound: NonNullable<
         RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]
       > = () => () => Effect.void;
-      const recordArtifactRecords: NonNullable<
-        RunAcceptanceReviewPhaseInput["recordArtifactRecords"]
-      > = () => Effect.void;
       const actualPolicy = {
         ...policy,
         profile: {
@@ -224,7 +221,6 @@ describe("Acceptance Review phase", () => {
         agentPersistence,
         linkAgentInvocation,
         settleAgentInvocationRound,
-        recordArtifactRecords,
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
@@ -528,7 +524,6 @@ type FixtureOptions = {
   readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
   readonly linkAgentInvocation?: RunAcceptanceReviewPhaseInput["linkAgentInvocation"];
   readonly settleAgentInvocationRound?: RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"];
-  readonly recordArtifactRecords?: RunAcceptanceReviewPhaseInput["recordArtifactRecords"];
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
   readonly sessionStorageRoot?: string;
@@ -594,9 +589,6 @@ const acceptancePhaseFixture = (
         ...(options.settleAgentInvocationRound === undefined
           ? {}
           : { settleAgentInvocationRound: options.settleAgentInvocationRound }),
-        ...(options.recordArtifactRecords === undefined
-          ? {}
-          : { recordArtifactRecords: options.recordArtifactRecords }),
         ...(options.sessionStore === undefined ? {} : { sessionStore: options.sessionStore }),
         allowedUntrackedFiles: [],
         now,

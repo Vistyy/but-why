@@ -51,6 +51,7 @@ describe("by change reconcile --discard-work", () => {
               startingCommit: git(root, "rev-parse", "refs/heads/main"),
               worktreePath: join(root, "uncreated-worktree"),
               now,
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
             });
             if (!created.ok) throw new Error(created.code);
             yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -117,6 +118,7 @@ describe("by change reconcile --discard-work", () => {
               startingCommit: git(root, "rev-parse", "refs/heads/main"),
               worktreePath: recordedWorktreePath,
               now,
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
             });
             if (!created.ok) throw new Error(created.code);
             yield* starts.recordPrepareOutcome(created.change.id, null, now);

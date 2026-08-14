@@ -129,9 +129,6 @@ export type RunAcceptanceReviewPhaseInput = {
       NonNullable<CandidateValidationExecutionPort["settleAgentInvocationRound"]>
     >[0],
   ) => AgentSessionSqlLink;
-  readonly recordArtifactRecords?: NonNullable<
-    CandidateValidationExecutionPort["recordArtifactRecords"]
-  >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
@@ -279,58 +276,70 @@ const runAcceptanceReviewPhaseImpl = (
     const usingAgentSettlement =
       input.agentPersistence !== undefined &&
       input.linkAgentInvocation !== undefined &&
-      input.settleAgentInvocationRound !== undefined &&
-      input.recordArtifactRecords !== undefined;
+      input.settleAgentInvocationRound !== undefined;
     const execution = usingAgentSettlement
-      ? yield* executeAgentSession<ReviewerOutput>({
-          ...(agentSessionId === undefined ? {} : { agentSessionId }),
-          configuration: agentConfiguration(input.policy.profile),
-          agentPersistence: input.agentPersistence,
-          linkInvocation: input.linkAgentInvocation({
-            changeId: input.changeId,
-            producer: "acceptance",
-            validationRunId: input.validationRunId,
-            phase: validationPhase.acceptanceReview,
-            configurationSnapshot: input.policy,
-          }),
-          reviewerRuntime: input.runtime,
-          reviewerExecutor: input.reviewerExecutor,
-          decodeOutput,
-          prompt,
-          continuationPrompt,
-          commandCwd: input.commandCwd,
-          resourceRoot: input.resourceRoot ?? input.commandCwd,
-          profile: input.policy.profile,
-          reviewer: "acceptance",
-          sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
-          ...(input.agentEnvironment === undefined
-            ? {}
-            : { agentEnvironment: input.agentEnvironment }),
-          now: () => new Date(input.now),
-          settleDomain: ({ result: runtimeResult }) => {
-            const result = translateRuntimeResult(runtimeResult, "acceptance");
-            const findings = result.ok
-              ? result.report.findings.map((finding, index) => ({
-                  id: `${input.validationRunId}-acceptance-F${index + 1}`,
+      ? yield* executeAgentSession<ReviewerOutput, ValidationToolingFailure, FileSystem.FileSystem>(
+          {
+            ...(agentSessionId === undefined ? {} : { agentSessionId }),
+            configuration: agentConfiguration(input.policy.profile),
+            agentPersistence: input.agentPersistence,
+            linkInvocation: input.linkAgentInvocation({
+              changeId: input.changeId,
+              producer: "acceptance",
+              validationRunId: input.validationRunId,
+              phase: validationPhase.acceptanceReview,
+              configurationSnapshot: input.policy,
+            }),
+            reviewerRuntime: input.runtime,
+            reviewerExecutor: input.reviewerExecutor,
+            decodeOutput,
+            prompt,
+            continuationPrompt,
+            commandCwd: input.commandCwd,
+            resourceRoot: input.resourceRoot ?? input.commandCwd,
+            profile: input.policy.profile,
+            reviewer: "acceptance",
+            sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
+            ...(input.agentEnvironment === undefined
+              ? {}
+              : { agentEnvironment: input.agentEnvironment }),
+            now: () => new Date(input.now),
+            settleDomain: ({ result: runtimeResult, evidence }) =>
+              Effect.gen(function* () {
+                const result = translateRuntimeResult(runtimeResult, "acceptance");
+                const findings = result.ok
+                  ? result.report.findings.map((finding, index) => ({
+                      id: `${input.validationRunId}-acceptance-F${index + 1}`,
+                      validationRunId: input.validationRunId,
+                      phase: validationPhase.acceptanceReview,
+                      producer: "acceptance" as const,
+                      ...finding,
+                    }))
+                  : [];
+                const artifacts = yield* writeReviewerArtifacts({
                   validationRunId: input.validationRunId,
                   phase: validationPhase.acceptanceReview,
-                  producer: "acceptance" as const,
-                  ...finding,
-                }))
-              : [];
-            return Effect.succeed(
-              input.settleAgentInvocationRound?.({
-                validationRunId: input.validationRunId,
-                phase: validationPhase.acceptanceReview,
-                producer: "acceptance",
-                roundNumber: 1,
-                roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
-                findings,
-                now: input.now,
+                  producer: "acceptance",
+                  result,
+                  artifactsRoot: input.artifactsRoot,
+                  ...(input.artifactMaxBytes === undefined
+                    ? {}
+                    : { artifactMaxBytes: input.artifactMaxBytes }),
+                  executionEvidence: reviewerEvidenceFromAgentSession(evidence),
+                });
+                return input.settleAgentInvocationRound?.({
+                  validationRunId: input.validationRunId,
+                  phase: validationPhase.acceptanceReview,
+                  producer: "acceptance",
+                  roundNumber: 1,
+                  roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+                  findings,
+                  artifactRecords: artifacts,
+                  now: input.now,
+                });
               }),
-            );
           },
-        })
+        )
       : yield* executeReviewerSession({
           identity,
           runtime: input.runtime,
@@ -356,22 +365,19 @@ const runAcceptanceReviewPhaseImpl = (
             invocations: execution.evidence.invocations,
           })
         : (execution.evidence as ReviewerExecutionEvidence);
-    const artifacts = yield* writeReviewerArtifacts({
-      validationRunId: input.validationRunId,
-      phase: validationPhase.acceptanceReview,
-      producer: "acceptance",
-      result,
-      artifactsRoot: input.artifactsRoot,
-      ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      executionEvidence: reviewerEvidence,
-    });
-    if (usingAgentSettlement) {
-      yield* input.recordArtifactRecords?.({
-        validationRunId: input.validationRunId,
-        artifactRecords: artifacts,
-        now: input.now,
-      });
-    }
+    const artifacts = usingAgentSettlement
+      ? undefined
+      : yield* writeReviewerArtifacts({
+          validationRunId: input.validationRunId,
+          phase: validationPhase.acceptanceReview,
+          producer: "acceptance",
+          result,
+          artifactsRoot: input.artifactsRoot,
+          ...(input.artifactMaxBytes === undefined
+            ? {}
+            : { artifactMaxBytes: input.artifactMaxBytes }),
+          executionEvidence: reviewerEvidence,
+        });
     const findings = result.ok
       ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
@@ -386,7 +392,7 @@ const runAcceptanceReviewPhaseImpl = (
         validationRunId: input.validationRunId,
         roundNumber: 1,
         roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
-        artifactRecords: artifacts,
+        artifactRecords: artifacts ?? [],
         findings,
         now: input.now,
       });

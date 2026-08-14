@@ -38,6 +38,7 @@ describe("SQLite Change decoding", () => {
             worktreePath: `${input.commonDirectory}/worktrees/change-decoded`,
             prepare: { command: "just init", timeoutSeconds: 120 },
             now: "2026-08-09T20:00:00.000Z",
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           expect(created).toMatchObject({ ok: true, change: { taskId: null } });
 
@@ -87,6 +88,7 @@ describe("SQLite Change decoding", () => {
           startingCommit: "base-sha",
           worktreePath: `${input.commonDirectory}/worktrees/change-malformed`,
           now: "2026-08-09T20:10:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!created.ok) throw new Error(created.code);
 
@@ -114,6 +116,7 @@ describe("SQLite Change decoding", () => {
           startingCommit: "base-sha",
           worktreePath: `${input.commonDirectory}/worktrees/change-publication-owner`,
           now: "2026-08-09T20:10:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!other.ok) throw new Error(other.code);
         yield* repository.operation("inject foreign publication ownership", (sql) =>
@@ -325,6 +328,7 @@ describe("SQLite Change decoding", () => {
           startingCommit: "base-sha",
           worktreePath: `${input.commonDirectory}/worktrees/change-publication-selection`,
           now: "2026-08-09T20:15:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!created.ok) throw new Error(created.code);
 
@@ -560,6 +564,7 @@ describe("SQLite Change decoding", () => {
           startingCommit: "base-sha",
           worktreePath: `${input.commonDirectory}/worktrees/change-selected-corruption`,
           now: "2026-08-09T20:27:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!created.ok) throw new Error(created.code);
 
@@ -661,6 +666,7 @@ describe("SQLite Change decoding", () => {
             startingCommit: "base-sha",
             worktreePath: `${input.commonDirectory}/worktrees/cleanup-selected-data`,
             now: "2026-08-09T20:30:00.000Z",
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!created.ok) throw new Error(created.code);
           yield* repository.operation("close Change with malformed unrelated data", (sql) =>

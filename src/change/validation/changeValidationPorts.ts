@@ -58,13 +58,9 @@ export type CandidateValidationExecutionPort = {
     readonly roundNumber: number;
     readonly roundStatus: "passed" | "failed";
     readonly findings: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
-    readonly now: string;
-  }) => AgentSessionSqlLink;
-  readonly recordArtifactRecords?: (input: {
-    readonly validationRunId: string;
     readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
     readonly now: string;
-  }) => StorageEffect<void>;
+  }) => AgentSessionSqlLink;
   readonly listRounds: (
     validationRunId: string,
   ) => StorageEffect<readonly CandidateValidationRound[]>;

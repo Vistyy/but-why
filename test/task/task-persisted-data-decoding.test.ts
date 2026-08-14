@@ -43,6 +43,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
         worktreePath: `${commonDirectory}/worktrees/change-with-resolution`,
         taskId: publicTaskId("BY-5"),
         now: secondNow,
+        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
       });
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation("insert resolved Blocker fixture", (sql) =>
@@ -122,6 +123,7 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
         worktreePath: `${commonDirectory}/worktrees/change-with-malformed-task-state`,
         taskId: publicTaskId("BY-3"),
         now: secondNow,
+        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
       });
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation(

@@ -41,6 +41,28 @@ const changeWithoutTaskPolicy = {
   copyFiles: [],
   specialistReviews: [],
 } as const;
+const storedAcceptanceReviewer = {
+  instructions: "Review intent",
+  instructionsSource: "built_in" as const,
+  profile: {
+    agentProfile: "default",
+    scope: "global" as const,
+    profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test/model" } },
+  },
+};
+const storedCandidateReviewer = {
+  id: "candidate",
+  instructions: "Candidate reviewer",
+  instructionsSource: "repo" as const,
+  profile: {
+    agentProfile: "candidate-reviewer",
+    scope: "repo" as const,
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "candidate/model" },
+    },
+  },
+};
 
 describe("Change Submit orchestration", () => {
   it.effect("reports the exact Active Validation Run rejected at start-or-reuse", () =>
@@ -71,6 +93,31 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-active",
       });
       expect(events).toEqual(["capture", "detect_target"]);
+    }),
+  );
+
+  it.effect("rejects a legacy Change without stored reviewer configuration", () =>
+    Effect.gen(function* () {
+      const submit = openChangeSubmit(
+        dependencies({ change: readyChange({ reviewerConfiguration: null }) }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Current reviewer configuration must not be used"),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "This Change has no stored reviewer configuration and cannot be submitted.",
+      });
     }),
   );
 
@@ -309,7 +356,12 @@ describe("Change Submit orchestration", () => {
         const submit = openChangeSubmit(
           dependencies({
             events,
-            change: readyChange(),
+            change: readyChange({
+              reviewerConfiguration: {
+                acceptanceReview: storedAcceptanceReviewer,
+                specialistReviews: [storedCandidateReviewer],
+              },
+            }),
             trackPolicyResolution: true,
             candidateRepoConfig: { taskPrefix: "BY", review: { specialists: ["candidate"] } },
             baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
@@ -1770,6 +1822,10 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   startingCommit: "base",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
+  reviewerConfiguration: {
+    acceptanceReview: storedAcceptanceReviewer,
+    specialistReviews: [],
+  },
   prepare: null,
   prepareFailure: null,
   implementationDecisions: [],

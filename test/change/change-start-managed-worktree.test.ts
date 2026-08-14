@@ -660,6 +660,7 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
+    reviewerConfiguration: null,
     prepare: null,
     prepareFailure: null,
     state: "open",

@@ -10,10 +10,7 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
-import {
-  type ValidationRunArtifactRecord,
-  validationPhase,
-} from "../change/validationRun/validationRun.js";
+import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -128,14 +125,10 @@ export const openSqliteCandidateValidationExecutionPort = () =>
           producer: input.producer,
           roundNumber: input.roundNumber,
           roundStatus: input.roundStatus,
-          artifactRecords: [],
+          artifactRecords: input.artifactRecords,
           findings: input.findings,
           now: input.now,
         }),
-      recordArtifactRecords: (input) =>
-        repository.transactionImmediate("record Candidate validation artifacts", (sql) =>
-          recordArtifactRecords(sql, input),
-        ),
       listRounds: (validationRunId) =>
         repository.transaction("list Candidate validation rounds", (sql) =>
           listRounds(sql, validationRunId),
@@ -413,29 +406,6 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
       { discard: true },
     );
   });
-
-const recordArtifactRecords = (
-  sql: SqlClient.SqlClient,
-  input: {
-    readonly validationRunId: string;
-    readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
-    readonly now: string;
-  },
-) =>
-  Effect.forEach(
-    input.artifactRecords,
-    (artifact) => sql`
-      INSERT INTO candidate_validation_artifacts (
-        ref, validation_run_id, phase, producer, path, original_bytes,
-        stored_bytes, truncated, created_at
-      ) VALUES (
-        ${artifact.ref}, ${artifact.validationRunId}, ${artifact.phase}, ${artifact.producer},
-        ${artifact.path}, ${artifact.originalBytes ?? 0}, ${artifact.storedBytes ?? 0},
-        ${artifact.truncated === true ? 1 : 0}, ${input.now}
-      )
-    `,
-    { discard: true },
-  );
 
 const listRounds = listValidationRounds;
 const listFindings = listValidationFindings;

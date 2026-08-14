@@ -126,9 +126,6 @@ export type RunSpecialistReviewPhaseInput = {
       NonNullable<CandidateValidationExecutionPort["settleAgentInvocationRound"]>
     >[0],
   ) => AgentSessionSqlLink;
-  readonly recordArtifactRecords?: NonNullable<
-    CandidateValidationExecutionPort["recordArtifactRecords"]
-  >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
@@ -314,58 +311,70 @@ const runSpecialist = (
     const usingAgentSettlement =
       input.agentPersistence !== undefined &&
       input.linkAgentInvocation !== undefined &&
-      input.settleAgentInvocationRound !== undefined &&
-      input.recordArtifactRecords !== undefined;
+      input.settleAgentInvocationRound !== undefined;
     const execution = usingAgentSettlement
-      ? yield* executeAgentSession<ReviewerOutput>({
-          ...(agentSessionId === undefined ? {} : { agentSessionId }),
-          configuration: agentConfiguration(policy.profile),
-          agentPersistence: input.agentPersistence,
-          linkInvocation: input.linkAgentInvocation({
-            changeId: input.changeId,
-            producer: policy.id,
-            validationRunId: input.validationRunId,
-            phase: validationPhase.specialistReview,
-            configurationSnapshot: policy,
-          }),
-          reviewerRuntime: input.runtime,
-          reviewerExecutor: input.reviewerExecutor,
-          decodeOutput,
-          prompt,
-          continuationPrompt,
-          commandCwd: input.commandCwd,
-          resourceRoot: input.resourceRoot ?? input.commandCwd,
-          profile: policy.profile,
-          reviewer: policy.id,
-          sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
-          ...(input.agentEnvironment === undefined
-            ? {}
-            : { agentEnvironment: input.agentEnvironment }),
-          now: () => new Date(input.now),
-          settleDomain: ({ result: runtimeResult }) => {
-            const result = translateRuntimeResult(runtimeResult, policy.id);
-            const findings = result.ok
-              ? result.report.findings.map((finding, index) => ({
-                  id: `${input.validationRunId}-${policy.id}-F${index + 1}`,
+      ? yield* executeAgentSession<ReviewerOutput, ValidationToolingFailure, FileSystem.FileSystem>(
+          {
+            ...(agentSessionId === undefined ? {} : { agentSessionId }),
+            configuration: agentConfiguration(policy.profile),
+            agentPersistence: input.agentPersistence,
+            linkInvocation: input.linkAgentInvocation({
+              changeId: input.changeId,
+              producer: policy.id,
+              validationRunId: input.validationRunId,
+              phase: validationPhase.specialistReview,
+              configurationSnapshot: policy,
+            }),
+            reviewerRuntime: input.runtime,
+            reviewerExecutor: input.reviewerExecutor,
+            decodeOutput,
+            prompt,
+            continuationPrompt,
+            commandCwd: input.commandCwd,
+            resourceRoot: input.resourceRoot ?? input.commandCwd,
+            profile: policy.profile,
+            reviewer: policy.id,
+            sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
+            ...(input.agentEnvironment === undefined
+              ? {}
+              : { agentEnvironment: input.agentEnvironment }),
+            now: () => new Date(input.now),
+            settleDomain: ({ result: runtimeResult, evidence }) =>
+              Effect.gen(function* () {
+                const result = translateRuntimeResult(runtimeResult, policy.id);
+                const findings = result.ok
+                  ? result.report.findings.map((finding, index) => ({
+                      id: `${input.validationRunId}-${policy.id}-F${index + 1}`,
+                      validationRunId: input.validationRunId,
+                      phase: validationPhase.specialistReview,
+                      producer: policy.id,
+                      ...finding,
+                    }))
+                  : [];
+                const artifacts = yield* writeReviewerArtifacts({
                   validationRunId: input.validationRunId,
                   phase: validationPhase.specialistReview,
                   producer: policy.id,
-                  ...finding,
-                }))
-              : [];
-            return Effect.succeed(
-              input.settleAgentInvocationRound?.({
-                validationRunId: input.validationRunId,
-                phase: validationPhase.specialistReview,
-                producer: policy.id,
-                roundNumber,
-                roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
-                findings,
-                now: input.now,
+                  result,
+                  artifactsRoot: input.artifactsRoot,
+                  ...(input.artifactMaxBytes === undefined
+                    ? {}
+                    : { artifactMaxBytes: input.artifactMaxBytes }),
+                  executionEvidence: reviewerEvidenceFromAgentSession(evidence),
+                });
+                return input.settleAgentInvocationRound?.({
+                  validationRunId: input.validationRunId,
+                  phase: validationPhase.specialistReview,
+                  producer: policy.id,
+                  roundNumber,
+                  roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+                  findings,
+                  artifactRecords: artifacts,
+                  now: input.now,
+                });
               }),
-            );
           },
-        })
+        )
       : yield* executeReviewerSession({
           identity,
           runtime: input.runtime,
@@ -406,22 +415,19 @@ const runSpecialist = (
           })
         : (execution.evidence as ReviewerExecutionEvidence)),
     };
-    const artifacts = yield* writeReviewerArtifacts({
-      validationRunId: input.validationRunId,
-      phase: validationPhase.specialistReview,
-      producer: policy.id,
-      result,
-      artifactsRoot: input.artifactsRoot,
-      ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      executionEvidence: reviewerEvidence,
-    });
-    if (usingAgentSettlement) {
-      yield* input.recordArtifactRecords?.({
-        validationRunId: input.validationRunId,
-        artifactRecords: artifacts,
-        now: input.now,
-      });
-    }
+    const artifacts = usingAgentSettlement
+      ? undefined
+      : yield* writeReviewerArtifacts({
+          validationRunId: input.validationRunId,
+          phase: validationPhase.specialistReview,
+          producer: policy.id,
+          result,
+          artifactsRoot: input.artifactsRoot,
+          ...(input.artifactMaxBytes === undefined
+            ? {}
+            : { artifactMaxBytes: input.artifactMaxBytes }),
+          executionEvidence: reviewerEvidence,
+        });
     const findings = result.ok
       ? result.report.findings.map((finding, findingIndex) => ({
           id: `${input.validationRunId}-${policy.id}-F${findingIndex + 1}`,
@@ -439,7 +445,7 @@ const runSpecialist = (
         producer: policy.id,
         roundNumber,
         roundStatus: passed ? "passed" : "failed",
-        artifactRecords: artifacts,
+        artifactRecords: artifacts ?? [],
         findings,
         now: input.now,
       });

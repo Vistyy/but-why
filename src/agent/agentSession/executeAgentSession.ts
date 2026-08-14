@@ -23,7 +23,7 @@ export type AgentExecutionEvidence = {
   readonly continuationId: number;
 };
 
-export type ExecuteAgentSessionInput<Output, DomainError = never> = {
+export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirements = never> = {
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
   readonly agentPersistence: AgentSessionPersistence;
@@ -48,7 +48,8 @@ export type ExecuteAgentSessionInput<Output, DomainError = never> = {
     readonly invocationId: number;
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
-  }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError>;
+    readonly evidence: AgentExecutionEvidence;
+  }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError, DomainRequirements>;
   readonly now: () => Date;
 };
 
@@ -57,9 +58,13 @@ export type ExecuteAgentSessionResult<Output> = {
   readonly evidence: AgentExecutionEvidence;
 };
 
-export const executeAgentSession = <Output, DomainError = never>(
-  input: ExecuteAgentSessionInput<Output, DomainError>,
-): Effect.Effect<ExecuteAgentSessionResult<Output>, RepositoryStorageError | DomainError> =>
+export const executeAgentSession = <Output, DomainError = never, DomainRequirements = never>(
+  input: ExecuteAgentSessionInput<Output, DomainError, DomainRequirements>,
+): Effect.Effect<
+  ExecuteAgentSessionResult<Output>,
+  RepositoryStorageError | DomainError,
+  DomainRequirements
+> =>
   Effect.gen(function* () {
     let prompt = input.prompt;
     let resumeSession: string | undefined;
@@ -155,12 +160,18 @@ export const executeAgentSession = <Output, DomainError = never>(
         result.failure.kind === "output_contract" &&
         result.sessionReference !== undefined &&
         invocationNumber < 3;
+      const evidence: AgentExecutionEvidence = {
+        agentSessionId: sessionId,
+        continuationId,
+        invocations: [...invocationEvidence, invocationEvidenceRecord],
+      };
       const settleDomain =
         !shouldRetry && input.settleDomain !== undefined
           ? yield* input.settleDomain({
               invocationId: dispatch.dispatch.invocation.id,
               result,
               invocationNumber,
+              evidence,
             })
           : undefined;
       yield* Effect.uninterruptible(

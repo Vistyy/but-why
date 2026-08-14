@@ -472,9 +472,6 @@ const runCandidatePhases = (
                       settleAgentInvocationRound:
                         dependencies.persistence.settleAgentInvocationRound,
                     }),
-                ...(dependencies.persistence.recordArtifactRecords === undefined
-                  ? {}
-                  : { recordArtifactRecords: dependencies.persistence.recordArtifactRecords }),
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -505,9 +502,6 @@ const runCandidatePhases = (
             : {
                 settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
               }),
-          ...(dependencies.persistence.recordArtifactRecords === undefined
-            ? {}
-            : { recordArtifactRecords: dependencies.persistence.recordArtifactRecords }),
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

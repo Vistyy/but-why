@@ -21,7 +21,7 @@ export type ChangeStartRecord = {
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration | null;
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly state: ChangeState;
@@ -36,7 +36,7 @@ export type CreateChangeStartInput = {
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly taskId?: PublicTaskId;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly now: string;
 };

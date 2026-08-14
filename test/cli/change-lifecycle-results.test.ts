@@ -19,6 +19,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
     title: "Accepted title",
     description: "Accepted description",
   },
+  reviewerConfiguration: null,
   prepare: { command: "prepare repository", timeoutSeconds: 17 },
   prepareFailure,
   state: "open",

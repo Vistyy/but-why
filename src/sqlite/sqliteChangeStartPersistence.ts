@@ -106,7 +106,7 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        ${input.reviewerConfiguration === undefined ? null : JSON.stringify(input.reviewerConfiguration)},
+        ${JSON.stringify(input.reviewerConfiguration)},
         ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )

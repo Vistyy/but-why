@@ -67,6 +67,14 @@ export const startChange = (
       if (resumed !== undefined) return resumed;
     }
 
+    if (input.reviewerConfiguration === undefined) {
+      return {
+        ok: false as const,
+        code: "reviewer_configuration_invalid" as const,
+        message: "A reviewer configuration is required to create a Change.",
+      };
+    }
+
     const id = randomUUID();
     const slug = input.taskId === undefined ? `change-${id}` : taskSlugForId(input.taskId);
     const gitIntent = git.resolveIntent(slug, input.baseBranch);
@@ -75,9 +83,7 @@ export const startChange = (
       id,
       ...gitIntent.intent,
       ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
-      ...(input.reviewerConfiguration === undefined
-        ? {}
-        : { reviewerConfiguration: input.reviewerConfiguration }),
+      reviewerConfiguration: input.reviewerConfiguration,
       now: input.now,
     });
     if (!created.ok) return created;

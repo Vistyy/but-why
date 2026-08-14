@@ -152,6 +152,7 @@ describe("repository SQL storage", () => {
           taskId,
           prepare: { command: "prepare repository", timeoutSeconds: 17 },
           now: "2026-07-17T22:50:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!created.ok) throw new Error(`Change Start failed: ${created.code}`);
         expect(yield* starts.getById(created.change.id)).toMatchObject({
@@ -229,6 +230,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-raise-blocker"),
           taskId,
           now: "2026-07-17T22:55:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
@@ -282,6 +284,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-duplicate-blocker"),
           taskId,
           now: "2026-07-17T22:55:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const first = yield* changes.authority.raiseImplementationBlocker({
@@ -336,6 +339,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-published-blocker"),
           taskId,
           now: "2026-07-17T22:55:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
@@ -417,6 +421,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-resolve-blocker"),
           taskId,
           now: "2026-07-17T23:04:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const raised = yield* changes.authority.raiseImplementationBlocker({
@@ -492,6 +497,7 @@ describe("repository SQL storage", () => {
             "by-1-change-without-task-blocker",
           ),
           now: "2026-07-17T23:02:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const raised = yield* changes.authority.raiseImplementationBlocker({
@@ -540,6 +546,7 @@ describe("repository SQL storage", () => {
           startingCommit: "1111111111111111111111111111111111111111",
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-no-blocker"),
           now: "2026-07-17T23:02:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
@@ -584,6 +591,7 @@ describe("repository SQL storage", () => {
             worktreePath: join(input.commonDirectory, "worktrees", "by-cancel-atomic"),
             taskId,
             now: "2026-07-17T22:57:00.000Z",
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
           if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
@@ -642,6 +650,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-stale"),
           taskId,
           now: "2026-07-17T22:57:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {
@@ -752,6 +761,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-newer"),
           taskId,
           now: "2026-07-17T22:57:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const target = {
@@ -875,6 +885,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-atomic"),
           taskId,
           now: "2026-07-17T22:57:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {
@@ -961,6 +972,7 @@ describe("repository SQL storage", () => {
           startingCommit: "1111111111111111111111111111111111111111",
           worktreePath: join(input.commonDirectory, "worktrees", "by-concurrent"),
           now: "2026-07-17T22:57:00.000Z",
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {

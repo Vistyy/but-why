@@ -343,7 +343,13 @@ const applyChangeReviewerConfiguration = (
   RepositoryStorageError
 > =>
   Effect.gen(function* () {
-    if (configuration === null || configuration === undefined) return { ok: true, resolved };
+    if (configuration === null || configuration === undefined) {
+      return {
+        ok: false as const,
+        code: "validation_policy_invalid" as const,
+        message: "This Change has no stored reviewer configuration and cannot be submitted.",
+      };
+    }
     const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
       Effect.gen(function* () {
         const current = resolved.policy.specialistReviews.find(
