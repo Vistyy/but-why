@@ -109,6 +109,7 @@ export const loadChangeSubmit = (input: {
         repoConfig,
         worktreePath,
         validationRepoConfig,
+        reviewerConfiguration,
       ) => {
         const globalConfig = readGlobalConfig(input.globalConfigPath);
         return globalConfig.ok
@@ -120,6 +121,7 @@ export const loadChangeSubmit = (input: {
               repoConfig,
               ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
               repoRoot: worktreePath,
+              ...(reviewerConfiguration === undefined ? {} : { reviewerConfiguration }),
             })
           : globalConfig;
       },

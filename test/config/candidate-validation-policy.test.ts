@@ -68,6 +68,32 @@ describe("Candidate validation policy configuration", () => {
     });
   });
 
+  it("uses the frozen Change reviewer configuration without resolving current reviewer selections", () => {
+    const root = createTestWorkspace();
+    const globalConfigPath = join(root, "global-config.json");
+    writeFileSync(globalConfigPath, "{}");
+    const decoded = decodeRepoConfig({
+      taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: "true" }] },
+      review: { specialists: ["removed-reviewer"] },
+    });
+    if (Either.isLeft(decoded)) throw new Error(decoded.left.message);
+
+    const result = resolveCandidateValidationPolicy({
+      context: { root, config: decoded.right },
+      globalConfigPath,
+      globalConfig: globalConfigAt(globalConfigPath),
+      acceptanceContextSupplied: false,
+      repoConfig: decoded.right,
+      reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      resolved: { policy: { specialistReviews: [] } },
+    });
+  });
+
   it("resolves Repository Preparation from the Change Base Repo Config", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global-config.json");

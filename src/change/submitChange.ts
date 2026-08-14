@@ -190,6 +190,7 @@ export const openChangeSubmit = (dependencies: {
     repoConfig: RepoConfig,
     worktreePath: string,
     validationRepoConfig?: RepoConfig,
+    reviewerConfiguration?: ChangeReviewerConfiguration,
   ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -295,11 +296,29 @@ const submitChange = (
           : { details: configFailureDetails(candidateRepoConfig) }),
       } as const;
     }
+    if (change.reviewerConfiguration === null || change.reviewerConfiguration === undefined) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "This Change has no stored reviewer configuration and cannot be submitted.",
+      } as const;
+    }
+    if (
+      change.acceptanceContext !== null &&
+      change.reviewerConfiguration.acceptanceReview === null
+    ) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
+      } as const;
+    }
     const policy = dependencies.resolvePolicy(
       change.acceptanceContext !== null,
       candidateRepoConfig.config,
       change.worktreePath,
       baselineRepoConfig.config,
+      change.reviewerConfiguration,
     );
     if (!policy.ok) {
       return {
@@ -313,6 +332,13 @@ const submitChange = (
       change.id,
       policy.resolved,
       change.reviewerConfiguration,
+      () =>
+        dependencies.resolvePolicy(
+          change.acceptanceContext !== null,
+          candidateRepoConfig.config,
+          change.worktreePath,
+          baselineRepoConfig.config,
+        ),
     );
     if (!fixedPolicy.ok) return fixedPolicy;
     const target = detectPublicationTarget(dependencies, change, candidate);
@@ -333,6 +359,7 @@ const applyChangeReviewerConfiguration = (
   changeId: string,
   resolved: ResolvedCandidateValidationPolicy,
   configuration: ChangeReviewerConfiguration | null | undefined,
+  resolveCurrentPolicy: () => CandidateValidationPolicyResolution,
 ): Effect.Effect<
   | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
   | {
@@ -350,16 +377,25 @@ const applyChangeReviewerConfiguration = (
         message: "This Change has no stored reviewer configuration and cannot be submitted.",
       };
     }
+    let currentPolicy: ResolvedCandidateValidationPolicy | undefined;
+    let currentPolicyLoaded = false;
+    const current = () => {
+      if (currentPolicyLoaded) return currentPolicy;
+      currentPolicyLoaded = true;
+      const result = resolveCurrentPolicy();
+      currentPolicy = result.ok ? result.resolved : undefined;
+      return currentPolicy;
+    };
     const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
       Effect.gen(function* () {
-        const current = resolved.policy.specialistReviews.find(
-          (candidate) => candidate.id === stored.id,
-        );
         const canCorrect =
-          current !== undefined && persistence.agentSessionConfigurationCanBeCorrected !== undefined
+          persistence.agentSessionConfigurationCanBeCorrected !== undefined
             ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, stored.id)
             : false;
-        return canCorrect && current !== undefined ? current : stored;
+        const replacement = canCorrect
+          ? current()?.policy.specialistReviews.find((candidate) => candidate.id === stored.id)
+          : undefined;
+        return replacement ?? stored;
       }),
     );
     const policy = { ...resolved.policy, specialistReviews };
@@ -373,20 +409,21 @@ const applyChangeReviewerConfiguration = (
       };
     }
     const canCorrectAcceptance =
-      resolved.policy.acceptanceReview !== undefined &&
       persistence.agentSessionConfigurationCanBeCorrected !== undefined
         ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, "acceptance")
         : false;
+    const currentResolved = canCorrectAcceptance ? current() : undefined;
+    const currentAcceptanceReview =
+      currentResolved?.acceptanceContextSupplied === true
+        ? currentResolved.policy.acceptanceReview
+        : undefined;
     return {
       ok: true as const,
       resolved: {
         acceptanceContextSupplied: true as const,
         policy: {
           ...policy,
-          acceptanceReview:
-            canCorrectAcceptance && resolved.policy.acceptanceReview !== undefined
-              ? resolved.policy.acceptanceReview
-              : configuration.acceptanceReview,
+          acceptanceReview: currentAcceptanceReview ?? configuration.acceptanceReview,
         },
       },
     };
