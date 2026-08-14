@@ -20,11 +20,11 @@ import {
 } from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
+  GitHubPullRequestCoordinates,
   GitHubPullRequestGateway,
   GitHubPullRequestListResult,
   GitHubPullRequestMutationResult,
   GitHubPullRequestReadResult,
-  GitHubPullRequestRequest,
   PublicationFailureEvidence,
 } from "../ownedPullRequestGateway.js";
 export type CommitSubjectResult =
@@ -470,7 +470,7 @@ const updateOrReuse = (
   change: PublishedCandidatePublicationChange,
   headBranch: string,
   expectedHeadSha: string,
-  metadata: Metadata,
+  body: string,
 ): PublicationEffect => {
   const prepared = preparePullRequestUpdate(
     dependencies,
@@ -487,7 +487,7 @@ const updateOrReuse = (
       prepared.owned,
       headBranch,
       expectedHeadSha,
-      metadata,
+      body,
       prepared.allowExistingRemoteHead,
     );
   }
@@ -884,7 +884,7 @@ const request = (
   branchRef: string,
   headBranch: string,
   expectedHeadSha: string,
-): Omit<GitHubPullRequestRequest, "title" | "body"> => ({
+): GitHubPullRequestCoordinates => ({
   owner: target.owner,
   repo: target.repo,
   remoteName: target.remoteName,

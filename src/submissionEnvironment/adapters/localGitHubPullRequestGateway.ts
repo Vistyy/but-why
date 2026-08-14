@@ -10,9 +10,10 @@ import type {
 } from "../../change/changeCleanupRemote.js";
 import type {
   GitHubPullRequestCloser,
+  GitHubPullRequestCoordinates,
+  GitHubPullRequestCreationRequest,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
-  GitHubPullRequestRequest,
 } from "../../change/ownedPullRequestGateway.js";
 import {
   decodeGitHubPullRequest,
@@ -323,7 +324,7 @@ const readAfterUncertainDeletion = (
 const createPullRequest = (
   runGit: PublicationCommandRunner,
   runGh: PublicationCommandRunner,
-  request: GitHubPullRequestRequest,
+  request: GitHubPullRequestCreationRequest,
 ): ReturnType<GitHubPullRequestGateway["createPullRequest"]> => {
   const localHead = hasExpectedLocalHead(runGit, request);
   if (!localHead.ok) {
@@ -482,7 +483,7 @@ const updatePullRequest = (
 
 const hasExpectedLocalHead = (
   runGit: PublicationCommandRunner,
-  request: GitHubPullRequestRequest,
+  request: GitHubPullRequestCoordinates,
 ): { readonly ok: boolean; readonly evidence?: ReturnType<typeof evidence> } => {
   const currentHead = runGit(["rev-parse", "--verify", `${request.branchRef}^{commit}`]);
   if (!currentHead.ok)
@@ -495,7 +496,7 @@ const hasExpectedLocalHead = (
 
 const initialRemoteHeadState = (
   runGh: PublicationCommandRunner,
-  request: GitHubPullRequestRequest,
+  request: GitHubPullRequestCoordinates,
 ): {
   readonly kind: "missing" | "present" | "unknown";
   readonly sha?: string;
@@ -557,7 +558,7 @@ type PushDestinationResult =
 
 const resolvePushDestination = (
   runGit: PublicationCommandRunner,
-  request: GitHubPullRequestRequest,
+  request: GitHubPullRequestCoordinates,
 ): PushDestinationResult => {
   const result = runGit(["remote", "get-url", "--push", "--all", request.remoteName]);
   if (!result.ok)
@@ -642,7 +643,7 @@ const decodeGitHubPushDestination = (
 
 const pushExactHead = (
   runGit: PublicationCommandRunner,
-  request: GitHubPullRequestRequest,
+  request: GitHubPullRequestCoordinates,
   destination: string,
 ): PublicationCommandResult =>
   runGit([

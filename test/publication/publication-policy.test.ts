@@ -5,7 +5,7 @@ import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   GitHubPullRequest,
-  GitHubPullRequestRequest,
+  GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
@@ -1572,7 +1572,7 @@ const pullRequestList = (pullRequests: readonly GitHubPullRequest[]) =>
 const successfulCreation = (requests: unknown[]) => ({
   findPullRequests: () => pullRequestList([]),
   getPullRequest: () => pullRequestRead(undefined),
-  createPullRequest: (request: GitHubPullRequestRequest) => {
+  createPullRequest: (request: GitHubPullRequestCreationRequest) => {
     requests.push(request);
     return { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
   },
