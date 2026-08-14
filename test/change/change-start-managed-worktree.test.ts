@@ -337,7 +337,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       expect(recovered.status).toBe(0);
       expect(JSON.parse(recovered.stdout)).toMatchObject({
-        change: output.change,
+        change: { id: output.change.id },
         worktreePath: output.worktreePath,
       });
       expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
@@ -363,7 +363,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       expect(recovered.status).toBe(0);
       expect(JSON.parse(recovered.stdout)).toMatchObject({
-        change: output.change,
+        change: { id: output.change.id },
         worktreePath: output.worktreePath,
       });
       expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);

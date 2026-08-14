@@ -90,8 +90,8 @@ describe("Change lifecycle CLI results", () => {
       exitCode: 0,
       stdout: { change: { id: "change-1" }, prepareFailure: failure },
     });
-    expect(prepareResult({ ok: true, change: change(failure) }).stdout.change).not.toHaveProperty(
-      "taskId",
+    expect(prepareResult({ ok: true, change: change(failure) }).stdout).not.toHaveProperty(
+      "change.taskId",
     );
     expect(prepareResult({ ok: true, change: change() }).stdout).not.toHaveProperty(
       "prepareFailure",
