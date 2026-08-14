@@ -7,8 +7,11 @@ Each plan must declare its status and removal condition.
 An approved status records operator acceptance but does not make the plan implementation authority.
 Agents must use a plan only when the operator or an active Task explicitly identifies it as planning context.
 
-`task-change-boundary.md` is the only current product-boundary planning record.
-All other plans are paused unless the Operator explicitly reactivates one after reviewing it against that boundary.
+`task-change-boundary.md` is the current Task and Change boundary plan.
+`agent-session-execution.md` is approved under that boundary.
+`release-baseline-cutover.md` is the current active exploration.
+`candidate-publication-presentation.md` is deferred until after the first-release baseline.
+All other plans are paused unless the Operator explicitly reactivates one after reviewing it against the boundary.
 
 After approval, record each accepted requirement in the smallest applicable authoritative work record, current documentation source, or ADR.
 Remove each working plan after those authoritative artifacts contain all required information.

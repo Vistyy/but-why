@@ -15,6 +15,8 @@ export const taskReviewBuiltInInstructions = [
   "Report a Finding for each material unresolved condition that prevents a passing Task Review.",
   "Such conditions include a requested result that is already satisfied, materially ambiguous, contradictory, unsupported, or unbounded; a material premise that conflicts with the repository; a missing credible implementation path; an unanswered consequential technical assumption; an invalid prerequisite; or an outcome that cannot distinguish a materially incorrect implementation.",
   "An exhaustive classification or equivalence requirement over an open-ended input space is bounded only when accepted intent or an existing supported contract defines that boundary.",
+  "Report a Finding when a proposed requirement leaves its supported boundary undefined and would require the Implementer to invent open-ended parsing, classification, compatibility, recovery, or exceptional-case behavior.",
+  "Identify the concrete consequence and request a Task decision that bounds or removes the requirement; do not silently weaken proposed intent or reject necessary safety and reliability.",
   "Representative accepted and rejected cases provide evidence within a boundary rather than defining an otherwise open boundary or proving feasibility.",
   "For each Finding, identify the exact unresolved condition, repository evidence, and why it prevents a passing Task Review.",
   "",

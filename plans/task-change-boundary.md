@@ -1,7 +1,7 @@
 # Task and Change boundary plan
 
-**Status:** Active exploration.
-It is the only current product-boundary planning record.
+**Status:** Approved planning direction.
+It is the current Task and Change boundary planning record.
 It is not implementation authority.
 
 **Removal condition:** Remove this file after the Operator approves the supported boundaries, the approved implementation outcomes are recorded in the applicable authoritative work systems, and superseded planning records are removed or replaced.
@@ -13,7 +13,8 @@ Allow each workflow to be used independently where its own inputs are sufficient
 
 ## Accepted planning direction
 
-Keep a modular monolith with three explicit areas: Tasks, Changes, and Task and Change coordination.
+Keep a modular monolith with three domain areas: Tasks, Changes, and Repository Runtime.
+Task and Change coordination is an application boundary, not another domain.
 
 Tasks own:
 
@@ -21,8 +22,8 @@ Tasks own:
 - Task Dependencies and readiness.
 - Exact-proposal Task Review and approval.
 - Task Lifecycle.
-- Handoff of exact approved intent.
-- Acceptance of sufficient completion evidence under Task rules.
+- Supplying exact approved intent when starting a Change.
+- Task Lifecycle rules applied during coordinated completion.
 
 Changes own:
 
@@ -36,8 +37,9 @@ Changes own:
 - Candidate Publication and merge reconciliation.
 - Durable completed-delivery evidence.
 
-Task and Change coordination owns moving approved Task intent into a Change and completing the corresponding Task from sufficient Change evidence.
+Task and Change coordination owns moving approved Task intent into a Change, completing the corresponding Task from sufficient Change evidence, coordinating cancellation, and joining Task and Change projections for CLI output.
 It must use the supported Task and Change interfaces instead of direct cross-module reads or duplicated lifecycle policy.
+Repository Runtime continues to own repository identity, shared database access, configuration, preparation, and executable selection.
 
 The built-in Implementer continues to commit in one persistent Managed Worktree and invoke Change Submission through the `by` CLI.
 A later Candidate for the same Change is another immutable committed state from that same implementation lineage, not another Managed Worktree.
@@ -77,7 +79,7 @@ The current schema makes `changes.task_id` unique and foreign-keyed to `tasks.id
 It requires Task ID and Acceptance Context to be present or absent together.
 Change read paths enforce the same relationship and reject a linked Change whose Task no longer exists.
 
-Task identity also determines the Repository Branch, Managed Worktree, Herdr session name, and Pi agent session title for a Task-backed Change.
+Task identity also determines the Repository Branch, Managed Worktree, Herdr session name, and Pi agent session title for a Change linked to a Task.
 These naming dependencies are implemented through `src/task/taskId.ts`, `src/change/changeLifecycle.ts`, and `src/change/interactiveSession/launchInteractiveImplementer.ts`.
 
 ### Interactive implementation and authority
@@ -88,7 +90,7 @@ It does not directly include Acceptance Context.
 Packaged Implementer guidance tells the agent to inspect intent through CLI commands.
 
 The `continue-change` extension binds itself to the Change ID and drives repeated inspection and Submission.
-Most of its state is Change-owned, but its reassessment path for a Task-backed Change currently invokes `by task context <task-id>` and treats that live read as required evidence.
+Most of its state is Change-owned, but its reassessment path for a Change linked to a Task currently invokes `by task context <task-id>` and treats that live read as required evidence.
 The Task Context read joins Change-owned Blocker Resolutions through `changes.task_id`.
 This is a direct runtime Task dependency that must be replaced by Change-owned Acceptance Context inspection.
 
@@ -106,8 +108,9 @@ Storage permits at most one unresolved Blocker for a Change.
 Resolving a Blocker appends its content to the Change Acceptance Context only when the Change has both a Task ID and Acceptance Context.
 The boundary change must make this behavior depend only on Change-owned Acceptance Context.
 
-The current `changes.acceptance_context` value is updated in place.
-Each Validation Run retains the exact Acceptance Context it used in its immutable Validation Policy Snapshot.
+The Change retains its immutable initial Acceptance Context, and each approved Resolution remains on its Implementation Blocker.
+The current Acceptance Context is derived by applying those ordered Resolutions rather than updating a second stored copy.
+Each Validation Run retains the exact resulting Acceptance Context it used in its immutable Validation Policy Snapshot.
 
 ### Candidate selection, validation, and Acceptance Review
 
@@ -128,7 +131,7 @@ The main implementation owners are:
 - `src/sqlite/sqliteCandidateValidationExecutionPersistence.ts`.
 - `src/cli/validationRunViews.ts`.
 
-This existing snapshot chain can prove which Acceptance Context the Acceptance Reviewer received without reading a live external Task during Validation.
+This existing snapshot chain can prove which Acceptance Context the Acceptance Reviewer received without reading live Task Context during Validation.
 
 ### Candidate Publication and presentation
 
@@ -159,7 +162,13 @@ The main implementation owners are:
 - The Change cancellation CLI modules.
 
 After the boundary change, Change cancellation must not mutate Task state through Change persistence.
-Task and Change coordination may request both supported cancellation operations and must report any partial result.
+Cancelling either a linked Task or linked Change invokes the same coordinated operation.
+An Active Validation Run rejects cancellation without state changes.
+An exact merged Candidate completes the Change and Task instead.
+Otherwise, coordination closes the owned pull request when required, then atomically cancels the Change and Task.
+If the pull request closes but the database update fails, coordination reports incomplete cancellation.
+A retry confirms that the pull request is already closed before atomically cancelling the Change and Task.
+Terminal Cleanup remains a later Change-owned operation.
 
 ### Merge reconciliation and completion
 
@@ -182,13 +191,13 @@ The main implementation owners are:
 - `src/change/cancelChange.ts`.
 - `src/change/cleanupTerminalChange.ts`.
 
-This is the principal cross-boundary atomic guarantee under review.
-The replacement boundary must preserve exact merged-Candidate evidence and idempotence.
-It must also support visible incomplete coordination and safe retry when the selected Task backend cannot share the local transaction.
+The replacement boundary must preserve this atomic guarantee for the built-in SQLite workflow while moving its ownership from Change persistence to Task and Change coordination.
 
 ### Inspection and public interfaces
 
 Task inspection currently projects linked Change activity as implementing, validating, blocked, or ready.
+The planned modular boundary preserves a combined Task inspection view through Task and Change coordination.
+Coordination reads supported Task and Change projections and joins them for output without storing Change state on the Task or putting Change rules in Tasks.
 Change and Validation Run output expose Task ID.
 Change Start errors and recovery guidance refer to Task state, Task Review, dependencies, and Task cancellation.
 The continuation extension parses these structured results.
@@ -203,7 +212,7 @@ The affected interface owners include:
 - `extensions/continue-change.ts`.
 - Packaged public documentation and skills under `docs/public/`.
 
-These are product contracts, not only implementation imports.
+These are public contracts, not only implementation imports.
 The boundary change must replace the complete supported interface in the same change as its parsers and packaged instructions.
 
 ### Persistence and runtime inventory
@@ -221,8 +230,8 @@ Task Review also depends on infrastructure currently shared with Change Delivery
 - Disposable exact-commit workspaces.
 - Structured CLI output.
 
-The boundary change must preserve immutable migration history until the release-baseline decision explicitly establishes another accepted cutover rule.
-Existing migration files are evidence and are not edited as a boundary shortcut.
+The boundary implementation targets the reviewed first-release `0001_baseline` rather than adding temporary migrations that would immediately be retired.
+Until that accepted cutover, existing migration files remain immutable evidence and are not edited as a boundary shortcut.
 
 ### Verification inventory
 
@@ -237,94 +246,85 @@ The current coupling is materially exercised by:
 - SQLite decoding, constraint, and migration tests.
 - Package-content and portable-skill tests.
 
-The migration plan must replace these claims through supported standalone and composed interfaces rather than merely delete the coupled tests.
+The migration plan must replace these claims through supported independent and coordinated interfaces rather than merely delete the coupled tests.
 
 ## Required boundaries
 
-### Acceptance Context handoff
+### Starting a Change from a Task
 
-Define the smallest versioned input that identifies which exact supplied intent But Why received.
-The handoff must contain the complete authority needed by the Implementer and Acceptance Reviewer without requiring But Why to query live Task state.
+Task and Change coordination asks Tasks for the exact approved Task Context and passes its complete title and description to Change Start through an internal typed operation.
+Change Start stores that content as the initial Acceptance Context while the same coordination transaction records the Task-to-Change link.
 
-Tasks own Task Review and approval.
-The supported Task handoff must provide the exact approved Task proposal.
-Changes do not independently review that proposal or reinterpret Task readiness.
-The Change boundary validates only the supported input contract and proves which exact Acceptance Context it retained and used.
+Tasks own Task Review, approval, readiness, and the exact context eligible to start a Change.
+Changes do not independently review Task intent or reinterpret Task readiness.
+After Change Start, implementation and validation read the Change-owned Acceptance Context rather than mutable live Task Context.
+Validation Policy Snapshots retain the exact complete Acceptance Context used by each Validation Run.
 
-This preserves a one-way authority handoff inside the modular monolith and supports the same contract for a future external Task backend.
-A rejected handoff means that the input contract is unsupported or malformed, not that Changes disagree with the intent or require Task revision.
+The initial boundary has no portable transfer artifact, compatibility envelope, digest, Intent Reference, approval signature, or external approval claim.
+A future external Task backend must justify any additional boundary contract when it becomes supported.
 
-The first handoff format has this planned shape:
+Repeated Change Start for a Task returns its existing linked Change.
+A requested Change Base that conflicts with the existing Change is rejected.
+When no link exists, coordination atomically rechecks Task eligibility, starts the Change, and records the link.
+This behavior needs no separate request identifier or retry protocol.
 
-```json
-{
-  "version": 1,
-  "acceptanceContext": {
-    "title": "Add authentication",
-    "description": "Users must sign in before..."
-  },
-  "intentReference": "https://github.com/acme/widget/issues/87"
-}
-```
+### Change-owned authority after Change Start
 
-The planned responsibilities are:
+The initial Acceptance Context and approved Change-owned Resolutions are authoritative for that Change.
+Validation must use the exact current Acceptance Context version retained by Changes and must not read mutable live Task content.
 
-- `version` selects the handoff schema and compatibility rules.
-- `acceptanceContext` is a closed, validated schema containing the complete title and description used by implementation, validation, and presentation.
-- `intentReference` is optional for Change use without a Task and present when a Change begins from an approved Task.
-  It is one immutable, opaque reference that identifies the intent record in its Task backend, such as a Task ID, URL, or URN.
-  Changes store and echo it for definite lifecycle correlation without parsing it, querying its backend, treating it as approval evidence, or using it as semantic intent content.
-- Changes calculate and retain an Acceptance Context digest from the exact validated Acceptance Context they store.
-  The caller does not supply the authoritative digest.
-  The digest identifies exact content and does not prove external approval.
-- Unknown properties or values outside the selected schema are rejected as unsupported or malformed input.
+Acceptance Context remains optional so Changes can validate existing committed work without implementation intent.
+Tasks and Changes use separate repository-scoped numeric sequences.
+Each Change ID is shaped like `<id-prefix>-C<number>`, such as `BW-C17`.
+The first-release baseline stores the numeric part for safe generation and uses the full Change ID directly as the Change primary key and in related rows.
+Do not retain a separate internal UUID without a concrete schema requirement.
+A linked Change does not reuse its Task ID.
+Change-owned branch names, worktree paths, machine session names, output, and publication use the Change ID rather than Task ID.
+Human-facing Herdr and Pi titles may add the Change-owned Acceptance Context title, such as `BW-C17 Fix login timeout`.
+A Change without Acceptance Context uses its Change ID alone.
+Joined Task and Change views remain the place that exposes the Task link.
 
-Still resolve:
-
-- The canonical digest representation and algorithm contract.
-- Import idempotence and conflict behavior.
-
-### Change-owned authority after import
-
-Define the authority retained by But Why after import.
-The current direction is that the imported Acceptance Context and approved Change-owned Resolutions are authoritative for that Change.
-Validation must use the exact current Acceptance Context version retained by But Why and must not read mutable live Task content.
-
-Acceptance Context remains optional so But Why can validate existing committed work without implementation intent.
 The planned validation matrix is:
 
 - Without Acceptance Context or Specialist Reviewers, run configured Checks only.
 - Without Acceptance Context but with Specialist Reviewers, run configured Checks and Specialist Reviews.
 - With Acceptance Context, run configured Checks and Acceptance Review, plus any configured Specialist Reviews.
-- Intent Reference is permitted only when Acceptance Context is present.
 
-Still resolve:
+Accepted planning direction:
 
-- How the optional Intent Reference is stored and exposed without importing the Task domain.
-- Which current Task-backed and taskless terms are retired or renamed.
-- **Resolved planning direction:** Tasks approve the initial handed-off intent.
+- Use “Change linked to a Task” and “Change without a Task.”
+  Do not introduce categorical names for these cases.
+- **Resolved planning direction:** Tasks approve the initial Task intent used to start the Change.
   During implementation, the Operator may approve a Blocker Resolution that amends the Change-owned Acceptance Context.
   Changes retain the initial Acceptance Context and the Resolution lineage so delivery evidence does not imply that Task Review approved later amendments.
   The first boundary change does not write those Resolutions back to the Task.
   Later Task and Change coordination may surface them to Tasks without making that behavior part of initial Change execution.
-- How the Validation Policy Snapshot proves which Acceptance Context the Acceptance Reviewer received.
+- **Resolved planning direction:** At Validation Run start, the complete current Acceptance Context is stored in the immutable Validation Policy Snapshot.
+  The Acceptance Reviewer input is built from that retained content.
+  The existing `version: 1` identifies the stored format rather than a separate Acceptance Context revision.
+  No digest or separate revision identifier is required.
 
-### Completed-delivery evidence
+### Coordinated completion
 
-Define the smallest durable Change result that Task and Change coordination can evaluate before completing the corresponding Task.
-Tasks must own the Task transition and must not accept an arbitrary caller assertion that work is complete.
+Changes own verification and durable retention of the exact repository, Candidate, Validation Run, publication, pull request, and merge facts required to complete a Change.
+Task and Change coordination owns the rule that completing an exactly merged linked Change marks its Task Done in the same built-in SQLite transaction.
+Tasks own the resulting Task Lifecycle transition.
+For an exact merged linked Change, Task and Change operations ask Tasks to apply their lifecycle rule inside the coordinated transaction.
+A `todo` Task becomes `done`, an already `done` Task remains unchanged, and a `new` or `cancelled` Task rejects the complete operation without changing either record.
+Change Submission and reconciliation receive one narrow exact-merged completion operation.
+Composition supplies an implementation that checks the link and completes either the Change alone or the Change and linked Task atomically, so Changes do not import Task and Change operations.
+No portable receipt or external evidence-verification contract is part of the initial boundary.
 
-Resolve at least:
+Task and Change coordination owns one durable relationship for the built-in workflow: the exact Task linked to the exact Change.
+A coordination-owned link table enforces the first supported one-Task-to-one-Change rule and supports combined inspection and atomic coordination.
+It stores only Task ID and Change ID and does not copy Task Lifecycle, Change state, Acceptance Context, Validation, or publication facts.
 
-- Exact repository, Change, Candidate, Validation Run, publication, and merge facts included in the evidence.
-- Binding to the exact imported Acceptance Context digest and any retained Intent Reference.
-- Whether coordination verifies evidence through a live Change inspection operation, a portable receipt, or another bounded mechanism.
-- Idempotent completion and reconciliation after an uncertain external mutation.
-- The first supported one-Task-to-one-Change completion rule.
-
-A future external Task backend cannot share one SQLite transaction with Changes.
-The supported boundary must therefore define deterministic, idempotent completion that can make an incomplete second mutation detectable and safely retryable.
-Whether the built-in SQLite Task backend retains a stronger local atomic operation remains unresolved.
+Repository Runtime provides the SQLite transaction capability without knowing Task or Change operations.
+Task and Change composition connects narrow transaction-bound Task, Change, and link Adapters inside one transaction for Change Start, coordinated cancellation, and exact merged completion.
+The workflow calls those narrow operations without receiving raw SQL or concrete Adapters.
+Each Adapter accesses only its owner's tables, and any failure rolls back the complete coordinated update.
+The current Adapters that open their own transactions must be split into transaction wrappers and transaction-bound operations where coordination requires them.
+A future external Task backend must define its own completion and recovery contract when that backend becomes supported.
 
 ## Boundary cleanup
 
@@ -338,13 +338,18 @@ The Change boundary should not own or interpret:
 - Task projections derived from Change state.
 
 Task cancellation and completion effects must occur through Task and Change coordination rather than hidden Change persistence behavior.
-Changes may retain an opaque Intent Reference and the complete handed-off Acceptance Context as correlation and validation authority.
+Changes retain the complete initial Acceptance Context as validation authority.
+Coordination owns Task-to-Change correlation.
 
 The cleanup inventory must cover implementation, persistence, migrations, CLI commands, output, configuration, packaged instructions, public documentation, tests, operational names, and generated artifacts.
 
 ## Module boundary
 
 Do not treat the boundary change as moving `src/task/` alone.
+Place cross-domain application operations under `src/taskChange/` without naming a generic coordination service.
+Move all owner-specific SQLite Adapters from the flat `src/sqlite/` area to `src/task/adapters/sqlite/`, `src/change/adapters/sqlite/`, and `src/taskChange/adapters/sqlite/` in the boundary implementation.
+Do not retain a flat Adapter exception.
+Keep shared database lifecycle and immutable ordered migrations under Repository Runtime.
 Tasks and Changes currently share repository and agent infrastructure.
 The design must inspect ownership of:
 
@@ -359,7 +364,53 @@ The design must inspect ownership of:
 
 For each shared mechanism, keep it with its existing coherent owner or define the narrowest common mechanism justified by both current consumers.
 Do not create a broad shared framework merely to prevent small duplication.
-Architecture checks must reject direct imports that bypass the supported Task, Change, or coordination interface.
+
+Shared agent infrastructure uses the planned Agent Session and Agent Invocation concepts rather than preserving Reviewer Session as the general name or adding a generic Agent Execution record.
+It owns harness invocation and continuation, invocation settlement evidence, transcript discovery, and harness-specific usage extraction.
+Tasks and Changes retain ownership of agent roles, instructions, supplied authority, structured-result interpretation, Findings, lifecycle effects, and recovery decisions.
+A Review remains a Task- or Change-owned use of Agent infrastructure rather than a shared Agent-infrastructure domain concept.
+The visible Implementer session remains separate from shared headless Agent Invocation.
+Changes own implementation behavior, and `InteractiveSessionHost` owns Herdr launching.
+Exact-commit disposable Snapshot Workspaces remain shared infrastructure behind a narrow workspace interface used by Task Review and Change Validation.
+They remain separate from the Change-owned persistent Managed Worktree.
+Repository Runtime reads repository and global configuration, including the configured Repository Preparation command.
+Shared Repository Preparation executes that command through a narrow interface.
+Tasks and Changes decide when preparation is required and how its failure affects their workflows.
+The current configurable Task Prefix becomes the repository ID Prefix and is supplied to both Tasks and Changes for their public IDs.
+Because But Why is unreleased, the first-release configuration uses only `idPrefix` and provides no `taskPrefix` compatibility behavior.
+Tasks and Changes select and store the resolved Agent Profile required by their reviewer policy.
+A Task fixes its resolved Task Reviewer configuration when its Task Reviewer Session first starts.
+A Change fixes all resolved reviewer roles and configurations at Change Start, even though their Agent Sessions are created lazily.
+Later Repo or Global Config changes do not alter those stored reviewer configurations.
+Agent infrastructure applies the stored profile as the exact Pi model, tools, skills, extensions, and runtime settings.
+
+Tasks, Changes, and Task and Change operations define their own result data.
+The shared output module only validates and serializes structured JSON.
+CLI modules only map commands to supported operations and their results.
+
+The existing `by change start` command remains one command.
+With `--task`, it selects Task and Change coordination.
+Without `--task`, it selects Changes directly.
+Both existing cancellation commands select coordination because the relationship must be read from storage.
+Coordination performs linked cancellation when a link exists and otherwise calls only the owning domain operation.
+The CLI selects the supported operation but does not perform coordination itself.
+
+Fallow must enforce the module dependency graph, including these rules:
+
+- Tasks and Changes do not import each other.
+- Coordination depends only on narrow Task and Change operations for starting, completion, cancellation, and supported projections.
+- Coordination cannot access whole domain stores, unrelated persistence methods, or raw SQL.
+- Domain modules do not import CLI, composition, or concrete Adapters.
+- Task and Change SQLite Adapters access only their owner's tables.
+- Coordination SQLite Adapters access only the Task-to-Change link table.
+- Repository Runtime owns the shared database and transaction capability without importing Tasks or Changes.
+- Task and Change composition connects transaction-bound owner Adapters; the workflow receives only their narrow operations.
+- Repository Runtime remains the owner of the shared database lifecycle and repository-scoped runtime capabilities.
+
+Real SQLite behavior tests must verify atomic Change Start, completion, cancellation, and rollback through the supported coordination operations.
+Initial table-ownership separation is verified through adapter placement, targeted search, and review.
+Do not add an ast-grep rule that guesses table ownership from SQL strings.
+Add a durable SQL ownership checker only if repository evidence later shows recurring violations that justify its maintenance cost.
 
 ## Independent and coordinated verification
 
@@ -367,30 +418,34 @@ The boundary is sufficient only when all of these paths are practical through on
 
 1. Tasks can be recorded, reviewed, approved, inspected, and completed without starting a Change.
 2. Existing committed work can be validated and published through a Change without a Task or Acceptance Context.
-3. An approved Task can hand off its exact intent and the Acceptance Reviewer receives the exact retained Acceptance Context version.
+3. An approved Task can start a Change with its exact intent, and the Acceptance Reviewer receives the exact retained Acceptance Context version.
 4. One Managed Worktree produces a Candidate, receives Findings, produces a later Candidate, and submits again through the existing Interactive Session loop.
 5. Task and Change coordination evaluates completed-delivery evidence and completes the corresponding implementation Task idempotently.
-6. A failure between Change completion and Task completion is visible and safely retryable.
+6. Built-in exact merged completion updates the Change and linked Task atomically.
 
 ## Planning sequence
 
 1. **Complete:** Trace the current Task-to-Change coupling through Change Start, implementation, Submission, cancellation, reconciliation, presentation, cleanup, and Task inspection.
-2. **In progress:** Define and review the Acceptance Context handoff.
-3. Define and review Change-owned authority after import.
-4. Define and review completed-delivery evidence and Task completion.
-5. Inventory shared infrastructure and define the module dependency rules.
-6. Define staged migration and verification without preserving retired cross-boundary behavior.
-7. Reassess the paused Agent Session, Candidate Publication, baseline, release, and Global Watcher plans against the accepted boundary.
-8. Remove superseded plans and record only still-supported outcomes in replacement plans or authoritative work records.
+2. **Complete:** Define and review starting a Change from a Task.
+3. **Complete:** Define and review Change-owned authority after Change Start.
+4. **Complete:** Define and review coordinated Task and Change completion.
+5. **Complete:** Inventory shared infrastructure and define the module dependency rules.
+6. **Complete:** Finish and approve Agent Session design before reviewing the complete first-release database baseline.
+7. Implement the boundary and reviewed first-release baseline together without an intermediate schema representation, and verify them without preserving retired cross-boundary behavior.
+   Candidate Publication presentation remains deferred and adds any later storage through a normal post-baseline migration.
+8. Reassess the release and Global Watcher plans against the accepted boundary.
+9. Remove superseded plans and record only still-supported outcomes in replacement plans or authoritative work records.
 
 ## Decisions deferred
 
+- Unifying the Change evidence supplied to Acceptance and Specialist Reviewers while preserving their different review responsibilities.
+  The baseline already retains Acceptance Context, Implementation Decisions, Blocker history, Findings, and Artifacts, so this later reviewer-input change requires no baseline storage generalization.
 - Additional Task backends.
 - Separate products, executables, or repositories.
 - Generic hooks or a separate orchestration service.
 - Multiple Changes per Task.
 - Task kinds and configurable completion policies.
-- Cross-product revision of approved intent after an Implementation Blocker.
+- Surfacing Change-owned Blocker Resolutions back to Tasks.
 - Splitting implementation workspace behavior from But Why.
 
 ## Authorization status

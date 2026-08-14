@@ -1,16 +1,20 @@
-# Agent Session and execution plan
+# Agent Session and invocation plan
 
-**Status:** Paused pending the Task Intent extraction boundary.
-The Change Delivery portions may remain applicable, while Task Review execution may move to another product.
-Do not use this plan as current planning direction or implementation authority.
+**Status:** Approved planning direction.
+This plan is separate from and consistent with the accepted modular-monolith direction in `task-change-boundary.md`.
+Complete this design before reviewing the first-release database baseline.
+It is not implementation authority.
 
 **Removal condition:** Remove this file after the approved behavior is implemented, recorded in applicable current architecture and domain authorities, and represented by completed SQLite Tasks.
 
 ## Outcome
 
-Task Review, Change reviewers, and the Publication Agent use one shared Agent Session and Agent Execution capability for mechanics they currently share.
-Task Intent and Change Delivery retain role policy, prompts, structured results, Findings, lifecycle effects, and recovery decisions.
-Pi remains the only headless Agent Harness implemented for the first release.
+Task Review and Change reviewers use shared Agent Session and Agent Invocation capabilities for mechanics they currently share.
+Candidate Publication may adopt these capabilities later but is not part of the initial Agent Session work.
+Tasks and Changes retain role policy, prompts, structured results, Findings, lifecycle effects, and recovery decisions.
+The first-release shared capability supports only headless reviewers.
+Pi remains its only Agent Harness.
+Names may remain role-neutral, but the implementation adds no behavior for Publication Agents or background Implementers.
 Herdr remains the default Interactive Session Host.
 
 The design keeps harness-specific and local-process knowledge local enough that a future harness or remote execution module can be introduced without rewriting Task Review, Validation, or Candidate Publication policy.
@@ -21,58 +25,94 @@ It does not claim that current execution is location-transparent.
 ### Agent Session
 
 An Agent Session is the permanent logical relationship between one domain owner and one domain-defined role.
+Initial examples are the Task Reviewer for one Task, the Acceptance Reviewer for one Change, and one named Specialist Reviewer for one Change.
+An Agent Session is never reused across owners or roles.
 The owning domain defines the role and determines when continuation is eligible.
-A session can retain a current physical harness continuation while that continuation remains compatible and usable.
-A changed stable setup or unusable continuation starts a fresh physical harness session while preserving the logical Agent Session.
+An Agent Session has physical harness continuations ordered by their repository-local immutable integer IDs.
+The latest usable continuation is current.
+An unusable continuation appends a fresh continuation while preserving the logical Agent Session and its stored resolved configuration.
+Past Invocations and continuations remain history without separate replacement metadata.
 
-Compatibility includes the resolved Agent Profile, role instructions, Agent Environment, tools, skills, and extensions.
-Candidate identity, prompt content, workspace path, Review identity, and publication source digest do not determine session compatibility.
+The owning domain resolves and stores the Agent Profile, role instructions, Agent Environment, tools, skills, and extensions once for the applicable owner lifecycle.
+A Task stores this configuration as a nullable immutable JSON snapshot when its Task Reviewer Session first starts.
+A Change stores all configured reviewer roles and their resolved configurations as one immutable JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
+These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
+Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
+Later Repo or Global Config changes do not alter those stored configurations, add or remove Change reviewers, or replace a usable continuation.
+The owning domain validates a resolved snapshot before storage.
+If the first launch proves that no usable continuation was established, a retry may replace only that owner-role configuration from corrected current config.
+Once a usable continuation exists, its stored configuration remains fixed.
+Every later Invocation and replacement continuation for that owner-role Agent Session uses the stored configuration.
+Shared Agent infrastructure does not interpret domain policy or store a compatibility fingerprint.
+Candidate identity, prompt content, workspace path, and Review identity may change without replacing the continuation.
 
-Session and transcript evidence remains inspectable after continuation ends.
+A domain stops continuation reuse when its owner can no longer use that role; shared storage needs no separate ended state.
+Closing a Change prevents reuse of its reviewer continuations.
+Moving a Task to `done` or `cancelled` prevents reuse of its Task Reviewer continuation, while moving it to `todo` remains eligible because Task Revision can return it to review.
+Agent Session, Invocation, continuation, and transcript history remains inspectable afterward.
 The first release adds no retention policy.
 
-### Agent Execution
+### Agent Invocation
 
-An Agent Execution is one requested unit of agent work owned by a domain operation.
-Examples include one Task Review execution, one Validation Review execution, and one publication-presentation generation.
-The domain operation creates and settles its execution as part of its own durable lifecycle.
+An Agent Invocation is one ordered harness launch or resume for a domain-owned operation.
+The domain operation, such as a Task Review or Acceptance Review, already groups its Invocations and owns their lifecycle and result.
+Record an Invocation before dispatching the harness call and settle it when the harness returns.
+For Pi, But Why derives a stable Pi session ID from the persisted continuation integer before launch.
+If interruption leaves an Invocation unsettled, recovery first confirms that the harness process stopped and never treats an unseen return as success.
+It settles the interrupted Invocation as `return_unknown`.
+When the transcript exists, recovery resumes the same continuation and requests the result again through a new Invocation.
+When no transcript exists, recovery records the continuation as missing, creates a new continuation, and reruns the complete domain prompt through a new Invocation.
+An existing continuation that cannot resume is likewise replaced with its reason recorded before the new Invocation.
 
-An Agent Invocation is one ordered harness launch or resume within an Agent Execution.
-Invocation evidence distinguishes an attempted dispatch with unsettled return evidence from a settled harness return.
-Recovery reconciles an unsettled Invocation before retry.
+Shared Invocation evidence includes:
 
-Shared execution evidence can include:
+- A repository-local immutable integer identity that orders Invocation history.
+- The physical harness continuation used.
+- `created_at` and nullable `settled_at` timestamps.
+- An application-decoded settlement kind.
+- Input, output, cached-input, and total token usage when the harness reports it.
+- The transcript-relative path discovered for the physical harness continuation.
 
-- Harness, provider when known, model, and optional thinking level.
-- Input, output, cache-read, cache-write, and total token usage when the harness reports it.
-- Continuity and a bounded restart reason when a physical continuation is replaced.
-- Transcript references discovered for the physical harness session.
+Settlement kinds are stored as text and decoded by the application unless a later relational invariant requires a SQLite constraint.
 
+For first-release Pi, derive the Pi session ID from the continuation integer and store no separate harness or Pi session identity.
+Store one nullable transcript-relative path on the physical continuation and do not retain a separate transcript-reference record.
+Domain operations reach that transcript through their Invocation links.
+Transcript contents remain in the Pi file and are not copied into SQLite.
+
+Invocation rows do not duplicate prompts or returned text.
+Domain records retain authoritative inputs and results, while harness transcripts retain the conversation.
 Monetary cost and generic harness-specific metadata are excluded until a supported use and evidence contract require them.
 
 ## Ownership
 
-Shared Agent Session execution owns:
+An Invocation result records whether the harness returned usable output, not whether the domain accepts that output.
+A readable but invalid domain result settles the Invocation, leaves the domain operation incomplete, and may cause a correction Invocation.
+A valid domain result may complete when continuation or transcript capture fails.
+The Invocation records that capture failure, and the next operation starts a fresh continuation rather than converting the valid result into a tooling failure.
+Each retry or correction is another Invocation, and the owning domain decides whether another attempt is allowed.
+When domain recovery ends without usable output, the final Invocation failure and the domain Tooling Failure are recorded atomically.
+The continuation is preserved or replaced only according to what the failure proves.
+Findings, Review outcomes, and Publication outcomes remain domain records.
 
-- Session compatibility.
+Shared Agent infrastructure owns:
+
+- Applying the stored resolved setup supplied by the owning domain.
 - Harness launch or resume mechanics.
-- Same-session structured-output correction mechanics.
+- Same-session structured-output correction mechanics, with each correction call recorded as another Invocation for the same domain operation.
 - Invocation settlement evidence.
 - Transcript discovery and references.
 - Harness-specific usage extraction.
 
-Task Intent and Change Delivery own:
+Tasks and Changes own:
 
 - Whether agent work may start or continue.
 - Agent role instructions and supplied authority.
 - Output decoding and domain interpretation.
 - Review or publication outcomes.
 - Findings and lifecycle effects.
-- Atomic persistence of the domain outcome with settled execution evidence.
+- Atomic persistence of the domain outcome with settled Invocation evidence.
 - Recovery decisions for unfinished domain work.
-
-A Publication Agent uses Agent Sessions without becoming a Review.
-Review policy and publication synthesis remain separate domain behavior.
 
 ## First-release execution boundaries
 
@@ -82,7 +122,7 @@ The Adapter should not expose Pi transcript formats, Pi command flags, or local 
 `InteractiveSessionHost` remains a distinct seam for visible Implementer sessions.
 Shared mechanics can be reused where evidence supports the same contract, but visible hosting, operator interaction, and headless result settlement must not be forced into one shallow interface.
 
-Local command execution for Repository Preparation and Checks remains separate from Agent Execution.
+Local command execution for Repository Preparation and Checks remains separate from Agent Invocation.
 The first release does not create one universal executor for agents, commands, containers, remote workers, and interactive terminals.
 
 ## Future execution direction
@@ -100,31 +140,55 @@ It would need explicit contracts for:
 These contracts remain deferred until a concrete execution provider or bounded spike establishes them.
 The first-release interfaces should avoid unnecessary local details but should not invent these semantics.
 
-A future background Implementer may use Agent Execution mechanics while retaining Implementer-specific authority and Change lifecycle policy.
+A future background Implementer may use Agent Invocation mechanics only after its own accepted design while retaining Implementer-specific authority and Change lifecycle policy.
 Another visible Interactive Session Host may replace Herdr through its existing host boundary.
 
 ## Persistence direction
 
-The release baseline needs durable representation for logical sessions, executions, invocations, and transcript references because they have distinct write and recovery lifecycles.
-The physical schema must be selected through the release-baseline review rather than copied from the prerelease Reviewer Session schema.
+Invocation settlement uses two short transactions around the external harness call.
+The first refuses dispatch when that Agent Session already has an unsettled Invocation, then atomically records the new unsettled Invocation and its domain-owned operation link before dispatch and commits before the agent runs.
+The existing SQLite write transaction provides sufficient serialization; do not add a separate lock, queue, scheduler, or coordination system.
+The harness runs without an open database transaction.
+When it returns, the second transaction atomically stores the settled Invocation evidence and the owning domain result.
+Repository Runtime provides the SQLite transaction capability.
+Task or Change composition connects its domain operation with narrow transaction-bound Agent storage operations.
+Agent infrastructure does not access Task or Change tables.
+A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
-Keep domain Review and publication outcomes with their owners.
-Do not introduce generic owner, workflow, run, phase, producer-registry, or plugin tables solely for future extensibility.
-Use direct ownership representation where it is sufficient, with application enforcement for cross-domain relationships when generic relational machinery would add more complexity than safety.
+The release baseline needs durable representation for logical sessions, physical continuations, and invocations because they have distinct write and recovery lifecycles.
+Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
+The physical schema must be selected through the release-baseline review rather than copied from the prerelease Reviewer Session schema.
+It stores no compatibility fingerprint.
+The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
+
+Create an Agent Session only when its domain role first invokes an agent.
+The first dispatch transaction atomically creates the Agent Session, the domain-owned role link, and the first Invocation.
+This avoids empty or orphan Agent Sessions.
+
+Shared Agent infrastructure stores Agent Session and Invocation mechanics without Task IDs, Change IDs, or generic domain-operation fields.
+Tasks and Changes store their own foreign-keyed links from domain operations to Agent Sessions and Invocations and own each role represented by those links.
+Foreign keys ensure each link names an existing shared record.
+Application operations enforce that one Agent Session belongs to only one domain owner and role because SQLite cannot express that exclusivity across separate Task and Change link tables without putting generic owner fields in shared Agent storage.
+An Invocation has `created_at` and nullable `settled_at` timestamps rather than a duplicated settled-state field.
+A missing `settled_at` means that its return is uncertain, including when interruption may have occurred before dispatch.
+Task Review, Acceptance Review, Specialist Review, and Publication records remain with Tasks or Changes.
+Shared Agent infrastructure stores only Agent Sessions, physical continuations, and Invocations.
+Do not introduce a generic Review table or generic owner, workflow, run, phase, producer-registry, or plugin tables.
 
 ## Verification direction
 
-A representative Task Review and Change reviewer operation must establish that the shared capability preserves current behavior through the supported operation.
-Candidate Publication must establish that a non-reviewing agent can use the same session and execution mechanics without inheriting Review policy.
-Interruption evidence must distinguish unsettled dispatch from a returned invocation before retry behavior is accepted.
+Representative Task Review and Change reviewer behavior tests use a deterministic test Agent Harness through the supported domain operations.
+Focused Pi Adapter tests verify assigned session IDs, resume arguments, and transcript discovery without calling a live model.
+Recovery tests cover interruption, missing transcripts, correction Invocations, prevention of concurrent unsettled Invocations, and atomic Invocation and domain settlement.
+Candidate Publication verifies its own later adoption if its accepted design still uses an agent.
 
-## Decisions still required
+## Accepted design direction
 
-- Finalize the smallest owner representation for Agent Sessions.
-- Finalize the exact settlement transaction boundary shared mechanics prepare for each domain owner.
-- Finalize the minimum persistent invocation and transcript evidence required by current inspection and recovery.
-- Decide whether the current Review persistence should remain domain-specific or share only a thin identity after reviewing actual current queries and invariants.
-- Select the released schema only after these decisions are accepted.
+- Shared Agent infrastructure stores no generic owner fields; Tasks and Changes store their own Agent Session links.
+- Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
+- Invocation and transcript evidence is limited to the fields defined above; Invocation rows do not duplicate prompts or returned text.
+- Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
+- The release-baseline review selects the physical schema after this plan is approved.
 
 ## Exclusions
 

@@ -1,11 +1,12 @@
 # Candidate Publication presentation plan
 
-**Status:** Paused pending the Task Intent extraction boundary.
+**Status:** Deferred until after the first-release baseline.
 The prior provisional approval is not current planning direction because publication inputs and Task Review access may change.
 Do not use this plan as implementation authority.
 
-**Scheduling:** Wait for `agent-session-execution.md` to establish the shared execution contract before decomposing this plan into Tasks.
-This plan supplies logical persistence and recovery requirements to `release-baseline-cutover.md`, which selects their physical representation.
+**Scheduling:** Reassess this plan after the first-release baseline.
+It may consume the approved Agent Session and Agent Invocation direction, but it is not part of the initial Agent Session work and supplies no requirements to the first-release baseline.
+Any later accepted persistence change uses a normal post-baseline migration.
 
 **Removal condition:** Remove this file after the Operator approves the plan and every accepted requirement and qualifying decision is recorded in its applicable SQLite Task, current domain context, accepted ADR, or current documentation source.
 
@@ -26,8 +27,8 @@ The work is split into independently reviewable deliverables.
 1. A separate prerequisite generalizes the current Reviewer Session infrastructure into a shared Agent Session capability while preserving existing review behavior.
 2. This Candidate Publication presentation work consumes the shared Agent Session capability.
 
-`agent-session-execution.md` owns shared Agent Session and Agent Execution behavior.
-`release-baseline-cutover.md` owns the final physical schema.
+`agent-session-execution.md` owns shared Agent Session and Agent Invocation behavior.
+`release-baseline-cutover.md` owns the first-release physical schema without this deferred presentation behavior.
 This plan owns Publication Agent behavior and Candidate Publication state and consumes those shared capabilities.
 This plan assumes only that Candidate Publication receives an exact Candidate and an upstream-selected eligible passing Validation Run.
 It does not define when Validation must rerun.

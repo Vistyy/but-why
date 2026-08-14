@@ -43,6 +43,9 @@ This section is complete when the selected work item and Work Route are explicit
    Ensure the complete proposed Task set covers the approved outcome without omitting or weakening approved behavior.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 3. Describe each Task in the form that communicates its outcome and consequential constraints clearly.
+   Before recording a proposed requirement, trace its normal path and material failure or recovery consequences.
+   Surface requirements that would introduce open-ended parsing, classification, compatibility, recovery, or exceptional-case behavior beyond the approved outcome, and ask the Operator to bound or remove them.
+   Do not silently weaken approved intent or remove necessary safety and reliability.
    Do not require standard headings, a verification inventory, an implementation plan, or an exact file forecast.
    State a special verification constraint only when it is already part of approved intent.
    Otherwise select proportionate verification during implementation.
