@@ -8,13 +8,7 @@ export type { ReviewerExecutionEvidence } from "../../agent/reviewerSession/exec
 
 export const reviewerEvidenceFromAgentSession = (
   evidence: AgentExecutionEvidence,
-  continuity: ReviewerExecutionEvidence["continuity"] = "fresh",
 ): ReviewerExecutionEvidence => ({
-  continuity,
-  identityFingerprint: "agent-session",
-  durationMs: 0,
-  reviewCalls: evidence.invocations.length,
-  invocationUsage: evidence.invocations.map((invocation) => invocation.usage),
   agentSessionId: evidence.agentSessionId,
   invocations: evidence.invocations,
 });

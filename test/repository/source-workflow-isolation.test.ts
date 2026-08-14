@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -7,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
 
@@ -76,6 +77,75 @@ test("source workflow delegates a Candidate worktree to the canonical executable
   });
   expect(readMigrationIds(main)).not.toContain("candidate_probe");
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
+}, 30_000);
+
+test("source workflow uses an integrity-checked predecessor only for exact reconciliation", () => {
+  const { candidate } = prepareLauncherRepository();
+  const bundle = createTestWorkspace();
+  const executable = join(bundle, "pinned-by");
+  writeFileSync(
+    executable,
+    '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ args: process.argv.slice(2), executable: process.env.BUT_WHY_EXECUTABLE_PATH }) + "\\n");\n',
+  );
+  chmodSync(executable, 0o755);
+  const manifest = join(bundle, "predecessor.json");
+  writeFileSync(
+    manifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+      executable: "pinned-by",
+    })}\n`,
+  );
+
+  const reconciled = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: manifest },
+  });
+  expect(reconciled.status).toBe(0);
+  expect(JSON.parse(reconciled.stdout)).toEqual({
+    args: ["change", "reconcile", "BY-1"],
+    executable,
+  });
+
+  const rejected = runTestProcess("just", ["by", "task", "list"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: manifest },
+  });
+  expect(rejected.status).toBe(1);
+  expect(JSON.parse(rejected.stdout)).toMatchObject({
+    error: { code: "pinned_predecessor_scope", changeId: "BY-1" },
+  });
+
+  const sourceBundle = createTestWorkspace();
+  mkdirSync(join(sourceBundle, "src"));
+  symlinkSync(join(repoRoot, "node_modules"), join(sourceBundle, "node_modules"), "dir");
+  const sourceExecutable = join(sourceBundle, "bin", "by");
+  mkdirSync(join(sourceBundle, "bin"));
+  cpSync(join(repoRoot, "bin", "by"), sourceExecutable);
+  writeFileSync(
+    join(sourceBundle, "src", "main.ts"),
+    'process.stdout.write(JSON.stringify({ source: "pinned-source-bundle" }) + "\\n");\n',
+  );
+  const sourceManifest = join(bundle, "source-predecessor.json");
+  writeFileSync(
+    sourceManifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(sourceExecutable)).digest("hex"),
+      executable: relative(bundle, sourceExecutable),
+    })}\n`,
+  );
+  const sourceReconciled = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: sourceManifest },
+  });
+  expect(sourceReconciled.status).toBe(0);
+  expect(JSON.parse(sourceReconciled.stdout)).toEqual({ source: "pinned-source-bundle" });
 }, 30_000);
 
 test("source workflow fails without Candidate fallback when the main checkout is unavailable", () => {

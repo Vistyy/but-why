@@ -181,7 +181,8 @@ export const runAcceptanceReviewPhase = (
         : result.findings === 1
           ? { reason: "findings" as const }
           : {}),
-      ...(result.reviewerEvidence === undefined
+      ...(result.reviewerEvidence?.continuity === undefined ||
+      result.reviewerEvidence.reviewCalls === undefined
         ? {}
         : {
             continuity: result.reviewerEvidence.continuity,

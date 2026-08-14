@@ -19,12 +19,12 @@ import {
 } from "./reviewerSession.js";
 
 export type ReviewerExecutionEvidence = {
-  readonly continuity: ReviewerContinuity;
-  readonly identityFingerprint: string;
+  readonly continuity?: ReviewerContinuity;
+  readonly identityFingerprint?: string;
   readonly restartReason?: string;
-  readonly durationMs: number;
-  readonly reviewCalls: number;
-  readonly invocationUsage: readonly (TokenUsage | null)[];
+  readonly durationMs?: number;
+  readonly reviewCalls?: number;
+  readonly invocationUsage?: readonly (TokenUsage | null)[];
   readonly agentSessionId?: number;
   readonly invocations?: readonly AgentInvocationRecord[];
 };

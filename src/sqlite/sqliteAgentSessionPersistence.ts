@@ -278,6 +278,48 @@ const settleInvocation = (
     if (input.settleDomain !== undefined) yield* input.settleDomain(sql, input.invocationId);
   });
 
+export const settleUnsettledAgentInvocations = (
+  sql: SqlClient.SqlClient,
+  invocationIds: readonly number[],
+  settledAt: string,
+  unusableReason: string,
+) =>
+  Effect.gen(function* () {
+    for (const invocationId of invocationIds) {
+      const rows = yield* sql<{
+        readonly continuationId: number;
+        readonly settledAt: string | null;
+      }>`
+        SELECT continuation_id AS continuationId, settled_at AS settledAt
+        FROM agent_invocations
+        WHERE id = ${invocationId}
+      `;
+      const invocation = rows[0];
+      if (invocation === undefined) {
+        return yield* invalid(
+          "settle interrupted Agent Invocations",
+          `Agent Invocation ${invocationId} was not found`,
+        );
+      }
+      if (invocation.settledAt !== null) continue;
+      yield* sql`
+        UPDATE agent_invocations
+        SET settled_at = ${settledAt},
+            settlement_kind = 'return_unknown',
+            input_tokens = NULL,
+            cached_input_tokens = NULL,
+            output_tokens = NULL,
+            total_tokens = NULL
+        WHERE id = ${invocationId} AND settled_at IS NULL
+      `;
+      yield* sql`
+        UPDATE agent_continuations
+        SET unusable_reason = COALESCE(unusable_reason, ${unusableReason})
+        WHERE id = ${invocation.continuationId}
+      `;
+    }
+  }).pipe(Effect.asVoid);
+
 const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number) =>
   Effect.gen(function* () {
     const rows = yield* sql<InvocationRow>`

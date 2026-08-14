@@ -22,6 +22,7 @@ import type {
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
 import { RepositorySql } from "./repositorySql.js";
+import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
 type ReviewRow = {
   readonly id: string;
@@ -148,14 +149,27 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
     abandon: (reviewId, reason, now) =>
       repository.transactionImmediate("abandon Task Review", (sql) =>
-        completeReview(
-          sql,
-          reviewId,
-          [],
-          { operation: "task_review_abandoned", message: reason },
-          reason,
-          now,
-        ),
+        Effect.gen(function* () {
+          const linked = yield* sql<{ readonly invocationId: number }>`
+            SELECT agent_invocation_id AS invocationId
+            FROM task_review_agent_invocations
+            WHERE review_id = ${reviewId}
+          `;
+          yield* settleUnsettledAgentInvocations(
+            sql,
+            linked.map(({ invocationId }) => invocationId),
+            now,
+            `Task Review abandonment confirmed that the reviewer process stopped. ${reason}`,
+          );
+          return yield* completeReview(
+            sql,
+            reviewId,
+            [],
+            { operation: "task_review_abandoned", message: reason },
+            reason,
+            now,
+          );
+        }),
       ),
     getById: (reviewId) =>
       repository.transaction("read Task Review", (sql) => getReview(sql, reviewId)),

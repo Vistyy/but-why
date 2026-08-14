@@ -47,6 +47,7 @@
   "devDependencies": {
     "@ast-grep/cli": "^0.44.1",
     "@biomejs/biome": "^2.2.0",
+    "@earendil-works/pi-ai": "0.84.0",
     "@effect/cli": "0.74.0",
     "@effect/experimental": "0.59.0",
     "@effect/platform": "0.95.0",

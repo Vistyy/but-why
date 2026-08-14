@@ -5,7 +5,9 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
+import { createPiReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import {
+  piReviewerAgentRuntime,
   type ReviewerAgentResult,
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -16,11 +18,15 @@ import type {
   ReviewerSessionRecord,
   ReviewerSessionStore,
 } from "../../src/agent/reviewerSession/reviewerSession.js";
-import { runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
+import {
+  type RunAcceptanceReviewPhaseInput,
+  runAcceptanceReviewPhase as runAcceptanceReviewPhaseWithFileSystem,
+} from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../../src/change/implementationBlocker.js";
 import type { ImplementationDecision } from "../../src/change/implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
+import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
@@ -148,6 +154,104 @@ describe("Acceptance Review phase", () => {
           ]),
         }),
       ]);
+    }),
+  );
+
+  it.scoped("runs the normal Pi reviewer process through the Acceptance Candidate boundary", () =>
+    Effect.gen(function* () {
+      const workspace = createTestWorkspace();
+      const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
+        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+          const sessionId = agentSessionId ?? 1;
+          const continuation = {
+            id: 1,
+            agentSessionId: sessionId,
+            harness: "pi" as const,
+            provider: configuration.provider ?? null,
+            model: configuration.model,
+            thinking: configuration.thinking ?? null,
+            transcriptPath: null,
+            unusableReason: null,
+          };
+          return Effect.succeed({
+            ok: true as const,
+            dispatch: {
+              agentSessionId: sessionId,
+              continuation,
+              invocation: {
+                id: 1,
+                continuationId: continuation.id,
+                createdAt,
+                settledAt: null,
+                settlementKind: null,
+                usage: null,
+                continuation,
+              },
+              resumed: false,
+              piSessionId: "by-agent-1",
+            },
+          });
+        },
+        settleInvocation: () => Effect.void,
+        readInvocationHistory: () => Effect.succeed([]),
+      };
+      const linkAgentInvocation: NonNullable<RunAcceptanceReviewPhaseInput["linkAgentInvocation"]> =
+        () => () =>
+          Effect.void;
+      const settleAgentInvocationRound: NonNullable<
+        RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]
+      > = () => () => Effect.void;
+      const recordArtifactRecords: NonNullable<
+        RunAcceptanceReviewPhaseInput["recordArtifactRecords"]
+      > = () => Effect.void;
+      const actualPolicy = {
+        ...policy,
+        profile: {
+          ...policy.profile,
+          profile: {
+            ...policy.profile.profile,
+            runtimeConfig: {
+              model: "but-why-test/deterministic-reviewer",
+              thinking: "off" as const,
+              extensions: [join(repoRoot, "test/fixtures/pi/deterministic-provider.mjs")],
+            },
+          },
+        },
+      };
+      const fixture = acceptancePhaseFixture(piReviewerAgentRuntime, {
+        policy: actualPolicy,
+        agentEnvironment: [],
+        agentPersistence,
+        linkAgentInvocation,
+        settleAgentInvocationRound,
+        recordArtifactRecords,
+        commandCwd: workspace,
+        resourceRoot: workspace,
+        reviewerExecutor: createPiReviewerProcessExecutor(),
+      });
+
+      const result = yield* fixture.run();
+
+      expect(result).toMatchObject({
+        findings: 0,
+        reviewerEvidence: {
+          agentSessionId: 1,
+          invocations: [
+            {
+              id: 1,
+              continuationId: 1,
+              settlementKind: "returned",
+              usage: {
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2,
+              },
+            },
+          ],
+        },
+      });
+      expect(result.reviewerEvidence).not.toHaveProperty("continuity");
+      expect(result.reviewerEvidence).not.toHaveProperty("reviewCalls");
     }),
   );
 
@@ -417,6 +521,17 @@ describe("Acceptance Review phase", () => {
 type FixtureOptions = {
   readonly validationRunId?: string;
   readonly candidate?: typeof candidate;
+  readonly policy?: RunAcceptanceReviewPhaseInput["policy"];
+  readonly agentEnvironment?: RunAcceptanceReviewPhaseInput["agentEnvironment"];
+  readonly reviewerExecutor?: RunAcceptanceReviewPhaseInput["reviewerExecutor"];
+  readonly agentPersistence?: RunAcceptanceReviewPhaseInput["agentPersistence"];
+  readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
+  readonly linkAgentInvocation?: RunAcceptanceReviewPhaseInput["linkAgentInvocation"];
+  readonly settleAgentInvocationRound?: RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"];
+  readonly recordArtifactRecords?: RunAcceptanceReviewPhaseInput["recordArtifactRecords"];
+  readonly commandCwd?: string;
+  readonly resourceRoot?: string;
+  readonly sessionStorageRoot?: string;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly previousFindings?: readonly ReturnType<typeof finding>[];
@@ -444,6 +559,7 @@ const acceptancePhaseFixture = (
       stderr: "",
     });
   const artifactsRoot = options.artifactsRoot ?? createTestWorkspace();
+  const phasePolicy = options.policy ?? policy;
 
   return {
     rounds,
@@ -455,14 +571,32 @@ const acceptancePhaseFixture = (
         acceptanceContext,
         implementationDecisions: options.implementationDecisions ?? [],
         ...(options.blockerHistory === undefined ? {} : { blockerHistory: options.blockerHistory }),
-        policy,
-        agentEnvironment: ["nix", "develop", "-c"],
+        policy: phasePolicy,
+        agentEnvironment: options.agentEnvironment ?? ["nix", "develop", "-c"],
         runtime,
         commandExecutor,
-        reviewerExecutor: unusedReviewerExecutor,
+        reviewerExecutor: options.reviewerExecutor ?? unusedReviewerExecutor,
         artifactsRoot,
-        commandCwd: "/captured/snapshot-workspace",
-        resourceRoot: "/captured/snapshot-workspace",
+        commandCwd: options.commandCwd ?? "/captured/snapshot-workspace",
+        resourceRoot: options.resourceRoot ?? "/captured/snapshot-workspace",
+        ...(options.sessionStorageRoot === undefined
+          ? {}
+          : { sessionStorageRoot: options.sessionStorageRoot }),
+        ...(options.agentPersistence === undefined
+          ? {}
+          : { agentPersistence: options.agentPersistence }),
+        ...(options.getAgentSession === undefined
+          ? {}
+          : { getAgentSession: options.getAgentSession }),
+        ...(options.linkAgentInvocation === undefined
+          ? {}
+          : { linkAgentInvocation: options.linkAgentInvocation }),
+        ...(options.settleAgentInvocationRound === undefined
+          ? {}
+          : { settleAgentInvocationRound: options.settleAgentInvocationRound }),
+        ...(options.recordArtifactRecords === undefined
+          ? {}
+          : { recordArtifactRecords: options.recordArtifactRecords }),
         ...(options.sessionStore === undefined ? {} : { sessionStore: options.sessionStore }),
         allowedUntrackedFiles: [],
         now,

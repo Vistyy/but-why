@@ -193,7 +193,8 @@ export const runSpecialistReviewPhase = (
             : review.hasFindings
               ? { reason: "findings" as const }
               : {}),
-          ...(review.reviewerEvidence === undefined
+          ...(review.reviewerEvidence?.continuity === undefined ||
+          review.reviewerEvidence.reviewCalls === undefined
             ? {}
             : {
                 continuity: review.reviewerEvidence.continuity,

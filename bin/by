@@ -1,63 +1,238 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, realpathSync } from "node:fs";
+import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-const repoDir = realpathSync(resolve(dirname(process.argv[1]), ".."));
 const args = process.argv.slice(2);
-const mainCheckout = findMainCheckout();
 
-if (!mainCheckout.ok) {
-  fail({
-    code: "main_checkout_unavailable",
-    message: "The Local Repository's canonical main checkout is unavailable.",
-    ...(mainCheckout.path === undefined ? {} : { details: { path: mainCheckout.path } }),
-    help: "Restore the canonical main checkout, then retry the command.",
-  });
-}
+runSourceGuarded(args);
 
-const trustedExecutable = join(mainCheckout.path, "bin/by");
-try {
-  accessSync(trustedExecutable, constants.X_OK);
-} catch {
-  fail({
-    code: "trusted_executable_unavailable",
-    message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
-    details: { path: trustedExecutable },
-    help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
-  });
-}
+function runSourceGuarded(commandArgs) {
+  const mainCheckout = findMainCheckout();
 
-const child =
-  repoDir === mainCheckout.path
-    ? spawnSync(
-        process.execPath,
-        [
-          "--import",
-          join(repoDir, "node_modules/tsx/dist/loader.mjs"),
-          join(repoDir, "src/main.ts"),
-          ...args,
-        ],
-        {
-          env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: join(repoDir, "bin/by") },
-          stdio: "inherit",
+  if (!mainCheckout.ok) {
+    fail({
+      code: "main_checkout_unavailable",
+      message: "The Local Repository's canonical main checkout is unavailable.",
+      ...(mainCheckout.path === undefined ? {} : { details: { path: mainCheckout.path } }),
+      help: "Restore the canonical main checkout, then retry the command.",
+    });
+  }
+
+  const pinnedManifestPath = process.env["BUT_WHY_PINNED_PREDECESSOR_MANIFEST"];
+  if (pinnedManifestPath !== undefined) {
+    const pinned = readPinnedPredecessorManifest(pinnedManifestPath);
+    const reconcileChangeId = exactReconcileChangeId(commandArgs);
+    if (reconcileChangeId !== pinned.changeId) {
+      fail({
+        code: "pinned_predecessor_scope",
+        message:
+          reconcileChangeId === undefined
+            ? "The Pinned Predecessor Executable is authorized only for exact Change reconciliation."
+            : `The Pinned Predecessor Executable is authorized for Change ${pinned.changeId}, not Change ${reconcileChangeId}.`,
+        details: {
+          changeId: pinned.changeId,
+          predecessorCommit: pinned.commit,
+          predecessorSha256: pinned.sha256,
         },
-      )
-    : spawnSync(trustedExecutable, args, {
-        env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: trustedExecutable },
-        stdio: "inherit",
+        help: [
+          "Run `by change reconcile " +
+            pinned.changeId +
+            "` only after stopping the new executable and before opening Shared Repository State with it.",
+        ],
       });
+    }
+    runPinnedPredecessor(pinned, commandArgs);
+    return;
+  }
 
-if (child.error !== undefined) {
-  fail({
-    code: "trusted_executable_unavailable",
-    message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
-    details: { path: trustedExecutable },
-    help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
-  });
+  const trustedExecutable = join(mainCheckout.path, "bin/by");
+  try {
+    accessSync(trustedExecutable, constants.X_OK);
+  } catch {
+    fail({
+      code: "trusted_executable_unavailable",
+      message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+      details: { path: trustedExecutable },
+      help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+    });
+  }
+
+  const repoDir = realpathSync(resolve(dirname(process.argv[1]), ".."));
+  const child =
+    repoDir === mainCheckout.path
+      ? spawnSync(
+          process.execPath,
+          [
+            "--import",
+            join(repoDir, "node_modules/tsx/dist/loader.mjs"),
+            join(repoDir, "src/main.ts"),
+            ...commandArgs,
+          ],
+          {
+            env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: join(repoDir, "bin/by") },
+            stdio: "inherit",
+          },
+        )
+      : spawnSync(trustedExecutable, commandArgs, {
+          env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: trustedExecutable },
+          stdio: "inherit",
+        });
+
+  if (child.error !== undefined) {
+    fail({
+      code: "trusted_executable_unavailable",
+      message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+      details: { path: trustedExecutable },
+      help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+    });
+  }
+
+  process.exitCode = child.status ?? 1;
 }
 
-process.exitCode = child.status ?? 1;
+function runPinnedPredecessor(manifest, commandArgs) {
+  const sourceBundle = sourceBundleForExecutable(manifest.executable);
+  const child =
+    sourceBundle === undefined
+      ? spawnSync(manifest.executable, commandArgs, {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            BUT_WHY_EXECUTABLE_PATH: manifest.executable,
+          },
+          stdio: "inherit",
+        })
+      : spawnSync(
+          process.execPath,
+          ["--import", sourceBundle.loader, sourceBundle.entrypoint, ...commandArgs],
+          {
+            cwd: process.cwd(),
+            env: {
+              ...process.env,
+              BUT_WHY_EXECUTABLE_PATH: manifest.executable,
+            },
+            stdio: "inherit",
+          },
+        );
+  if (child.error !== undefined) {
+    fail({
+      code: "pinned_predecessor_unavailable",
+      message: "The Pinned Predecessor Executable could not be started.",
+      details: {
+        path: manifest.executable,
+        predecessorCommit: manifest.commit,
+        predecessorSha256: manifest.sha256,
+      },
+      help: "Restore the recorded Pinned Predecessor bundle, then retry exact Change reconciliation.",
+    });
+  }
+  process.exitCode = child.status ?? 1;
+}
+
+function sourceBundleForExecutable(executable) {
+  const bundleRoot = resolve(dirname(executable), "..");
+  const loader = join(bundleRoot, "node_modules/tsx/dist/loader.mjs");
+  const entrypoint = join(bundleRoot, "src/main.ts");
+  try {
+    accessSync(loader, constants.R_OK);
+    accessSync(entrypoint, constants.R_OK);
+    return { loader, entrypoint };
+  } catch {
+    return undefined;
+  }
+}
+
+function readPinnedPredecessorManifest(path) {
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor manifest could not be read.",
+      details: { path },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    parsed.version !== 1 ||
+    typeof parsed.changeId !== "string" ||
+    typeof parsed.commit !== "string" ||
+    typeof parsed.sha256 !== "string" ||
+    typeof parsed.executable !== "string"
+  ) {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor manifest has an invalid shape.",
+      details: { path },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+
+  const value = parsed;
+  const executable = resolve(dirname(path), value.executable);
+  const sha256 = value.sha256.toLowerCase();
+  if (
+    value.changeId.trim().length === 0 ||
+    !/^[0-9a-f]{7,64}$/i.test(value.commit) ||
+    !/^[0-9a-f]{64}$/.test(sha256)
+  ) {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor manifest has invalid identity or integrity facts.",
+      details: { path },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+
+  let actual;
+  try {
+    accessSync(executable, constants.X_OK);
+    actual = createHash("sha256").update(readFileSync(executable)).digest("hex");
+  } catch {
+    fail({
+      code: "pinned_predecessor_unavailable",
+      message: "The recorded Pinned Predecessor Executable is unavailable.",
+      details: { path: executable, predecessorCommit: value.commit, predecessorSha256: sha256 },
+      help: "Restore the recorded Pinned Predecessor bundle, then retry exact Change reconciliation.",
+    });
+  }
+  if (actual !== sha256) {
+    fail({
+      code: "pinned_predecessor_integrity_mismatch",
+      message: "The Pinned Predecessor Executable does not match its recorded SHA-256.",
+      details: {
+        path: executable,
+        predecessorCommit: value.commit,
+        expectedSha256: sha256,
+        observedSha256: actual,
+      },
+      help: "Restore the exact recorded Pinned Predecessor bundle, then retry exact Change reconciliation.",
+    });
+  }
+
+  return {
+    version: 1,
+    changeId: value.changeId,
+    commit: value.commit,
+    sha256,
+    executable,
+  };
+}
+
+function exactReconcileChangeId(commandArgs) {
+  if (commandArgs[0] !== "change" || commandArgs[1] !== "reconcile") return undefined;
+  const changeId = commandArgs[2];
+  if (changeId === undefined) return undefined;
+  if (commandArgs.length === 3) return changeId;
+  if (commandArgs.length === 4 && commandArgs[3] === "--discard-work") return changeId;
+  return undefined;
+}
 
 function findMainCheckout() {
   const worktrees = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {

@@ -524,17 +524,12 @@ const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfig
 const reviewerEvidenceFromAgent = (
   evidence: AgentExecutionEvidence,
 ): ReviewerExecutionEvidence => ({
-  continuity: evidence.invocations[0]?.settlementKind === "returned" ? "fresh" : "restarted",
-  identityFingerprint: "agent-session",
-  durationMs: 0,
-  reviewCalls: evidence.invocations.length,
-  invocationUsage: evidence.invocations.map((invocation) => invocation.usage),
   agentSessionId: evidence.agentSessionId,
   invocations: evidence.invocations,
 });
 
 const taskReviewProgressDetails = (evidence: ReviewerExecutionEvidence | undefined) =>
-  evidence === undefined
+  evidence?.continuity === undefined || evidence.reviewCalls === undefined
     ? undefined
     : { continuity: evidence.continuity, reviewCalls: evidence.reviewCalls };
 
