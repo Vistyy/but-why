@@ -118,7 +118,6 @@ export type ChangeTaskProjectionRecord = {
 
 export type ChangeListRecord = {
   readonly id: string;
-  readonly taskId: PublicTaskId | null;
   readonly state: ChangeState;
   readonly branchRef: string;
   readonly worktreePath: string | null;
@@ -259,7 +258,6 @@ type CandidatePublicationChangeBase = {
   readonly state: ChangeState;
   readonly branchRef: string;
   readonly startingCommit: string | null;
-  readonly taskId: PublicTaskId | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions: readonly ImplementationDecision[];
 };

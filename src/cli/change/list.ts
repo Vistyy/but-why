@@ -27,7 +27,6 @@ export const runList = (
         success({
           changes: changes.map((change) => ({
             id: change.id,
-            taskId: change.taskId,
             state: change.state,
             createdAt: change.createdAt,
             ...(change.state === "open"

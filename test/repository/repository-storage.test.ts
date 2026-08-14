@@ -392,9 +392,10 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("resolves a Task-backed blocker and appends to current Acceptance Context", () =>
+  it.scoped("resolves a blocker and derives current Acceptance Context", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
+        const repository = yield* RepositorySql;
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
@@ -444,6 +445,24 @@ describe("repository SQL storage", () => {
           activeBlocker: null,
           acceptanceContext: { resolutions: ["Use the approved approach."] },
         });
+        const storedContext = yield* repository.operation(
+          "read initial Acceptance Context",
+          (sql) =>
+            sql<{ readonly acceptanceContext: string | null }>`
+            SELECT acceptance_context AS acceptanceContext
+            FROM changes
+            WHERE id = ${started.change.id}
+          `,
+        );
+        expect(storedContext).toEqual([
+          {
+            acceptanceContext: JSON.stringify({
+              version: 1,
+              title: "Resolve blocker",
+              description: "Resume implementation with approved intent.",
+            }),
+          },
+        ]);
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(
           yield* changes.authority.listImplementationBlockers(started.change.id),
@@ -455,19 +474,23 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("resolves a taskless blocker without creating Acceptance Context", () =>
+  it.scoped("resolves a blocker for a Change without a Task", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const started = yield* starts.create({
-          id: "change-taskless-blocker",
+          id: "change-without-task-blocker",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-taskless-blocker",
+          branchRef: "refs/heads/but-why/by-1-change-without-task-blocker",
           baseRef: "main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-taskless-blocker"),
+          worktreePath: join(
+            input.commonDirectory,
+            "worktrees",
+            "by-1-change-without-task-blocker",
+          ),
           now: "2026-07-17T23:02:00.000Z",
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
@@ -480,13 +503,13 @@ describe("repository SQL storage", () => {
 
         const resolved = yield* changes.authority.resolveImplementationBlocker({
           changeId: started.change.id,
-          content: "Continue without taskless intent.",
+          content: "Continue without accepted intent.",
           now: "2026-07-17T23:04:00.000Z",
         });
 
         expect(resolved).toMatchObject({
           ok: true,
-          blocker: { resolution: { content: "Continue without taskless intent." } },
+          blocker: { resolution: { content: "Continue without accepted intent." } },
         });
         expect(yield* changes.reads.getChangeById(started.change.id)).toMatchObject({
           state: "open",
@@ -497,7 +520,7 @@ describe("repository SQL storage", () => {
           yield* changes.authority.listImplementationBlockers(started.change.id),
         ).toMatchObject({
           active: null,
-          resolutions: [{ content: "Continue without taskless intent." }],
+          resolutions: [{ content: "Continue without accepted intent." }],
         });
       }),
     ),
@@ -544,7 +567,7 @@ describe("repository SQL storage", () => {
           const starts = yield* openSqliteChangeStartPersistence();
           const changes = yield* openSqliteChangeTestDependencies();
           const created = yield* tasks.createTask({
-            title: "Cancel Task-backed Change atomically",
+            title: "Cancel Change linked to a Task atomically",
             description: "The linked Task mutation and Change close share one transaction.",
             now: "2026-07-17T22:55:00.000Z",
           });
@@ -1460,7 +1483,7 @@ describe("repository SQL storage", () => {
         expect(raised.ok).toBe(true);
         const resolved = yield* changes.authority.resolveImplementationBlocker({
           changeId: captured.changeId,
-          content: "Proceed without taskless intent.",
+          content: "Proceed without a Task intent.",
           now: "2026-07-25T16:16:00.000Z",
         });
         expect(resolved.ok).toBe(true);

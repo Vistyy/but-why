@@ -101,16 +101,16 @@ const fixture = (options: FixtureOptions = {}) => {
 
 describe("Change Start orchestration", () => {
   it.effect(
-    "creates taskless and Task-backed Changes in provisioning order with captured intent",
+    "creates a Change without a Task and a Change linked to a Task in provisioning order with captured intent",
     () =>
       Effect.gen(function* () {
-        const taskless = fixture();
-        const tasklessResult = yield* taskless.operations.start({ now });
-        expect(tasklessResult).toMatchObject({
+        const changeWithoutTask = fixture();
+        const changeWithoutTaskResult = yield* changeWithoutTask.operations.start({ now });
+        expect(changeWithoutTaskResult).toMatchObject({
           ok: true,
           change: { taskId: null, acceptanceContext: null },
         });
-        expect(taskless.events).toEqual([
+        expect(changeWithoutTask.events).toEqual([
           expect.stringMatching(/^resolveIntent:change-/u),
           "create",
           "provisionWorktree:create",
@@ -159,7 +159,7 @@ describe("Change Start orchestration", () => {
     }),
   );
 
-  it.effect("recovers and prepares the same existing Task-backed Change", () =>
+  it.effect("recovers and prepares the same existing Change linked to a Task", () =>
     Effect.gen(function* () {
       const existing = recordFrom({
         id: "existing",

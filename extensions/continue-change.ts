@@ -38,8 +38,8 @@ export type ChangeInspectionSnapshot = {
   readonly change: {
     readonly state: ChangeState;
     readonly closeReason: ChangeCloseReason | null;
-    readonly taskId?: string | null;
-    readonly baseRef?: string;
+    readonly acceptanceContext: JsonObject | null;
+    readonly baseRef?: string | null;
   };
   readonly currentCandidate: CurrentCandidate | null;
   readonly currentValidationRun: CurrentValidationRun | null;
@@ -73,16 +73,13 @@ export type RetryState = {
 type ReassessmentEvidence = {
   readonly change: boolean;
   readonly acceptanceContext: boolean;
-  readonly blockerResolutions: boolean;
   readonly worktreeStatus: boolean;
   readonly candidateDiff: boolean;
 };
 
 type SubmissionReassessment = {
   readonly state: "awaiting-settle" | "awaiting-restart" | "running" | "complete" | "not-required";
-  readonly taskId: string | null;
   readonly baseRef: string | null;
-  readonly hasResolutions: boolean;
   readonly evidence: ReassessmentEvidence;
 };
 
@@ -417,7 +414,6 @@ const inspectionFailureMessage = (message: string): string =>
 const emptyReassessmentEvidence = (): ReassessmentEvidence => ({
   change: false,
   acceptanceContext: false,
-  blockerResolutions: false,
   worktreeStatus: false,
   candidateDiff: false,
 });
@@ -425,24 +421,19 @@ const emptyReassessmentEvidence = (): ReassessmentEvidence => ({
 const reassessmentEvidenceComplete = (reassessment: SubmissionReassessment): boolean =>
   reassessment.evidence.change &&
   reassessment.evidence.acceptanceContext &&
-  (!reassessment.hasResolutions || reassessment.evidence.blockerResolutions) &&
   reassessment.evidence.worktreeStatus &&
   reassessment.evidence.candidateDiff;
 
 const commandReassessmentEvidence = (
   command: string,
   changeId: string,
-  taskId: string,
   baseRef: string,
 ): ReassessmentEvidence => {
   const visible = visibleShellText(command).trim();
   const prefixes = ["just by", "pnpx but-why", "npx -y but-why"];
   return {
     change: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
-    acceptanceContext: prefixes.some((prefix) => visible === `${prefix} task context ${taskId}`),
-    blockerResolutions: prefixes.some(
-      (prefix) => visible === `${prefix} change blocker list ${changeId}`,
-    ),
+    acceptanceContext: prefixes.some((prefix) => visible === `${prefix} change show ${changeId}`),
     worktreeStatus: visible === "git status --short",
     candidateDiff: visible === `git diff ${baseRef}...HEAD`,
   };
@@ -454,15 +445,9 @@ const incompleteReassessmentMessage = (
   commandPrefix: ButWhyCommandPrefix,
 ): string => {
   const commands = [
-    ...(reassessment.evidence.change
-      ? []
-      : [butWhyCommand(commandPrefix, "change", "show", changeId)]),
-    ...(reassessment.evidence.acceptanceContext || reassessment.taskId === null
-      ? []
-      : [butWhyCommand(commandPrefix, "task", "context", reassessment.taskId)]),
-    ...(!reassessment.hasResolutions || reassessment.evidence.blockerResolutions
-      ? []
-      : [butWhyCommand(commandPrefix, "change", "blocker", "list", changeId)]),
+    ...(!reassessment.evidence.change || !reassessment.evidence.acceptanceContext
+      ? [butWhyCommand(commandPrefix, "change", "show", changeId)]
+      : []),
     ...(reassessment.evidence.worktreeStatus ? [] : ["git status --short"]),
     ...(reassessment.evidence.candidateDiff || reassessment.baseRef === null
       ? []
@@ -473,22 +458,16 @@ const incompleteReassessmentMessage = (
 
 const submissionReassessmentMessage = (
   changeId: string,
-  taskId: string,
   commandPrefix: ButWhyCommandPrefix,
   baseRef: string,
-  hasResolutions: boolean,
 ): string =>
   [
     `But Why started the required separate reassessment run for Change ${changeId}.`,
     "Do not call Change Submit during this run.",
-    `Inspect the Change with \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and read the complete current Acceptance Context with \`${butWhyCommand(commandPrefix, "task", "context", taskId)}\`.`,
+    `Inspect the Change with \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and use its complete current Acceptance Context when present.`,
     "Inspect the Managed Worktree status with `git status --short`.",
     `Inspect the complete committed Candidate diff against the current Change Base with \`git diff ${baseRef}...HEAD\`.`,
-    ...(hasResolutions
-      ? [
-          `Inspection shows approved Implementation Blocker Resolutions. Read them with \`${butWhyCommand(commandPrefix, "change", "blocker", "list", changeId)}\` and include them in the current Acceptance Context.`,
-        ]
-      : []),
+
     "Compare the complete committed implementation with every accepted outcome, criterion, constraint, and verification requirement.",
     "Correct and commit each material discrepancy.",
     "Run focused verification for any corrections.",
@@ -549,7 +528,7 @@ export const buildContinuationMessage = (
   }
   return [
     `Resume implementation of Change ${changeId}.`,
-    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, the Managed Worktree, and the linked Task Context when present.`,
+    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
     "Implement the complete accepted intent and continue until Change Submit passes.",
   ].join(" ");
 };
@@ -889,9 +868,8 @@ export default function continueChange(pi: ExtensionAPI): void {
   ): Promise<
     | {
         readonly ok: true;
-        readonly taskId: string | null;
+        readonly hasAcceptanceContext: boolean;
         readonly baseRef: string | null;
-        readonly hasResolutions: boolean;
       }
     | { readonly ok: false; readonly message: string }
   > => {
@@ -912,46 +890,22 @@ export default function continueChange(pi: ExtensionAPI): void {
     } catch {
       return { ok: false, message: "But Why Change inspection returned malformed JSON" };
     }
-    if (!isSnapshot(snapshotValue) || snapshotValue.change.taskId === undefined) {
+    if (!isSnapshot(snapshotValue)) {
       return {
         ok: false,
         message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    if (snapshotValue.change.taskId === null) {
-      return { ok: true, taskId: null, baseRef: null, hasResolutions: false };
+    if (snapshotValue.change.acceptanceContext === null) {
+      return { ok: true, hasAcceptanceContext: false, baseRef: null };
     }
-    if (snapshotValue.change.baseRef === undefined) {
+    if (snapshotValue.change.baseRef === undefined || snapshotValue.change.baseRef === null) {
       return { ok: false, message: "But Why inspection omitted the Change Base reference" };
-    }
-
-    const blockerResult = await inspectCommand(["change", "blocker", "list", id], ctx.cwd);
-    if (!blockerResult.ok) {
-      return {
-        ok: false,
-        message:
-          blockerResult.stdout.trim() === ""
-            ? blockerResult.message
-            : `${blockerResult.message}: ${blockerResult.stdout.trim().slice(0, 500)}`,
-      };
-    }
-    let blockerValue: unknown;
-    try {
-      blockerValue = JSON.parse(blockerResult.stdout) as unknown;
-    } catch {
-      return { ok: false, message: "But Why blocker inspection returned malformed JSON" };
-    }
-    if (!isBlockerHistory(blockerValue)) {
-      return {
-        ok: false,
-        message: "But Why inspection returned an unsupported blocker history shape",
-      };
     }
     return {
       ok: true,
-      taskId: snapshotValue.change.taskId,
+      hasAcceptanceContext: true,
       baseRef: snapshotValue.change.baseRef,
-      hasResolutions: blockerValue.resolutions.length > 0,
     };
   };
 
@@ -980,15 +934,10 @@ export default function continueChange(pi: ExtensionAPI): void {
   pi.on("tool_call", async (event, ctx) => {
     if (!isToolCallEventType("bash", event)) return;
     const runningReassessment = persisted?.submissionReassessment;
-    if (
-      runningReassessment?.state === "running" &&
-      runningReassessment.taskId !== null &&
-      runningReassessment.baseRef !== null
-    ) {
+    if (runningReassessment?.state === "running" && runningReassessment.baseRef !== null) {
       const evidence = commandReassessmentEvidence(
         event.input.command,
         changeId ?? "",
-        runningReassessment.taskId,
         runningReassessment.baseRef,
       );
       if (Object.values(evidence).some(Boolean)) {
@@ -1019,12 +968,10 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (!eligibility.ok) {
       return { block: true, reason: inspectionFailureMessage(eligibility.message) };
     }
-    if (eligibility.taskId === null) {
+    if (!eligibility.hasAcceptanceContext) {
       saveSubmissionReassessment({
         state: "not-required",
-        taskId: null,
         baseRef: null,
-        hasResolutions: false,
         evidence: emptyReassessmentEvidence(),
       });
       showValidationStarted(ctx);
@@ -1032,9 +979,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     saveSubmissionReassessment({
       state: "awaiting-settle",
-      taskId: eligibility.taskId,
       baseRef: eligibility.baseRef,
-      hasResolutions: eligibility.hasResolutions,
       evidence: emptyReassessmentEvidence(),
     });
     return { block: true, reason: interruptedSubmissionMessage };
@@ -1052,7 +997,6 @@ export default function continueChange(pi: ExtensionAPI): void {
       evidence: {
         change: reassessment.evidence.change || observed.change,
         acceptanceContext: reassessment.evidence.acceptanceContext || observed.acceptanceContext,
-        blockerResolutions: reassessment.evidence.blockerResolutions || observed.blockerResolutions,
         worktreeStatus: reassessment.evidence.worktreeStatus || observed.worktreeStatus,
         candidateDiff: reassessment.evidence.candidateDiff || observed.candidateDiff,
       },
@@ -1076,7 +1020,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const explanation = resolution.content;
     const next = hasFindings
       ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, the Managed Worktree, and the linked Task Context when present. Continue implementing the complete accepted intent until Change Submit passes.`;
+      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
@@ -1387,18 +1331,12 @@ export default function continueChange(pi: ExtensionAPI): void {
     ctx: ExtensionContext,
     reassessment: SubmissionReassessment,
   ): void => {
-    if (changeId === undefined || reassessment.taskId === null || reassessment.baseRef === null) {
+    if (changeId === undefined || reassessment.baseRef === null) {
       return;
     }
     saveSubmissionReassessment({ ...reassessment, state: "running" });
     pi.sendUserMessage(
-      submissionReassessmentMessage(
-        changeId,
-        reassessment.taskId,
-        commandPrefixFor(ctx.cwd),
-        reassessment.baseRef,
-        reassessment.hasResolutions,
-      ),
+      submissionReassessmentMessage(changeId, commandPrefixFor(ctx.cwd), reassessment.baseRef),
     );
   };
 
@@ -1527,7 +1465,6 @@ const isReassessmentEvidence = (value: unknown): value is ReassessmentEvidence =
   isRecord(value) &&
   typeof recordValue(value, "change") === "boolean" &&
   typeof recordValue(value, "acceptanceContext") === "boolean" &&
-  typeof recordValue(value, "blockerResolutions") === "boolean" &&
   typeof recordValue(value, "worktreeStatus") === "boolean" &&
   typeof recordValue(value, "candidateDiff") === "boolean";
 
@@ -1538,9 +1475,7 @@ const isSubmissionReassessment = (value: unknown): value is SubmissionReassessme
     recordValue(value, "state") === "running" ||
     recordValue(value, "state") === "complete" ||
     recordValue(value, "state") === "not-required") &&
-  (recordValue(value, "taskId") === null || typeof recordValue(value, "taskId") === "string") &&
   (recordValue(value, "baseRef") === null || typeof recordValue(value, "baseRef") === "string") &&
-  typeof recordValue(value, "hasResolutions") === "boolean" &&
   isReassessmentEvidence(recordValue(value, "evidence"));
 
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
@@ -1564,6 +1499,20 @@ const isValidationRun = (value: unknown): value is CurrentValidationRun =>
   typeof recordValue(value, "id") === "string" &&
   (recordValue(value, "state") === "running" || recordValue(value, "state") === "complete");
 
+const isStringArray = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const isAcceptanceContext = (value: unknown): value is JsonObject | null =>
+  value === null ||
+  (isRecord(value) &&
+    recordValue(value, "version") === 1 &&
+    typeof recordValue(value, "title") === "string" &&
+    typeof recordValue(value, "description") === "string" &&
+    (recordValue(value, "comments") === undefined ||
+      isStringArray(recordValue(value, "comments"))) &&
+    (recordValue(value, "resolutions") === undefined ||
+      isStringArray(recordValue(value, "resolutions"))));
+
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;
   const change = recordValue(value, "change");
@@ -1577,7 +1526,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (recordValue(change, "closeReason") === "completed" ||
       recordValue(change, "closeReason") === "cancelled" ||
       recordValue(change, "closeReason") === null) &&
-    (recordValue(change, "taskId") === null || typeof recordValue(change, "taskId") === "string") &&
+    isAcceptanceContext(recordValue(change, "acceptanceContext")) &&
     (candidate === null || isCandidate(candidate)) &&
     (validationRun === null || isValidationRun(validationRun)) &&
     isNonNegativeInteger(recordValue(value, "findingCount")) &&

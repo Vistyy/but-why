@@ -49,7 +49,11 @@ export const runBlocker = (
     .pipe(
       Effect.map((result) =>
         result.ok
-          ? success({ changeId, blocker: result.blocker, change: result.change })
+          ? success({
+              changeId,
+              blocker: result.blocker,
+              change: support.changeInspectionView(result.change),
+            })
           : runtimeError({
               code: result.code,
               message:

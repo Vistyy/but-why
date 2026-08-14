@@ -5,7 +5,7 @@ This context owns requested intent, Task Submission, dependencies, and user-faci
 ## Language
 
 **Work Route Selection**:
-The Operator's explicit choice to handle requested repository work through a Task-backed Change, a taskless Change, or a direct edit outside But Why.
+The Operator's explicit choice to handle requested repository work through a Change linked to a Task, a Change without a Task, or a direct edit outside But Why.
 An agent may recommend a route but must not substitute another route after the Operator decides.
 When the selected route conflicts with a higher-priority instruction, supported interface, safety constraint, or approved Task intent, the agent reports the conflict and requests direction through the applicable authority mechanism.
 _Avoid_: Agent-selected workflow, Task Submission, Change Start

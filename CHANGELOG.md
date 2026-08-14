@@ -7,7 +7,7 @@ All notable changes to But Why? are documented here.
 ### Added
 
 - Initial v1 package candidate for the Change-centered `by` CLI.
-- Task-backed and taskless Change workflows.
+- Change workflows linked to Tasks or without a Task.
 - Managed Worktree preparation, validation, submission, and reconciliation.
 - Public setup, configuration, and agent skill documentation.
 

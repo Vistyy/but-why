@@ -11,7 +11,7 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   change: {
     state: "open",
     closeReason: null,
-    taskId: "BY-236",
+    acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
     baseRef: "refs/remotes/origin/main",
   },
   currentCandidate: null,
@@ -225,7 +225,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toHaveLength(1);
     const reassessment = harness.sent[0];
     expect(reassessment).toContain(`change show ${changeId}`);
-    expect(reassessment).toContain("task context BY-236");
+    expect(reassessment).toContain("Acceptance Context");
     expect(reassessment).toContain("git diff refs/remotes/origin/main...HEAD");
     expect(harness.sendOptions).toEqual([undefined]);
 
@@ -246,7 +246,6 @@ describe("packaged Change Implement continuation extension", () => {
 
     const inspectionCommands = [
       `just by change show ${changeId}`,
-      "just by task context BY-236",
       "git status --short",
       "git diff refs/remotes/origin/main...HEAD",
     ];
@@ -319,7 +318,6 @@ describe("packaged Change Implement continuation extension", () => {
 
     const inspectionCommands = [
       `just by change show ${changeId}`,
-      "just by task context BY-236",
       "git status --short",
       "git diff refs/remotes/origin/main...HEAD",
     ];
@@ -408,13 +406,10 @@ describe("packaged Change Implement continuation extension", () => {
       paused: false,
       submissionReassessment: {
         state: "complete",
-        taskId: "BY-236",
         baseRef: "refs/remotes/origin/main",
-        hasResolutions: false,
         evidence: {
           change: true,
           acceptanceContext: true,
-          blockerResolutions: false,
           worktreeStatus: true,
           candidateDiff: true,
         },
@@ -443,13 +438,10 @@ describe("packaged Change Implement continuation extension", () => {
       paused: false,
       submissionReassessment: {
         state: "complete",
-        taskId: "BY-236",
         baseRef: "refs/remotes/origin/main",
-        hasResolutions: false,
         evidence: {
           change: true,
           acceptanceContext: true,
-          blockerResolutions: false,
           worktreeStatus: true,
           candidateDiff: true,
         },
@@ -481,7 +473,7 @@ describe("packaged Change Implement continuation extension", () => {
     ]);
   });
 
-  it("mentions approved Resolutions only when eligibility inspection finds them", async () => {
+  it("starts reassessment from Change inspection without separate Resolution inspection", async () => {
     const harness = createHarness();
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
@@ -498,10 +490,10 @@ describe("packaged Change Implement continuation extension", () => {
     });
     await harness.emit("agent_settled");
 
-    expect(harness.sent.at(-1)).toContain(`change blocker list ${changeId}`);
+    expect(harness.sent.at(-1)).toContain(`change show ${changeId}`);
   });
 
-  it("does not credit help, summary, or omitted Resolution inspections", async () => {
+  it("does not credit help or summary inspections", async () => {
     const harness = createHarness();
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
@@ -519,7 +511,6 @@ describe("packaged Change Implement continuation extension", () => {
 
     const incompleteCommands = [
       `just by change show ${changeId} --help`,
-      "just by task context BY-236 --help",
       "git status --short",
       "git diff refs/remotes/origin/main...HEAD --stat",
     ];
@@ -547,14 +538,16 @@ describe("packaged Change Implement continuation extension", () => {
 
     const followUp = harness.sent[1];
     expect(followUp).toContain(`change show ${changeId}`);
-    expect(followUp).toContain("task context BY-236");
-    expect(followUp).toContain(`change blocker list ${changeId}`);
+    expect(followUp).toContain("Acceptance Context");
+    expect(followUp).not.toContain(`change blocker list ${changeId}`);
     expect(followUp).toContain("git diff refs/remotes/origin/main...HEAD");
   });
 
-  it("does not interrupt Taskless Changes or Change Submit help", async () => {
+  it("does not interrupt Changes without a Task or Change Submit help", async () => {
     const harness = createHarness();
-    harness.setSnapshot(snapshot({ change: { state: "open", closeReason: null, taskId: null } }));
+    harness.setSnapshot(
+      snapshot({ change: { state: "open", closeReason: null, acceptanceContext: null } }),
+    );
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     const inspectionCallCount = harness.getExecCallCount();
     const blockerInspectionCallCount = harness.execCalls.filter(({ args }) =>
@@ -970,7 +963,13 @@ describe("packaged Change Implement continuation extension", () => {
   it("automatically resumes after an external blocker Resolution and explains it before old Findings", async () => {
     const harness = createHarness();
     harness.setSnapshot(
-      snapshot({ change: { state: "open", closeReason: null, taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "open",
+          closeReason: null,
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
@@ -1096,7 +1095,13 @@ describe("packaged Change Implement continuation extension", () => {
     const cancelled = createHarness();
     await cancelled.emit("session_start", { type: "session_start", reason: "startup" });
     cancelled.setSnapshot(
-      snapshot({ change: { state: "closed", closeReason: "cancelled", taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "closed",
+          closeReason: "cancelled",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await cancelled.runCommand("continue-change");
     expect(cancelled.latestWidgetText()).toEqual(["✕ Change was cancelled"]);
@@ -1105,7 +1110,11 @@ describe("packaged Change Implement continuation extension", () => {
     await cleanup.emit("session_start", { type: "session_start", reason: "startup" });
     cleanup.setSnapshot(
       snapshot({
-        change: { state: "closed", closeReason: "completed", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
         cleanup: { state: "pending", blockingReason: "worktree" },
       }),
     );
@@ -1140,7 +1149,13 @@ describe("packaged Change Implement continuation extension", () => {
       await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
       harness.setSnapshot(
-        snapshot({ change: { state: "closed", closeReason: "cancelled", taskId: "BY-236" } }),
+        snapshot({
+          change: {
+            state: "closed",
+            closeReason: "cancelled",
+            acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+          },
+        }),
       );
       await vi.advanceTimersByTimeAsync(30_000);
       const terminalInspectionCalls = harness.getExecCallCount();
@@ -1160,7 +1175,13 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.runCommand("pause-change");
     harness.setSnapshot(
-      snapshot({ change: { state: "closed", closeReason: "completed", taskId: "BY-236" } }),
+      snapshot({
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
+      }),
     );
     await harness.runCommand("continue-change");
 
@@ -1173,7 +1194,11 @@ describe("packaged Change Implement continuation extension", () => {
     [
       "Change close reason",
       snapshot({
-        change: { state: "closed", closeReason: "not-a-close-reason", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "not-a-close-reason",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
       }),
       undefined,
     ],
@@ -1248,7 +1273,11 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setSnapshot(
       snapshot({
-        change: { state: "closed", closeReason: "completed", taskId: "BY-236" },
+        change: {
+          state: "closed",
+          closeReason: "completed",
+          acceptanceContext: { version: 1, title: "Accepted", description: "Accepted." },
+        },
         cleanup: { state: "pending", blockingReason: { opaque: true } },
       }),
     );

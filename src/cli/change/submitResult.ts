@@ -316,7 +316,6 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
     result.code === "candidate_does_not_belong_to_change" ||
     result.code === "validation_evidence_invalid" ||
     result.code === "branch_binding_invalid" ||
-    result.code === "task_metadata_missing" ||
     result.code === "commit_history_unavailable" ||
     result.code === "publication_state_conflict" ||
     result.code === "detached_head" ||

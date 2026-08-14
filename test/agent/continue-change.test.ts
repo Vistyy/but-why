@@ -12,7 +12,7 @@ describe("Change Implement continuation policy", () => {
   it("classifies an unfinished Change with Findings", () => {
     expect(
       decideContinuation({
-        change: { state: "open", closeReason: null },
+        change: { state: "open", closeReason: null, acceptanceContext: null },
         currentCandidate: null,
         currentValidationRun: null,
         findingCount: 2,
@@ -23,10 +23,16 @@ describe("Change Implement continuation policy", () => {
   });
 
   it.each([
-    ["closed Change", { change: { state: "closed", closeReason: "completed" } } as const],
+    [
+      "closed Change",
+      { change: { state: "closed", closeReason: "completed", acceptanceContext: null } } as const,
+    ],
     [
       "tooling failure",
-      { change: { state: "open", closeReason: null }, toolingFailureCount: 1 } as const,
+      {
+        change: { state: "open", closeReason: null, acceptanceContext: null },
+        toolingFailureCount: 1,
+      } as const,
     ],
   ])("permits idle state for a %s", (_name, input) => {
     expect(
@@ -45,7 +51,7 @@ describe("Change Implement continuation policy", () => {
     expect(
       decideContinuation(
         {
-          change: { state: "open", closeReason: null },
+          change: { state: "open", closeReason: null, acceptanceContext: null },
           currentCandidate: { id: "candidate-1", headSha: "head-1" },
           currentValidationRun: null,
           findingCount: 0,
@@ -66,7 +72,7 @@ describe("Change Implement continuation policy", () => {
     expect(
       decideContinuation(
         {
-          change: { state: "open", closeReason: null },
+          change: { state: "open", closeReason: null, acceptanceContext: null },
           currentCandidate: { id: "candidate-1", headSha: "old-head" },
           currentValidationRun: null,
           findingCount: 0,

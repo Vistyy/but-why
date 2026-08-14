@@ -9,7 +9,6 @@ import type {
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
@@ -17,11 +16,7 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodeChangeState,
-  decodeStoredNullableString,
-  decodeStoredString,
-} from "./sqliteChangeValueDecoders.js";
+import { decodeChangeState, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { readCurrentPassingValidationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -82,16 +77,10 @@ const resolveBlocker = (
     if (selected === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (selected.state === changeState.closed)
       return { ok: false as const, code: "no_active_blocker" as const };
-    const change = yield* readBlockerResolutionChange(sql, input.changeId);
-    if (change === undefined)
-      return yield* invalidData("resolve Implementation Blocker", "Change disappeared");
     const blocker = yield* readActiveBlocker(sql, input.changeId, "resolve Implementation Blocker");
     if (blocker === null) return { ok: false as const, code: "no_active_blocker" as const };
     const resolutionId = randomUUID();
     yield* sql`UPDATE implementation_blockers SET resolved_at = ${input.now}, resolution_id = ${resolutionId}, resolution_recorded_at = ${input.now}, resolution_content = ${input.content} WHERE id = ${blocker.id}`;
-    if (change.taskId !== null && change.acceptanceContext !== null) {
-      yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
-    }
     const resolved = yield* readBlockerById(
       sql,
       input.changeId,
@@ -165,37 +154,6 @@ const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationNa
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => decodeSelectedChangeState(row, changeId));
-  });
-const readBlockerResolutionChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.gen(function* () {
-    const operationName = "resolve Implementation Blocker";
-    const rows = yield* sql<{
-      readonly id: unknown;
-      readonly state: unknown;
-      readonly taskId: unknown;
-      readonly acceptanceContext: unknown;
-    }>`
-      SELECT id, state, task_id AS taskId, acceptance_context AS acceptanceContext
-      FROM changes WHERE id = ${changeId}
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    return yield* decodePersisted(operationName, () => {
-      const selected = decodeSelectedChangeState(row, changeId);
-      const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
-      const encodedAcceptanceContext = decodeStoredNullableString(
-        row.acceptanceContext,
-        "Change Acceptance Context",
-      );
-      return {
-        ...selected,
-        taskId,
-        acceptanceContext:
-          encodedAcceptanceContext === null
-            ? null
-            : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-      };
-    });
   });
 const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
   const id = decodeStoredString(row.id, "Change id");

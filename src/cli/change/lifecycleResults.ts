@@ -6,7 +6,7 @@ import { type CliResult, runtimeError, success } from "../../cliResults.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult): CliResult => {
-  if (result.ok) return success(changeView(result.change));
+  if (result.ok) return success(changeView(result.change, true));
   if (result.code === "task_dependencies_unsatisfied") {
     return runtimeError({
       code: result.code,
@@ -33,7 +33,7 @@ export const startResult = (result: ChangeStartResult): CliResult => {
   if (result.code === "requested_base_conflict") {
     return runtimeError({
       code: result.code,
-      message: "The existing Task-backed Change uses a different Change Base branch.",
+      message: "The existing Change linked to a Task uses a different Change Base branch.",
       details: {
         ...(result.requestedBaseBranch === undefined
           ? {}
@@ -56,11 +56,11 @@ export const startResult = (result: ChangeStartResult): CliResult => {
   ) {
     return remoteChangeBaseError(result, "Start");
   }
-  return operationalError(result);
+  return operationalError(result, true);
 };
 
 export const prepareResult = (result: ChangePrepareResult): CliResult => {
-  if (result.ok) return success(changeView(result.change));
+  if (result.ok) return success(changeView(result.change, false));
   if (result.code === "change_not_found" || result.code === "change_not_open") {
     return runtimeError({
       code: result.code,
@@ -68,11 +68,11 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
       help: ["Use an open Change ID returned by `by change start`."],
     });
   }
-  return operationalError(result);
+  return operationalError(result, false);
 };
 
-export const changeView = (change: ChangeStartRecord) => ({
-  change: { id: change.id, taskId: change.taskId },
+export const changeView = (change: ChangeStartRecord, includeTaskId: boolean) => ({
+  change: { id: change.id, ...(includeTaskId ? { taskId: change.taskId } : {}) },
   branch: change.branchRef,
   baseRef: change.baseRef,
   startingCommit: change.startingCommit,
@@ -88,14 +88,20 @@ type OperationalErrorInput = {
   readonly attachedPath?: string;
 };
 
-const cancelChangeHelp = (change: ChangeStartRecord | undefined): string =>
-  change === undefined
-    ? "Or cancel the work with the applicable cancellation command."
-    : change.taskId === null
-      ? `Or cancel the Change with \`by change cancel ${change.id} --reason "<reason>"\`.`
-      : `Or cancel the Task with \`by task cancel ${change.taskId} --reason "<reason>"\`.`;
+const cancelChangeHelp = (
+  change: ChangeStartRecord | undefined,
+  includeTaskCancellation: boolean,
+): string =>
+  change === undefined || change.taskId === null || !includeTaskCancellation
+    ? change === undefined
+      ? "Or cancel the work with the applicable cancellation command."
+      : `Or cancel the Change with \`by change cancel ${change.id} --reason "<reason>"\`.`
+    : `Or cancel the Task with \`by task cancel ${change.taskId} --reason "<reason>"\`.`;
 
-export const operationalError = (result: OperationalErrorInput): CliResult => {
+export const operationalError = (
+  result: OperationalErrorInput,
+  includeTaskCancellation: boolean,
+): CliResult => {
   const { code, change } = result;
   const identityDetails =
     change === undefined
@@ -113,7 +119,7 @@ export const operationalError = (result: OperationalErrorInput): CliResult => {
       details: identityDetails,
       help: [
         `Recover the branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change),
+        cancelChangeHelp(change, includeTaskCancellation),
       ],
     });
   }
@@ -127,7 +133,7 @@ export const operationalError = (result: OperationalErrorInput): CliResult => {
       },
       help: [
         `Remove or relocate the worktree that holds the branch, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change),
+        cancelChangeHelp(change, includeTaskCancellation),
       ],
     });
   }
@@ -138,7 +144,7 @@ export const operationalError = (result: OperationalErrorInput): CliResult => {
       details: identityDetails,
       help: [
         `Move the conflicting files aside or remove them, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change),
+        cancelChangeHelp(change, includeTaskCancellation),
       ],
     });
   }

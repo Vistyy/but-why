@@ -23,6 +23,7 @@ import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidati
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   implementationBlockerReadColumns,
   latestResolvedBlockerId,
   type StoredImplementationBlockerRow,
@@ -178,9 +179,8 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const changeRows = yield* sql<{
       readonly id: string;
       readonly state: "open" | "closed";
-      readonly taskId: string | null;
       readonly acceptanceContext: string | null;
-    }>`SELECT id, state, task_id AS taskId, acceptance_context AS acceptanceContext
+    }>`SELECT id, state, acceptance_context AS acceptanceContext
        FROM changes WHERE id = ${candidate.changeId}`;
     const changeAuthority = yield* decodePersisted("start Candidate Validation Run", () => {
       const row = changeRows[0];
@@ -216,15 +216,17 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const blockerHistory = yield* decodePersisted("start Candidate Validation Run", () =>
       decodeImplementationBlockerHistory(blockerRows, candidate.changeId),
     );
+    const acceptanceContext = deriveAcceptanceContext(
+      changeAuthority.acceptanceContext,
+      blockerHistory,
+    );
     if (blockerHistory.active !== null) {
       return { reused: false, blocked: true } satisfies StartCandidateValidationRunResult;
     }
     const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
     const policy = {
       ...input.policy,
-      ...(changeAuthority.acceptanceContext === null
-        ? {}
-        : { acceptanceContext: changeAuthority.acceptanceContext }),
+      ...(acceptanceContext === null ? {} : { acceptanceContext }),
     };
     const authority = {
       candidate,

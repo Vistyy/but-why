@@ -8,11 +8,11 @@ This context owns code lineage, implementation, Candidate selection, validation,
 The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned pull request, optionally linked to one Task.
 _Avoid_: Task, branch, pull request, generic workflow
 
-**Task-backed Change**:
+**Change linked to a Task**:
 A Change linked to one Task and its Acceptance Context.
 _Avoid_: Task, Task Worktree
 
-**Taskless Change**:
+**Change without a Task**:
 A Change with no linked Task or Acceptance Context that remains eligible for code-based validation and publication.
 _Avoid_: Ad hoc worktree, implicit Task
 
@@ -85,11 +85,11 @@ _Avoid_: Merged pull request, historical Candidate, current Candidate
 
 **Acceptance Context**:
 One immutable version of approved intent.
-A task-backed Change captures its initial version from the approved Task when the Task starts.
+A Change linked to a Task captures its initial version from the approved Task when the Task starts.
 Acceptance Review uses supplied Acceptance Context as review authority.
 A Specialist Review that receives Acceptance Context uses it only as an authoritative scope constraint.
-A Task-backed Implementation Blocker Resolution appends the Resolution to the current Acceptance Context.
-A taskless Resolution remains Change history and creates no Acceptance Context.
+An Implementation Blocker Resolution for a Change linked to a Task becomes part of the current Acceptance Context through derivation from the immutable initial snapshot and ordered Resolution records.
+A Resolution for a Change without a Task remains Change history and creates no Acceptance Context.
 A Validation Run retains the exact Acceptance Context it used through its Validation Policy Snapshot.
 _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
 
@@ -104,7 +104,7 @@ A later failed or tooling-failed Run does not hide eligible passing evidence, an
 When a later Submission follows such a Run for the unchanged Current Candidate, it starts Validation again rather than reusing an earlier pass.
 Acceptance Context, Validation Policy Snapshot, Implementation Decisions, and resolved Implementation Blocker history remain immutable Run provenance rather than reuse invalidators.
 A changed Current Candidate requires eligible evidence for the new Candidate without deleting historical evidence.
-For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
+For a Change without a Task, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
 _Avoid_: Candidate, retry Attempt, generic job
 
 **Active Validation Run**:
@@ -193,9 +193,9 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 **Implementation Authorization**:
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
 Task Recording Authorization and Task Submission do not grant it.
-It applies to Task-backed Changes, taskless Changes, and direct edits.
-For a Task-backed Change, Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
-For taskless work, implementation remains in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
+It applies to Changes linked to a Task, Changes without a Task, and direct edits.
+For a Change linked to a Task, Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
+For a Change without a Task, implementation remains in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
 _Avoid_: Task Submission, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
 **Managed Worktree**:
@@ -260,12 +260,12 @@ _Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation De
 **Implementation Blocker Resolution**:
 A user-approved answer to one active Implementation Blocker.
 The Resolution record remains immutable Change history and is not classified by whether it changes intent.
-For a Task-backed Change, the Resolution appends to the current Acceptance Context.
-A taskless Resolution creates no Acceptance Context or Acceptance Review input.
+For a Change linked to a Task, the Resolution becomes part of the current Acceptance Context through derivation from the immutable initial snapshot and ordered Resolution records.
+A Resolution for a Change without a Task creates no Acceptance Context or Acceptance Review input.
 _Avoid_: Implementation Decision, silent Task edit, automatic recovery
 
 **Validation Gate**:
-The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Task-backed Change, and configured Specialists.
+The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Change linked to a Task, and configured Specialists.
 _Avoid_: Generic pipeline language, publication, implementation
 
 **Acceptance Reviewer**:

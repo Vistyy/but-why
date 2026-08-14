@@ -203,34 +203,36 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("names a Task-backed session from its Task ID and immutable title", () =>
-    Effect.gen(function* () {
-      const root = yield* readyRepository();
-      const taskId = "BY-172";
-      const fixture = yield* createChangeImplementFixture(root, {
-        taskId,
-        acceptanceContext: {
-          title: "Record cancellation reasons",
-          description: "Implement this Change.\n",
-        },
-      });
-      let launchInput: unknown;
-      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
-        interactiveSessionHost: {
-          launch: async (input) => {
-            launchInput = input;
-            return { ok: true, host: "herdr", status: "started" };
+  it.effect(
+    "names a session for a Change linked to a Task from its Task ID and immutable title",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* readyRepository();
+        const taskId = "BY-172";
+        const fixture = yield* createChangeImplementFixture(root, {
+          taskId,
+          acceptanceContext: {
+            title: "Record cancellation reasons",
+            description: "Implement this Change.\n",
           },
-        },
-      });
+        });
+        let launchInput: unknown;
+        const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+          interactiveSessionHost: {
+            launch: async (input) => {
+              launchInput = input;
+              return { ok: true, host: "herdr", status: "started" };
+            },
+          },
+        });
 
-      expect(result.status).toBe(0);
-      expect(launchInput).toMatchObject({
-        changeId: fixture.id,
-        hostSessionName: taskSlugForId(publicTaskId(taskId)),
-        agentSessionName: `${taskId} Record cancellation reasons`,
-      });
-    }),
+        expect(result.status).toBe(0);
+        expect(launchInput).toMatchObject({
+          changeId: fixture.id,
+          hostSessionName: taskSlugForId(publicTaskId(taskId)),
+          agentSessionName: `${taskId} Record cancellation reasons`,
+        });
+      }),
   );
 
   it.effect("rejects missing profile resources before launching Herdr", () =>

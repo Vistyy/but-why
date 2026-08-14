@@ -29,7 +29,7 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cancellation", () => {
   it.effect(
-    "cancels a Task-backed Change through Change Cancel and stores the reason on the Task",
+    "cancels a Change linked to a Task through Change Cancel and stores the reason on the Task",
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
@@ -83,43 +83,46 @@ describe("Change cancellation", () => {
       }),
   );
 
-  it.effect("cancels a Task-backed Change through Task Cancel and closes its linked Change", () =>
-    Effect.gen(function* () {
-      const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
-      expect(initialized.status).toBe(0);
-      commitButWhyConfigAndRecordDefault(root);
-      writeFileSync(join(root, "task.md"), "Implement the requested change.");
+  it.effect(
+    "cancels a Change linked to a Task through Task Cancel and closes its linked Change",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        expect(initialized.status).toBe(0);
+        commitButWhyConfigAndRecordDefault(root);
+        writeFileSync(join(root, "task.md"), "Implement the requested change.");
 
-      expect(
-        (yield* runByInProcessEffect(root, [
+        expect(
+          (yield* runByInProcessEffect(root, [
+            "task",
+            "create",
+            "--title",
+            "Linked change",
+            "--file",
+            "task.md",
+          ])).status,
+        ).toBe(0);
+        yield* passTaskReviewFixture(root, "BY-1");
+        const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
+        expect(started.status).toBe(0);
+        const changeId = (
+          JSON.parse(started.stdout) as { readonly change: { readonly id: string } }
+        ).change.id;
+
+        const cancelled = yield* runByInProcessEffect(root, [
           "task",
-          "create",
-          "--title",
-          "Linked change",
-          "--file",
-          "task.md",
-        ])).status,
-      ).toBe(0);
-      yield* passTaskReviewFixture(root, "BY-1");
-      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", "BY-1"]);
-      expect(started.status).toBe(0);
-      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
-        .change.id;
-
-      const cancelled = yield* runByInProcessEffect(root, [
-        "task",
-        "cancel",
-        "BY-1",
-        "--reason",
-        "No longer needed",
-      ]);
-      expect(cancelled.status).toBe(0);
-      expect(JSON.parse(cancelled.stdout)).toMatchObject({
-        task: { state: "cancelled", reason: "No longer needed" },
-        change: { id: changeId, state: "closed" },
-      });
-    }),
+          "cancel",
+          "BY-1",
+          "--reason",
+          "No longer needed",
+        ]);
+        expect(cancelled.status).toBe(0);
+        expect(JSON.parse(cancelled.stdout)).toMatchObject({
+          task: { state: "cancelled", reason: "No longer needed" },
+          change: { id: changeId, state: "closed" },
+        });
+      }),
   );
 
   it.effect("directly cancels an unlinked Task through Task Cancel", () =>
@@ -155,7 +158,7 @@ describe("Change cancellation", () => {
     }),
   );
 
-  it.effect("cancels a Taskless Change and exposes its reason through inspection", () =>
+  it.effect("cancels a Change without a Task and exposes its reason through inspection", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -232,40 +235,43 @@ describe("Change cancellation", () => {
     }),
   );
 
-  it.effect("retries a repeated Taskless Change cancellation without changing its reason", () =>
-    Effect.gen(function* () {
-      const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
-      expect(initialized.status).toBe(0);
-      commitButWhyConfigAndRecordDefault(root);
+  it.effect(
+    "retries a repeated Change without a Task cancellation without changing its reason",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        expect(initialized.status).toBe(0);
+        commitButWhyConfigAndRecordDefault(root);
 
-      const started = yield* runByInProcessEffect(root, ["change", "start"]);
-      expect(started.status).toBe(0);
-      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
-        .change.id;
+        const started = yield* runByInProcessEffect(root, ["change", "start"]);
+        expect(started.status).toBe(0);
+        const changeId = (
+          JSON.parse(started.stdout) as { readonly change: { readonly id: string } }
+        ).change.id;
 
-      const cancelled = yield* runByInProcessEffect(root, [
-        "change",
-        "cancel",
-        changeId,
-        "--reason",
-        "Not needed",
-      ]);
-      expect(cancelled.status).toBe(0);
+        const cancelled = yield* runByInProcessEffect(root, [
+          "change",
+          "cancel",
+          changeId,
+          "--reason",
+          "Not needed",
+        ]);
+        expect(cancelled.status).toBe(0);
 
-      const repeated = yield* runByInProcessEffect(root, [
-        "change",
-        "cancel",
-        changeId,
-        "--reason",
-        "A different reason",
-      ]);
-      expect(repeated.status).toBe(0);
-      expect(JSON.parse(repeated.stdout)).toMatchObject({
-        changed: false,
-        change: { cancelReason: "Not needed", cleanup: { state: "complete" } },
-      });
-    }),
+        const repeated = yield* runByInProcessEffect(root, [
+          "change",
+          "cancel",
+          changeId,
+          "--reason",
+          "A different reason",
+        ]);
+        expect(repeated.status).toBe(0);
+        expect(JSON.parse(repeated.stdout)).toMatchObject({
+          changed: false,
+          change: { cancelReason: "Not needed", cleanup: { state: "complete" } },
+        });
+      }),
   );
 
   it.effect("proves PR closure ordering through the Change CLI", () =>
