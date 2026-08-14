@@ -194,7 +194,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
 const result = (stdout: string) => ({ stdout, stderr: "", code: 0, killed: false });
 
 describe("packaged Change Implement continuation extension", () => {
-  it("interrupts the first Submission and completes one separate reassessment run", async () => {
+  it("interrupts the first Task-backed Submission and permits an immediate retry", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     const submit = {
@@ -209,216 +209,25 @@ describe("packaged Change Implement continuation extension", () => {
       block: true,
       reason: expect.stringContaining("before any part of it executed"),
     });
-    expect(harness.sent).toEqual([]);
-
-    const immediateRetry = await harness.emit("tool_call", {
-      ...submit,
-      toolCallId: "submit-2",
+    expect(first).toMatchObject({
+      reason: expect.stringContaining("reassess the complete committed implementation"),
     });
-    expect(immediateRetry).toMatchObject({
-      block: true,
-      reason: expect.stringContaining("separate reassessment run has not settled"),
-    });
+    expect(harness.sent).toEqual([
+      expect.stringContaining("re-read the complete current Acceptance Context"),
+    ]);
+    expect(harness.sendOptions).toEqual([{ deliverAs: "steer" }]);
 
-    await harness.emit("agent_settled");
-
-    expect(harness.sent).toHaveLength(1);
-    const reassessment = harness.sent[0];
-    expect(reassessment).toContain(`change show ${changeId}`);
-    expect(reassessment).toContain("task context BY-236");
-    expect(reassessment).toContain("git diff refs/remotes/origin/main...HEAD");
-    expect(harness.sendOptions).toEqual([undefined]);
-
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "submit-during-reassessment" }),
-    ).toMatchObject({ block: true });
-
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "stop" }],
-    });
-    expect(harness.sent).toHaveLength(2);
-    expect(harness.sendOptions[1]).toEqual({ deliverAs: "followUp" });
-
-    await harness.emit("agent_settled");
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "still-pending" }),
-    ).toMatchObject({ block: true });
-
-    const inspectionCommands = [
-      `just by change show ${changeId}`,
-      "just by task context BY-236",
-      "git status --short",
-      "git diff refs/remotes/origin/main...HEAD",
-    ];
-    for (const [index, command] of inspectionCommands.entries()) {
-      const toolCallId = `reassessment-inspection-${index}`;
-      await harness.emit("tool_call", {
-        type: "tool_call",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-      });
-      await harness.emit("tool_result", {
-        type: "tool_result",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-        content: [{ type: "text", text: "inspection complete" }],
-        isError: false,
-        details: undefined,
-      });
-    }
-    await harness.emit("agent_settled");
-
-    expect(harness.sent).toHaveLength(3);
-    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-3" })).toBeUndefined();
-    expect(
-      await harness.emit("tool_call", {
-        ...submit,
-        toolCallId: "submit-4",
-        input: {
-          command: `just by change submit ${changeId}; just by change submit ${changeId}`,
-        },
-      }),
-    ).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-2" })).toBeUndefined();
+    expect(harness.latestWidgetText()).toEqual(["◐ Validating revision"]);
   });
 
-  it("starts reassessment after the initially interrupted run is aborted", async () => {
-    const harness = createHarness();
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    const submit = {
-      type: "tool_call",
-      toolCallId: "submit-1",
-      toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
-    };
-
-    expect(await harness.emit("tool_call", submit)).toMatchObject({ block: true });
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
-    });
-    await harness.emit("agent_settled");
-
-    expect(harness.sent).toHaveLength(1);
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "submit-during-reassessment" }),
-    ).toMatchObject({ block: true });
-  });
-
-  it("keeps an aborted reassessment pending until a replacement run settles", async () => {
-    const harness = createHarness();
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    const submit = {
-      type: "tool_call",
-      toolCallId: "submit-1",
-      toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
-    };
-    await harness.emit("tool_call", submit);
-    await harness.emit("agent_settled");
-
-    const inspectionCommands = [
-      `just by change show ${changeId}`,
-      "just by task context BY-236",
-      "git status --short",
-      "git diff refs/remotes/origin/main...HEAD",
-    ];
-    for (const [index, command] of inspectionCommands.entries()) {
-      const toolCallId = `aborted-inspection-${index}`;
-      await harness.emit("tool_call", {
-        type: "tool_call",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-      });
-      await harness.emit("tool_result", {
-        type: "tool_result",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-        content: [{ type: "text", text: "inspection complete" }],
-        isError: false,
-        details: undefined,
-      });
-    }
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
-    });
-    await harness.emit("agent_settled");
-
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-abort" }),
-    ).toMatchObject({ block: true });
-
-    harness.setIdle(false);
-    const messageCountBeforeBusyRestart = harness.sent.length;
-    await harness.runCommand("continue-change");
-    expect(harness.sent).toHaveLength(messageCountBeforeBusyRestart);
-    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
-
-    harness.setIdle(true);
-    await harness.runCommand("continue-change");
-    expect(harness.sent).toHaveLength(messageCountBeforeBusyRestart + 1);
-
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
-    });
-    await harness.emit("agent_settled");
-    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-restart-abort" }),
-    ).toMatchObject({ block: true });
-
-    await harness.runCommand("continue-change");
-    expect(harness.sent).toHaveLength(messageCountBeforeBusyRestart + 2);
-
-    for (const [index, command] of inspectionCommands.entries()) {
-      const toolCallId = `replacement-inspection-${index}`;
-      await harness.emit("tool_call", {
-        type: "tool_call",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-      });
-      await harness.emit("tool_result", {
-        type: "tool_result",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-        content: [{ type: "text", text: "inspection complete" }],
-        isError: false,
-        details: undefined,
-      });
-    }
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "stop" }],
-    });
-    await harness.emit("agent_settled");
-
-    expect(
-      await harness.emit("tool_call", { ...submit, toolCallId: "submit-after-replacement" }),
-    ).toBeUndefined();
-  });
-
-  it("does not repeat a completed reassessment after the extension restores session state", async () => {
+  it("does not repeat the interruption after restoring handled session state", async () => {
     const harness = createHarness(sourceCwd, {
       changeId,
       fingerprint: "saved",
       unchangedRestarts: 0,
       paused: false,
-      submissionReassessment: {
-        state: "complete",
-        taskId: "BY-236",
-        baseRef: "refs/remotes/origin/main",
-        hasResolutions: false,
-        evidence: {
-          change: true,
-          acceptanceContext: true,
-          blockerResolutions: false,
-          worktreeStatus: true,
-          candidateDiff: true,
-        },
-      },
+      initialSubmissionHandled: true,
     });
     await harness.emit("session_start", { type: "session_start", reason: "resume" });
     const inspectionCallCount = harness.getExecCallCount();
@@ -441,19 +250,7 @@ describe("packaged Change Implement continuation extension", () => {
       fingerprint: "saved",
       unchangedRestarts: 0,
       paused: false,
-      submissionReassessment: {
-        state: "complete",
-        taskId: "BY-236",
-        baseRef: "refs/remotes/origin/main",
-        hasResolutions: false,
-        evidence: {
-          change: true,
-          acceptanceContext: true,
-          blockerResolutions: false,
-          worktreeStatus: true,
-          candidateDiff: true,
-        },
-      },
+      initialSubmissionHandled: true,
     });
     harness.setSnapshot(
       snapshot({
@@ -479,77 +276,6 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual([
       "◐ Validating revision - https://github.test/pull/12",
     ]);
-  });
-
-  it("mentions approved Resolutions only when eligibility inspection finds them", async () => {
-    const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
-      active: null,
-    });
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-
-    await harness.emit("tool_call", {
-      type: "tool_call",
-      toolCallId: "submit-1",
-      toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
-    });
-    await harness.emit("agent_settled");
-
-    expect(harness.sent.at(-1)).toContain(`change blocker list ${changeId}`);
-  });
-
-  it("does not credit help, summary, or omitted Resolution inspections", async () => {
-    const harness = createHarness();
-    harness.setBlockerHistory({
-      blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
-      active: null,
-    });
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    await harness.emit("tool_call", {
-      type: "tool_call",
-      toolCallId: "submit-1",
-      toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
-    });
-    await harness.emit("agent_settled");
-
-    const incompleteCommands = [
-      `just by change show ${changeId} --help`,
-      "just by task context BY-236 --help",
-      "git status --short",
-      "git diff refs/remotes/origin/main...HEAD --stat",
-    ];
-    for (const [index, command] of incompleteCommands.entries()) {
-      const toolCallId = `incomplete-inspection-${index}`;
-      await harness.emit("tool_call", {
-        type: "tool_call",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-      });
-      await harness.emit("tool_result", {
-        type: "tool_result",
-        toolCallId,
-        toolName: "bash",
-        input: { command },
-        content: [{ type: "text", text: "command passed" }],
-        isError: false,
-        details: undefined,
-      });
-    }
-    await harness.emit("agent_end", {
-      messages: [{ role: "assistant", content: [], stopReason: "stop" }],
-    });
-
-    const followUp = harness.sent[1];
-    expect(followUp).toContain(`change show ${changeId}`);
-    expect(followUp).toContain("task context BY-236");
-    expect(followUp).toContain(`change blocker list ${changeId}`);
-    expect(followUp).toContain("git diff refs/remotes/origin/main...HEAD");
   });
 
   it("does not interrupt Taskless Changes or Change Submit help", async () => {
