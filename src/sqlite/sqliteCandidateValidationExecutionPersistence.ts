@@ -10,7 +10,10 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
-import { validationPhase } from "../change/validationRun/validationRun.js";
+import {
+  type ValidationRunArtifactRecord,
+  validationPhase,
+} from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -415,10 +418,7 @@ const recordArtifactRecords = (
   sql: SqlClient.SqlClient,
   input: {
     readonly validationRunId: string;
-    readonly artifactRecords: readonly Omit<
-      import("../change/validationRun/validationRun.js").ValidationRunArtifactRecord,
-      "createdAt"
-    >[];
+    readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
     readonly now: string;
   },
 ) =>

@@ -1,17 +1,20 @@
 import { isAbsolute, relative, sep } from "node:path";
 
 import { Cause, Effect } from "effect";
+import {
+  RepositoryPersistedDataInvalid,
+  type RepositoryStorageError,
+} from "../../contracts/repositoryStorageError.js";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
 import type { ReviewerAgentResult, ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
 import type { TokenUsage } from "../tokenUsage.js";
-import { RepositoryPersistedDataInvalid } from "../../contracts/repositoryStorageError.js";
-import {
-  type AgentInvocationRecord,
-  type AgentInvocationSettlementKind,
-  type AgentSessionConfiguration,
-  type AgentSessionPersistence,
-  type AgentSessionSqlLink,
+import type {
+  AgentInvocationRecord,
+  AgentInvocationSettlementKind,
+  AgentSessionConfiguration,
+  AgentSessionPersistence,
+  AgentSessionSqlLink,
 } from "./agentSession.js";
 
 export type AgentExecutionEvidence = {
@@ -56,10 +59,7 @@ export type ExecuteAgentSessionResult<Output> = {
 
 export const executeAgentSession = <Output, DomainError = never>(
   input: ExecuteAgentSessionInput<Output, DomainError>,
-): Effect.Effect<
-  ExecuteAgentSessionResult<Output>,
-  import("../../contracts/repositoryStorageError.js").RepositoryStorageError | DomainError
-> =>
+): Effect.Effect<ExecuteAgentSessionResult<Output>, RepositoryStorageError | DomainError> =>
   Effect.gen(function* () {
     let prompt = input.prompt;
     let resumeSession: string | undefined;

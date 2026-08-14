@@ -14,8 +14,8 @@ import {
 import { removePreNativeSnapshotWorkspaceCleanupMigration } from "../../src/sqlite/migrations/0033_remove_pre_native_snapshot_workspace_cleanup.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import {
-  RepositorySql,
   repositorySqlLayer as productionRepositorySqlLayer,
+  RepositorySql,
 } from "../../src/sqlite/repositorySql.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";

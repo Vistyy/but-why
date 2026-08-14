@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import type { ChangeRecord } from "../change/change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
+import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -213,7 +214,7 @@ const decodeReviewerConfiguration = (value: unknown) => {
   ) {
     throw new Error("Stored Change Reviewer Configuration is invalid");
   }
-  return decoded as import("../change/changeStartStore.js").ChangeReviewerConfiguration;
+  return decoded as ChangeReviewerConfiguration;
 };
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(

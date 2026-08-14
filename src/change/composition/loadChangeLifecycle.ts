@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
@@ -8,6 +8,7 @@ import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeRec
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
@@ -20,13 +21,12 @@ import {
   prepareChange,
   startChange,
 } from "../changeLifecycle.js";
+import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
-import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
-import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
-import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
+import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =

@@ -1,3 +1,4 @@
+import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangeReviewerSessionPort } from "../change/changePorts.js";
@@ -145,7 +146,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
   );
 
 const changeAgentConfigurationCanBeCorrected = (
-  sql: import("@effect/sql/SqlClient").SqlClient,
+  sql: SqlClient.SqlClient,
   sessionId: number,
   invocationId: number,
 ) =>

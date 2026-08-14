@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
-import {
-  executeAgentSession,
-  type AgentExecutionEvidence,
-} from "../../agent/agentSession/executeAgentSession.js";
+import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
 } from "../../agent/agentSession/agentSession.js";
-import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import {
+  type AgentExecutionEvidence,
+  executeAgentSession,
+} from "../../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
@@ -39,7 +39,12 @@ import {
   startSubmitProgress,
 } from "../../submission/submissionProgress.js";
 import type { PublicTaskId } from "../taskId.js";
-import type { TaskReviewBase, TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
+import type {
+  TaskReviewBase,
+  TaskReviewPolicySnapshot,
+  TaskReviewRecord,
+  TaskReviewToolingFailure,
+} from "./taskReview.js";
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
 import { settleTaskReviewEvidence } from "./taskReviewEvidenceSettlement.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
@@ -312,101 +317,107 @@ const submitTaskReview = (
                 input.persistence.getReviewerAgentSession === undefined
                   ? undefined
                   : yield* input.persistence.getReviewerAgentSession(taskId);
+              const agentPersistence = input.agentPersistence;
+              const linkAgentInvocation = input.persistence.linkAgentInvocation;
+              const settleAgentReview = input.persistence.settleAgentReview;
               usingAgentSession =
-                input.agentPersistence !== undefined &&
-                input.persistence.linkAgentInvocation !== undefined &&
-                input.persistence.settleAgentReview !== undefined;
-              const execution = usingAgentSession
-                ? yield* executeAgentSession({
-                    ...(reviewerSessionId === undefined
-                      ? {}
-                      : { agentSessionId: reviewerSessionId }),
-                    configuration: agentConfiguration(resolvedPolicy.policy.profile),
-                    agentPersistence: input.agentPersistence!,
-                    linkInvocation: input.persistence.linkAgentInvocation!({
-                      taskId,
-                      reviewId,
+                agentPersistence !== undefined &&
+                linkAgentInvocation !== undefined &&
+                settleAgentReview !== undefined;
+              const execution =
+                agentPersistence !== undefined &&
+                linkAgentInvocation !== undefined &&
+                settleAgentReview !== undefined
+                  ? yield* executeAgentSession({
+                      ...(reviewerSessionId === undefined
+                        ? {}
+                        : { agentSessionId: reviewerSessionId }),
                       configuration: agentConfiguration(resolvedPolicy.policy.profile),
-                      configurationSnapshot: resolvedPolicy.policy.snapshot,
-                    }),
-                    reviewerRuntime: input.reviewerRuntime,
-                    reviewerExecutor: input.reviewerExecutor,
-                    decodeOutput,
-                    prompt,
-                    continuationPrompt: buildTaskReviewContinuationPrompt({
-                      previousProposal: previous?.proposal,
-                      currentPrompt: prompt,
-                      currentProposal: admitted.proposal,
-                    }),
-                    commandCwd: active.worktreePath,
-                    resourceRoot: active.worktreePath,
-                    profile: resolvedPolicy.policy.profile,
-                    reviewer: "task",
-                    sessionStorageRoot: input.reviewerSessionStorageRoot,
-                    ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-                    now: () => new Date(now),
-                    settleDomain: ({ result }) =>
-                      Effect.gen(function* () {
-                        const evidence = yield* Effect.either(
-                          settleTaskReviewEvidence(input, admitted.review, now),
-                        );
-                        const cleanupFailure =
-                          evidence._tag === "Left"
-                            ? {
-                                operation: "settle_task_review_evidence",
-                                message: taskReviewStorageErrorMessage(evidence.left),
-                              }
-                            : evidence.right.ok
+                      agentPersistence,
+                      linkInvocation: linkAgentInvocation({
+                        taskId,
+                        reviewId,
+                        configuration: agentConfiguration(resolvedPolicy.policy.profile),
+                        configurationSnapshot: resolvedPolicy.policy.snapshot,
+                      }),
+                      reviewerRuntime: input.reviewerRuntime,
+                      reviewerExecutor: input.reviewerExecutor,
+                      decodeOutput,
+                      prompt,
+                      continuationPrompt: buildTaskReviewContinuationPrompt({
+                        previousProposal: previous?.proposal,
+                        currentPrompt: prompt,
+                        currentProposal: admitted.proposal,
+                      }),
+                      commandCwd: active.worktreePath,
+                      resourceRoot: active.worktreePath,
+                      profile: resolvedPolicy.policy.profile,
+                      reviewer: "task",
+                      sessionStorageRoot: input.reviewerSessionStorageRoot,
+                      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                      now: () => new Date(now),
+                      settleDomain: ({ result }) =>
+                        Effect.gen(function* () {
+                          const evidence = yield* Effect.either(
+                            settleTaskReviewEvidence(input, admitted.review, now),
+                          );
+                          const cleanupFailure =
+                            evidence._tag === "Left"
+                              ? {
+                                  operation: "settle_task_review_evidence",
+                                  message: taskReviewStorageErrorMessage(evidence.left),
+                                }
+                              : evidence.right.ok
+                                ? undefined
+                                : {
+                                    operation: "settle_task_review_evidence",
+                                    message: evidence.right.message,
+                                  };
+                          const toolingFailure =
+                            cleanupFailure ??
+                            (result.ok
                               ? undefined
                               : {
-                                  operation: "settle_task_review_evidence",
-                                  message: evidence.right.message,
-                                };
-                        const toolingFailure =
-                          cleanupFailure ??
-                          (result.ok
-                            ? undefined
-                            : {
-                                operation: result.failure.operationName,
-                                message: result.failure.message,
-                              });
-                        return input.persistence.settleAgentReview!({
-                          reviewId,
-                          findings: result.ok ? result.report.findings : [],
-                          ...(toolingFailure === undefined ? {} : { toolingFailure }),
-                          now,
-                          complete: toolingFailure === undefined,
-                        });
+                                  operation: result.failure.operationName,
+                                  message: result.failure.message,
+                                });
+                          return settleAgentReview({
+                            reviewId,
+                            findings: result.ok ? result.report.findings : [],
+                            ...(toolingFailure === undefined ? {} : { toolingFailure }),
+                            now,
+                            complete: toolingFailure === undefined,
+                          });
+                        }),
+                    })
+                  : yield* executeReviewerSession<TaskReviewerOutput, never>({
+                      identity: {
+                        owner: { kind: "task", id: taskId },
+                        producer: "task",
+                        agentProfile: resolvedPolicy.policy.profile,
+                        instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
+                        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                        resources: {},
+                      },
+                      runtime: input.reviewerRuntime,
+                      reviewerExecutor: input.reviewerExecutor,
+                      decodeOutput,
+                      prompt,
+                      continuationPrompt: buildTaskReviewContinuationPrompt({
+                        previousProposal: previous?.proposal,
+                        currentPrompt: prompt,
+                        currentProposal: admitted.proposal,
                       }),
-                  })
-                : yield* executeReviewerSession<TaskReviewerOutput, never>({
-                    identity: {
-                      owner: { kind: "task", id: taskId },
-                      producer: "task",
-                      agentProfile: resolvedPolicy.policy.profile,
-                      instructions: JSON.stringify(resolvedPolicy.policy.snapshot),
-                      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-                      resources: {},
-                    },
-                    runtime: input.reviewerRuntime,
-                    reviewerExecutor: input.reviewerExecutor,
-                    decodeOutput,
-                    prompt,
-                    continuationPrompt: buildTaskReviewContinuationPrompt({
-                      previousProposal: previous?.proposal,
-                      currentPrompt: prompt,
-                      currentProposal: admitted.proposal,
-                    }),
-                    commandCwd: active.worktreePath,
-                    resourceRoot: active.worktreePath,
-                    sessionStorageRoot: input.reviewerSessionStorageRoot,
-                    sessionStore: {
-                      get: input.persistence.getReviewerSession,
-                      save: input.persistence.saveReviewerSession,
-                      remove: input.persistence.removeReviewerSession,
-                    },
-                    completeReview: ({ initialResult }) => Effect.succeed(initialResult),
-                  });
+                      commandCwd: active.worktreePath,
+                      resourceRoot: active.worktreePath,
+                      sessionStorageRoot: input.reviewerSessionStorageRoot,
+                      sessionStore: {
+                        get: input.persistence.getReviewerSession,
+                        save: input.persistence.saveReviewerSession,
+                        remove: input.persistence.removeReviewerSession,
+                      },
+                      completeReview: ({ initialResult }) => Effect.succeed(initialResult),
+                    });
               taskReviewEvidence = (
                 execution.evidence.invocations === undefined
                   ? execution.evidence
@@ -487,7 +498,7 @@ const submitTaskReview = (
   });
 
 const taskReviewPolicyFromSnapshot = (
-  snapshot: import("./taskReview.js").TaskReviewPolicySnapshot,
+  snapshot: TaskReviewPolicySnapshot,
 ): TaskReviewPolicyResolutionResult =>
   snapshot.profile.profile === null
     ? { ok: false, message: "Stored Task Reviewer configuration has no Agent Profile." }

@@ -2,9 +2,12 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangePrepareFailure } from "../change/change.js";
-import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
+import type {
+  ChangeReviewerConfiguration,
+  ChangeStartRecord,
+  CreateChangeStartInput,
+} from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";

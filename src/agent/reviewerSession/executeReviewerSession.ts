@@ -1,8 +1,8 @@
 import { chmodSync, readdirSync, statSync } from "node:fs";
 
 import { Clock, Effect } from "effect";
-import type { AgentInvocationRecord } from "../agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { AgentInvocationRecord } from "../agentSession/agentSession.js";
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,

@@ -1,7 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
-import type { AgentInvocationRecord } from "../agent/agentSession/agentSession.js";
 import { Effect, Schema } from "effect";
-import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
+import type {
+  AgentInvocationRecord,
+  AgentSessionSqlLink,
+} from "../agent/agentSession/agentSession.js";
 import type { TokenUsage } from "../agent/tokenUsage.js";
 import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";

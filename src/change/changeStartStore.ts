@@ -1,8 +1,8 @@
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
+import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 

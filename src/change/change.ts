@@ -1,10 +1,10 @@
 import { Schema } from "effect";
 
 import type { PublicTaskId } from "../task/taskId.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 
 export const changeState = {
   open: "open",

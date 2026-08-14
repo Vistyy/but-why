@@ -1,11 +1,12 @@
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
-import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
+  AgentSessionSqlLink,
 } from "../../agent/agentSession/agentSession.js";
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentResult,
   type ReviewerAgentRuntime,
@@ -40,6 +41,7 @@ import {
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import {
   ReviewerProcessToolingFailed,
   type ValidationToolingFailure,
@@ -118,16 +120,14 @@ export type RunSpecialistReviewPhaseInput = {
     readonly validationRunId: string;
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
-  }) => import("../../agent/agentSession/agentSession.js").AgentSessionSqlLink;
+  }) => AgentSessionSqlLink;
   readonly settleAgentInvocationRound?: (
     input: Parameters<
-      NonNullable<
-        import("../validation/changeValidationPorts.js").CandidateValidationExecutionPort["settleAgentInvocationRound"]
-      >
+      NonNullable<CandidateValidationExecutionPort["settleAgentInvocationRound"]>
     >[0],
-  ) => import("../../agent/agentSession/agentSession.js").AgentSessionSqlLink;
+  ) => AgentSessionSqlLink;
   readonly recordArtifactRecords?: NonNullable<
-    import("../validation/changeValidationPorts.js").CandidateValidationExecutionPort["recordArtifactRecords"]
+    CandidateValidationExecutionPort["recordArtifactRecords"]
   >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;

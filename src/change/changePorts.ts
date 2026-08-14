@@ -4,7 +4,6 @@ import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSes
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   ChangeCleanup,
   ChangeCloseReason,
@@ -14,6 +13,7 @@ import type {
   ChangeState,
   RemoteChangeBranch,
 } from "./change.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
   CancelChangeInput,
