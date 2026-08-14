@@ -486,7 +486,11 @@ describe("repository SQL storage", () => {
           baseRef: "main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-change-without-task-blocker"),
+          worktreePath: join(
+            input.commonDirectory,
+            "worktrees",
+            "by-1-change-without-task-blocker",
+          ),
           now: "2026-07-17T23:02:00.000Z",
         });
         if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);

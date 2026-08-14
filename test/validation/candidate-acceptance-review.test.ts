@@ -92,66 +92,68 @@ const passingValidationPolicy = {
   specialistReviews: [],
 };
 
-layer(acceptanceTemplateLayer)("Candidate Acceptance Review for a Change linked to a Task", (it) => {
-  it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
-    Effect.gen(function* () {
-      const ready = yield* acceptanceReadyRepo({
-        review: () =>
-          Effect.succeed({
-            ok: true,
-            report: {
-              findings: [
-                {
-                  title: "First mismatch",
-                  description: "The first requirement is incomplete.",
-                  evidence: "Observed incomplete behavior.",
-                  files: ["src/first.ts"],
-                  artifactRefs: [],
-                },
-                {
-                  title: "Second mismatch",
-                  description: "The second requirement is incomplete.",
-                  evidence: "Observed another incomplete behavior.",
-                  files: [],
-                  artifactRefs: [],
-                },
-              ],
-            },
-            attempts: 1,
-            stdout: "review evidence",
-          }),
-      });
-      const { validation } = ready;
+layer(acceptanceTemplateLayer)(
+  "Candidate Acceptance Review for a Change linked to a Task",
+  (it) => {
+    it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
+      Effect.gen(function* () {
+        const ready = yield* acceptanceReadyRepo({
+          review: () =>
+            Effect.succeed({
+              ok: true,
+              report: {
+                findings: [
+                  {
+                    title: "First mismatch",
+                    description: "The first requirement is incomplete.",
+                    evidence: "Observed incomplete behavior.",
+                    files: ["src/first.ts"],
+                    artifactRefs: [],
+                  },
+                  {
+                    title: "Second mismatch",
+                    description: "The second requirement is incomplete.",
+                    evidence: "Observed another incomplete behavior.",
+                    files: [],
+                    artifactRefs: [],
+                  },
+                ],
+              },
+              attempts: 1,
+              stdout: "review evidence",
+            }),
+        });
+        const { validation } = ready;
 
-      const result = yield* runTaskBackedCandidate(ready);
+        const result = yield* runTaskBackedCandidate(ready);
 
-      expect(result).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
-        state: "complete",
-        outcome: "blocked",
-      });
-      const findingColumns = yield* withTestRepository(
-        ready.repo,
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          return yield* repository.operation(
-            "inspect reviewer Finding table columns",
-            (sql) =>
-              sql<{ readonly name: string }>`
+        expect(result).toMatchObject({ ok: true, outcome: "blocked" });
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "complete",
+          outcome: "blocked",
+        });
+        const findingColumns = yield* withTestRepository(
+          ready.repo,
+          Effect.gen(function* () {
+            const repository = yield* RepositorySql;
+            return yield* repository.operation(
+              "inspect reviewer Finding table columns",
+              (sql) =>
+                sql<{ readonly name: string }>`
                 PRAGMA table_info(candidate_validation_findings)
               `,
-          );
-        }),
-      );
-      expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
-      yield* withTestRepository(
-        ready.repo,
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          yield* repository.operation(
-            "seed historical reviewer Finding",
-            (sql) =>
-              sql`
+            );
+          }),
+        );
+        expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
+        yield* withTestRepository(
+          ready.repo,
+          Effect.gen(function* () {
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "seed historical reviewer Finding",
+              (sql) =>
+                sql`
                 INSERT INTO candidate_validation_findings (
                   id, validation_run_id, phase, producer, title, description,
                   evidence, files, artifact_refs, created_at, updated_at
@@ -162,124 +164,130 @@ layer(acceptanceTemplateLayer)("Candidate Acceptance Review for a Change linked 
                   'Historical evidence.', '[]', '[]', ${now}, ${now}
                 )
               `,
-          );
-        }),
-      );
-      const findings = yield* validation.listFindings(result.validationRunId);
-      expect(findings).toHaveLength(3);
-      expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
-        evidence: "Historical evidence.",
-      });
-      expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
-          expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
-        ]),
-      );
-    }),
-  );
-  it.scoped("persists a reviewer Tooling Failure without an Acceptance Finding", () =>
-    Effect.gen(function* () {
-      const ready = yield* acceptanceReadyRepo({
-        review: () =>
+            );
+          }),
+        );
+        const findings = yield* validation.listFindings(result.validationRunId);
+        expect(findings).toHaveLength(3);
+        expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
+          evidence: "Historical evidence.",
+        });
+        expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
+            expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
+          ]),
+        );
+      }),
+    );
+    it.scoped("persists a reviewer Tooling Failure without an Acceptance Finding", () =>
+      Effect.gen(function* () {
+        const ready = yield* acceptanceReadyRepo({
+          review: () =>
+            Effect.succeed({
+              ok: false,
+              failure: new ReviewerExecutionFailed({
+                kind: "process_execution",
+                operationName: "run_reviewer_process",
+                message: "Reviewer launch failed.",
+              }),
+              sessionUsability: "unknown" as const,
+              attempts: 1,
+              stdout: "",
+            }),
+        });
+
+        const result = yield* runTaskBackedCandidate(ready);
+
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        expect(yield* ready.validation.listFindings(result.validationRunId)).toEqual([]);
+        expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
+          expect.objectContaining({
+            errorKind: "reviewer_process_execution_failed",
+            operationName: "run_reviewer_process",
+          }),
+        ]);
+        expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
+          { producer: "quality", status: "passed" },
+          { producer: "acceptance", status: "failed" },
+        ]);
+      }),
+    );
+
+    it.scoped("preserves earlier Acceptance Findings through failure until a clean report", () =>
+      Effect.gen(function* () {
+        const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed({
+            ok: true,
+            report: { findings: [earlierFinding] },
+            attempts: 1,
+            stdout: "earlier acceptance report",
+          }),
+        );
+        const ready = yield* acceptanceReadyRepo({ review });
+        const earlier = yield* runTaskBackedCandidate(ready);
+        expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+        if (!earlier.ok) return;
+
+        git(ready.repo, "commit", "--allow-empty", "-m", "failed acceptance candidate");
+        const failedCandidate = yield* captureLocalCandidate({
+          cwd: ready.repo,
+          now: "2026-07-15T10:01:00.000Z",
+        });
+        if (!failedCandidate.ok)
+          throw new Error(`Candidate capture failed: ${failedCandidate.code}`);
+        review.mockImplementationOnce(() =>
           Effect.succeed({
             ok: false,
             failure: new ReviewerExecutionFailed({
               kind: "process_execution",
               operationName: "run_reviewer_process",
-              message: "Reviewer launch failed.",
+              message: "Temporary reviewer failure.",
             }),
             sessionUsability: "unknown" as const,
             attempts: 1,
             stdout: "",
           }),
-      });
+        );
+        const failed = yield* runTaskBackedCandidate(
+          ready,
+          passingValidationPolicy,
+          failedCandidate,
+        );
+        expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
 
-      const result = yield* runTaskBackedCandidate(ready);
-
-      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(yield* ready.validation.listFindings(result.validationRunId)).toEqual([]);
-      expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
-        expect.objectContaining({
-          errorKind: "reviewer_process_execution_failed",
-          operationName: "run_reviewer_process",
-        }),
-      ]);
-      expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
-        { producer: "quality", status: "passed" },
-        { producer: "acceptance", status: "failed" },
-      ]);
-    }),
-  );
-
-  it.scoped("preserves earlier Acceptance Findings through failure until a clean report", () =>
-    Effect.gen(function* () {
-      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
-      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-        Effect.succeed({
-          ok: true,
-          report: { findings: [earlierFinding] },
-          attempts: 1,
-          stdout: "earlier acceptance report",
-        }),
-      );
-      const ready = yield* acceptanceReadyRepo({ review });
-      const earlier = yield* runTaskBackedCandidate(ready);
-      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
-      if (!earlier.ok) return;
-
-      git(ready.repo, "commit", "--allow-empty", "-m", "failed acceptance candidate");
-      const failedCandidate = yield* captureLocalCandidate({
-        cwd: ready.repo,
-        now: "2026-07-15T10:01:00.000Z",
-      });
-      if (!failedCandidate.ok) throw new Error(`Candidate capture failed: ${failedCandidate.code}`);
-      review.mockImplementationOnce(() =>
-        Effect.succeed({
-          ok: false,
-          failure: new ReviewerExecutionFailed({
-            kind: "process_execution",
-            operationName: "run_reviewer_process",
-            message: "Temporary reviewer failure.",
+        git(ready.repo, "commit", "--allow-empty", "-m", "clean acceptance candidate");
+        const cleanCandidate = yield* captureLocalCandidate({
+          cwd: ready.repo,
+          now: "2026-07-15T10:02:00.000Z",
+        });
+        if (!cleanCandidate.ok) throw new Error(`Candidate capture failed: ${cleanCandidate.code}`);
+        review.mockImplementation(() =>
+          Effect.succeed({
+            ok: true,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "clean acceptance report",
           }),
-          sessionUsability: "unknown" as const,
-          attempts: 1,
-          stdout: "",
-        }),
-      );
-      const failed = yield* runTaskBackedCandidate(ready, passingValidationPolicy, failedCandidate);
-      expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        );
+        const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
+        expect(clean).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
 
-      git(ready.repo, "commit", "--allow-empty", "-m", "clean acceptance candidate");
-      const cleanCandidate = yield* captureLocalCandidate({
-        cwd: ready.repo,
-        now: "2026-07-15T10:02:00.000Z",
-      });
-      if (!cleanCandidate.ok) throw new Error(`Candidate capture failed: ${cleanCandidate.code}`);
-      review.mockImplementation(() =>
-        Effect.succeed({
-          ok: true,
-          report: { findings: [] },
-          attempts: 1,
-          stdout: "clean acceptance report",
-        }),
-      );
-      const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
-      expect(clean).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+        git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+        if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
 
-      git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
-      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+        const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
-      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
-
-      expect(final).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledTimes(4);
-      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
-    }),
-  );
-});
+        expect(final).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review).toHaveBeenCalledTimes(4);
+        expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+      }),
+    );
+  },
+);
 
 type AcceptanceReadyRepo = {
   readonly repo: string;

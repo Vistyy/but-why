@@ -32,33 +32,35 @@ afterAll(() => {
 const repositoryCopy = () => cloneInitializedTestRepository(initializedRepositoryTemplate);
 
 describe("Change Start Managed Worktree boundaries", () => {
-  it.effect("creates a ready Change without a Task from the freshly fetched remote default branch", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");
+  it.effect(
+    "creates a ready Change without a Task from the freshly fetched remote default branch",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* repositoryCopy();
+        writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");
 
-      const result = yield* runByInProcessEffect(root, ["change", "start"], now);
+        const result = yield* runByInProcessEffect(root, ["change", "start"], now);
 
-      expect(result.status).toBe(0);
-      const output = JSON.parse(result.stdout) as ChangeOutput;
-      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
-      expect(output).toMatchObject({
-        change: { id: expect.any(String), taskId: null },
-        branch: expect.stringMatching(/^refs\/heads\/but-why\/change-/u),
-        baseRef: "refs/remotes/origin/main",
-        startingCommit,
-        worktreePath: expect.any(String),
-      });
-      expect(output.worktreePath).toMatch(
-        new RegExp(
-          `^${escapeRegExp(join(dirname(root), `${basename(root)}-worktrees`, "but-why"))}/change-`,
-          "u",
-        ),
-      );
-      expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
-      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(startingCommit);
-      expect(existsSync(join(output.worktreePath, "dirty.txt"))).toBe(false);
-    }),
+        expect(result.status).toBe(0);
+        const output = JSON.parse(result.stdout) as ChangeOutput;
+        const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
+        expect(output).toMatchObject({
+          change: { id: expect.any(String), taskId: null },
+          branch: expect.stringMatching(/^refs\/heads\/but-why\/change-/u),
+          baseRef: "refs/remotes/origin/main",
+          startingCommit,
+          worktreePath: expect.any(String),
+        });
+        expect(output.worktreePath).toMatch(
+          new RegExp(
+            `^${escapeRegExp(join(dirname(root), `${basename(root)}-worktrees`, "but-why"))}/change-`,
+            "u",
+          ),
+        );
+        expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
+        expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(startingCommit);
+        expect(existsSync(join(output.worktreePath, "dirty.txt"))).toBe(false);
+      }),
   );
 
   it.effect("ignores an ahead local branch and preserves it unchanged", () =>

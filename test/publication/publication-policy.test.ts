@@ -71,39 +71,41 @@ const publicationTemplateLayer = Layer.effect(
 );
 
 layer(publicationTemplateLayer)("Candidate publication", (it) => {
-  it.scoped("publishes exact metadata for a Change without a Task from Candidate-based evidence", () =>
-    withFixture((fixture) =>
-      Effect.gen(function* () {
-        const requests: unknown[] = [];
-        const publication = openCandidatePublication({
-          changePersistence: fixture.changes.publication,
-          git: {
-            ...publicationGitDefaults,
-            readBranchHead: () => fixture.captured.headSha,
-            readFirstNonMergeCommitSubject: () => ({
-              ok: true,
-              subject: "Add Change without a Task publication",
-            }),
-          },
-          github: successfulCreation(requests),
-        });
-        expect(yield* publication.publish(input(fixture))).toMatchObject({
-          ok: true,
-          created: true,
-        });
-        expect(requests).toHaveLength(1);
-        expect(requests).toEqual([
-          {
-            ...target,
-            headBranch: "feature",
-            branchRef: "refs/heads/feature",
-            expectedHeadSha: fixture.captured.headSha,
-            title: "Add Change without a Task publication",
-            body: "",
-          },
-        ]);
-      }),
-    ),
+  it.scoped(
+    "publishes exact metadata for a Change without a Task from Candidate-based evidence",
+    () =>
+      withFixture((fixture) =>
+        Effect.gen(function* () {
+          const requests: unknown[] = [];
+          const publication = openCandidatePublication({
+            changePersistence: fixture.changes.publication,
+            git: {
+              ...publicationGitDefaults,
+              readBranchHead: () => fixture.captured.headSha,
+              readFirstNonMergeCommitSubject: () => ({
+                ok: true,
+                subject: "Add Change without a Task publication",
+              }),
+            },
+            github: successfulCreation(requests),
+          });
+          expect(yield* publication.publish(input(fixture))).toMatchObject({
+            ok: true,
+            created: true,
+          });
+          expect(requests).toHaveLength(1);
+          expect(requests).toEqual([
+            {
+              ...target,
+              headBranch: "feature",
+              branchRef: "refs/heads/feature",
+              expectedHeadSha: fixture.captured.headSha,
+              title: "Add Change without a Task publication",
+              body: "",
+            },
+          ]);
+        }),
+      ),
   );
 
   it.scoped("reads back a malformed pull request creation response without recording it", () =>
@@ -208,33 +210,35 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("uses fallback metadata for a Change without a Task and reports unavailable history", () =>
-    withFixture((fixture) =>
-      Effect.gen(function* () {
-        const requests: unknown[] = [];
-        let historyAvailable = false;
-        const publication = openCandidatePublication({
-          changePersistence: fixture.changes.publication,
-          git: {
-            ...publicationGitDefaults,
-            readBranchHead: () => fixture.captured.headSha,
-            readFirstNonMergeCommitSubject: () =>
-              historyAvailable
-                ? { ok: true as const, subject: undefined }
-                : { ok: false as const, code: "commit_history_unavailable" as const },
-          },
-          github: successfulCreation(requests),
-        });
-        expect(yield* publication.publish(input(fixture))).toEqual({
-          ok: false,
-          code: "commit_history_unavailable",
-        });
-        expect(requests).toEqual([]);
-        historyAvailable = true;
-        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-        expect(requests).toContainEqual(expect.objectContaining({ title: "Change publication" }));
-      }),
-    ),
+  it.scoped(
+    "uses fallback metadata for a Change without a Task and reports unavailable history",
+    () =>
+      withFixture((fixture) =>
+        Effect.gen(function* () {
+          const requests: unknown[] = [];
+          let historyAvailable = false;
+          const publication = openCandidatePublication({
+            changePersistence: fixture.changes.publication,
+            git: {
+              ...publicationGitDefaults,
+              readBranchHead: () => fixture.captured.headSha,
+              readFirstNonMergeCommitSubject: () =>
+                historyAvailable
+                  ? { ok: true as const, subject: undefined }
+                  : { ok: false as const, code: "commit_history_unavailable" as const },
+            },
+            github: successfulCreation(requests),
+          });
+          expect(yield* publication.publish(input(fixture))).toEqual({
+            ok: false,
+            code: "commit_history_unavailable",
+          });
+          expect(requests).toEqual([]);
+          historyAvailable = true;
+          expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+          expect(requests).toContainEqual(expect.objectContaining({ title: "Change publication" }));
+        }),
+      ),
   );
 
   it.scoped("publishes the latest Implementation Decision Log without claiming review", () =>
@@ -333,7 +337,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             ...publicationGitDefaults,
             readBranchHead: () => fixture.captured.headSha,
             readFirstNonMergeCommitSubject: () => {
-              throw new Error("metadata for a Change linked to a Task must not read commit history");
+              throw new Error(
+                "metadata for a Change linked to a Task must not read commit history",
+              );
             },
           },
           github: successfulCreation(requests),
