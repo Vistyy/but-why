@@ -155,6 +155,7 @@ export type RunAcceptanceReviewPhaseInput = {
 };
 export type RunAcceptanceReviewPhaseResult = {
   readonly findings: 0 | 1;
+  readonly requiresAbandonment?: boolean;
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
@@ -339,6 +340,10 @@ const runAcceptanceReviewPhaseImpl = (
                 });
               }),
           },
+        ).pipe(
+          Effect.catchTag("InfrastructureToolingFailed", (toolingFailure) =>
+            Effect.succeed({ artifactPersistenceFailure: toolingFailure } as const),
+          ),
         )
       : yield* executeReviewerSession({
           identity,
@@ -356,6 +361,13 @@ const runAcceptanceReviewPhaseImpl = (
           completeReview: ({ initialResult }) =>
             verifyIntegrity(input).pipe(Effect.as(initialResult)),
         });
+    if ("artifactPersistenceFailure" in execution) {
+      return {
+        findings: 0,
+        requiresAbandonment: true,
+        toolingFailure: execution.artifactPersistenceFailure,
+      };
+    }
     const result = translateRuntimeResult(execution.result, "acceptance");
     const reviewerEvidence: ReviewerExecutionEvidence =
       execution.evidence.invocations !== undefined

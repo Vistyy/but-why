@@ -286,6 +286,13 @@ const makeCandidateValidation = (dependencies: {
     }
 
     const activeResult = workspace.activeWorkspaceResult;
+    if (activeResult?.requiresAbandonment === true) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        validationRunId: started.validationRunId,
+      } as const;
+    }
     const toolingFailures =
       (
         activeResult as

@@ -90,6 +90,23 @@ describe("Candidate Validation Gate", () => {
         toolingFailures: [failure],
       });
       expect(calls).toEqual(["checks", "acceptance"]);
+
+      const abandonmentResult = yield* runCandidateValidationGate({
+        checks: () => Effect.succeed(passed),
+        acceptanceReview: () =>
+          Effect.succeed({
+            findings: 0 as const,
+            requiresAbandonment: true,
+            toolingFailure: failure,
+          }),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
+      });
+      expect(abandonmentResult).toMatchObject({
+        outcome: "tooling_failed",
+        requiresAbandonment: true,
+        toolingFailures: [failure],
+      });
+      expect(calls).toEqual(["checks", "acceptance"]);
     }),
   );
 

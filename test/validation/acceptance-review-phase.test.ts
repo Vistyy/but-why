@@ -251,6 +251,72 @@ describe("Acceptance Review phase", () => {
     }),
   );
 
+  it.scoped("requests Validation Run abandonment when Agent Artifact persistence fails", () =>
+    Effect.gen(function* () {
+      const workspace = createTestWorkspace();
+      const artifactsRoot = join(workspace, "artifact-root-file");
+      writeFileSync(artifactsRoot, "not a directory");
+      const settledInvocationIds: number[] = [];
+      const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
+        beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
+          const sessionId = agentSessionId ?? 1;
+          const continuation = {
+            id: 1,
+            agentSessionId: sessionId,
+            harness: "pi" as const,
+            provider: configuration.provider ?? null,
+            model: configuration.model,
+            thinking: configuration.thinking ?? null,
+            transcriptPath: null,
+            unusableReason: null,
+          };
+          return Effect.succeed({
+            ok: true as const,
+            dispatch: {
+              agentSessionId: sessionId,
+              continuation,
+              invocation: {
+                id: 1,
+                continuationId: continuation.id,
+                createdAt,
+                settledAt: null,
+                settlementKind: null,
+                usage: null,
+                continuation,
+              },
+              resumed: false,
+              piSessionId: "by-agent-1",
+            },
+          });
+        },
+        settleInvocation: ({ invocationId }) =>
+          Effect.sync(() => {
+            settledInvocationIds.push(invocationId);
+          }),
+        readInvocationHistory: () => Effect.succeed([]),
+      };
+      const fixture = acceptancePhaseFixture(
+        { review: () => Effect.succeed(cleanReport) },
+        {
+          agentPersistence,
+          linkAgentInvocation: () => () => Effect.void,
+          settleAgentInvocationRound: () => () => Effect.void,
+          artifactsRoot,
+        },
+      );
+
+      const result = yield* fixture.run();
+
+      expect(result).toMatchObject({
+        findings: 0,
+        requiresAbandonment: true,
+        toolingFailure: { _tag: "InfrastructureToolingFailed" },
+      });
+      expect(settledInvocationIds).toEqual([]);
+      expect(fixture.rounds).toEqual([]);
+    }),
+  );
+
   it.scoped("rejects a different workspace Candidate before reviewer launch", () =>
     Effect.gen(function* () {
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>

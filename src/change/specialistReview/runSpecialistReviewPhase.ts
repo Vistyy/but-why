@@ -157,6 +157,7 @@ export type SpecialistReviewerContinuityEvidence = ReviewerExecutionEvidence & {
 
 export type RunSpecialistReviewPhaseResult = {
   readonly findings: 0 | 1;
+  readonly requiresAbandonment?: boolean;
   readonly toolingFailures: readonly ValidationToolingFailure[];
   readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
 };
@@ -202,6 +203,14 @@ export const runSpecialistReviewPhase = (
       if (result.hasFindings) hasFindings = true;
       if (result.toolingFailure !== undefined) toolingFailures.push(result.toolingFailure);
       if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
+      if (result.requiresAbandonment) {
+        return {
+          findings: hasFindings ? 1 : 0,
+          requiresAbandonment: true,
+          toolingFailures,
+          reviewerEvidence,
+        };
+      }
     }
 
     return {
@@ -218,6 +227,7 @@ const runSpecialist = (
 ): Effect.Effect<
   {
     readonly hasFindings: boolean;
+    readonly requiresAbandonment?: boolean;
     readonly toolingFailure?: ValidationToolingFailure;
     readonly reviewerEvidence?: SpecialistReviewerContinuityEvidence;
   },
@@ -374,6 +384,10 @@ const runSpecialist = (
                 });
               }),
           },
+        ).pipe(
+          Effect.catchTag("InfrastructureToolingFailed", (toolingFailure) =>
+            Effect.succeed({ artifactPersistenceFailure: toolingFailure } as const),
+          ),
         )
       : yield* executeReviewerSession({
           identity,
@@ -404,6 +418,13 @@ const runSpecialist = (
               return result;
             }),
         });
+    if ("artifactPersistenceFailure" in execution) {
+      return {
+        hasFindings: false,
+        requiresAbandonment: true,
+        toolingFailure: execution.artifactPersistenceFailure,
+      };
+    }
     const result = translateRuntimeResult(execution.result, policy.id);
     const reviewerEvidence: SpecialistReviewerContinuityEvidence = {
       producer: policy.id,
