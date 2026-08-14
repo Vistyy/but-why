@@ -1,7 +1,7 @@
 # First-release baseline and state cutover plan
 
-**Status:** Active exploration.
-The approved Task and Change boundary and Agent Session plans now supply its required ownership direction.
+**Status:** Approved planning direction.
+The approved Task and Change boundary and Agent Session plans supply its required ownership direction.
 It is not implementation authority.
 
 **Removal condition:** Remove this file after the released baseline is implemented, the prerelease state is archived, the cutover is completed, and accepted authority changes are recorded in current artifacts.
@@ -243,6 +243,7 @@ After verification, remove those loose copies and retain only the new active `st
 
 Only implementation work that must complete before cutover should be recorded in the prerelease database.
 The baseline Candidate must be submitted, merged, and reconciled with the old Trusted But Why Executable before that executable loses access to prerelease state.
+The Operator coordinates the brief write pause manually; do not add product maintenance mode or distributed locking for this cutover.
 Then:
 
 1. Merge the baseline with the old Trusted But Why Executable.
@@ -253,11 +254,13 @@ Then:
 6. Verify the new Trusted But Why Executable and state before recording new work.
 7. Resume development in the new state and finish release work before npm publication.
 
-If verification fails before new work is recorded, restore use of the preserved old state.
+Verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
+If verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
 After new work is recorded, fix the new state forward and do not merge old and new databases.
+Do not add released rollback or database-conversion commands for this one-time cutover.
 
-A fresh clone is preferred for initializing the released baseline because it does not delete or rewrite the archived prerelease state.
-The exact operational procedure remains unresolved.
+A fresh clone may be used for initialization as an operational safety convenience, but it is not required.
+The exact manual operational procedure remains unresolved.
 
 ## Verification direction
 
@@ -277,19 +280,19 @@ Remove verification whose only claim is upgrading or transforming a retired prer
 
 ## Authority change
 
-The planned baseline Change retires the complete prerelease schema after its state is archived.
-This requires a separately accepted authority change that supersedes ADR 0009's requirement to preserve the prerelease migration chain through the first release.
-After implementation, review the implemented system against the ADR gate and record the accepted one-time release-boundary decision if it qualifies.
-Do not change current architecture or ADR authority before implementation and explicit acceptance.
+The planned baseline Change explicitly retires and deletes the prerelease migration files, registration, upgrade tests, and active support after its state is archived.
+Git history and the prerelease archive preserve the old executable revision and migration chain for inspection.
+This is an accepted one-time exception to ADR 0009's current consequence that the first release ships the complete prerelease chain.
+ADR 0009's governing decision remains applicable: migrations are immutable and schema changes use ordered forward migrations.
+After implementation, amend ADR 0009 rather than superseding it.
+The amendment records that the prerelease chain was explicitly retired at the first-release boundary, the new `0001_baseline` became the immutable migration root, and normal forward-only migration continues from there.
+Do not change current architecture or ADR authority before implementation.
 
-## Decisions still required
+## Implementation-time procedure
 
-- Accept the final Task Backend ownership representation.
-- Accept the final Agent Session and execution representation.
-- Accept Candidate Publication and Submission Workspace persistence behavior.
-- Review the complete final table, column, relationship, and index inventory.
-- Define the minimum archive contents and external inspection procedure without adding archive support to the released CLI.
-- Define the exact trusted-executable cutover procedure and rollback boundary.
+Define and test the exact manual trusted-executable cutover commands during baseline implementation, when the implemented baseline CLI and archive layout are available.
+Review the runbook before cutover and store the old-state inspection instructions in the archive.
+Do not add product cutover, rollback, or prerelease conversion commands.
 
 ## Authorization status
 
