@@ -29,19 +29,22 @@ Initial examples are the Task Reviewer for one Task, the Acceptance Reviewer for
 An Agent Session is never reused across owners or roles.
 The owning domain defines the role and determines when continuation is eligible.
 An Agent Session has physical harness continuations ordered by their repository-local immutable integer IDs.
-The latest usable continuation is current.
-An unusable continuation appends a fresh continuation while preserving the logical Agent Session and its stored resolved configuration.
+The highest-ID continuation is current for dispatch and recovery inspection.
+It is resumable only when its transcript path is present and no unusable reason is recorded.
+When no continuation exists, dispatch creates one; when the current continuation is resumable, dispatch reuses it; otherwise dispatch appends a fresh continuation while preserving the logical Agent Session and its stored resolved configuration.
 Past Invocations and continuations remain history without separate replacement metadata.
 
 The owning domain resolves and stores the Agent Profile, role instructions, Agent Environment, tools, skills, and extensions once for the applicable owner lifecycle.
-A Task stores this configuration as a nullable immutable JSON snapshot when its Task Reviewer Session first starts.
-A Change stores all configured reviewer roles and their resolved configurations as one immutable JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
+A Task stores this configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
+A Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
 These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
 Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
 Later Repo or Global Config changes do not alter those stored configurations, add or remove Change reviewers, or replace a usable continuation.
 The owning domain validates a resolved snapshot before storage.
-If the first launch proves that no usable continuation was established, a retry may replace only that owner-role configuration from corrected current config.
-Once a usable continuation exists, its stored configuration remains fixed.
+A retry may replace only that owner-role configuration from corrected current config when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
+Replacement never changes the Change reviewer roster.
+Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
+Missing or unusable transcript recovery creates a replacement continuation with that same configuration rather than adopting later config.
 Every later Invocation and replacement continuation for that owner-role Agent Session uses the stored configuration.
 Shared Agent infrastructure does not interpret domain policy or store a compatibility fingerprint.
 Candidate identity, prompt content, workspace path, and Review identity may change without replacing the continuation.
@@ -66,17 +69,28 @@ An existing continuation that cannot resume is likewise replaced with its reason
 
 Shared Invocation evidence includes:
 
-- A repository-local immutable integer identity that orders Invocation history.
+- A table-local immutable integer identity that orders Invocation history.
 - The physical harness continuation used.
 - `created_at` and nullable `settled_at` timestamps.
 - An application-decoded settlement kind.
-- Input, output, cached-input, and total token usage when the harness reports it.
+- Nullable input, output, cached-input, and total token columns stored as one all-present or all-absent measured set.
 - The transcript-relative path discovered for the physical harness continuation.
 
-Settlement kinds are stored as text and decoded by the application unless a later relational invariant requires a SQLite constraint.
+Each physical continuation stores its required Agent Harness name, nullable model provider, required selected model slug, and nullable thinking level.
+These dimensions describe the physical conversation and make usage queryable without repeating them on every Invocation.
+The first release stores `pi` as the Agent Harness; retaining this explicit fact does not add support for another harness.
+Provider remains nullable when the harness cannot report it reliably, and thinking remains nullable because it is not a capability of every harness.
 
-For first-release Pi, derive the Pi session ID from the continuation integer and store no separate harness or Pi session identity.
-Store one nullable transcript-relative path on the physical continuation and do not retain a separate transcript-reference record.
+Settlement kinds are stored as text and decoded by the application unless a later relational invariant requires a SQLite constraint.
+The first-release values are `returned`, `launch_failed`, `failed`, and `return_unknown`.
+A readable response with invalid structured output is `returned`; its correction is another Invocation.
+`launch_failed` proves that no conversation was established, `failed` means the harness ran without usable returned output, and `return_unknown` records an interrupted call whose return was not observed.
+
+For first-release Pi, derive the Pi session ID from the continuation integer and store no separate Pi session identity.
+Store the explicit Agent Harness name on the continuation rather than relying on the first-release implementation choice as durable evidence.
+Store one nullable transcript-relative path and one nullable unusable reason on the physical continuation and do not retain a separate transcript-reference record.
+A continuation is resumable only when its transcript path is present and no unusable reason is recorded.
+The reason records why its transcript cannot continue without adding a replacement pointer, generic continuation status, or superseded timestamp.
 Domain operations reach that transcript through their Invocation links.
 Transcript contents remain in the Pi file and are not copied into SQLite.
 
@@ -84,12 +98,19 @@ Invocation rows do not duplicate prompts or returned text.
 Domain records retain authoritative inputs and results, while harness transcripts retain the conversation.
 Monetary cost and generic harness-specific metadata are excluded until a supported use and evidence contract require them.
 
+Public domain inspection exposes exact ordered Invocation evidence rather than retained reviewer execution aggregates.
+Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none input, cached-input, output, and total token usage; transcript-relative path; and unusable reason.
+Task Review and Validation phase inspection associates each Invocation with its owning operation, phase, and producer as applicable.
+Do not expose compatibility fingerprint, continuity, review-call count, or aggregate reviewer duration.
+The Invocation list and timestamps provide the underlying evidence without storing or presenting those retired summaries.
+
 ## Ownership
 
 An Invocation result records whether the harness returned usable output, not whether the domain accepts that output.
 A readable but invalid domain result settles the Invocation, leaves the domain operation incomplete, and may cause a correction Invocation.
 A valid domain result may complete when continuation or transcript capture fails.
-The Invocation records that capture failure, and the next operation starts a fresh continuation rather than converting the valid result into a tooling failure.
+The continuation records that capture failure in `unusable_reason`, while the Invocation settlement continues to describe the harness call.
+The next operation starts a fresh continuation rather than converting the valid result into a tooling failure.
 Each retry or correction is another Invocation, and the owning domain decides whether another attempt is allowed.
 When domain recovery ends without usable output, the final Invocation failure and the domain Tooling Failure are recorded atomically.
 The continuation is preserved or replaced only according to what the failure proves.
@@ -156,6 +177,9 @@ Agent infrastructure does not access Task or Change tables.
 A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
 The release baseline needs durable representation for logical sessions, physical continuations, and invocations because they have distinct write and recovery lifecycles.
+During prerelease staging, existing Reviewer Session records remain temporary read-only legacy inspection evidence because they lack the per-call facts needed to reconstruct exact Invocations honestly.
+All new reviewer work writes only the Agent Session representation.
+The final baseline and released executable remove this inspection compatibility after the verified prerelease archive preserves the old evidence.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The physical schema must be selected through the release-baseline review rather than copied from the prerelease Reviewer Session schema.
 It stores no compatibility fingerprint.
@@ -188,6 +212,8 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 - Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
 - Invocation and transcript evidence is limited to the fields defined above; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
+- Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying configuration into each Review or Run.
+- Retire generic Reviewer Session, transcript-array, per-Review policy, and reviewer execution-summary presentation in favor of owner-role configuration, Agent Session, continuation, Invocation, domain Tooling Failure, and cleanup evidence.
 - The release-baseline review selects the physical schema after this plan is approved.
 
 ## Exclusions

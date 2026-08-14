@@ -48,6 +48,7 @@ Use same-row SQLite `CHECK` constraints only for supported enum values and these
 - Task `cancelled` state and cancellation reason presence.
 - Change `close_reason` and cancellation reason presence.
 - Agent Invocation settlement time and settlement kind presence.
+- Agent Invocation input, cached-input, output, and total token usage are either all present or all absent.
 - Task Reviewer configuration and Task Reviewer Agent Session ID presence.
 
 Owner operations enforce cleanup combinations, validation outcomes against embedded evidence, GitHub Publication Candidate and Validation Run agreement, Acceptance Context against the Task link, phase and producer meaning, JSON shape, and non-whitespace text.
@@ -55,7 +56,7 @@ Direct database modification outside But Why remains unsupported.
 
 ## Current retained directions
 
-`shared_state_identity` remains required to bind state to the canonical Git Common Directory and support immediate transaction locking.
+`shared_state_identity` remains required to bind state to the canonical Git Common Directory, freeze the repository ID Prefix, and support immediate transaction locking.
 The Change Execution Lock remains one separate SQLite coordination file per Change rather than baseline state, a main-database lease, or an in-process Effect lock.
 It provides cross-process exclusion for conflicting long-running Change operations while allowing operations on different Changes to proceed concurrently.
 Domain timestamps remain ISO timestamp text where current reads rely on lexical ordering.
@@ -63,11 +64,16 @@ Domain timestamps remain ISO timestamp text where current reads rely on lexical 
 Accepted baseline direction:
 
 - Keep Task identity, title, description, lifecycle state, cancellation reason, nullable resolved Task Reviewer configuration, and nullable Task Reviewer Agent Session ID on `tasks`.
+  An unlinked Task cannot become Done; exact merged completion of its linked Change is the only completion path.
   Keep direct Task Dependency relationships in `task_dependencies`.
   Store each Task Review's exact proposal and dependency evidence as immutable JSON snapshots, with its Review Base ref and commit, nullable outcome, Findings, optional Tooling Failure, and cleanup obligation directly on `task_reviews`.
   Task Reviews use their Task's stored reviewer configuration rather than duplicating it.
   Do not add separate proposal, dependency-evidence, policy, Finding, or Tooling Failure tables.
-- Keep Change public and numeric IDs, Repository Branch, Change Base ref and remote URL, Managed Worktree path, optional initial Acceptance Context, reviewer configuration snapshot, closure fields, and cleanup obligation directly on `changes`.
+- Give `tasks` and `changes` independent SQLite-allocated table-local `INTEGER PRIMARY KEY` identities.
+  Store the repository's immutable `id_prefix` once in `shared_state_identity` and derive public Task and Change IDs at the application boundary as `<id-prefix>-<task-number>` and `<id-prefix>-C<change-number>`.
+  Use integer foreign keys internally and do not store duplicated public ID strings on domain rows.
+  Repository initialization freezes `id_prefix`; opening Shared Repository State rejects a conflicting configured `idPrefix` with actionable failure behavior.
+  Keep Change Repository Branch, Change Base ref and remote URL, Managed Worktree path, optional initial Acceptance Context, reviewer configuration snapshot, closure fields, and cleanup obligation directly on `changes`.
   Keep the optional one-to-one Task relationship only in `task_change_links`.
   Keep Decisions, Blockers, Candidates, Validation Runs, and GitHub Publication in their owner-specific history or operation tables.
   Do not store the starting commit, Git Common Directory, mutable current Acceptance Context, Current Candidate pointer, or Active Validation Run pointer on Change.
@@ -90,18 +96,24 @@ Schema simplification candidates still subject to final review:
   The immediate SQLite start transaction checks the complete Change for any unfinished Run, confirms the selected Candidate is current, and creates the new Run atomically.
   Do not add an Active Validation Run table, Change pointer, or per-Candidate partial uniqueness index.
 - Require every Change to be created through Change Start with a Repository Branch, Change Base ref and remote URL, and Managed Worktree path.
+  Resolve and validate the reviewer configuration from Repo Config at the exact starting commit, current Global Config, and their resolved guidance and resources before creating the Change.
+  Invalid reviewer configuration rejects Start without creating a Change.
+  After Git intent and reviewer configuration resolve, Task and Change coordination atomically creates the Change, its reviewer configuration snapshot, and its optional Task link.
+  Managed Worktree provisioning and Repository Preparation then run against the durable Open Change.
+  Their failure preserves the Change and intended Managed Worktree path for supported retry.
+  Later Candidate configuration may change per-Run Prepare and Checks but cannot change the Change reviewer roster or configuration.
   Candidate capture operates only on an existing Open Change and does not implicitly create one.
   This first-release requirement applies to the current local Managed Worktree model and does not define a future cloud Implementer contract.
 - Do not persist the Change starting commit after Change Start.
   Publication for a Change without Acceptance Context derives its first implementation commit from the exact Candidate Change Base and head commits.
-- Store the canonical Git Common Directory only in `shared_state_identity`, not on every Change.
+- Store the canonical Git Common Directory and immutable repository ID Prefix only in `shared_state_identity`, not on every Task or Change.
   Repository Branch identity is repository-scoped by the Shared Repository State database.
 - Store the initial Acceptance Context on the Change and each approved Resolution on its Implementation Blocker.
   Derive the current Acceptance Context by applying ordered Resolutions rather than storing a mutable second copy on the Change.
-  For a Change without a Task and initial Acceptance Context, a Resolution unblocks implementation but does not create Acceptance Context or cause Acceptance Review to run.
+  For a Change without a Task, a Resolution unblocks implementation but does not create Acceptance Context or cause Acceptance Review to run.
   Each Validation Run retains the exact resulting Acceptance Context it reviewed when one exists.
 - Keep the core Change representation independent of GitHub.
-  Store current GitHub-specific delivery evidence in a separate one-to-zero-or-one `github_publications` table with `change_id` as its primary key.
+  Store current GitHub-specific delivery evidence in a separate one-to-zero-or-one `github_publications` table with the internal integer `change_id` as its primary key.
   Do not add a separate publication ID because no current record references Publication independently.
   Create the row with the exact publication Candidate and passing Validation Run before creating the pull request.
   After GitHub creation succeeds or is reconciled, store the pull request number needed during external-mutation recovery.
@@ -147,47 +159,217 @@ Schema simplification candidates still subject to final review:
 - Remove Validation Round `round_number` and use the fixed phase and producer identity.
 - Shared Agent storage retains Agent Sessions, physical continuations, and Invocations.
   Store no compatibility fingerprint.
-  The Task stores its resolved Task Reviewer configuration as a nullable immutable JSON snapshot when its Task Reviewer Session first starts.
-  The Change stores all configured reviewer roles and their resolved configurations as one immutable JSON snapshot at Change Start, before their Agent Sessions are created lazily.
+  The Task stores its resolved Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
+  The Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
   These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
   Validate a resolved snapshot before storage.
   Later Repo or Global Config changes do not alter stored configurations after a usable continuation exists, and replacement continuations reuse them.
-  If the first launch proves that no usable continuation was established, a retry may replace only that owner-role configuration from corrected current config.
+  A retry may replace only that owner-role configuration from corrected current config when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
+  Replacement never changes the Change reviewer roster.
+  Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
+  Missing or unusable transcript recovery uses that same configuration.
   Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
   Prepare, Checks, Acceptance Context, and the output contract remain captured independently for each Validation Run rather than being frozen at Change Start.
-  For first-release Pi, store the nullable transcript-relative path on its physical continuation and do not retain a separate transcript-reference table.
+  For first-release Pi, store the nullable transcript-relative path and nullable unusable reason on its physical continuation and do not retain a separate transcript-reference table.
+  A continuation is resumable only when its transcript path is present and no unusable reason is recorded.
+  Do not add a replacement pointer, generic continuation status, or superseded timestamp.
   Domain operations reach that transcript through their Invocation links.
   A Task stores its one Task Reviewer Agent Session ID directly.
   `change_agent_sessions` maps each Change reviewer producer to its Agent Session.
-  Task Reviews and Validation Phase Results use domain-owned link tables to identify their Invocations.
-  Agent Sessions, continuations, and Invocations each use one repository-local immutable integer identity that also orders their history.
-  Continuations reference their Agent Session, and Invocations reference their continuation.
-  Derive the first-release Pi session ID deterministically from the continuation ID and do not store a separate Pi session ID or harness name.
+  Task Reviews use a domain-owned link table to identify their Invocations.
+  Before a reviewer phase dispatch, `validation_phase_agent_invocations` links its Validation Run, phase, producer, and Invocation without referencing a not-yet-created Phase Result.
+  After settlement, `validation_phase_results` records the same Run, phase, and producer identity with its result.
+  Agent Sessions, continuations, and Invocations each use one table-local immutable `INTEGER PRIMARY KEY` that also orders that table's history.
+  SQLite allocates these IDs without the `AUTOINCREMENT` keyword or application `MAX(id) + 1` queries.
+  Continuations reference their Agent Session and store the required Agent Harness name, nullable model provider, required selected model slug, and nullable thinking level used for their physical conversation.
+  The first release records `pi` as the harness; explicit storage is durable query evidence and does not add support for another harness.
+  Invocations reference their continuation and store nullable input, cached-input, output, and total token columns as one all-present or all-absent measured set.
+  Derive the first-release Pi session ID deterministically from the continuation ID and do not store a separate Pi session ID.
   Keep the nullable transcript-relative path because Pi's transcript filename is not fully deterministic.
-  The latest continuation for an Agent Session is current, so do not store a current pointer, `superseded_at`, or replacement metadata.
+  The highest-ID continuation for an Agent Session is current for dispatch and recovery inspection, so do not store a current pointer, `superseded_at`, or replacement metadata.
+  Dispatch creates a continuation when none exists, reuses the current continuation only when it has a transcript path and no unusable reason, and otherwise appends a replacement with the same stored configuration.
+  Transcript capture failure belongs to the continuation's `unusable_reason`; Invocation settlement continues to describe only the harness call.
   The pre-dispatch SQLite transaction joins through continuations to reject an unsettled Invocation for the same Agent Session.
   Invocation settlement times, settlement kind, and token usage remain for recovery and usage reporting.
-- Use repository-wide immutable integer identities as append order for Task Reviews, Candidates, Validation Runs, Agent Sessions, continuations, Invocations, Implementation Decisions, and Implementation Blockers.
-  Immutable history rows are not deleted, and IDs are allocated transactionally within JavaScript-safe integers without `AUTOINCREMENT`.
+  First-release settlement kinds are `returned`, `launch_failed`, `failed`, and `return_unknown`.
+  Invalid structured output is a returned Invocation followed by a correction Invocation.
+- Use table-local immutable `INTEGER PRIMARY KEY` identities as append order for Task Reviews, Candidates, Validation Runs, Agent Sessions, continuations, Invocations, Implementation Decisions, and Implementation Blockers.
+  SQLite allocates IDs transactionally within JavaScript-safe integers without the `AUTOINCREMENT` keyword, a shared sequence table, or application `MAX(id) + 1` queries.
+  Immutable history rows are not deleted.
 - Keep `implementation_decisions` because Decisions are appended independently and Validation Runs must identify the exact non-authoritative rationale supplied to the Acceptance Reviewer.
   Each Run stores the highest included Decision ID and reconstructs the immutable Change-owned prefix.
   Keep `implementation_blockers` because Blockers are created unresolved, resolved later, queried as active operational state, and supplied as ordered validation history.
-  Use repository-wide immutable append sequence values as the identities of Implementation Decisions and Implementation Blockers.
+  Give Implementation Decisions and Implementation Blockers separate table-local SQLite-allocated integer identities.
+  Each identity orders only its own record type; no shared Decision-and-Blocker sequence or cross-type ordering is required.
   Change operations require non-whitespace Decision fields and Blocker content before storage without SQLite text-format constraints.
   Do not retain separate Decision, Blocker, or Resolution UUIDs or a Resolution sequence.
   The Blocker ID identifies and orders its optional one-to-one Resolution.
-  A Blocker owns at most one Resolution, represented by nullable `resolution_content` on its Blocker row, and Validation references use the stable Blocker sequence.
+  A Blocker owns at most one Resolution, represented by nullable `resolution_content` on its Blocker row, and Validation references use the stable Blocker ID.
   `NULL` means unresolved and non-whitespace text means resolved, so no separate Resolution table, `resolved_at` column, or all-or-none Resolution constraint is required.
   The Change operation validates non-whitespace Resolution content before storage rather than adding a SQLite text constraint.
   A partial unique index enforces at most one unresolved Blocker per Change.
-  A Validation Run stores the highest Implementation Decision and Implementation Blocker sequences included when it starts, plus the exact latest resolved Blocker sequence required by current validation rules when applicable.
-  The Run reconstructs those immutable histories by selecting records for its Change through those sequence boundaries rather than copying them into the Run.
+  A Validation Run stores only the highest Implementation Decision and Implementation Blocker IDs included when it starts.
+  The Run reconstructs those immutable histories by selecting records for its Change through those integer boundaries rather than copying them into the Run.
+  Do not store a separate latest-resolved-Blocker ID because at most one Blocker can be unresolved, a new Blocker cannot be raised until it is resolved, and Validation cannot start with an unresolved Blocker.
+  The highest included Blocker is therefore also the latest resolved Blocker at Run start.
 - Do not store timestamps merely to order records that already have immutable integer order.
   Remove creation and update timestamps from Task Reviews, Candidates, Validation Runs, Decisions, Blockers, Findings, Artifacts, phase results, and other records without a separate time-based behavior.
   Retain timestamps only for real elapsed-time or external-event evidence, including Agent Invocation dispatch and settlement and any external mutation or cleanup recovery that requires time.
+- Public inspection may retain lifecycle states that are derived rather than stored.
+  Change inspection derives `open` or `closed` from `close_reason`.
+  Task Review and Validation Run inspection derives `active` or `complete` from nullable `outcome`.
+  Remove `createdAt`, `updatedAt`, `closedAt`, and derived age output when their source timestamps are removed, and order public histories by immutable integer ID.
+- Replace reviewer execution aggregates with exact ordered Invocation evidence in Task Review and Validation phase inspection.
+  Do not expose compatibility fingerprint, continuity, review-call count, or aggregate reviewer duration.
+  Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none token usage; transcript-relative path; and unusable reason.
+  Keep command-duration evidence when it describes an actual check execution.
+- Snapshot Workspace inspection may expose its deterministic derived path for recovery, but the path is not persisted.
+  Continue exposing its cleanup obligation and blocking reason.
 - Retain only indexes justified by current predicates, ordering, uniqueness, or active-row invariants.
 
 These are candidates, not authorization for a specific final schema.
+
+## Approved physical contracts
+
+The `changes` table contains:
+
+- `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
+- Required unique `branch_ref`.
+- Required `base_ref` and `base_remote_url`.
+- Required unique `worktree_path`, which records the intended location before provisioning so failure remains retryable.
+- Nullable `initial_acceptance_context` JSON.
+- Required `reviewer_configuration` JSON containing the fixed roster and each role's resolved configuration at Change Start, subject only to the approved pre-conversation role-configuration correction.
+- Nullable `prepare_definition` JSON that freezes the exact Repository Preparation command and timeout for retry.
+- Nullable `prepare_failure` JSON containing the latest retained preparation failure evidence.
+- Nullable `close_reason` and `cancel_reason`.
+- Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
+
+The Change row does not store its derived public ID, Task link, starting commit, current Acceptance Context, lifecycle state, or timestamps.
+The current Acceptance Context is derived from its initial context and ordered approved Blocker Resolutions.
+Lifecycle state is derived from `close_reason`.
+Task linkage remains exclusively in `task_change_links`.
+
+The `tasks` table contains:
+
+- `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
+- Required `title` and `description`.
+- Required `state` constrained to `new`, `todo`, `done`, or `cancelled`.
+- Nullable `cancel_reason` with the approved cancellation-state combination constraint.
+- Nullable `reviewer_configuration` JSON, fixed after its Task Reviewer conversation is established and subject only to the approved pre-conversation correction.
+- Nullable unique `reviewer_agent_session_id` referencing `agent_sessions`.
+- The approved all-present or all-absent constraint across reviewer configuration and Agent Session ID.
+
+The Task row does not store its derived public ID or timestamps.
+`task_dependencies` contains required integer `dependent_task_id` and `prerequisite_task_id` foreign keys with their pair as its primary key.
+
+The `task_reviews` table contains:
+
+- `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
+- Required integer `task_id` foreign key.
+- Required `proposal` and `dependency_evidence` JSON snapshots.
+- Required `base_ref` and `base_commit`.
+- Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
+- Required ordered `findings` JSON and nullable `tooling_failure` JSON.
+- Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
+
+A partial unique index on `task_reviews.task_id` where `outcome IS NULL` permits at most one Active Task Review per Task.
+The Task Review row does not store lifecycle state, reviewer policy, Snapshot Workspace path, reviewer aggregates, abandonment reason, or timestamps.
+`task_review_agent_invocations` contains required integer `task_review_id` and `agent_invocation_id` foreign keys with their pair as its primary key.
+Invocation ID supplies their order.
+
+Small stable lifecycle sets that control persistence queries and transitions use SQLite `CHECK` constraints and application decoding.
+This includes Task state, Task Review outcome, Validation Run outcome, and Validation Phase Result outcome.
+Open-ended or evolving classifications, including tooling error kinds and producer names, remain application-decoded unless a relational invariant requires a later constraint.
+
+`implementation_decisions` contains a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`, required integer `change_id` foreign key, and required `choice` and `rationale`.
+`implementation_blockers` contains a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`, required integer `change_id` foreign key, required `content`, and nullable `resolution_content`.
+Neither table stores UUIDs, separate sequence values, or timestamps.
+
+`candidates` contains a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`, required integer `change_id` foreign key, and required `base_commit` and `head_commit`.
+It has no timestamps or commit-pair uniqueness constraint.
+
+The `validation_runs` table contains:
+
+- `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
+- Required integer `candidate_id` foreign key.
+- Required immutable `policy_snapshot` JSON.
+- Nullable integer `highest_decision_id` and `highest_blocker_id` foreign keys.
+- Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
+- Nullable `run_tooling_failure` JSON.
+- Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
+
+The Validation Run row does not store lifecycle state, Change ID, Active Run identity, latest-resolved-Blocker identity, or timestamps.
+
+`validation_phase_results` contains required integer `validation_run_id`, required `phase` and `producer`, required `outcome` constrained to `passed` or `failed`, required ordered `findings` and `artifacts` JSON, and nullable `tooling_failure` JSON.
+Its primary key is `(validation_run_id, phase, producer)`.
+It stores no round number, state, or timestamps.
+
+`validation_phase_agent_invocations` contains required integer `validation_run_id`, required `phase` and `producer`, and required integer `agent_invocation_id` foreign key.
+Its primary key is `(validation_run_id, phase, producer, agent_invocation_id)` so correction and recovery Invocations remain ordered by Invocation ID.
+It links before dispatch without requiring a Phase Result row.
+
+`agent_sessions` contains only a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`.
+Owner and role remain in domain-owned links.
+
+The `agent_continuations` table contains:
+
+- A SQLite-allocated safe positive `id INTEGER PRIMARY KEY`.
+- Required integer `agent_session_id` foreign key.
+- Required `harness` and `model`.
+- Nullable `provider` and `thinking`.
+- Nullable `transcript_path` and `unusable_reason`.
+
+These execution dimensions describe the physical conversation.
+The first release stores `pi` as the harness, while provider may be absent when Pi cannot report it reliably.
+WezTerm, Herdr, and `InteractiveSessionHost` are not Agent Harness values.
+
+The `agent_invocations` table contains:
+
+- A SQLite-allocated safe positive `id INTEGER PRIMARY KEY`.
+- Required integer `continuation_id` foreign key.
+- Required `created_at` and nullable `settled_at`.
+- Nullable application-decoded `settlement_kind`.
+- Nullable safe nonnegative integer `input_tokens`, `cached_input_tokens`, `output_tokens`, and `total_tokens`.
+
+Settlement time and kind are both absent or both present.
+The four token columns are all absent or all present.
+
+`change_agent_sessions` contains required integer `change_id`, required application-decoded `producer`, and required unique integer `agent_session_id` foreign key.
+Its primary key is `(change_id, producer)`.
+`task_change_links` contains required integer `task_id` as its primary key and required unique integer `change_id`, both foreign-keyed to their owner tables.
+`github_publications` contains required integer `change_id` as its primary key, required integer `candidate_id` and `validation_run_id` foreign keys, and nullable safe positive integer `pull_request_number`.
+Repository identity, branches, pull request URL, and expected commit derive from Change, Candidate, and pull request number.
+
+All cleanup-pending columns are integer Booleans constrained to zero or one.
+Task cancellation reason is present exactly when Task state is `cancelled`.
+Change cancellation reason is present exactly when `close_reason` is `cancelled`; it is absent for an Open or completed Change.
+Task reviewer configuration and Task Reviewer Agent Session are both absent or both present.
+Agent Invocation settlement time and kind are both absent or both present, and its four token columns are all absent or all present.
+A partial unique index permits at most one unresolved Blocker per Change.
+
+Repository Branch and Managed Worktree path are independently unique in Shared Repository State.
+A Task Reviewer Agent Session is unique among Tasks.
+A Change producer is unique within its Change, and a Change-owned Agent Session is unique in `change_agent_sessions`.
+Agent Invocation ID is unique within each domain operation-link table so one Invocation cannot be linked to multiple Task Reviews or multiple Validation phase producers in that owner table.
+The Task-to-Change link is unique on both sides.
+Application operations enforce Agent Session ownership exclusivity across the separate Task and Change links because SQLite cannot express that cross-table invariant without generic owner data.
+
+All foreign keys use normal `NO ACTION`; immutable product history is not cascade-deleted.
+Atomic owner operations enforce cross-table facts that SQLite cannot express locally, including that Validation Run boundaries belong to the Run's Change and that publication Candidate and Validation Run identify the same Change and Candidate.
+
+Beyond primary-key and unique indexes, retain only these operation-backed indexes:
+
+- `tasks (state, id)` for lifecycle-filtered Task listing.
+- `task_dependencies (prerequisite_task_id, dependent_task_id)` for reverse dependency reads.
+- `task_reviews (task_id, id DESC)` for Task Review history, plus the partial active-Review uniqueness index.
+- `changes (close_reason, id)` for Open or Closed Change listing.
+- `implementation_decisions (change_id, id)` and `implementation_blockers (change_id, id)` for ordered Change authority history, plus the partial unresolved-Blocker uniqueness index.
+- `candidates (change_id, id DESC)` for Candidate history and Current Candidate selection.
+- `validation_runs (candidate_id, id DESC)` for Run history, plus partial indexes on the same key where outcome is `NULL` and where outcome is `passed` for Active Run and current passing-evidence reads.
+- `agent_continuations (agent_session_id, id DESC)` for current continuation and continuation history.
+- `agent_invocations (continuation_id, id)` for Invocation history, plus a partial `(continuation_id)` index where `settled_at IS NULL` for dispatch exclusion and recovery.
+
+Do not add speculative indexes for JSON contents, timestamps, provider, model, or publication fields.
 
 ## Approved baseline table inventory
 
@@ -227,6 +409,121 @@ Shared Agent infrastructure owns:
 No other product-owned baseline table is planned.
 Effect SQL retains its dependency-owned migration ledger.
 
+## Independently reviewable implementation sequence
+
+Use seven implementation Tasks because one integrated Change would be too broad for reliable human review.
+Additional temporary migration and verification work is accepted to keep each merged state supported and each review bounded.
+Task and Change storage simplification remain separate after their ownership boundary exists so one reviewer does not need to assess both persistence domains together.
+
+1. Make Change-owned Acceptance Context and public inspection sufficient for implementation, remove live Task Context reads from Change execution, and update the extension and portable interfaces together.
+   `by change show` returns the complete current Acceptance Context derived from the initial context and ordered approved Blocker Resolutions.
+   Remove Task Context calls from `continue-change`, Task ID from Change-only and Validation output and publication presentation, and categorical “Task-backed” or “taskless” terminology.
+   Update the extension, Change inspection, portable skills and documentation, structured-output tests, and package-content tests together.
+   Task inspection may continue to expose its joined Change projection.
+   This Task needs no schema migration.
+2. Introduce Agent Sessions, continuations, and Invocations; migrate Task Review and Change reviewer execution and inspection from Reviewer Sessions.
+   Before installing the new executable, the Task 1 executable must confirm there are no Open Changes, Active Task Reviews, Active Validation Runs, or pending Task Review, Validation Run, or Change cleanup obligations.
+   A failed precondition leaves the database unchanged and directs the Operator to settle it with the Task 1 executable.
+   Stop all writes to the prerelease Reviewer Session, transcript, and execution-evidence tables.
+   Historical records lack enough facts to reconstruct exact per-call Invocations, so retain those tables temporarily as read-only legacy inspection evidence rather than inventing Invocation data.
+   All new reviewer work uses only Agent Sessions, continuations, and Invocations.
+   Historical closed Changes retain nullable reviewer configuration because their exact Change Start roster and configuration did not exist and must not be invented; they cannot launch new reviewers.
+   Every new Change resolves and stores required reviewer configuration at Change Start.
+   Task 7's clean baseline requires Change reviewer configuration because it contains no historical rows.
+   Inspection distinguishes legacy evidence from current Invocation evidence without presenting either as the other.
+   Update Tooling and Repository Runtime authority with the temporary Pinned Predecessor Executable rule used by migration Tasks.
+   Task 7 removes the legacy tables from the released product.
+   The first post-cutover Task removes the temporary executable rule after its final authorized use and archive verification.
+3. Introduce Task and Change coordination, `task_change_links`, and the approved module boundary while the prerelease string identity representation remains supported.
+   Append a migration that first rejects any linked Change without Acceptance Context, then creates `task_change_links` with the current string foreign keys, copies every `changes.task_id` relationship, and rebuilds `changes` without `task_id` or its old equivalence constraint.
+   A Task link requires initial Acceptance Context, while a Change without a Task must have none because the first release has no independent authority or input path for supplying it.
+   Place linked Change Start, coordinated cancellation, exact merged completion, and joined Task inspection under `src/taskChange/`, with its new SQLite Adapter under `src/taskChange/adapters/sqlite/`.
+   Existing owner-specific flat SQLite Adapters remain an explicit temporary staging exception until Task 5 moves Task Adapters and Task 6 moves Change Adapters.
+   Tasks and Changes no longer import each other, Change storage cannot mutate Task state, an unlinked Task cannot become Done, and linked completion remains one SQLite transaction.
+   Add a new ADR that supersedes ADR 0006 and defines Task, Change, Task and Change coordination, coordinated transaction composition, and the module dependency graph.
+   Update `CONTEXT-MAP.md`, `docs/architecture.md`, the Task Intent, Change Delivery, and Repository Runtime contexts and `.fallowrc.jsonc` together.
+   Fallow must enforce that Tasks and Changes do not import each other, coordination imports only their explicit coordination operations, domains do not import CLI, composition, or concrete Adapters, Repository Runtime does not import Tasks or Changes, and CLI selects operations without coordinating persistence.
+   Task 4 converts the temporary string link to integer foreign keys; Task 3 adds no broader string-ID compatibility.
+4. Introduce internal SQLite integer identities, freeze the repository ID Prefix, derive public IDs, and migrate Task, Change, link, naming, and path behavior together.
+   Before installing the new executable, the Task 3 executable must confirm there are no Open Changes, Active Task Reviews, Active Validation Runs, unsettled Agent Invocations, or pending Task Review, Validation Run, or Change cleanup obligations.
+   Repo Config must replace `taskPrefix` with `idPrefix` using the same prefix value.
+   The migration stores immutable `id_prefix` in `shared_state_identity`, uses each Task's existing numeric ID as its SQLite integer primary key, assigns Change integer primary keys in deterministic existing creation order, and rebuilds all relationships with integer foreign keys.
+   Public Task and Change IDs are then derived from the frozen prefix and internal identity.
+   Old Change IDs are retired without lookup compatibility; the prerelease archive preserves their history.
+   New Repository Branches, Managed Worktree paths, and machine and human session titles use the new Change ID.
+5. Simplify Task storage against an appended prerelease migration.
+   Rebuild `tasks` and `task_reviews` to their final physical contracts and retain `task_dependencies` and `task_review_agent_invocations` in their final forms.
+   Embed Task Review Findings and Tooling Failure evidence and remove `task_review_findings`.
+   Remove Task Review policy, workspace path, stored lifecycle state, reviewer aggregates, abandonment reason, and unsupported timestamps.
+   Move Task SQLite Adapters to `src/task/adapters/sqlite/`.
+   Retain only the Task-side read-only legacy Reviewer Session, execution, transcript, and observation evidence required by Task 2 until Task 7.
+6. Simplify Change storage against an appended prerelease migration.
+   Rebuild Changes, Decisions, Blockers, Candidates, Validation Runs, phase results, publication, and cleanup to their final physical contracts.
+   Remove `current_candidates`, `active_validation_runs`, `candidate_validation_workspace_setups`, `candidate_validation_tooling_failures`, `candidate_validation_rounds`, `candidate_validation_findings`, and `candidate_validation_artifacts` after migrating their retained evidence.
+   Embed Findings, Artifact metadata, and Tooling Failures, and remove duplicated lifecycle, unsupported timestamps, and old publication fields.
+   Move publication evidence to `github_publications`.
+   Move Change SQLite Adapters to `src/change/adapters/sqlite/` and coordination SQLite Adapters to `src/taskChange/adapters/sqlite/`.
+   Retain only the Change-side read-only legacy Reviewer Session and transcript evidence required by Task 2 until Task 7.
+   Its temporary prerelease `changes` table permits nullable reviewer configuration only on a Closed historical Change; every Open Change requires it and a historical Change without it cannot launch reviewers.
+   Task 7's clean baseline makes reviewer configuration `NOT NULL` because no historical rows are imported.
+7. Replace the complete temporary prerelease migration chain with the reviewed `0001_baseline` and verify clean initialization, exact migration-prefix enforcement, packaging, and current authority documentation without changing product behavior.
+   The packaged migration list contains only numeric ID `0001` with descriptive name `baseline`.
+   An empty ledger applies it, an exact `[0001]` ledger opens normally, and an unknown ID, missing prefix element, or ID above the packaged maximum rejects opening.
+   Numeric IDs are authoritative while descriptive names are not compatibility identity.
+   Remove every legacy Reviewer table and reader, migrations `0001` through the final temporary prerelease migration, prerelease upgrade tests, and temporary compatibility code.
+   Retain these plans and the temporary Pinned Predecessor Executable rule through the operational cutover; the first post-cutover Task removes them after confirming that current authority contains their supported outcomes.
+   Amend ADR 0009 to record the accepted one-time prerelease baseline reset while retaining its immutable forward-migration rule after release.
+
+Tasks 1 and 2 are independently startable.
+Task 3 depends on Task 1.
+Task 4 depends on Task 3.
+Task 5 depends on Tasks 2 and 4.
+Task 6 depends on Tasks 2 and 4.
+Task 7 depends on Tasks 5 and 6.
+Preferred sequencing may reduce conflicts but does not create an additional Task Dependency.
+
+For each migration Task from Task 2 through Task 7, build and preserve its Pinned Predecessor Executable from canonical `main` immediately before merge and record its Git commit and SHA-256.
+After merge, that bundle is authorized only to reconcile the exact just-merged migration Change against the old representation before the new executable opens Shared Repository State.
+The new executable may then apply its migration and the next Task may be recorded.
+Delete each temporary predecessor bundle after successful migration; retain Task 7's predecessor only in the prerelease archive.
+This is an explicit temporary prerelease exception to the normal Trusted But Why Executable selection rule and adds no general executable-selection path.
+This staging makes migration preconditions achievable without adding compatibility for the implementing Change.
+
+Before installing Task 5's executable, the previous executable must confirm there is no Active Task Review and no pending Task Review cleanup.
+Before installing Task 6's executable, the previous executable must confirm there is no Open Change, Active Validation Run, pending Validation Run or Change cleanup, or unsettled Agent Invocation.
+A failed precondition leaves the database unchanged and directs the Operator to settle it with the previous executable.
+These preconditions avoid inventing conversion behavior for operations whose representation is changing.
+
+Existing prerelease migrations remain immutable while intermediate Tasks append migrations.
+Intermediate executables normally replace one representation atomically and do not support dual writes.
+The sole accepted compatibility exception is Task 2's read-only inspection of historical Reviewer evidence that cannot be converted honestly into exact Invocations.
+New reviewer work writes only the new Agent representation.
+The final released executable contains only the new baseline and no prerelease import or compatibility behavior.
+
+Every Task Context must explicitly enumerate its required outcomes and removals.
+If implementation discovers necessary work that is not explicitly included, the Implementer must raise an Implementation Blocker before performing or deferring that work.
+The Operator decides whether to amend the current Task or create another bounded Task.
+
+The operator archive and active-state cutover remain a separate release action after all seven implementation Tasks are complete and reconciled.
+
+## Verification allocation
+
+Every Task runs the repository's complete required check suite.
+Focused verification remains with the Task whose result it establishes:
+
+- Task 1 verifies Change-owned Acceptance Context inspection, extension behavior without live Task Context calls, structured output, portable guidance, and package contents.
+- Task 2 verifies dispatch and settlement transactions, interruption, correction, missing and unusable transcripts, deterministic Pi Adapter behavior, token evidence, and honest legacy inspection.
+- Task 3 verifies atomic linked Change Start, cancellation, exact merged completion, rollback, and the Fallow-enforced dependency graph.
+  `just fallow-check` verifies import boundaries.
+  Do not add custom source-scanning tests that duplicate Fallow.
+- Task 4 verifies a real prerelease database migration, unchanged state after failed preconditions, public ID derivation, old Change ID rejection, configured-prefix conflict, and new branch, worktree, and session names.
+- Task 5 verifies Task and Task Review migration, exact embedded evidence, the final Task schema, and supported Task behavior.
+- Task 6 verifies Change and Validation migration, Candidate selection, Validation Run derivation, publication and recovery, final Change schema, and removal of retired non-legacy representations.
+- Task 7 verifies clean initialization, the exact schema inventory, migration-prefix rejection, packaging, current documentation authority, and absence of legacy Reviewer compatibility from the released product.
+
+Real SQLite integration tests verify coordination behavior.
+Final Adapter table ownership is verified through owner placement, targeted inspection, and review rather than a guessed SQL source scanner.
+
 ## Prerelease archive
 
 The existing prerelease Shared Repository State remains useful historical evidence but does not need to remain executable by `0.1.0`.
@@ -242,17 +539,23 @@ After verification, remove those loose copies and retain only the new active `st
 ## Cutover sequence
 
 Only implementation work that must complete before cutover should be recorded in the prerelease database.
-The baseline Candidate must be submitted, merged, and reconciled with the old Trusted But Why Executable before that executable loses access to prerelease state.
-The Operator coordinates the brief write pause manually; do not add product maintenance mode or distributed locking for this cutover.
+Record the seven implementation Tasks just in time rather than populating the old state with later release work.
+Each prerelease Task must be completed and reconciled before the cutover.
+Record Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-cutover work only after the new baseline state is active.
+The archive preserves old Task history, but the new database does not import it.
+The baseline Candidate must be submitted, merged, and reconciled with the Task 6 Trusted But Why Executable before that executable loses access to prerelease state.
+Before merging Task 7, build its Task 6 predecessor as a pinned production bundle outside the checkout, record its Git commit and SHA-256, and verify that exact bundle on a disposable repository.
+The coding agent performs the approved commands on the Operator's behalf and coordinates the brief write pause; do not add product maintenance mode or distributed locking for this cutover.
 Then:
 
-1. Merge the baseline with the old Trusted But Why Executable.
-2. Briefly stop But Why writes.
-3. Archive the old operational state, including the Git Common Directory state and repository reviewer files.
-4. Preserve that archive without rewriting the old database.
-5. Initialize the new Shared Repository State from merged `main`.
-6. Verify the new Trusted But Why Executable and state before recording new work.
-7. Resume development in the new state and finish release work before npm publication.
+1. Submit and merge Task 7 while the canonical main checkout still selects the Task 6 executable for its prerelease state operations.
+2. From the merged canonical checkout, use the pinned Task 6 bundle once to reconcile Task 7 against the old database.
+3. Briefly stop But Why writes.
+4. Archive the old operational state, including the Git Common Directory state and repository reviewer files.
+5. Preserve that archive without rewriting the old database.
+6. Initialize the new Shared Repository State from merged `main` with the Task 7 executable.
+7. Verify the new Trusted But Why Executable and state before recording new work.
+8. Resume development in the new state, record the post-cutover plan-removal Task, and finish release work before npm publication.
 
 Verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
 If verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
@@ -291,7 +594,8 @@ Do not change current architecture or ADR authority before implementation.
 ## Implementation-time procedure
 
 Define and test the exact manual trusted-executable cutover commands during baseline implementation, when the implemented baseline CLI and archive layout are available.
-Review the runbook before cutover and store the old-state inspection instructions in the archive.
+Keep the procedure direct: verify the commands on a disposable repository, present the exact destructive step for one confirmation, and then execute the approved procedure on the Operator's behalf.
+Store the old-state inspection instructions in the archive.
 Do not add product cutover, rollback, or prerelease conversion commands.
 
 ## Authorization status
