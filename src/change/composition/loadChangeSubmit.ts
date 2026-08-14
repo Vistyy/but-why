@@ -111,6 +111,17 @@ export const loadChangeSubmit = (input: {
         validationRepoConfig,
         reviewerConfiguration,
       ) => {
+        if (reviewerConfiguration !== undefined) {
+          return resolveCandidateValidationPolicy({
+            context,
+            globalConfigPath: input.globalConfigPath,
+            acceptanceContextSupplied,
+            repoConfig,
+            ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
+            repoRoot: worktreePath,
+            reviewerConfiguration,
+          });
+        }
         const globalConfig = readGlobalConfig(input.globalConfigPath);
         return globalConfig.ok
           ? resolveCandidateValidationPolicy({
@@ -121,7 +132,6 @@ export const loadChangeSubmit = (input: {
               repoConfig,
               ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
               repoRoot: worktreePath,
-              ...(reviewerConfiguration === undefined ? {} : { reviewerConfiguration }),
             })
           : globalConfig;
       },

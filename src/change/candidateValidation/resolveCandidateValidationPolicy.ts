@@ -32,18 +32,26 @@ export type CandidateValidationPolicyResolution =
       readonly error: SubmitRejectionError | GlobalConfigValidationFailed;
     };
 
-export const resolveCandidateValidationPolicy = (input: {
+type CandidateValidationPolicyInput = {
   readonly context:
     | LocalRepositoryContext
     | { readonly root: string; readonly config?: RepoConfig };
   readonly globalConfigPath: string;
-  readonly globalConfig: GlobalConfig;
   readonly acceptanceContextSupplied: boolean;
   readonly repoConfig?: RepoConfig;
   readonly validationRepoConfig?: RepoConfig;
   readonly repoRoot?: string;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
-}): CandidateValidationPolicyResolution => {
+} & (
+  | { readonly globalConfig: GlobalConfig; readonly reviewerConfiguration?: undefined }
+  | {
+      readonly globalConfig?: GlobalConfig;
+      readonly reviewerConfiguration: ChangeReviewerConfiguration;
+    }
+);
+
+export const resolveCandidateValidationPolicy = (
+  input: CandidateValidationPolicyInput,
+): CandidateValidationPolicyResolution => {
   const repoConfig = input.repoConfig ?? input.context.config;
   const repoRoot = input.repoRoot ?? input.context.root;
   if (repoConfig === undefined) {
