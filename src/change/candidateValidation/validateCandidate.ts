@@ -466,6 +466,15 @@ const runCandidatePhases = (
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
                 recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
+                ...(dependencies.persistence.settleAgentInvocationRound === undefined
+                  ? {}
+                  : {
+                      settleAgentInvocationRound:
+                        dependencies.persistence.settleAgentInvocationRound,
+                    }),
+                ...(dependencies.persistence.recordArtifactRecords === undefined
+                  ? {}
+                  : { recordArtifactRecords: dependencies.persistence.recordArtifactRecords }),
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -491,6 +500,14 @@ const runCandidatePhases = (
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,
           recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
+          ...(dependencies.persistence.settleAgentInvocationRound === undefined
+            ? {}
+            : {
+                settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
+              }),
+          ...(dependencies.persistence.recordArtifactRecords === undefined
+            ? {}
+            : { recordArtifactRecords: dependencies.persistence.recordArtifactRecords }),
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

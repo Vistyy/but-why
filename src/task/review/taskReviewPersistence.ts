@@ -148,6 +148,13 @@ export type TaskReviewPersistence = {
     readonly configuration: AgentSessionConfiguration;
     readonly configurationSnapshot?: unknown;
   }) => AgentSessionSqlLink;
+  readonly settleAgentReview?: (input: {
+    readonly reviewId: string;
+    readonly findings: readonly TaskReviewFinding[];
+    readonly toolingFailure?: TaskReviewToolingFailure;
+    readonly now: string;
+    readonly complete: boolean;
+  }) => AgentSessionSqlLink;
   readonly getReviewerSession: (
     taskId: string,
     producer: string,

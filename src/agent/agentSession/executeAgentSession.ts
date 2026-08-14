@@ -20,7 +20,7 @@ export type AgentExecutionEvidence = {
   readonly continuationId: number;
 };
 
-export type ExecuteAgentSessionInput<Output> = {
+export type ExecuteAgentSessionInput<Output, DomainError = never> = {
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
   readonly agentPersistence: AgentSessionPersistence;
@@ -45,7 +45,7 @@ export type ExecuteAgentSessionInput<Output> = {
     readonly invocationId: number;
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
-  }) => AgentSessionSqlLink | undefined;
+  }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError>;
   readonly now?: () => Date;
 };
 
@@ -54,11 +54,11 @@ export type ExecuteAgentSessionResult<Output> = {
   readonly evidence: AgentExecutionEvidence;
 };
 
-export const executeAgentSession = <Output>(
-  input: ExecuteAgentSessionInput<Output>,
+export const executeAgentSession = <Output, DomainError = never>(
+  input: ExecuteAgentSessionInput<Output, DomainError>,
 ): Effect.Effect<
   ExecuteAgentSessionResult<Output>,
-  import("../../contracts/repositoryStorageError.js").RepositoryStorageError
+  import("../../contracts/repositoryStorageError.js").RepositoryStorageError | DomainError
 > =>
   Effect.gen(function* () {
     let prompt = input.prompt;
@@ -135,11 +135,34 @@ export const executeAgentSession = <Output>(
         interrupted ? "return_unknown" : undefined,
         input.now,
       );
-      const settleDomain = input.settleDomain?.({
-        invocationId: dispatch.dispatch.invocation.id,
-        result,
-        invocationNumber,
-      });
+      const invocationEvidenceRecord: AgentInvocationRecord = {
+        ...dispatch.dispatch.invocation,
+        settledAt: settlement.settledAt,
+        settlementKind: settlement.kind,
+        usage: settlement.usage ?? null,
+        continuation: {
+          ...dispatch.dispatch.continuation,
+          ...(settlement.transcriptPath === undefined
+            ? {}
+            : { transcriptPath: settlement.transcriptPath }),
+          ...(settlement.unusableReason === undefined
+            ? {}
+            : { unusableReason: settlement.unusableReason }),
+        },
+      };
+      const shouldRetry =
+        !result.ok &&
+        result.failure.kind === "output_contract" &&
+        result.sessionReference !== undefined &&
+        invocationNumber < 3;
+      const settleDomain =
+        !shouldRetry && input.settleDomain !== undefined
+          ? yield* input.settleDomain({
+              invocationId: dispatch.dispatch.invocation.id,
+              result,
+              invocationNumber,
+            })
+          : undefined;
       yield* Effect.uninterruptible(
         settleDomain === undefined
           ? input.agentPersistence.settleInvocation({
@@ -154,21 +177,7 @@ export const executeAgentSession = <Output>(
               settleDomain,
             }),
       );
-      invocationEvidence.push({
-        ...dispatch.dispatch.invocation,
-        settledAt: settlement.settledAt,
-        settlementKind: settlement.kind,
-        usage: settlement.usage ?? null,
-        continuation: {
-          ...dispatch.dispatch.continuation,
-          ...(settlement.transcriptPath === undefined
-            ? {}
-            : { transcriptPath: settlement.transcriptPath }),
-          ...(settlement.unusableReason === undefined
-            ? {}
-            : { unusableReason: settlement.unusableReason }),
-        },
-      });
+      invocationEvidence.push(invocationEvidenceRecord);
 
       if (result.ok) {
         return {
@@ -180,7 +189,7 @@ export const executeAgentSession = <Output>(
           },
         };
       }
-      if (result.failure.kind !== "output_contract" || result.sessionReference === undefined) break;
+      if (!shouldRetry) break;
       prompt = result.failure.correctionPrompt ?? result.failure.message;
     }
 

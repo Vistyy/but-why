@@ -122,6 +122,16 @@ export type RunAcceptanceReviewPhaseInput = {
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
   }) => import("../../agent/agentSession/agentSession.js").AgentSessionSqlLink;
+  readonly settleAgentInvocationRound?: (
+    input: Parameters<
+      NonNullable<
+        import("../validation/changeValidationPorts.js").CandidateValidationExecutionPort["settleAgentInvocationRound"]
+      >
+    >[0],
+  ) => import("../../agent/agentSession/agentSession.js").AgentSessionSqlLink;
+  readonly recordArtifactRecords?: NonNullable<
+    import("../validation/changeValidationPorts.js").CandidateValidationExecutionPort["recordArtifactRecords"]
+  >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
@@ -265,49 +275,76 @@ const runAcceptanceReviewPhaseImpl = (
       input.getAgentSession === undefined
         ? undefined
         : yield* input.getAgentSession(input.changeId, "acceptance");
-    const execution =
-      input.agentPersistence !== undefined && input.linkAgentInvocation !== undefined
-        ? yield* executeAgentSession<ReviewerOutput>({
-            ...(agentSessionId === undefined ? {} : { agentSessionId }),
-            configuration: agentConfiguration(input.policy.profile),
-            agentPersistence: input.agentPersistence,
-            linkInvocation: input.linkAgentInvocation({
-              changeId: input.changeId,
-              producer: "acceptance",
-              validationRunId: input.validationRunId,
-              phase: validationPhase.acceptanceReview,
-              configurationSnapshot: input.policy,
-            }),
-            reviewerRuntime: input.runtime,
-            reviewerExecutor: input.reviewerExecutor,
-            decodeOutput,
-            prompt,
-            continuationPrompt,
-            commandCwd: input.commandCwd,
-            resourceRoot: input.resourceRoot ?? input.commandCwd,
-            profile: input.policy.profile,
-            reviewer: "acceptance",
-            sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
-            ...(input.agentEnvironment === undefined
-              ? {}
-              : { agentEnvironment: input.agentEnvironment }),
-          })
-        : yield* executeReviewerSession({
-            identity,
-            runtime: input.runtime,
-            reviewerExecutor: input.reviewerExecutor,
-            decodeOutput: (output, reviewCall) => decodeOutput(output, reviewCall),
-            prompt,
-            continuationPrompt,
-            commandCwd: input.commandCwd,
-            ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-            ...(input.sessionStorageRoot === undefined
-              ? {}
-              : { sessionStorageRoot: input.sessionStorageRoot }),
-            ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
-            completeReview: ({ initialResult }) =>
-              verifyIntegrity(input).pipe(Effect.as(initialResult)),
-          });
+    const usingAgentSettlement =
+      input.agentPersistence !== undefined &&
+      input.linkAgentInvocation !== undefined &&
+      input.settleAgentInvocationRound !== undefined &&
+      input.recordArtifactRecords !== undefined;
+    const execution = usingAgentSettlement
+      ? yield* executeAgentSession<ReviewerOutput>({
+          ...(agentSessionId === undefined ? {} : { agentSessionId }),
+          configuration: agentConfiguration(input.policy.profile),
+          agentPersistence: input.agentPersistence,
+          linkInvocation: input.linkAgentInvocation({
+            changeId: input.changeId,
+            producer: "acceptance",
+            validationRunId: input.validationRunId,
+            phase: validationPhase.acceptanceReview,
+            configurationSnapshot: input.policy,
+          }),
+          reviewerRuntime: input.runtime,
+          reviewerExecutor: input.reviewerExecutor,
+          decodeOutput,
+          prompt,
+          continuationPrompt,
+          commandCwd: input.commandCwd,
+          resourceRoot: input.resourceRoot ?? input.commandCwd,
+          profile: input.policy.profile,
+          reviewer: "acceptance",
+          sessionStorageRoot: input.sessionStorageRoot ?? input.commandCwd,
+          ...(input.agentEnvironment === undefined
+            ? {}
+            : { agentEnvironment: input.agentEnvironment }),
+          settleDomain: ({ result: runtimeResult }) => {
+            const result = translateRuntimeResult(runtimeResult, "acceptance");
+            const findings = result.ok
+              ? result.report.findings.map((finding, index) => ({
+                  id: `${input.validationRunId}-acceptance-F${index + 1}`,
+                  validationRunId: input.validationRunId,
+                  phase: validationPhase.acceptanceReview,
+                  producer: "acceptance" as const,
+                  ...finding,
+                }))
+              : [];
+            return Effect.succeed(
+              input.settleAgentInvocationRound?.({
+                validationRunId: input.validationRunId,
+                phase: validationPhase.acceptanceReview,
+                producer: "acceptance",
+                roundNumber: 1,
+                roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+                findings,
+                now: input.now,
+              }),
+            );
+          },
+        })
+      : yield* executeReviewerSession({
+          identity,
+          runtime: input.runtime,
+          reviewerExecutor: input.reviewerExecutor,
+          decodeOutput: (output, reviewCall) => decodeOutput(output, reviewCall),
+          prompt,
+          continuationPrompt,
+          commandCwd: input.commandCwd,
+          ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+          ...(input.sessionStorageRoot === undefined
+            ? {}
+            : { sessionStorageRoot: input.sessionStorageRoot }),
+          ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
+          completeReview: ({ initialResult }) =>
+            verifyIntegrity(input).pipe(Effect.as(initialResult)),
+        });
     const result = translateRuntimeResult(execution.result, "acceptance");
     const reviewerEvidence: ReviewerExecutionEvidence =
       execution.evidence.invocations !== undefined
@@ -326,6 +363,13 @@ const runAcceptanceReviewPhaseImpl = (
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       executionEvidence: reviewerEvidence,
     });
+    if (usingAgentSettlement) {
+      yield* input.recordArtifactRecords?.({
+        validationRunId: input.validationRunId,
+        artifactRecords: artifacts,
+        now: input.now,
+      });
+    }
     const findings = result.ok
       ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
@@ -335,14 +379,16 @@ const runAcceptanceReviewPhaseImpl = (
           ...finding,
         }))
       : [];
-    yield* input.recordAcceptanceRound({
-      validationRunId: input.validationRunId,
-      roundNumber: 1,
-      roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
-      artifactRecords: artifacts,
-      findings,
-      now: input.now,
-    });
+    if (!usingAgentSettlement) {
+      yield* input.recordAcceptanceRound({
+        validationRunId: input.validationRunId,
+        roundNumber: 1,
+        roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+        artifactRecords: artifacts,
+        findings,
+        now: input.now,
+      });
+    }
     if (!result.ok) {
       return {
         findings: 0,

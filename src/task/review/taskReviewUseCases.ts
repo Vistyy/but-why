@@ -313,7 +313,8 @@ const submitTaskReview = (
                   : yield* input.persistence.getReviewerAgentSession(taskId);
               const execution =
                 input.agentPersistence !== undefined &&
-                input.persistence.linkAgentInvocation !== undefined
+                input.persistence.linkAgentInvocation !== undefined &&
+                input.persistence.settleAgentReview !== undefined
                   ? yield* executeAgentSession({
                       ...(reviewerSessionId === undefined
                         ? {}
@@ -341,6 +342,39 @@ const submitTaskReview = (
                       reviewer: "task",
                       sessionStorageRoot: input.reviewerSessionStorageRoot,
                       ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                      settleDomain: ({ result }) =>
+                        Effect.gen(function* () {
+                          const evidence = yield* Effect.either(
+                            settleTaskReviewEvidence(input, admitted.review, now),
+                          );
+                          const cleanupFailure =
+                            evidence._tag === "Left"
+                              ? {
+                                  operation: "settle_task_review_evidence",
+                                  message: taskReviewStorageErrorMessage(evidence.left),
+                                }
+                              : evidence.right.ok
+                                ? undefined
+                                : {
+                                    operation: "settle_task_review_evidence",
+                                    message: evidence.right.message,
+                                  };
+                          const toolingFailure =
+                            cleanupFailure ??
+                            (result.ok
+                              ? undefined
+                              : {
+                                  operation: result.failure.operationName,
+                                  message: result.failure.message,
+                                });
+                          return input.persistence.settleAgentReview!({
+                            reviewId,
+                            findings: result.ok ? result.report.findings : [],
+                            ...(toolingFailure === undefined ? {} : { toolingFailure }),
+                            now,
+                            complete: toolingFailure === undefined,
+                          });
+                        }),
                     })
                   : yield* executeReviewerSession<TaskReviewerOutput, never>({
                       identity: {
@@ -494,6 +528,11 @@ const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgr
   model: profile.profile.runtimeConfig?.model ?? "unknown",
   thinking: profile.profile.runtimeConfig?.thinking ?? "default",
 });
+
+const taskReviewStorageErrorMessage = (error: RepositoryStorageError): string =>
+  "operationName" in error
+    ? `Task Review persistence failed during ${error.operationName}.`
+    : `Task Review persistence failed: ${error._tag}.`;
 
 export const inspectTaskReviewIdentity = (
   input: {

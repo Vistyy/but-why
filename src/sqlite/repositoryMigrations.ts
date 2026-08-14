@@ -84,11 +84,24 @@ const migrations = {
   "0040_agent_sessions": agentSessions,
 };
 
+const migrationKeys = Object.keys(migrations).sort();
+
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord(migrations),
 });
 
-export const repositoryMigrationIds: readonly number[] = Object.keys(migrations)
+export const migrateRepositoryStateThrough = (lastMigrationId: number) =>
+  Migrator.make({})({
+    loader: Migrator.fromRecord(
+      Object.fromEntries(
+        migrationKeys
+          .filter((key) => Number(key.slice(0, 4)) <= lastMigrationId)
+          .map((key) => [key, migrations[key as keyof typeof migrations]]),
+      ),
+    ),
+  });
+
+export const repositoryMigrationIds: readonly number[] = migrationKeys
   .map((key) => /^(\d+)_/.exec(key)?.[1])
   .filter((id): id is string => id !== undefined)
   .map(Number)

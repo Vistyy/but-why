@@ -322,6 +322,47 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           VALUES (${input.reviewId}, ${invocationId})
         `;
         }).pipe(Effect.asVoid),
+    settleAgentReview:
+      (input): AgentSessionSqlLink =>
+      (sql, invocationId) =>
+        Effect.gen(function* () {
+          const linked = yield* sql<{ readonly reviewId: string }>`
+            SELECT review_id AS reviewId FROM task_review_agent_invocations
+            WHERE review_id = ${input.reviewId} AND agent_invocation_id = ${invocationId}
+          `;
+          if (linked.length === 0)
+            return yield* invalid(
+              "settle Task Review with Agent Invocation",
+              "Invocation is not linked to the Task Review",
+            );
+          if (input.complete) {
+            const completed = yield* completeReview(
+              sql,
+              input.reviewId,
+              input.findings,
+              input.toolingFailure,
+              undefined,
+              input.now,
+            );
+            if (!completed.ok)
+              return yield* invalid(
+                "settle Task Review with Agent Invocation",
+                `Task Review did not complete: ${completed.code}`,
+              );
+          } else {
+            const failure = input.toolingFailure;
+            if (failure === undefined)
+              return yield* invalid(
+                "settle Task Review with Agent Invocation",
+                "Active Agent Task Review settlement requires a Tooling Failure",
+              );
+            yield* sql`
+              UPDATE task_reviews
+              SET tooling_failure = ${JSON.stringify(failure)}, updated_at = ${input.now}
+              WHERE id = ${input.reviewId} AND state = 'running'
+            `;
+          }
+        }).pipe(Effect.asVoid),
     getReviewerSession: (taskId, producer) =>
       repository.transaction("read Task Reviewer Session", (sql) =>
         Effect.map(
@@ -602,7 +643,7 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      if (abandonReason !== undefined || current.outcome !== "tooling_failed") {
+      if (abandonReason !== undefined) {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
       const taskState = yield* readTaskState(sql, current.taskId);
