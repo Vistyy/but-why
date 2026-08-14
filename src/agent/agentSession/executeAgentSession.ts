@@ -2,7 +2,7 @@ import { isAbsolute, relative, sep } from "node:path";
 
 import { Cause, Effect } from "effect";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
-import { type ReviewerAgentResult, type ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
+import type { ReviewerAgentResult, ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
 import type { TokenUsage } from "../tokenUsage.js";
 import { RepositoryPersistedDataInvalid } from "../../contracts/repositoryStorageError.js";
@@ -46,7 +46,7 @@ export type ExecuteAgentSessionInput<Output, DomainError = never> = {
     readonly result: ReviewerAgentResult<Output>;
     readonly invocationNumber: number;
   }) => Effect.Effect<AgentSessionSqlLink | undefined, DomainError>;
-  readonly now?: () => Date;
+  readonly now: () => Date;
 };
 
 export type ExecuteAgentSessionResult<Output> = {
@@ -72,7 +72,7 @@ export const executeAgentSession = <Output, DomainError = never>(
       const dispatch = yield* input.agentPersistence.beginInvocation({
         ...(sessionId === undefined ? {} : { agentSessionId: sessionId }),
         configuration: input.configuration,
-        createdAt: (input.now ?? (() => new Date()))().toISOString(),
+        createdAt: input.now().toISOString(),
         linkInvocation: input.linkInvocation,
       });
       if (!dispatch.ok) {
@@ -208,7 +208,7 @@ const settlementFor = <Output>(
   result: ReviewerAgentResult<Output>,
   sessionStorageRoot: string,
   forcedKind: AgentInvocationSettlementKind | undefined,
-  now: (() => Date) | undefined,
+  now: () => Date,
 ): {
   readonly settledAt: string;
   readonly kind: AgentInvocationSettlementKind;
@@ -216,7 +216,7 @@ const settlementFor = <Output>(
   readonly transcriptPath?: string | null;
   readonly unusableReason?: string | null;
 } => {
-  const settledAt = (now ?? (() => new Date()))().toISOString();
+  const settledAt = now().toISOString();
   const transcriptPath = safeTranscriptPath(sessionStorageRoot, result.sessionFilePath);
   if (result.ok) {
     return {

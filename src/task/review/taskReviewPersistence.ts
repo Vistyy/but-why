@@ -53,6 +53,7 @@ export type CompleteTaskReviewInput = {
   readonly findings: readonly TaskReviewFinding[];
   readonly toolingFailure?: TaskReviewToolingFailure;
   readonly now: string;
+  readonly agentSettlement?: boolean;
 };
 
 type CompletedTaskReviewRecord = Omit<TaskReviewRecord, "state" | "outcome"> & {

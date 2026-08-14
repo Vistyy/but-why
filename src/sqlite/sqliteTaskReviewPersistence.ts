@@ -141,6 +141,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           input.toolingFailure,
           undefined,
           input.now,
+          input.agentSettlement === true,
         ),
       ),
     abandon: (reviewId, reason, now) =>
@@ -343,6 +344,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               input.toolingFailure,
               undefined,
               input.now,
+              true,
             );
             if (!completed.ok)
               return yield* invalid(
@@ -636,6 +638,7 @@ const completeReview = (
   toolingFailure: TaskReviewToolingFailure | undefined,
   abandonReason: string | undefined,
   now: string,
+  allowAlreadyComplete = false,
 ) =>
   Effect.gen(function* () {
     const current = yield* getReview(sql, reviewId);
@@ -643,7 +646,10 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      if (abandonReason !== undefined) {
+      if (
+        abandonReason !== undefined ||
+        (!allowAlreadyComplete && current.outcome !== "tooling_failed")
+      ) {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
       const taskState = yield* readTaskState(sql, current.taskId);

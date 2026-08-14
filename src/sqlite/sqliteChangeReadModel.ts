@@ -174,7 +174,7 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
 };
 
 const decodeChangeReviewerConfiguration = (source: string): ChangeReviewerConfiguration => {
-  const value: unknown = JSON.parse(source);
+  const value: unknown = JSON.parse(source) as unknown;
   if (
     typeof value !== "object" ||
     value === null ||

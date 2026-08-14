@@ -340,6 +340,7 @@ const runSpecialist = (
           ...(input.agentEnvironment === undefined
             ? {}
             : { agentEnvironment: input.agentEnvironment }),
+          now: () => new Date(input.now),
           settleDomain: ({ result: runtimeResult }) => {
             const result = translateRuntimeResult(runtimeResult, policy.id);
             const findings = result.ok

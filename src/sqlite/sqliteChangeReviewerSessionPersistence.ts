@@ -71,12 +71,14 @@ export const openSqliteChangeReviewerSessionPort = () =>
             const configuration = configurations[0]?.configuration;
             if (configuration !== undefined && configuration !== null) {
               const replacement = yield* Effect.try({
-                try: () =>
-                  replaceChangeRoleConfiguration(
-                    JSON.parse(configuration) as ChangeReviewerConfiguration,
+                try: () => {
+                  const decoded: unknown = JSON.parse(configuration) as unknown;
+                  return replaceChangeRoleConfiguration(
+                    decoded as ChangeReviewerConfiguration,
                     input.producer,
                     input.configurationSnapshot,
-                  ),
+                  );
+                },
                 catch: (cause) =>
                   new RepositoryPersistedDataInvalid({
                     operationName: "correct Change Agent configuration",

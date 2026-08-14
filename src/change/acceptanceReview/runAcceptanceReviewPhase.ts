@@ -305,6 +305,7 @@ const runAcceptanceReviewPhaseImpl = (
           ...(input.agentEnvironment === undefined
             ? {}
             : { agentEnvironment: input.agentEnvironment }),
+          now: () => new Date(input.now),
           settleDomain: ({ result: runtimeResult }) => {
             const result = translateRuntimeResult(runtimeResult, "acceptance");
             const findings = result.ok

@@ -25,7 +25,7 @@ export type StoredValidationRoundRow = {
   readonly createdAt: string;
 };
 
-export type StoredValidationAgentInvocationRow = {
+type StoredValidationAgentInvocationRow = {
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly id: number;

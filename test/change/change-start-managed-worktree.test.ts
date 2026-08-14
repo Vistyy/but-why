@@ -618,6 +618,13 @@ const initializedRepository = (workspace?: string): string => {
   const root = createInitializedRepo(workspace);
   git(root, "config", "user.name", "But Why Test");
   git(root, "config", "user.email", "but-why@example.test");
+  writeFileSync(
+    join(root, ".test-global-config.json"),
+    JSON.stringify({
+      defaultAgentProfile: { scope: "global", name: "test" },
+      agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+    }),
+  );
   git(root, "branch", "-M", "main");
   writeFileSync(join(root, "README.md"), "# Test repository\n");
   git(root, "add", "README.md", ".but-why/config.json");

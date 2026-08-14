@@ -4,11 +4,6 @@ import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { TokenUsage } from "../tokenUsage.js";
 
-export const agentHarness = {
-  pi: "pi",
-} as const;
-
-export type AgentHarness = (typeof agentHarness)[keyof typeof agentHarness];
 export type AgentThinking = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export type AgentSessionConfiguration = {
@@ -86,10 +81,3 @@ export type AgentSessionPersistence = {
 
 export const piSessionIdForContinuation = (continuationId: number): string =>
   `by-agent-${continuationId}`;
-
-export const tokenUsageColumns = (usage: TokenUsage | undefined) => ({
-  inputTokens: usage?.inputTokens ?? null,
-  cachedInputTokens: usage?.cachedInputTokens ?? null,
-  outputTokens: usage?.outputTokens ?? null,
-  totalTokens: usage?.totalTokens ?? null,
-});

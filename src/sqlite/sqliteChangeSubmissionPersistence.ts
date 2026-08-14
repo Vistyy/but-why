@@ -205,7 +205,7 @@ const decodeSelectedAcceptanceContext = (value: string | null) =>
 const decodeReviewerConfiguration = (value: unknown) => {
   const encoded = decodeStoredNullableString(value, "Change Reviewer Configuration");
   if (encoded === null) return null;
-  const decoded: unknown = JSON.parse(encoded);
+  const decoded: unknown = JSON.parse(encoded) as unknown;
   if (
     typeof decoded !== "object" ||
     decoded === null ||
