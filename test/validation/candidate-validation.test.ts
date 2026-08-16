@@ -298,8 +298,8 @@ describe("Candidate validation", () => {
             repository.operation("install current Acceptance Context", (sql) =>
               Effect.gen(function* () {
                 yield* sql`
-                  INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-                  VALUES ('BY-1', 1, 'Validate the fixed Gate',
+                  INSERT INTO tasks (id, title, description, state, created_at, updated_at)
+                  VALUES (1, 'Validate the fixed Gate',
                     'Run each eligible phase in its fixed order.', 'todo', ${now}, ${now})
                 `;
                 yield* sql`
@@ -313,7 +313,7 @@ describe("Candidate validation", () => {
                 `;
                 yield* sql`
                   INSERT INTO task_change_links (task_id, change_id)
-                  VALUES ('BY-1', ${captured.changeId})
+                  VALUES (1, ${captured.changeId})
                 `;
               }),
             ),

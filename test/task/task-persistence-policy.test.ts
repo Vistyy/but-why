@@ -136,14 +136,14 @@ it.scoped(
           (sql) => sql`
           UPDATE tasks SET
             updated_at = CASE id
-              WHEN 'BY-1' THEN ${firstNow}
-              WHEN 'BY-2' THEN ${thirdNow}
-              WHEN 'BY-3' THEN ${thirdNow}
-              WHEN 'BY-4' THEN ${secondNow}
-              WHEN 'BY-5' THEN ${thirdNow}
+              WHEN 1 THEN ${firstNow}
+              WHEN 2 THEN ${thirdNow}
+              WHEN 3 THEN ${thirdNow}
+              WHEN 4 THEN ${secondNow}
+              WHEN 5 THEN ${thirdNow}
               ELSE ${thirdNow}
             END
-          WHERE id IN ('BY-1', 'BY-2', 'BY-3', 'BY-4', 'BY-5')
+          WHERE id IN (1, 2, 3, 4, 5)
         `,
         );
 

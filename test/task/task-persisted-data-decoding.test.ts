@@ -33,9 +33,9 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
       yield* repository.operation("set terminal Task fixtures", (sql) =>
         sql.unsafe(`
           UPDATE tasks
-          SET state = CASE id WHEN 'BY-3' THEN 'done' ELSE 'cancelled' END,
-              cancel_reason = CASE id WHEN 'BY-4' THEN 'Cancelled fixture' ELSE NULL END
-          WHERE id IN ('BY-3', 'BY-4')
+          SET state = CASE id WHEN 3 THEN 'done' ELSE 'cancelled' END,
+              cancel_reason = CASE id WHEN 4 THEN 'Cancelled fixture' ELSE NULL END
+          WHERE id IN (3, 4)
         `),
       );
       const started = yield* starts.create({
@@ -57,7 +57,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
           id, change_id, reported_at, content, resolved_at,
           resolution_id, resolution_recorded_at, resolution_content
         ) VALUES (
-          'blocker-1', 'change-with-resolution', '${secondNow}', 'Question', '${secondNow}',
+          'blocker-1', 1, '${secondNow}', 'Question', '${secondNow}',
           'resolution-1', '${secondNow}', 'Approved resolution'
         )
       `),
@@ -114,13 +114,13 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       yield* repository.operation("inject malformed prerequisite Task state", (sql) =>
         Effect.gen(function* () {
           yield* sql`PRAGMA ignore_check_constraints = ON`;
-          yield* sql`UPDATE tasks SET state = 'unsupported' WHERE id = 'BY-1'`;
+          yield* sql`UPDATE tasks SET state = 'unsupported' WHERE id = 1`;
         }),
       );
       yield* expectPersistedDataInvalid(starts.prepareTask(publicTaskId("BY-2")));
       yield* repository.operation(
         "restore prerequisite Task state",
-        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`,
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 1`,
       );
 
       const started = yield* starts.create({
@@ -138,7 +138,7 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation(
         "inject malformed existing Change Task state",
-        (sql) => sql`UPDATE tasks SET state = 'unsupported' WHERE id = 'BY-3'`,
+        (sql) => sql`UPDATE tasks SET state = 'unsupported' WHERE id = 3`,
       );
       yield* expectPersistedDataInvalid(starts.prepareTask(publicTaskId("BY-3")));
     }),
@@ -156,7 +156,7 @@ it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
       yield* repository.operation("insert self-referential Task dependency", (sql) =>
         sql.unsafe(`
           INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-          VALUES ('BY-1', 'BY-1')
+          VALUES (1, 1)
         `),
       );
 

@@ -43,9 +43,9 @@ describe("by change reconcile --discard-work", () => {
             const starts = yield* openSqliteChangeStartPersistence();
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
-              id: "change-contended",
+              id: "BY-C1",
               repositoryCommonDirectory: commonDirectory,
-              branchRef: "refs/heads/but-why/change-contended",
+              branchRef: "refs/heads/but-why/BY-C1",
               baseRef: "refs/heads/main",
               baseRemoteUrl: "https://github.com/acme/repo.git",
               startingCommit: git(root, "rev-parse", "refs/heads/main"),
@@ -66,13 +66,8 @@ describe("by change reconcile --discard-work", () => {
 
         const result = yield* openSqliteExecutionLock({ commonDirectory }).withLock({
           owner: "change_submission",
-          key: "change-contended",
-          effect: runByInProcessEffect(root, [
-            "change",
-            "reconcile",
-            "change-contended",
-            "--discard-work",
-          ]),
+          key: "BY-C1",
+          effect: runByInProcessEffect(root, ["change", "reconcile", "BY-C1", "--discard-work"]),
         });
 
         expect(result.status).toBe(1);
@@ -80,7 +75,7 @@ describe("by change reconcile --discard-work", () => {
           error: {
             code: "submission_in_progress",
             message: "Another operation owns the Change execution lock.",
-            changes: [{ changeId: "change-contended", status: "submission_in_progress" }],
+            changes: [{ changeId: "BY-C1", status: "submission_in_progress" }],
           },
           help: ["Wait for the current Change operation to finish, then retry reconciliation."],
         });
@@ -95,9 +90,9 @@ describe("by change reconcile --discard-work", () => {
         const root = createInitializedRepo();
         commitButWhyConfigAndRecordDefault(root);
         const commonDirectory = join(root, ".git");
-        const recordedWorktreePath = join(root, "worktrees", "but-why", "change-pending");
-        const actualWorktree = join(root, "actual", "change-pending");
-        git(root, "worktree", "add", "-b", "but-why/change-pending", actualWorktree, "main");
+        const recordedWorktreePath = join(root, "worktrees", "but-why", "BY-C1");
+        const actualWorktree = join(root, "actual", "BY-C1");
+        git(root, "worktree", "add", "-b", "but-why/BY-C1", actualWorktree, "main");
         writeFileSync(join(actualWorktree, "feature.txt"), "unique\n");
         git(actualWorktree, "add", "feature.txt");
         git(actualWorktree, "commit", "-m", "Unique");
@@ -110,9 +105,9 @@ describe("by change reconcile --discard-work", () => {
             const starts = yield* openSqliteChangeStartPersistence();
             const changes = yield* openSqliteChangeTestDependencies();
             const created = yield* starts.create({
-              id: "change-pending",
+              id: "BY-C1",
               repositoryCommonDirectory: commonDirectory,
-              branchRef: "refs/heads/but-why/change-pending",
+              branchRef: "refs/heads/but-why/BY-C1",
               baseRef: "refs/heads/main",
               baseRemoteUrl: "https://github.com/acme/repo.git",
               startingCommit: git(root, "rev-parse", "refs/heads/main"),
@@ -134,7 +129,7 @@ describe("by change reconcile --discard-work", () => {
         const result = yield* runByInProcessEffect(root, [
           "change",
           "reconcile",
-          "change-pending",
+          "BY-C1",
           "--discard-work",
         ]);
 
@@ -149,14 +144,12 @@ describe("by change reconcile --discard-work", () => {
         };
         expect(stdout.changes).toEqual([
           {
-            changeId: "change-pending",
+            changeId: "BY-C1",
             status: "cleanup_pending",
             cleanup: { state: "pending", blockingReason: "worktree_path_unsafe" },
           },
         ]);
-        expect(stdout.help.join(" ")).toContain(
-          "by change reconcile change-pending --discard-work",
-        );
+        expect(stdout.help.join(" ")).toContain("by change reconcile BY-C1 --discard-work");
         expect(existsSync(actualWorktree)).toBe(true);
       }),
     30_000,

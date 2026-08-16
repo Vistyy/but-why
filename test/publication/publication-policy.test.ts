@@ -311,8 +311,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         yield* repository.operation(
           "create publication Task",
           (sql) => sql`
-        INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-        VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
+        INSERT INTO tasks (id, title, description, state, created_at, updated_at)
+        VALUES (1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
       `,
         );
         yield* repository.operation("attach Task publication metadata", (sql) =>
@@ -325,7 +325,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               `;
             yield* sql`
                 INSERT INTO task_change_links (task_id, change_id)
-                VALUES ('BY-1', ${fixture.captured.changeId})
+                VALUES (1, ${fixture.captured.changeId})
               `;
           }),
         );

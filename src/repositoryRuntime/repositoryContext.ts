@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepoConfigValidationFailed } from "../contracts/configErrors.js";
+import { isIdPrefix } from "../contracts/idPrefix.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
   RepositoryIdentityConflict,
@@ -15,7 +16,6 @@ import {
   type RestoredTransientChangeFact,
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
-import { isIdPrefix } from "../contracts/idPrefix.js";
 import { findCurrentWorktreeFacts, findGitRoot } from "../init/adapters/git.js";
 import { readRepoConfig, writeRepoConfig } from "../init/adapters/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
