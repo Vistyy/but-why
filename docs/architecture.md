@@ -51,7 +51,8 @@ Task Revision atomically returns an unlinked Todo Task to New while preserving i
 
 Change Start creates one Change and its Managed Worktree, optionally linked to an approved Task.
 Submission returns without validation when there is no changed Candidate.
-Otherwise it selects an exact Candidate, runs the fixed Validation Gate, and publishes the Candidate only with eligible evidence.
+Otherwise it selects an exact Candidate, resolves validation policy from the exact fetched Change Base and stored Change Start reviewer facts, runs the fixed Validation Gate, and publishes the Candidate only with eligible evidence.
+The prerelease source repository validates actual Candidate Repo Config through a Change Base-controlled Check and a read-only Candidate source entrypoint in the Snapshot Workspace.
 Reconciliation observes publication and merge facts before coordination completes a Change and its linked Task atomically.
 
 The fixed Validation Gate and project-owned execution boundary are defined by [ADR 0001](adr/0001-use-fixed-validation-gate-with-project-owned-execution.md).

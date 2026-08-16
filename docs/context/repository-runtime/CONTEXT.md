@@ -38,6 +38,12 @@ A temporary pre-publication command path used only because the published But Why
 It does not define normal installation behavior.
 _Avoid_: source mode, development installation
 
+**Candidate Repo Config Validator**:
+The prerelease read-only source entrypoint that uses Candidate code to validate the actual Candidate Repo Config in a Snapshot Workspace.
+It does not open Shared Repository State or provide Candidate access to live repository-state operations.
+The Trusted But Why Executable invokes it only through a Check selected from the exact Change Base Repo Config.
+_Avoid_: Candidate CLI, submission policy resolver, compatibility parser
+
 **Migration Artifact**:
 One numbered source artifact that defines an ordered Shared Repository State migration.
 Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.

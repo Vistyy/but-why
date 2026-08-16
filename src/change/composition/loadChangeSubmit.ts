@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import { Effect } from "effect";
 
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
@@ -7,7 +5,7 @@ import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
-import { decodeRepoConfigSource, readRepoConfig } from "../../init/adapters/repoConfig.js";
+import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
@@ -82,19 +80,6 @@ export const loadChangeSubmit = (input: {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
       github,
-      loadRepoConfig: (worktreePath): ManagedRepoConfigResolution => {
-        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-        return managedConfig.ok
-          ? managedConfig
-          : {
-              ok: false,
-              message: `Candidate Repo Config is invalid: ${managedConfig.error.message}`,
-              ...(managedConfig.error.path === undefined ? {} : { path: managedConfig.error.path }),
-              ...(managedConfig.error.diagnostics === undefined
-                ? {}
-                : { diagnostics: managedConfig.error.diagnostics }),
-            };
-      },
       loadRepoConfigAtCommit: (worktreePath, commit): ManagedRepoConfigResolution => {
         const source = readRepositoryFileAtCommit(worktreePath, commit, ".but-why/config.json");
         if (!source.ok) {
@@ -122,7 +107,6 @@ export const loadChangeSubmit = (input: {
         acceptanceContextSupplied,
         repoConfig,
         worktreePath,
-        validationRepoConfig,
         reviewerConfiguration,
       ) => {
         if (reviewerConfiguration !== undefined) {
@@ -131,7 +115,6 @@ export const loadChangeSubmit = (input: {
             globalConfigPath: input.globalConfigPath,
             acceptanceContextSupplied,
             repoConfig,
-            ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
             repoRoot: worktreePath,
             reviewerConfiguration,
           });
@@ -144,7 +127,6 @@ export const loadChangeSubmit = (input: {
               globalConfig: globalConfig.config,
               acceptanceContextSupplied,
               repoConfig,
-              ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
               repoRoot: worktreePath,
             })
           : globalConfig;
