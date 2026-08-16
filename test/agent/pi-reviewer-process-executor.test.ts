@@ -184,7 +184,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("restores only the resumed transcript and preserves unrelated process files", () =>
+  it.effect("preserves transcript evidence written by a failed resumed invocation", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-narrow-recovery-"));
       const sessions = join(root, "sessions");
@@ -223,7 +223,9 @@ describe("Pi reviewer process executor", () => {
             },
           },
         });
-        expect(readFileSync(sessionFile, "utf8")).toBe(original);
+        expect(readFileSync(sessionFile, "utf8")).toBe(
+          `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\npartial transcript\n`,
+        );
         expect(readFileSync(unrelatedFile, "utf8")).toBe("before\nafter\n");
       } finally {
         rmSync(root, { recursive: true, force: true });

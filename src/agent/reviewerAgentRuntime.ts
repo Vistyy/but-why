@@ -1,4 +1,3 @@
-import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { Data, Effect } from "effect";
 import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
@@ -60,8 +59,6 @@ export type ReviewerAgentInput<Output> = {
   readonly sessionStorageRoot?: string;
   readonly sessionId?: string;
   readonly resumeSession?: string;
-  /** The exact persisted continuation file used for narrow interruption recovery. */
-  readonly continuationFilePath?: string;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -89,52 +86,27 @@ const reviewWithPi = <Output>(
   input: ReviewerAgentInput<Output>,
 ): Effect.Effect<ReviewerAgentResult<Output>> =>
   Effect.gen(function* () {
-    const sessionSnapshot =
-      input.resumeSession === undefined || input.continuationFilePath === undefined
-        ? undefined
-        : snapshotContinuationFile(input.continuationFilePath);
-    let sessionSnapshotSettled = false;
-    const restoreSession = () => {
-      if (sessionSnapshotSettled) return;
-      if (sessionSnapshot !== undefined) restoreContinuationFile(sessionSnapshot);
-      sessionSnapshotSettled = true;
+    const processInput: ReviewerProcessInput = {
+      reviewer: input.reviewer,
+      prompt: input.prompt,
+      profile: input.profile,
+      commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
+      resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
+      ...(input.sessionStorageRoot === undefined
+        ? {}
+        : { sessionStorageRoot: input.sessionStorageRoot }),
+      ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
+      ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
     };
-    const review = Effect.gen(function* () {
-      const processInput: ReviewerProcessInput = {
-        reviewer: input.reviewer,
-        prompt: input.prompt,
-        profile: input.profile,
-        commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
-        resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
-        ...(input.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : { sessionStorageRoot: input.sessionStorageRoot }),
-        ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
-        ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
-      };
-      const initial = yield* Effect.either(
-        runReviewerProcess(input.reviewerExecutor, processInput),
-      );
-      if (initial._tag === "Left") {
-        restoreSession();
-        return reviewerProcessFailure(initial.left, 1, "");
-      }
-      const invocationUsage: readonly (TokenUsage | null)[] = [
-        initial.right.invocationUsage ?? null,
-      ];
-      const validation = yield* Effect.either(validateRunResult(input, initial.right));
-      if (validation._tag === "Right") {
-        sessionSnapshotSettled = true;
-        return successfulResult(validation.right, initial.right, 1, invocationUsage);
-      }
-      sessionSnapshotSettled = true;
-      return failedOutputResult(validation.left, initial.right, 1, invocationUsage);
-    });
+    const initial = yield* Effect.either(runReviewerProcess(input.reviewerExecutor, processInput));
+    if (initial._tag === "Left") return reviewerProcessFailure(initial.left, 1, "");
 
-    return yield* review.pipe(Effect.ensuring(Effect.sync(restoreSession)));
+    const invocationUsage: readonly (TokenUsage | null)[] = [initial.right.invocationUsage ?? null];
+    const validation = yield* Effect.either(validateRunResult(input, initial.right));
+    return validation._tag === "Right"
+      ? successfulResult(validation.right, initial.right, 1, invocationUsage)
+      : failedOutputResult(validation.left, initial.right, 1, invocationUsage);
   });
 
 export const piReviewerAgentRuntime = {
@@ -219,26 +191,6 @@ const reviewerProcessFailure = (
   ...(failure.sessionReference === undefined ? {} : { sessionReference: failure.sessionReference }),
   ...(failure.sessionFilePath === undefined ? {} : { sessionFilePath: failure.sessionFilePath }),
 });
-
-type ContinuationFileSnapshot = {
-  readonly path: string;
-  readonly contents: string;
-  readonly mode: number;
-};
-
-const snapshotContinuationFile = (path: string): ContinuationFileSnapshot | undefined => {
-  if (!existsSync(path)) return undefined;
-  return {
-    path,
-    contents: readFileSync(path, "utf8"),
-    mode: statSync(path).mode,
-  };
-};
-
-const restoreContinuationFile = (snapshot: ContinuationFileSnapshot): void => {
-  writeFileSync(snapshot.path, snapshot.contents, { mode: snapshot.mode & 0o777 });
-  chmodSync(snapshot.path, snapshot.mode & 0o777);
-};
 
 const processMetadata = (
   result: ReviewerProcessResult,

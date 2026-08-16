@@ -41,7 +41,7 @@ describe("host interruption process boundary", () => {
       expect(result.status, result.stderr).toBe(exitCode);
       expect(processIsGone(reviewerPid)).toBe(true);
       expect(readFileSync(eventsPath, "utf8").trim().split("\n")).toEqual([
-        "workspace-cleanup:child-gone:session-restored",
+        "workspace-cleanup:child-gone:transcript-retained",
         `complete:${signal}`,
       ]);
     } finally {

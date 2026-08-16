@@ -1,4 +1,3 @@
-import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { Cause, Clock, Effect } from "effect";
@@ -89,11 +88,6 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       sessionId = dispatch.dispatch.agentSessionId;
       continuationId = dispatch.dispatch.continuation.id;
       resumeSession = dispatch.dispatch.resumed ? dispatch.dispatch.piSessionId : undefined;
-      const persistedContinuationFilePath = continuationFilePath(
-        input.sessionStorageRoot,
-        dispatch.dispatch.continuation.transcriptPath,
-        dispatch.dispatch.resumed,
-      );
 
       const reviewExit = yield* Effect.exit(
         input.reviewerRuntime.review({
@@ -114,9 +108,6 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           sessionStorageRoot: input.sessionStorageRoot,
           sessionId: dispatch.dispatch.piSessionId,
           ...(resumeSession === undefined ? {} : { resumeSession }),
-          ...(persistedContinuationFilePath === undefined
-            ? {}
-            : { continuationFilePath: persistedContinuationFilePath }),
         }),
       );
       const interrupted =
@@ -136,8 +127,13 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                   : "Agent Invocation failed.",
                 sessionUsability: "unknown",
                 ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
-                ...(interrupted && persistedContinuationFilePath !== undefined
-                  ? { sessionFilePath: persistedContinuationFilePath }
+                ...(interrupted && dispatch.dispatch.continuation.transcriptPath !== null
+                  ? {
+                      sessionFilePath: resolve(
+                        input.sessionStorageRoot,
+                        dispatch.dispatch.continuation.transcriptPath,
+                      ),
+                    }
                   : {}),
               },
               sessionUsability: "unknown",
@@ -269,23 +265,6 @@ const settlementFor = <Output>(
       ? { unusableReason: result.failure.message }
       : {}),
   };
-};
-
-const continuationFilePath = (
-  root: string,
-  transcriptPath: string | null,
-  resumed: boolean,
-): string | undefined => {
-  if (!resumed || transcriptPath === null) return undefined;
-  const candidate = resolve(root, transcriptPath);
-  if (safeTranscriptPath(root, candidate) === null || !existsSync(candidate)) return undefined;
-  let canonicalPath: string;
-  try {
-    canonicalPath = realpathSync(candidate);
-  } catch {
-    return undefined;
-  }
-  return safeTranscriptPath(root, canonicalPath) === null ? undefined : candidate;
 };
 
 const safeTranscriptPath = (root: string, path: string | undefined): string | null => {

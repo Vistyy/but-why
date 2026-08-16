@@ -36,30 +36,23 @@ const executePiReviewerProcess = (
   executeCommand: PiCommandExecutor,
 ): Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed> =>
   Effect.gen(function* () {
-    const sessionSnapshot = yield* Effect.try({
-      try: () => snapshotPiContinuation(input),
-      catch: (error) => reviewerProcessExecutionFailed(error),
-    });
-    const commandResult = yield* Effect.gen(function* () {
-      if (input.resumeSession !== undefined) {
-        yield* Effect.try({
-          try: () => preparePiSession(input),
-          catch: (error) => reviewerProcessExecutionFailed(error),
-        });
-      }
-
-      const invocation = yield* Effect.try({
-        try: () => commandInvocation(input),
+    if (input.resumeSession !== undefined) {
+      yield* Effect.try({
+        try: () => preparePiSession(input),
         catch: (error) => reviewerProcessExecutionFailed(error),
       });
-      return yield* executeCommand({
-        command: invocation.command,
-        args: invocation.args,
-        cwd: input.commandCwd,
-      }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
-    }).pipe(Effect.tapError(() => Effect.sync(() => restorePiContinuation(sessionSnapshot))));
+    }
+
+    const invocation = yield* Effect.try({
+      try: () => commandInvocation(input),
+      catch: (error) => reviewerProcessExecutionFailed(error),
+    });
+    const commandResult = yield* executeCommand({
+      command: invocation.command,
+      args: invocation.args,
+      cwd: input.commandCwd,
+    }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
     if (commandResult.exitCode !== 0) {
-      restorePiContinuation(sessionSnapshot);
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
         .filter((value) => value.length > 0)
         .join("\n");
@@ -379,27 +372,6 @@ const sessionReferenceFromOutput = (output: string): string | undefined => {
     }
   }
   return undefined;
-};
-
-type PiContinuationSnapshot = {
-  readonly path: string;
-  readonly contents: string;
-  readonly mode: number;
-};
-
-const snapshotPiContinuation = (
-  input: ReviewerProcessInput,
-): PiContinuationSnapshot | undefined => {
-  if (input.resumeSession === undefined || input.sessionStorageRoot === undefined) return undefined;
-  const path = findSessionFile(input.sessionStorageRoot, input.resumeSession);
-  if (path === undefined) return undefined;
-  return { path, contents: readFileSync(path, "utf8"), mode: statSync(path).mode };
-};
-
-const restorePiContinuation = (snapshot: PiContinuationSnapshot | undefined): void => {
-  if (snapshot === undefined) return;
-  writeFileSync(snapshot.path, snapshot.contents, { mode: snapshot.mode & 0o777 });
-  chmodSync(snapshot.path, snapshot.mode & 0o777);
 };
 
 const reviewerProcessExecutionFailed = (
