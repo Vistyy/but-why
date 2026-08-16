@@ -152,7 +152,7 @@ export const provisionCreatedChange = (
     return { ok: true as const, change };
   });
 
-export const deleteChangeStart = (sql: SqlClient.SqlClient, changeId: string) =>
+const deleteChangeStart = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     yield* sql`
       DELETE FROM task_change_links WHERE change_id = ${changeIdSqlParameter(changeId)}
