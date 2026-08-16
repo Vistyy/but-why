@@ -1,8 +1,7 @@
 import { Effect } from "effect";
-
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeAuthorityPort, ChangeReadPort } from "../change/changePorts.js";
 import type { ActiveValidationRunPort } from "../change/validation/changeValidationPorts.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskChangeLinkPort } from "./taskChangePorts.js";
 
 export type TaskChangeActivity = "blocked" | "validating" | "ready" | "implementing";

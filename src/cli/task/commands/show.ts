@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,

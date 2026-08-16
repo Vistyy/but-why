@@ -6,9 +6,9 @@ import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/reposi
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteTaskChangeStartPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
+import { openSqliteTaskChangeStartPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import {
   provisionChangeWorktree,

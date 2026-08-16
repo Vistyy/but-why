@@ -1,12 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
-import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
-import { changeExists } from "../../../sqlite/sqliteChangeInspectionPersistence.js";
-import { getTaskById, taskExists, completeTask } from "../../../sqlite/sqliteTaskPersistence.js";
+import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { changeExists } from "../../../sqlite/sqliteChangeInspectionPersistence.js";
+import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
+import { completeTask, getTaskById, taskExists } from "../../../sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../../../task/taskId.js";
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLink, TaskChangeLinkMutationPort } from "../../taskChangePorts.js";

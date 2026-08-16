@@ -5,6 +5,7 @@ type TaskDependencyFact = {
   readonly title: string;
   readonly state: TaskState;
 };
+
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
 import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";

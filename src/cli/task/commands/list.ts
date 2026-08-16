@@ -1,7 +1,6 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
@@ -9,6 +8,7 @@ import type { StructuredValue } from "../../../output/structured.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
+import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import { type TaskCommandEnvironment, withTasks } from "../taskCliSupport.js";
 
 export type TaskListCommand = {

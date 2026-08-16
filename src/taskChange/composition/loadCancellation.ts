@@ -1,18 +1,17 @@
 import { Effect } from "effect";
-
+import { composeTerminalCleanup } from "../../change/composition/terminalCleanup.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
+import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { type CancellationUseCases, openCancellationUseCases } from "../cancelTaskChange.js";
-import { composeTerminalCleanup } from "../../change/composition/terminalCleanup.js";
 
 type WithCancellationUseCasesResult<A> =
   | { readonly ok: true; readonly value: A }

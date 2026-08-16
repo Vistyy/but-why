@@ -2,10 +2,10 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangeReconciliationPort } from "../change/changePorts.js";
+import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
-import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,

@@ -12,9 +12,9 @@ import {
   requireCancellationChange,
 } from "../../../sqlite/sqliteChangeCancellationPersistence.js";
 import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
-import { completeLinkedChange } from "./sqliteTaskChangePersistence.js";
 import { storedPublicTaskId } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
+import { completeLinkedChange } from "./sqliteTaskChangePersistence.js";
 
 export const openSqliteTaskChangeCancellationPort = () =>
   Effect.map(

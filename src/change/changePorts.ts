@@ -11,7 +11,9 @@ import type {
   ChangeState,
   TerminalCleanupChange,
 } from "./change.js";
+
 export type { TerminalCleanupChange } from "./change.js";
+
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,

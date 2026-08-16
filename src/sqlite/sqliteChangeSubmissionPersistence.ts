@@ -5,6 +5,7 @@ import type { ChangeRecord } from "../change/change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
@@ -28,7 +29,6 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
-import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
