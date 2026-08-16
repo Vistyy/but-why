@@ -1,5 +1,12 @@
-import { chmodSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { isAbsolute, relative, sep } from "node:path";
 
 import { Effect } from "effect";
 import {
@@ -19,6 +26,7 @@ import {
   isPiSessionRecord,
 } from "../piJsonl.js";
 import { piResourceArgs } from "../piRuntime.js";
+import { findUniquePiSessionTranscript } from "../piSessionTranscript.js";
 import type {
   ReviewerProcessExecutor,
   ReviewerProcessInput,
@@ -57,12 +65,18 @@ const executePiReviewerProcess = (
         .filter((value) => value.length > 0)
         .join("\n");
       const sessionMetadata = sessionMetadataAfterFailure(input, commandResult.stdout);
+      const parsedEvidence = parsePiInvocationEvidence(commandResult.stdout);
       return yield* Effect.fail(
         reviewerProcessExecutionFailed(
           diagnostic.length > 0
             ? diagnostic
             : `Pi reviewer exited with status ${commandResult.exitCode}.`,
-          sessionMetadata,
+          {
+            ...sessionMetadata,
+            ...(parsedEvidence.usage === undefined
+              ? {}
+              : { invocationUsage: parsedEvidence.usage }),
+          },
         ),
       );
     }
@@ -80,32 +94,21 @@ const executePiReviewerProcess = (
       sessionStorageRoot === undefined
         ? undefined
         : (input.sessionId ?? parsed.sessionReference ?? input.resumeSession);
-    const sessionFilePath =
-      sessionReference === undefined || sessionStorageRoot === undefined
-        ? undefined
-        : findSessionFile(sessionStorageRoot, sessionReference);
-    const result: ReviewerProcessResult = {
+    const sessionFilePath = yield* Effect.try({
+      try: () =>
+        input.resumeSession === undefined
+          ? sessionReference === undefined || sessionStorageRoot === undefined
+            ? undefined
+            : findUniquePiSessionTranscript(sessionStorageRoot, sessionReference)
+          : input.resumeSessionFilePath,
+      catch: (error) => reviewerProcessExecutionFailed(error),
+    });
+    return {
       stdout: parsed.stdout,
       invocationUsage: parsed.usage ?? null,
       ...(sessionReference === undefined ? {} : { sessionReference }),
       ...(sessionFilePath === undefined ? {} : { sessionFilePath }),
     };
-
-    return sessionReference === undefined
-      ? result
-      : {
-          ...result,
-          resume: (prompt) =>
-            executePiReviewerProcess(
-              {
-                ...input,
-                prompt,
-                sessionId: sessionReference,
-                resumeSession: sessionReference,
-              },
-              executeCommand,
-            ),
-        };
   });
 
 export const createPiReviewerProcessExecutor = (
@@ -147,7 +150,7 @@ const commandInvocation = (
         : input.sessionId.startsWith("by-agent-")
           ? ["--session-id", input.sessionId]
           : ["--session", input.sessionId]
-      : ["--session", input.resumeSession]),
+      : ["--session", requiredResumeSessionFilePath(input)]),
     "--name",
     `${input.reviewer} Review`,
     input.prompt,
@@ -166,34 +169,71 @@ const applyAgentEnvironment = (
 
 const preparePiSession = (input: ReviewerProcessInput): void => {
   if (input.resumeSession === undefined || input.sessionStorageRoot === undefined) return;
-  const path = findSessionFile(input.sessionStorageRoot, input.resumeSession);
-  if (path === undefined) {
-    throw new Error(
-      `resumeSession "${input.resumeSession}" not found under ${input.sessionStorageRoot}`,
-    );
-  }
+  const path = requiredResumeSessionFilePath(input);
+  validateContainedSessionFile(input.sessionStorageRoot, path);
   const content = readFileSync(path, "utf8");
-  let headerFound = false;
-  const rewritten = content
-    .split("\n")
-    .map((line) => {
-      if (line === "") return line;
-      const entry = decodeJsonlObject(line, "Reviewer Session JSONL is corrupt.");
-      if (!isPiSessionRecord(entry)) return line;
-      const header = decodePiSessionHeader(entry);
-      if (headerFound || header?.id !== input.resumeSession) {
-        throw new Error("Reviewer Session header is incompatible.");
-      }
-      headerFound = true;
-      return JSON.stringify({ ...header, cwd: input.commandCwd });
-    })
-    .join("\n");
-  if (!headerFound) throw new Error("Reviewer Session header is missing.");
+  const lines = content.split("\n");
+  const firstLine = lines[0];
+  if (firstLine === undefined || firstLine === "") {
+    throw new Error("Reviewer Session header is missing.");
+  }
+  const entry = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
+  if (!isPiSessionRecord(entry)) throw new Error("Reviewer Session header is missing.");
+  const header = decodePiSessionHeader(entry);
+  if (header?.id !== input.resumeSession) {
+    throw new Error("Reviewer Session header is incompatible.");
+  }
+  lines[0] = JSON.stringify({ ...header, cwd: input.commandCwd });
+  const rewritten = lines.join("\n");
   if (rewritten === content) return;
   const temporaryPath = `${path}.but-why-tmp`;
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
   chmodSync(temporaryPath, 0o600);
   renameSync(temporaryPath, path);
+};
+
+const parsePiInvocationEvidence = (
+  output: string,
+): { readonly sessionReference?: string; readonly usage?: TokenUsage } => {
+  let sessionReference: string | undefined;
+  let usageAvailable = true;
+  let messageEnds = 0;
+  const usage = {
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
+
+  for (const line of output.split("\n")) {
+    if (line === "") continue;
+    let event: Readonly<Record<string, unknown>>;
+    try {
+      event = decodePiJsonlObject(line);
+    } catch {
+      continue;
+    }
+    sessionReference = decodePiSessionIdentity(event) ?? sessionReference;
+    const messageEnd = decodePiAssistantMessageEnd(event);
+    if (messageEnd === undefined) continue;
+    messageEnds += 1;
+    const messageUsage = decodePiMessageUsage(messageEnd.message.usage);
+    if (messageUsage === undefined) {
+      usageAvailable = false;
+      continue;
+    }
+    usage.inputTokens += messageUsage.inputTokens;
+    usage.cachedInputTokens += messageUsage.cachedInputTokens;
+    usage.cacheWriteTokens += messageUsage.cacheWriteTokens;
+    usage.outputTokens += messageUsage.outputTokens;
+    usage.totalTokens += messageUsage.totalTokens;
+  }
+
+  return {
+    ...(sessionReference === undefined ? {} : { sessionReference }),
+    ...(messageEnds > 0 && usageAvailable ? { usage } : {}),
+  };
 };
 
 const parsePiOutput = (
@@ -206,6 +246,7 @@ const parsePiOutput = (
   const usage = {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
   };
@@ -225,6 +266,7 @@ const parsePiOutput = (
     }
     usage.inputTokens += messageUsage.inputTokens;
     usage.cachedInputTokens += messageUsage.cachedInputTokens;
+    usage.cacheWriteTokens += messageUsage.cacheWriteTokens;
     usage.outputTokens += messageUsage.outputTokens;
     usage.totalTokens += messageUsage.totalTokens;
   }
@@ -248,47 +290,36 @@ const decodeJsonlObject = (line: string, message: string): Readonly<Record<strin
   }
 };
 
-const findSessionFile = (root: string, sessionId: string): string | undefined => {
-  let rootStat: ReturnType<typeof statSync>;
-  try {
-    rootStat = statSync(root);
-  } catch (error) {
-    if (nodeErrorCode(error) === "ENOENT") return undefined;
-    throw error;
+const requiredResumeSessionFilePath = (input: ReviewerProcessInput): string => {
+  if (input.resumeSessionFilePath === undefined) {
+    throw new Error(`resumeSession "${input.resumeSession}" has no persisted transcript path.`);
   }
+  return input.resumeSessionFilePath;
+};
+
+const validateContainedSessionFile = (root: string, path: string): void => {
+  const rootStat = statSync(root);
   if (!rootStat.isDirectory()) {
     throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
   }
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      const nested = findSessionFile(path, sessionId);
-      if (nested !== undefined) return nested;
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith(".jsonl") &&
-      (entry.name.includes(sessionId) || hasSessionHeader(path, sessionId))
-    ) {
-      return path;
-    }
-  }
-  return undefined;
-};
-
-const hasSessionHeader = (path: string, sessionId: string): boolean => {
-  let firstLine: string | undefined;
+  const canonicalRoot = realpathSync(root);
+  let canonicalPath: string;
   try {
-    firstLine = readFileSync(path, "utf8").split("\n", 1)[0];
+    canonicalPath = realpathSync(path);
   } catch (error) {
-    if (nodeErrorCode(error) === "ENOENT") return false;
+    if (nodeErrorCode(error) === "ENOENT") {
+      throw new Error(`resumeSession transcript "${path}" not found.`);
+    }
     throw error;
   }
-  if (firstLine === undefined) return false;
-  try {
-    const header = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
-    return decodePiSessionIdentity(header) === sessionId;
-  } catch {
-    return false;
+  const candidate = relative(canonicalRoot, canonicalPath);
+  if (
+    isAbsolute(candidate) ||
+    candidate === "" ||
+    candidate === ".." ||
+    candidate.startsWith(`..${sep}`)
+  ) {
+    throw new Error(`resumeSession transcript "${path}" is outside ${root}.`);
   }
 };
 
@@ -305,11 +336,16 @@ const sessionMetadataAfterFailure = (
   if (outputReference !== undefined) {
     return {
       sessionReference: outputReference,
-      ...sessionFileMetadata(input.sessionStorageRoot, outputReference),
+      ...(input.resumeSession !== undefined && input.resumeSessionFilePath !== undefined
+        ? { sessionFilePath: input.resumeSessionFilePath }
+        : sessionFileMetadata(input.sessionStorageRoot, outputReference)),
     };
   }
   const expectedReference = input.sessionId ?? input.resumeSession;
   if (expectedReference === undefined || input.sessionStorageRoot === undefined) return {};
+  if (input.resumeSession !== undefined && input.resumeSessionFilePath !== undefined) {
+    return { sessionReference: expectedReference, sessionFilePath: input.resumeSessionFilePath };
+  }
   const fileMetadata = sessionFileMetadata(input.sessionStorageRoot, expectedReference);
   return fileMetadata.sessionFilePath === undefined
     ? {}
@@ -322,7 +358,7 @@ const sessionFileMetadata = (
 ): { readonly sessionFilePath?: string } => {
   if (root === undefined) return {};
   try {
-    const sessionFilePath = findSessionFile(root, sessionReference);
+    const sessionFilePath = findUniquePiSessionTranscript(root, sessionReference);
     return sessionFilePath === undefined ? {} : { sessionFilePath };
   } catch {
     return {};
@@ -344,13 +380,19 @@ const sessionReferenceFromOutput = (output: string): string | undefined => {
 
 const reviewerProcessExecutionFailed = (
   error: unknown,
-  metadata: { readonly sessionReference?: string; readonly sessionFilePath?: string } = {},
+  metadata: {
+    readonly invocationUsage?: TokenUsage | null;
+    readonly sessionReference?: string;
+    readonly sessionFilePath?: string;
+  } = {},
 ): ReviewerProcessExecutionFailed => {
   const message = error instanceof Error ? error.message : String(error);
   return new ReviewerProcessExecutionFailed({
     message,
     sessionUsability:
-      /^resumeSession ".+" not found(?: under|: expected)/m.test(message) ||
+      /^resumeSession ".+" (?:has no persisted transcript path|not found)/m.test(message) ||
+      /^resumeSession transcript ".+" (?:is outside |not found\.)/m.test(message) ||
+      /^Multiple Reviewer Session transcripts have id /m.test(message) ||
       /^Session resume failed:/m.test(message) ||
       /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
         message,

@@ -103,23 +103,25 @@ export const openSqliteChangeReviewerSessionPort = () =>
           ) VALUES (${input.validationRunId}, ${input.phase}, ${input.producer}, ${invocationId})
         `;
         }).pipe(Effect.asVoid),
-      getReviewerSession: (changeId, producer) =>
-        repository.transaction("read legacy Reviewer Session", (sql) =>
+      listReviewerSessions: (changeId) =>
+        repository.transaction("list legacy Reviewer Sessions", (sql) =>
           Effect.flatMap(
             sql<StoredReviewerSessionRow>`
             SELECT change_id AS changeId, producer, fingerprint,
               session_reference AS sessionReference
             FROM reviewer_sessions
-            WHERE change_id = ${changeId} AND producer = ${producer}
+            WHERE change_id = ${changeId}
           `,
-            (rows) => {
-              const row = rows[0];
-              return row === undefined
-                ? Effect.succeed(undefined)
-                : decodePersisted("read legacy Reviewer Session", () =>
-                    decodeReviewerSession(row, changeId),
-                  );
-            },
+            (rows) =>
+              decodePersisted("list legacy Reviewer Sessions", () =>
+                rows
+                  .map((row) => decodeReviewerSession(row, changeId))
+                  .sort(
+                    (left, right) =>
+                      compareStoredStrings(left.producer, right.producer) ||
+                      compareStoredStrings(left.sessionReference, right.sessionReference),
+                  ),
+              ),
           ),
         ),
     }),
@@ -164,6 +166,9 @@ const changeAgentConfigurationCanBeCorrected = (
       (returned[0]?.count ?? 0) === 0
     );
   });
+
+const compareStoredStrings = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
 
 const replaceChangeRoleConfiguration = (
   configuration: ChangeReviewerConfiguration,

@@ -36,7 +36,10 @@ export type TaskReviewPolicySnapshot = {
 export type TaskReviewToolingFailure = {
   readonly operation: string;
   readonly message: string;
-  readonly pendingExecution?: TaskReviewExecution;
+};
+
+export type LegacyTaskReviewToolingFailure = TaskReviewToolingFailure & {
+  readonly pendingExecution: TaskReviewExecution;
 };
 
 export type TaskReviewFinding = ReviewerFindingCore;
@@ -45,6 +48,11 @@ export type TaskReviewerTranscript = {
   readonly producer: string;
   readonly piSessionId: string;
   readonly filePath: string;
+};
+
+export type LegacyTaskReviewerSession = {
+  readonly fingerprint: string;
+  readonly sessionReference: string;
 };
 
 export type TaskReviewExecution = ReviewerExecutionEvidence & {
@@ -63,11 +71,12 @@ export type TaskReviewRecord = {
   readonly state: "running" | "complete";
   readonly outcome: TaskReviewOutcome | null;
   readonly workspaceCleanup: DisposableWorkspaceCleanupState;
-  readonly toolingFailure: TaskReviewToolingFailure | null;
+  readonly toolingFailure: TaskReviewToolingFailure | LegacyTaskReviewToolingFailure | null;
   readonly abandonReason: string | null;
   readonly findings: readonly TaskReviewFinding[];
   readonly sessions: readonly TaskReviewExecution[];
   readonly transcripts: readonly TaskReviewerTranscript[];
+  readonly legacyTaskReviewerSession?: LegacyTaskReviewerSession;
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
   readonly reviewerConfiguration?: TaskReviewPolicySnapshot;

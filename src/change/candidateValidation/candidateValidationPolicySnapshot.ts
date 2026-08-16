@@ -20,6 +20,7 @@ const resolvedPiAgentProfileSnapshotSchema = Schema.Struct({
   agentProfile: Schema.String,
   scope: Schema.Literal("repo", "global"),
   profile: piAgentProfileConfigSnapshotSchema,
+  globalConfigDirectory: Schema.optionalWith(Schema.String, { exact: true }),
 });
 
 const prepareSnapshotSchema = Schema.Struct({

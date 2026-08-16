@@ -20,6 +20,7 @@ const tokenCountSchema = Schema.Number.pipe(
 const tokenUsageInputSchema = Schema.Struct({
   inputTokens: tokenCountSchema,
   cachedInputTokens: Schema.optional(tokenCountSchema),
+  cacheWriteTokens: Schema.optional(tokenCountSchema),
   outputTokens: tokenCountSchema,
   totalTokens: Schema.optional(tokenCountSchema),
 });
@@ -27,6 +28,7 @@ const tokenUsageInputSchema = Schema.Struct({
 export type TokenUsage = {
   readonly inputTokens: number;
   readonly cachedInputTokens: number;
+  readonly cacheWriteTokens: number;
   readonly outputTokens: number;
   readonly totalTokens: number;
 };
@@ -42,8 +44,14 @@ export const decodeTokenUsage = (
     Effect.map((usage) => ({
       inputTokens: usage.inputTokens,
       cachedInputTokens: usage.cachedInputTokens ?? 0,
+      cacheWriteTokens: usage.cacheWriteTokens ?? 0,
       outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens ?? usage.inputTokens + usage.outputTokens,
+      totalTokens:
+        usage.totalTokens ??
+        usage.inputTokens +
+          (usage.cachedInputTokens ?? 0) +
+          (usage.cacheWriteTokens ?? 0) +
+          usage.outputTokens,
     })),
     Effect.mapError((error) => {
       const diagnostics = contractDiagnostics(error, input);

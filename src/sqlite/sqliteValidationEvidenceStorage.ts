@@ -36,6 +36,7 @@ type StoredValidationAgentInvocationRow = {
   readonly settlementKind: string | null;
   readonly inputTokens: number | null;
   readonly cachedInputTokens: number | null;
+  readonly cacheWriteTokens: number | null;
   readonly outputTokens: number | null;
   readonly totalTokens: number | null;
   readonly harness: string;
@@ -127,6 +128,7 @@ export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validat
         invocation.settlement_kind AS settlementKind,
         invocation.input_tokens AS inputTokens,
         invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens,
         invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens,
         continuation.harness,
@@ -267,7 +269,13 @@ const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentIn
   ) {
     throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
   }
-  const values = [row.inputTokens, row.cachedInputTokens, row.outputTokens, row.totalTokens];
+  const values = [
+    row.inputTokens,
+    row.cachedInputTokens,
+    row.cacheWriteTokens,
+    row.outputTokens,
+    row.totalTokens,
+  ];
   const hasUsage = values.some((value) => value !== null);
   if (
     hasUsage &&
@@ -285,6 +293,7 @@ const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentIn
       ? {
           inputTokens: row.inputTokens as number,
           cachedInputTokens: row.cachedInputTokens as number,
+          cacheWriteTokens: row.cacheWriteTokens as number,
           outputTokens: row.outputTokens as number,
           totalTokens: row.totalTokens as number,
         }

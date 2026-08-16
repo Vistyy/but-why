@@ -186,7 +186,7 @@ _Avoid_: Provider error message, automatic retry status
 
 **Invocation Token Evidence**:
 The token usage evidence for one Agent Invocation.
-A measured Invocation records its input, cached input, output, and total token counts, while unavailable usage is recorded as `null` and is not treated as zero.
+A measured Invocation records its input, cache-read, cache-write, output, and total token counts, while unavailable usage is recorded as `null` and is not treated as zero.
 A resumed Agent Continuation produces new Invocation Token Evidence for each Invocation instead of repeating cumulative session usage.
 _Avoid_: Agent Session total, inferred zero usage, cumulative resumed-session usage
 

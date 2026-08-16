@@ -34,6 +34,7 @@ type InvocationRow = {
   readonly settlementKind: string | null;
   readonly inputTokens: number | null;
   readonly cachedInputTokens: number | null;
+  readonly cacheWriteTokens: number | null;
   readonly outputTokens: number | null;
   readonly totalTokens: number | null;
   readonly harness: string;
@@ -258,6 +259,7 @@ const settleInvocation = (
           settlement_kind = ${input.settlement.kind},
           input_tokens = ${usage?.inputTokens ?? null},
           cached_input_tokens = ${usage?.cachedInputTokens ?? null},
+          cache_write_tokens = ${usage?.cacheWriteTokens ?? null},
           output_tokens = ${usage?.outputTokens ?? null},
           total_tokens = ${usage?.totalTokens ?? null}
       WHERE id = ${input.invocationId}
@@ -289,10 +291,15 @@ export const settleUnsettledAgentInvocations = (
       const rows = yield* sql<{
         readonly continuationId: number;
         readonly settledAt: string | null;
+        readonly transcriptPath: string | null;
       }>`
-        SELECT continuation_id AS continuationId, settled_at AS settledAt
-        FROM agent_invocations
-        WHERE id = ${invocationId}
+        SELECT invocation.continuation_id AS continuationId,
+          invocation.settled_at AS settledAt,
+          continuation.transcript_path AS transcriptPath
+        FROM agent_invocations AS invocation
+        JOIN agent_continuations AS continuation
+          ON continuation.id = invocation.continuation_id
+        WHERE invocation.id = ${invocationId}
       `;
       const invocation = rows[0];
       if (invocation === undefined) {
@@ -308,15 +315,18 @@ export const settleUnsettledAgentInvocations = (
             settlement_kind = 'return_unknown',
             input_tokens = NULL,
             cached_input_tokens = NULL,
+            cache_write_tokens = NULL,
             output_tokens = NULL,
             total_tokens = NULL
         WHERE id = ${invocationId} AND settled_at IS NULL
       `;
-      yield* sql`
-        UPDATE agent_continuations
-        SET unusable_reason = COALESCE(unusable_reason, ${unusableReason})
-        WHERE id = ${invocation.continuationId}
-      `;
+      if (invocation.transcriptPath === null) {
+        yield* sql`
+          UPDATE agent_continuations
+          SET unusable_reason = COALESCE(unusable_reason, ${unusableReason})
+          WHERE id = ${invocation.continuationId}
+        `;
+      }
     }
   }).pipe(Effect.asVoid);
 
@@ -329,6 +339,7 @@ const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number)
         invocation.settlement_kind AS settlementKind,
         invocation.input_tokens AS inputTokens,
         invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens,
         invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens,
         continuation.harness,
@@ -360,12 +371,14 @@ const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
   const usagePresent =
     row.inputTokens !== null ||
     row.cachedInputTokens !== null ||
+    row.cacheWriteTokens !== null ||
     row.outputTokens !== null ||
     row.totalTokens !== null;
   const usage = usagePresent
     ? {
         inputTokens: requiredToken(row.inputTokens),
         cachedInputTokens: requiredToken(row.cachedInputTokens),
+        cacheWriteTokens: requiredToken(row.cacheWriteTokens),
         outputTokens: requiredToken(row.outputTokens),
         totalTokens: requiredToken(row.totalTokens),
       }

@@ -8,6 +8,8 @@ import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime
 import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
+import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeReviewerTranscriptPort } from "../../sqlite/sqliteChangeReviewerTranscriptPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import type {
@@ -106,19 +108,24 @@ const loadChangeDetailOperation = <A>(
           changes: openSqliteChangeReadPort(),
           authority: openSqliteChangeAuthorityPort(),
           validation: openSqliteChangeValidationReadPort(),
+          reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
         }).pipe(
-          Effect.flatMap(({ changes, authority, validation }) =>
-            query(
-              {
-                getChangeById: changes.getChangeById,
-                getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
-                getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
-                getRunById: validation.getRunById,
-                listFindings: validation.listFindings,
-                listToolingFailures: validation.listToolingFailures,
-              },
-              changeId,
-            ),
+          Effect.flatMap(
+            ({ changes, authority, validation, reviewerSessions, reviewerTranscripts }) =>
+              query(
+                {
+                  getChangeById: changes.getChangeById,
+                  getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
+                  getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
+                  getRunById: validation.getRunById,
+                  listFindings: validation.listFindings,
+                  listToolingFailures: validation.listToolingFailures,
+                  listReviewerSessions: reviewerSessions.listReviewerSessions,
+                  listReviewerTranscripts: reviewerTranscripts.listReviewerTranscripts,
+                },
+                changeId,
+              ),
           ),
         ),
       ),

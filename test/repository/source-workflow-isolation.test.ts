@@ -117,6 +117,9 @@ test("source workflow uses an integrity-checked predecessor only for exact recon
   expect(rejected.status).toBe(1);
   expect(JSON.parse(rejected.stdout)).toMatchObject({
     error: { code: "pinned_predecessor_scope", changeId: "BY-1" },
+    help: [
+      "Run `by change reconcile BY-1` only after stopping the new executable and before opening Shared Repository State with it.",
+    ],
   });
 
   const tamperedBundle = createTestWorkspace();
@@ -146,8 +149,52 @@ test("source workflow uses an integrity-checked predecessor only for exact recon
     cwd: candidate,
     env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: tamperedManifest },
   });
-  expect(tamperedReconciled.status).toBe(0);
-  expect(JSON.parse(tamperedReconciled.stdout)).toEqual({ source: "hashed-executable" });
+  expect(tamperedReconciled.status).toBe(1);
+  expect(JSON.parse(tamperedReconciled.stdout)).toMatchObject({
+    error: { code: "pinned_predecessor_manifest_invalid" },
+  });
+
+  const escapingManifest = join(bundle, "escaping-predecessor.json");
+  writeFileSync(
+    escapingManifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+      executable: "../outside/pinned-by",
+    })}\n`,
+  );
+  const escaping = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: escapingManifest },
+  });
+  expect(escaping.status).toBe(1);
+  expect(JSON.parse(escaping.stdout)).toMatchObject({
+    error: { code: "pinned_predecessor_manifest_invalid" },
+  });
+
+  const linkedExecutable = join(bundle, "linked-by");
+  symlinkSync(tamperedExecutable, linkedExecutable);
+  const symlinkManifest = join(bundle, "symlink-predecessor.json");
+  writeFileSync(
+    symlinkManifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId: "BY-1",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+      sha256: createHash("sha256").update(readFileSync(tamperedExecutable)).digest("hex"),
+      executable: "linked-by",
+    })}\n`,
+  );
+  const symlinked = runTestProcess("just", ["by", "change", "reconcile", "BY-1"], {
+    cwd: candidate,
+    env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: symlinkManifest },
+  });
+  expect(symlinked.status).toBe(1);
+  expect(JSON.parse(symlinked.stdout)).toMatchObject({
+    error: { code: "pinned_predecessor_manifest_invalid" },
+  });
 }, 30_000);
 
 test("source workflow fails without Candidate fallback when the main checkout is unavailable", () => {

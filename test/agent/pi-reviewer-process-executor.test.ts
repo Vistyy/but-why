@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
@@ -83,8 +90,9 @@ describe("Pi reviewer process executor", () => {
       expect(result).toMatchObject({
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
         invocationUsage: {
-          inputTokens: 7,
+          inputTokens: 5,
           cachedInputTokens: 7,
+          cacheWriteTokens: 2,
           outputTokens: 3,
           totalTokens: 17,
         },
@@ -112,7 +120,11 @@ describe("Pi reviewer process executor", () => {
       const sessions = join(root, "sessions");
       mkdirSync(sessions);
       const sessionId = "123e4567-e89b-42d3-a456-426614174009";
-      const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
+      const sessionFile = join(sessions, "opaque.jsonl");
+      writeFileSync(
+        join(sessions, `review_${sessionId}.jsonl`),
+        `${JSON.stringify({ type: "session", id: "another-session", cwd: input.commandCwd })}\n`,
+      );
       const executor = createPiReviewerProcessExecutor(() => {
         writeFileSync(
           sessionFile,
@@ -134,8 +146,79 @@ describe("Pi reviewer process executor", () => {
           sessionReference: sessionId,
           sessionFilePath: sessionFile,
         });
-        expect(result.resume).toBeTypeOf("function");
         expect(readFileSync(sessionFile, "utf8")).toContain(sessionId);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("does not recursively discover a new Reviewer Session transcript", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-nested-"));
+      const sessions = join(root, "sessions");
+      const nested = join(sessions, "nested");
+      mkdirSync(nested, { recursive: true });
+      const sessionId = "123e4567-e89b-42d3-a456-426614174018";
+      writeFileSync(
+        join(nested, "nested.jsonl"),
+        `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+      );
+      const executor = createPiReviewerProcessExecutor(() =>
+        Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n${messageEvent(
+            '<reviewer-output>{"findings":[]}</reviewer-output>',
+            { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
+          )}\n`,
+        }),
+      );
+
+      try {
+        const result = yield* executor.execute({ ...input, sessionStorageRoot: sessions });
+        expect(result.sessionReference).toBe(sessionId);
+        expect(result.sessionFilePath).toBeUndefined();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("rejects ambiguous direct Reviewer Session transcripts", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-ambiguous-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const nested = join(sessions, "nested");
+      mkdirSync(nested);
+      const sessionId = "123e4567-e89b-42d3-a456-426614174019";
+      const header = `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`;
+      writeFileSync(join(sessions, "one.jsonl"), header);
+      writeFileSync(join(sessions, "two.jsonl"), header);
+      writeFileSync(join(nested, "nested.jsonl"), header);
+      const executor = createPiReviewerProcessExecutor(() =>
+        Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n${messageEvent(
+            '<reviewer-output>{"findings":[]}</reviewer-output>',
+            { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 },
+          )}\n`,
+        }),
+      );
+
+      try {
+        const result = yield* Effect.either(
+          executor.execute({ ...input, sessionStorageRoot: sessions }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            sessionUsability: "unusable",
+            message: expect.stringContaining("Multiple Reviewer Session transcripts"),
+          },
+        });
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -178,6 +261,61 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
+  it.effect("preserves transcript evidence written by a failed resumed invocation", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-narrow-recovery-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
+      const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
+      const original = `${JSON.stringify({ type: "session", id: sessionId, cwd: "/old" })}\n`;
+      writeFileSync(sessionFile, original);
+      const unrelatedFile = join(sessions, "unrelated.txt");
+      writeFileSync(unrelatedFile, "before\n");
+      const executor = createPiReviewerProcessExecutor(() => {
+        appendFileSync(sessionFile, "partial transcript\n");
+        appendFileSync(unrelatedFile, "after\n");
+        return Effect.succeed({
+          exitCode: 1,
+          stderr: "Pi stopped after partial output.",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n${messageEvent(
+            '<reviewer-output>{"findings":[]}</reviewer-output>',
+            { input: 7, output: 2, cacheRead: 3, cacheWrite: 0, totalTokens: 12 },
+          )}\n`,
+        });
+      });
+
+      try {
+        const result = yield* Effect.either(
+          executor.execute({
+            ...input,
+            sessionStorageRoot: sessions,
+            resumeSession: sessionId,
+            resumeSessionFilePath: sessionFile,
+          }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            invocationUsage: {
+              inputTokens: 7,
+              cachedInputTokens: 3,
+              cacheWriteTokens: 0,
+              outputTokens: 2,
+              totalTokens: 12,
+            },
+          },
+        });
+        expect(readFileSync(sessionFile, "utf8")).toBe(
+          `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\npartial transcript\n`,
+        );
+        expect(readFileSync(unrelatedFile, "utf8")).toBe("before\nafter\n");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("does not infer a conversation from an unused session ID", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-unused-session-"));
@@ -208,7 +346,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("rewrites a resumed session cwd and keeps each invocation usage separate", () =>
+  it.effect("rewrites only the resumed header and preserves later records", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-"));
       const sessions = join(root, "sessions");
@@ -224,7 +362,7 @@ describe("Pi reviewer process executor", () => {
           timestamp: "2026-08-11T20:00:00.000Z",
           version: 3,
           externalMetadata: { retained: true },
-        })}\n`,
+        })}\n{"type":"message"`,
       );
       let calls = 0;
       const executor = createPiReviewerProcessExecutor((command) => {
@@ -233,7 +371,9 @@ describe("Pi reviewer process executor", () => {
         expect(persistedSession).toContain('"cwd":"/validation/workspace"');
         expect(persistedSession).toContain('"timestamp":"2026-08-11T20:00:00.000Z"');
         expect(persistedSession).toContain('"externalMetadata":{"retained":true}');
+        expect(persistedSession.endsWith('{"type":"message"')).toBe(true);
         expect(command.args).toContain("--session");
+        expect(command.args).toContain(sessionFile);
         return Effect.succeed({
           exitCode: 0,
           stderr: "",
@@ -251,9 +391,15 @@ describe("Pi reviewer process executor", () => {
           ...input,
           sessionStorageRoot: sessions,
           resumeSession: sessionId,
+          resumeSessionFilePath: sessionFile,
         });
-        if (first.resume === undefined) throw new Error("Expected reviewer continuation.");
-        const second = yield* first.resume("Correct the output.");
+        const second = yield* executor.execute({
+          ...input,
+          sessionStorageRoot: sessions,
+          resumeSession: sessionId,
+          resumeSessionFilePath: sessionFile,
+          prompt: "Correct the output.",
+        });
 
         expect(first.invocationUsage).toMatchObject({ inputTokens: 11, totalTokens: 13 });
         expect(second.invocationUsage).toMatchObject({
@@ -310,8 +456,9 @@ describe("Pi reviewer process executor", () => {
       expect(result).toMatchObject({
         stdout: "",
         invocationUsage: {
-          inputTokens: 7,
+          inputTokens: 5,
           cachedInputTokens: 7,
+          cacheWriteTokens: 2,
           outputTokens: 3,
           totalTokens: 17,
         },
@@ -328,11 +475,45 @@ describe("Pi reviewer process executor", () => {
             ...input,
             sessionStorageRoot: root,
             resumeSession: "missing-session",
+            resumeSessionFilePath: join(root, "missing.jsonl"),
           }),
         );
         expect(result).toMatchObject({
           _tag: "Left",
           left: { sessionUsability: "unusable" },
+        });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("rejects a resumed transcript outside session storage", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-outside-reviewer-session-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const sessionId = "outside-session";
+      const outside = join(root, "outside.jsonl");
+      writeFileSync(
+        outside,
+        `${JSON.stringify({ type: "session", id: sessionId, cwd: input.commandCwd })}\n`,
+      );
+      try {
+        const result = yield* Effect.either(
+          createPiReviewerProcessExecutor(() => Effect.die("must not execute")).execute({
+            ...input,
+            sessionStorageRoot: sessions,
+            resumeSession: sessionId,
+            resumeSessionFilePath: outside,
+          }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            sessionUsability: "unusable",
+            message: expect.stringContaining("is outside"),
+          },
         });
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -351,6 +532,7 @@ describe("Pi reviewer process executor", () => {
             ...input,
             sessionStorageRoot: storageFile,
             resumeSession: "stored-session",
+            resumeSessionFilePath: join(root, "stored.jsonl"),
           }),
         );
         expect(result).toMatchObject({

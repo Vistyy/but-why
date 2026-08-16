@@ -1,16 +1,13 @@
-import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Data, Effect } from "effect";
 import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import type {
+  ReviewerProcessExecutionFailed,
   ReviewerProcessExecutor,
   ReviewerProcessInput,
   ReviewerProcessResult,
 } from "./reviewerExecution.js";
-import { ReviewerProcessExecutionFailed } from "./reviewerExecution.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import type { TokenUsage } from "./tokenUsage.js";
 
@@ -21,6 +18,7 @@ export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecution
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
 }> {}
@@ -36,6 +34,7 @@ export type ReviewerRuntimeFailure = {
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
 };
@@ -60,7 +59,7 @@ export type ReviewerAgentInput<Output> = {
   readonly sessionStorageRoot?: string;
   readonly sessionId?: string;
   readonly resumeSession?: string;
-  readonly singleInvocation?: boolean;
+  readonly resumeSessionFilePath?: string;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -88,90 +87,30 @@ const reviewWithPi = <Output>(
   input: ReviewerAgentInput<Output>,
 ): Effect.Effect<ReviewerAgentResult<Output>> =>
   Effect.gen(function* () {
-    const sessionSnapshot =
-      input.resumeSession === undefined || input.sessionStorageRoot === undefined
-        ? undefined
-        : snapshotSessionRoot(input.sessionStorageRoot);
-    let sessionSnapshotSettled = false;
-    const restoreSession = () => {
-      if (sessionSnapshotSettled) return;
-      if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
-      cleanupSessionSnapshot(sessionSnapshot);
-      sessionSnapshotSettled = true;
+    const processInput: ReviewerProcessInput = {
+      reviewer: input.reviewer,
+      prompt: input.prompt,
+      profile: input.profile,
+      commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
+      resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
+      ...(input.sessionStorageRoot === undefined
+        ? {}
+        : { sessionStorageRoot: input.sessionStorageRoot }),
+      ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
+      ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+      ...(input.resumeSessionFilePath === undefined
+        ? {}
+        : { resumeSessionFilePath: input.resumeSessionFilePath }),
     };
-    const retainSession = () => {
-      if (sessionSnapshotSettled) return;
-      cleanupSessionSnapshot(sessionSnapshot);
-      sessionSnapshotSettled = true;
-    };
-    const review = Effect.gen(function* () {
-      const processInput: ReviewerProcessInput = {
-        reviewer: input.reviewer,
-        prompt: input.prompt,
-        profile: input.profile,
-        commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",
-        resourceRoot: input.resourceRoot ?? input.commandCwd ?? ".",
-        ...(input.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: input.agentEnvironment }),
-        ...(input.sessionStorageRoot === undefined
-          ? {}
-          : { sessionStorageRoot: input.sessionStorageRoot }),
-        ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
-        ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
-      };
-      const initial = yield* Effect.either(
-        runReviewerProcess(input.reviewerExecutor, processInput),
-      );
-      if (initial._tag === "Left") {
-        restoreSession();
-        return reviewerProcessFailure(initial.left, 1, "", [null]);
-      }
-      let current = initial.right;
-      const invocationUsage: (TokenUsage | null)[] = [current.invocationUsage ?? null];
-      let validation = yield* Effect.either(validateRunResult(input, current));
-      if (validation._tag === "Right") {
-        retainSession();
-        return successfulResult(validation.right, current, 1, invocationUsage);
-      }
+    const initial = yield* Effect.either(runReviewerProcess(input.reviewerExecutor, processInput));
+    if (initial._tag === "Left") return reviewerProcessFailure(initial.left, 1, "");
 
-      if (input.singleInvocation === true) {
-        retainSession();
-        return failedOutputResult(validation.left, current, 1, invocationUsage);
-      }
-
-      let attempts = 1;
-      while (validation._tag === "Left" && attempts < 3) {
-        const failure = validation.left;
-        if (current.resume === undefined) {
-          restoreSession();
-          return failedOutputResult(failure, current, attempts, invocationUsage);
-        }
-        attempts += 1;
-        const corrected = yield* Effect.either(
-          resumeReviewerProcess(current, failure.correctionPrompt ?? failure.message),
-        );
-        if (corrected._tag === "Left") {
-          restoreSession();
-          return reviewerProcessFailure(corrected.left, attempts, current.stdout, [
-            ...invocationUsage,
-            null,
-          ]);
-        }
-        current = corrected.right;
-        invocationUsage.push(current.invocationUsage ?? null);
-        validation = yield* Effect.either(validateRunResult(input, current));
-      }
-
-      if (validation._tag === "Right") {
-        retainSession();
-        return successfulResult(validation.right, current, attempts, invocationUsage);
-      }
-      restoreSession();
-      return failedOutputResult(validation.left, current, attempts, invocationUsage);
-    });
-
-    return yield* review.pipe(Effect.ensuring(Effect.sync(restoreSession)));
+    const invocationUsage: readonly (TokenUsage | null)[] = [initial.right.invocationUsage ?? null];
+    const validation = yield* Effect.either(validateRunResult(input, initial.right));
+    return validation._tag === "Right"
+      ? successfulResult(validation.right, initial.right, 1, invocationUsage)
+      : failedOutputResult(validation.left, initial.right, 1, invocationUsage);
   });
 
 export const piReviewerAgentRuntime = {
@@ -218,20 +157,6 @@ const runReviewerProcess = (
 ): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
   translateProcessFailure(executor.execute(input));
 
-const resumeReviewerProcess = (
-  result: ReviewerProcessResult,
-  prompt: string,
-): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
-  translateProcessFailure(
-    result.resume?.(prompt) ??
-      Effect.fail(
-        new ReviewerProcessExecutionFailed({
-          message: "Reviewer continuation is unavailable.",
-          sessionUsability: "unknown",
-        }),
-      ),
-  );
-
 const translateProcessFailure = (
   effect: Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>,
 ): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
@@ -243,6 +168,9 @@ const translateProcessFailure = (
           message: error.message,
           kind: "process_execution",
           sessionUsability: error.sessionUsability,
+          ...(error.invocationUsage === undefined
+            ? {}
+            : { invocationUsage: error.invocationUsage }),
           ...(error.sessionReference === undefined
             ? {}
             : { sessionReference: error.sessionReference }),
@@ -257,38 +185,16 @@ const reviewerProcessFailure = (
   failure: ReviewerExecutionFailed,
   attempts: number,
   stdout: string,
-  invocationUsage: readonly (TokenUsage | null)[],
 ): ReviewerAgentResult<never> => ({
   ok: false,
   failure,
   sessionUsability: failure.sessionUsability ?? "unknown",
   attempts,
   stdout,
-  invocationUsage,
+  invocationUsage: [failure.invocationUsage ?? null],
   ...(failure.sessionReference === undefined ? {} : { sessionReference: failure.sessionReference }),
   ...(failure.sessionFilePath === undefined ? {} : { sessionFilePath: failure.sessionFilePath }),
 });
-
-const snapshotSessionRoot = (
-  root: string,
-): { readonly root: string; readonly snapshot: string } | undefined => {
-  if (!existsSync(root)) return undefined;
-  const snapshot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-"));
-  cpSync(root, join(snapshot, "sessions"), { recursive: true });
-  return { root, snapshot };
-};
-
-const cleanupSessionSnapshot = (
-  value: { readonly root: string; readonly snapshot: string } | undefined,
-): void => {
-  if (value !== undefined) rmSync(value.snapshot, { recursive: true, force: true });
-};
-
-const restoreSessionRoot = (value: { readonly root: string; readonly snapshot: string }): void => {
-  const source = join(value.snapshot, "sessions");
-  rmSync(value.root, { recursive: true, force: true });
-  cpSync(source, value.root, { recursive: true });
-};
 
 const processMetadata = (
   result: ReviewerProcessResult,

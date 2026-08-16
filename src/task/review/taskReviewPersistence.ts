@@ -3,7 +3,6 @@ import type {
   AgentSessionConfiguration,
   AgentSessionSqlLink,
 } from "../../agent/agentSession/agentSession.js";
-import type { ReviewerSessionRecord } from "../../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskState } from "../lifecycle.js";
@@ -154,10 +153,6 @@ export type TaskReviewPersistence = {
     readonly now: string;
     readonly complete: boolean;
   }) => AgentSessionSqlLink;
-  readonly getReviewerSession: (
-    taskId: string,
-    producer: string,
-  ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
   readonly recordActiveFailure: (
     reviewId: string,
     failure: TaskReviewToolingFailure,

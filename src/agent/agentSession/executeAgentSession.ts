@@ -1,11 +1,12 @@
-import { isAbsolute, relative, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { Cause, Clock, Effect } from "effect";
+import { Cause, Clock, Effect, Option } from "effect";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../contracts/repositoryStorageError.js";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
+import { findUniquePiSessionTranscript } from "../piSessionTranscript.js";
 import type { ReviewerAgentResult, ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
 import type { TokenUsage } from "../tokenUsage.js";
@@ -67,6 +68,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
   Effect.gen(function* () {
     let prompt = input.prompt;
     let resumeSession: string | undefined;
+    let resumeSessionFilePath: string | undefined;
     const invocationEvidence: AgentInvocationRecord[] = [];
     let lastResult: ReviewerAgentResult<Output> | undefined;
     let sessionId = input.agentSessionId;
@@ -88,6 +90,10 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       sessionId = dispatch.dispatch.agentSessionId;
       continuationId = dispatch.dispatch.continuation.id;
       resumeSession = dispatch.dispatch.resumed ? dispatch.dispatch.piSessionId : undefined;
+      resumeSessionFilePath =
+        dispatch.dispatch.resumed && dispatch.dispatch.continuation.transcriptPath !== null
+          ? resolve(input.sessionStorageRoot, dispatch.dispatch.continuation.transcriptPath)
+          : undefined;
 
       const reviewExit = yield* Effect.exit(
         input.reviewerRuntime.review({
@@ -108,11 +114,26 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           sessionStorageRoot: input.sessionStorageRoot,
           sessionId: dispatch.dispatch.piSessionId,
           ...(resumeSession === undefined ? {} : { resumeSession }),
-          singleInvocation: true,
+          ...(resumeSessionFilePath === undefined ? {} : { resumeSessionFilePath }),
         }),
       );
       const interrupted =
         reviewExit._tag === "Failure" && Cause.isInterruptedOnly(reviewExit.cause);
+      const interruptedSessionFilePath =
+        interrupted && resumeSessionFilePath === undefined
+          ? Option.getOrUndefined(
+              yield* Effect.option(
+                Effect.try({
+                  try: () =>
+                    findUniquePiSessionTranscript(
+                      input.sessionStorageRoot,
+                      dispatch.dispatch.piSessionId,
+                    ),
+                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+                }),
+              ),
+            )
+          : resumeSessionFilePath;
       const result: ReviewerAgentResult<Output> =
         reviewExit._tag === "Success"
           ? reviewExit.value
@@ -127,10 +148,18 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                   ? "Agent Invocation was interrupted."
                   : "Agent Invocation failed.",
                 sessionUsability: "unknown",
+                ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
+                ...(interrupted && interruptedSessionFilePath !== undefined
+                  ? { sessionFilePath: interruptedSessionFilePath }
+                  : {}),
               },
               sessionUsability: "unknown",
               attempts: 1,
               stdout: "",
+              ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
+              ...(interrupted && interruptedSessionFilePath !== undefined
+                ? { sessionFilePath: interruptedSessionFilePath }
+                : {}),
             };
       lastResult = result;
       const settlement = settlementFor(
@@ -253,7 +282,9 @@ const settlementFor = <Output>(
       ? {}
       : { usage: result.invocationUsage[0] }),
     transcriptPath,
-    ...(transcriptPath === null ? { unusableReason: result.failure.message } : {}),
+    ...(result.sessionUsability === "unusable" || transcriptPath === null
+      ? { unusableReason: result.failure.message }
+      : {}),
   };
 };
 

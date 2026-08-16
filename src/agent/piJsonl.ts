@@ -88,8 +88,9 @@ export const decodePiMessageUsage = (value: unknown): TokenUsage | undefined => 
   if (usage === undefined) return undefined;
   const totalTokens = Option.getOrUndefined(decodeTokenCount(usage.totalTokens));
   return {
-    inputTokens: usage.input + usage.cacheWrite,
+    inputTokens: usage.input,
     cachedInputTokens: usage.cacheRead,
+    cacheWriteTokens: usage.cacheWrite,
     outputTokens: usage.output,
     totalTokens: totalTokens ?? usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
   };

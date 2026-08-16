@@ -4,11 +4,7 @@ import type {
   ExactDisposableWorkspaceCleanupInput,
   ExactDisposableWorkspaceCleanupResult,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import type {
-  TaskReviewExecution,
-  TaskReviewRecord,
-  TaskReviewToolingFailure,
-} from "./taskReview.js";
+import type { TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
 
 type TaskReviewEvidencePersistence = Pick<
@@ -39,10 +35,8 @@ export const settleTaskReviewEvidence = (
   },
   review: TaskReviewRecord,
   now: string,
-  execution?: TaskReviewExecution,
 ): Effect.Effect<TaskReviewEvidenceSettlementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const requiredExecution = execution ?? review.toolingFailure?.pendingExecution;
     const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
@@ -56,7 +50,6 @@ export const settleTaskReviewEvidence = (
           message: base.message,
         },
         now,
-        requiredExecution,
       );
     }
 
@@ -80,7 +73,6 @@ export const settleTaskReviewEvidence = (
           ),
         },
         now,
-        requiredExecution,
       );
     }
     if (cleanup.workspace !== "removed") {
@@ -92,7 +84,6 @@ export const settleTaskReviewEvidence = (
           message: cleanup.errorMessage ?? "Task Review workspace cleanup failed.",
         },
         now,
-        requiredExecution,
       );
     }
 
@@ -104,19 +95,14 @@ const settlementFailed = (
   review: TaskReviewRecord,
   failure: TaskReviewToolingFailure,
   now: string,
-  pendingExecution?: TaskReviewExecution,
 ): Effect.Effect<TaskReviewEvidenceSettlementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const retainedFailure =
-      pendingExecution === undefined || failure.pendingExecution !== undefined
-        ? failure
-        : { ...failure, pendingExecution };
-    yield* persistence.recordActiveFailure(review.id, retainedFailure, now);
+    yield* persistence.recordActiveFailure(review.id, failure, now);
     const current = yield* persistence.getById(review.id);
     return {
       ok: false,
-      review: current ?? { ...review, toolingFailure: retainedFailure, updatedAt: now },
-      message: retainedFailure.message,
+      review: current ?? { ...review, toolingFailure: failure, updatedAt: now },
+      message: failure.message,
     } as const;
   });
 

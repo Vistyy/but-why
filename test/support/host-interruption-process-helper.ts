@@ -65,11 +65,11 @@ const program = Effect.scoped(
       Effect.sync(() => {
         const childPid = Number(readFileSync(childPidPath, "utf8"));
         const childState = processIsGone(childPid) ? "child-gone" : "child-alive";
-        const sessionState =
-          readFileSync(sessionPath, "utf8") === originalSession
-            ? "session-restored"
-            : "session-modified";
-        appendEvent(`workspace-cleanup:${childState}:${sessionState}`);
+        const transcriptState =
+          readFileSync(sessionPath, "utf8") === `${originalSession}partial invocation\n`
+            ? "transcript-retained"
+            : "transcript-unexpected";
+        appendEvent(`workspace-cleanup:${childState}:${transcriptState}`);
       }),
     );
     yield* piReviewerAgentRuntime.review({

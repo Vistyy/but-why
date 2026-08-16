@@ -12,6 +12,7 @@ describe("token usage contract", () => {
       expect(usage).toEqual({
         inputTokens: 10,
         cachedInputTokens: 0,
+        cacheWriteTokens: 0,
         outputTokens: 4,
         totalTokens: 14,
       });
@@ -31,6 +32,7 @@ describe("token usage contract", () => {
       const usage = {
         inputTokens: 10,
         cachedInputTokens: 3,
+        cacheWriteTokens: 3,
         outputTokens: 4,
         totalTokens: 20,
       };

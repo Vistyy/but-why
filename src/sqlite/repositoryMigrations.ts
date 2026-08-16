@@ -40,6 +40,7 @@ import { requirePassingReviewForUnlinkedTodoTasksMigration as requirePassingRevi
 import { currentCandidateSelectionMigration as currentCandidateSelection } from "./migrations/0038_current_candidate_selection.js";
 import { candidateValidationReuseMigration as candidateValidationReuse } from "./migrations/0039_candidate_validation_reuse.js";
 import { agentSessionsMigration as agentSessions } from "./migrations/0040_agent_sessions.js";
+import { agentInvocationCacheWriteTokensMigration as agentInvocationCacheWriteTokens } from "./migrations/0041_agent_invocation_cache_write_tokens.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -82,6 +83,7 @@ const migrations = {
   "0038_current_candidate_selection": currentCandidateSelection,
   "0039_candidate_validation_reuse": candidateValidationReuse,
   "0040_agent_sessions": agentSessions,
+  "0041_agent_invocation_cache_write_tokens": agentInvocationCacheWriteTokens,
 };
 
 const migrationKeys = Object.keys(migrations).sort();

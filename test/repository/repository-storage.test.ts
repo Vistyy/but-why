@@ -2155,16 +2155,17 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        const live = yield* changes.reviewerSessions.getReviewerSession(
+        const live = yield* changes.reviewerSessions.listReviewerSessions(
           "change-transcript-retained",
-          "acceptance",
         );
-        expect(live).toEqual({
-          ownerId: "change-transcript-retained",
-          producer: "acceptance",
-          fingerprint: "fingerprint",
-          sessionReference: "session-live",
-        });
+        expect(live).toEqual([
+          {
+            ownerId: "change-transcript-retained",
+            producer: "acceptance",
+            fingerprint: "fingerprint",
+            sessionReference: "session-live",
+          },
+        ]);
         const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
           "change-transcript-retained",
         );
@@ -2256,11 +2257,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(40);
+          expect(yield* initializeMigrationCount).toBe(41);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(40);
+          expect(yield* readMigrationCount).toBe(41);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2360,9 +2361,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(40);
+              expect(migrations.length).toBe(41);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 40 }, (_, index) => index + 1),
+                Array.from({ length: 41 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2461,7 +2462,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 40,
+              migrationCount: 41,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

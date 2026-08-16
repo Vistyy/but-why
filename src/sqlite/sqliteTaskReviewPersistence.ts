@@ -9,6 +9,8 @@ import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type {
+  LegacyTaskReviewerSession,
+  LegacyTaskReviewToolingFailure,
   TaskReviewDependencyEvidence,
   TaskReviewExecution,
   TaskReviewFinding,
@@ -61,6 +63,8 @@ type TranscriptRow = {
   readonly filePath: string;
 };
 
+type LegacyTaskReviewerSessionRow = LegacyTaskReviewerSession;
+
 type AgentInvocationRow = {
   readonly id: number;
   readonly agentSessionId: number;
@@ -70,6 +74,7 @@ type AgentInvocationRow = {
   readonly settlementKind: string | null;
   readonly inputTokens: number | null;
   readonly cachedInputTokens: number | null;
+  readonly cacheWriteTokens: number | null;
   readonly outputTokens: number | null;
   readonly totalTokens: number | null;
   readonly harness: string;
@@ -381,19 +386,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             `;
           }
         }).pipe(Effect.asVoid),
-    getReviewerSession: (taskId, producer) =>
-      repository.transaction("read legacy Task Reviewer Session", (sql) =>
-        Effect.map(
-          sql<{ readonly fingerprint: string; readonly sessionReference: string }>`
-            SELECT fingerprint, session_reference AS sessionReference
-            FROM task_reviewer_sessions WHERE task_id = ${taskId}
-          `,
-          (rows) => {
-            const row = rows[0];
-            return row === undefined ? undefined : { ownerId: taskId, producer, ...row };
-          },
-        ),
-      ),
     recordActiveFailure: (reviewId, failure, now) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>
         Effect.asVoid(sql`
@@ -516,7 +508,13 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
   ) {
     throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
   }
-  const tokenValues = [row.inputTokens, row.cachedInputTokens, row.outputTokens, row.totalTokens];
+  const tokenValues = [
+    row.inputTokens,
+    row.cachedInputTokens,
+    row.cacheWriteTokens,
+    row.outputTokens,
+    row.totalTokens,
+  ];
   const hasTokens = tokenValues.some((value) => value !== null);
   if (
     hasTokens &&
@@ -534,6 +532,7 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
       ? {
           inputTokens: row.inputTokens as number,
           cachedInputTokens: row.cachedInputTokens as number,
+          cacheWriteTokens: row.cacheWriteTokens as number,
           outputTokens: row.outputTokens as number,
           totalTokens: row.totalTokens as number,
         }
@@ -845,6 +844,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
         invocation.settlement_kind AS settlementKind,
         invocation.input_tokens AS inputTokens,
         invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens,
         invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens,
         continuation.harness,
@@ -868,6 +868,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
       WHERE observation.review_id = ${row.id}
       ORDER BY transcript.sequence ASC
     `;
+    const legacyTaskReviewerSession = yield* readLegacyTaskReviewerSession(sql, row.taskId);
     return yield* Effect.try({
       try: (): TaskReviewRecord => ({
         id: row.id,
@@ -895,6 +896,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           invocationUsage: parseInvocationUsage(execution.invocationUsage),
         })),
         transcripts,
+        ...(legacyTaskReviewerSession === undefined ? {} : { legacyTaskReviewerSession }),
         ...(agentSessionId === undefined && agentInvocations.length === 0
           ? {}
           : {
@@ -909,6 +911,13 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
         new RepositoryPersistedDataInvalid({ operationName: "read Task Review", cause }),
     });
   });
+
+const readLegacyTaskReviewerSession = (sql: SqlClient.SqlClient, taskId: string) =>
+  sql<LegacyTaskReviewerSessionRow>`
+    SELECT fingerprint, session_reference AS sessionReference
+    FROM task_reviewer_sessions
+    WHERE task_id = ${taskId}
+  `.pipe(Effect.map((rows) => rows[0]));
 
 type TaskReviewJsonObject = Record<string, unknown> & {
   readonly id?: unknown;
@@ -966,7 +975,13 @@ const parseInvocationUsage = (source: string): readonly (TokenUsage | null)[] =>
     const cachedInputTokens = requiredTokenCount(cachedInputTokenValue);
     const outputTokens = requiredTokenCount(outputTokenValue);
     const totalTokens = requiredTokenCount(totalTokenValue);
-    return { inputTokens, cachedInputTokens, outputTokens, totalTokens };
+    return {
+      inputTokens,
+      cachedInputTokens,
+      cacheWriteTokens: 0,
+      outputTokens,
+      totalTokens,
+    };
   });
 };
 const requiredTokenCount = (value: unknown): number => {
@@ -1056,15 +1071,17 @@ const parseWorkspaceCleanup = (value: string): TaskReviewRecord["workspaceCleanu
   if (value === "not_created" || value === "removed" || value === "failed") return value;
   throw new Error("Invalid Task Review workspace cleanup");
 };
-const parseFailure = (source: string): TaskReviewToolingFailure => {
+const parseFailure = (
+  source: string,
+): TaskReviewToolingFailure | LegacyTaskReviewToolingFailure => {
   const value = parseObject(source);
-  return {
+  const failure = {
     operation: requiredString(value.operation),
     message: requiredString(value.message),
-    ...(value.pendingExecution === undefined
-      ? {}
-      : { pendingExecution: parseExecution(value.pendingExecution) }),
   };
+  return value.pendingExecution === undefined
+    ? failure
+    : { ...failure, pendingExecution: parseExecution(value.pendingExecution) };
 };
 const parseExecution = (source: unknown): TaskReviewExecution => {
   const value = parseObject(JSON.stringify(source));
