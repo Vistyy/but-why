@@ -32,32 +32,17 @@ This section is complete when the selected work item and Work Route are explicit
 ## Author Tasks
 
 1. Gather the Operator-approved outcome, applicable authority, existing Tasks, and relevant repository evidence.
-   Do not infer approval from brainstorming or provisional planning.
    Ask the Operator when the outcome or scope is unclear.
-2. Choose the smallest coherent vertical Tasks that each leave the repository safe and supported.
-   Each Task must be independently understandable, implementable, reviewable, and verifiable, but it need not deliver standalone end-user value.
-   Split separable observable behavior, external integrations, lifecycle or recovery rules, durable state changes, or materially different verification boundaries when the narrower results remain supported.
-   Do not combine separable behavior only because it contributes to one product outcome.
-   Keep behavior together when a narrower result would leave the repository unsupported or require temporary duplicated interfaces without independently verifiable behavior.
-   Do not split or combine work based only on files, modules, implementation steps, line count, estimated effort, or difficulty.
-   Ensure the complete proposed Task set covers the approved outcome without omitting or weakening approved behavior.
-   Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
-3. Describe each Task in the form that communicates its outcome and consequential constraints clearly.
-   Before recording a proposed requirement, trace its normal path and material failure or recovery consequences.
-   Surface requirements that would introduce open-ended parsing, classification, compatibility, recovery, or exceptional-case behavior beyond the approved outcome, and ask the Operator to bound or remove them.
-   Do not silently weaken approved intent or remove necessary safety and reliability.
-   Do not require standard headings, a verification inventory, an implementation plan, or an exact file forecast.
-   State a special verification constraint only when it is already part of approved intent.
-   Otherwise select proportionate verification during implementation.
-4. Present the proposed Task titles, intended outcomes, actual dependencies, and unresolved choices that affect scope or observable behavior.
-5. Obtain Task Recording Authorization before mutating any Task or Task Dependency.
+2. Apply [Task authoring](task-authoring.md) to compose or revise the proposed Tasks and their actual Task Dependencies.
+3. Present the proposed Task titles, intended outcomes, actual dependencies, and unresolved choices that affect scope or observable behavior.
+4. Obtain Task Recording Authorization before mutating any Task or Task Dependency.
    This authorization permits clear description wording and dependency encoding within the agreed scope.
    It does not authorize Task Submission, Change Start, or implementation.
-6. Record the agreed Tasks and only their actual prerequisites.
+5. Record the agreed Tasks and only their actual prerequisites.
    For an approved unlinked Todo Task, run `<but-why> task revise <task-id>` before using a Task Context draft and apply operation.
    Revision returns the Task to New without changing its current Context or direct Task Dependencies.
    For an existing New Task, use the Task Context draft and apply operation directly.
-7. Treat each successful mutation result as authoritative for its returned committed fields.
+6. Treat each successful mutation result as authoritative for its returned committed fields.
    Use an inspection command only when the result omits required recording state.
    Verify that every recorded Task remains unapproved and unlinked to a Change.
 
