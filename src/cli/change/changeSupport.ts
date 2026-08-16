@@ -23,7 +23,7 @@ export const withResolvedChangeId = <E, R>(
   commandName: string,
   use: (changeId: string) => Effect.Effect<CliResult, E, R>,
 ): Effect.Effect<CliResult, E, R> =>
-  resolveChangeId(changeId, environment.cwd, commandName).pipe(
+  resolveChangeId(changeId, environment.cwd, commandName, environment.operationalRepoRoot).pipe(
     Effect.flatMap((resolved) =>
       resolved.ok ? use(resolved.changeId) : Effect.succeed(resolved.result),
     ),

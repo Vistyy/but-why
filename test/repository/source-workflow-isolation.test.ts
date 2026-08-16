@@ -141,6 +141,10 @@ test("source Change operations ignore a future Managed Worktree Repo Config", ()
     change: { id: changeId, worktreePath: candidate },
   });
 
+  const inferred = runTestProcess("just", ["by", "change", "show"], { cwd: candidate });
+  expect(inferred.status, `${inferred.stdout}${inferred.stderr}`).toBe(0);
+  expect(JSON.parse(inferred.stdout)).toMatchObject({ change: { id: changeId } });
+
   const blockers = runTestProcess("just", ["by", "change", "blocker", "list", changeId], {
     cwd: candidate,
   });
