@@ -32,10 +32,10 @@ export type LoadTaskChangeTaskUseCasesResult<A> =
   | { readonly ok: false; readonly error: RepositoryRuntimeLoadError };
 
 export const withTaskChangeTaskUseCases = <A, E, R>(
-  input: { readonly cwd: string },
+  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
   use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<LoadTaskChangeTaskUseCasesResult<A>, E | RepositoryStorageError, R> => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return Effect.succeed(loaded);
   const { context } = loaded.runtime;
   return loaded.runtime.provide(

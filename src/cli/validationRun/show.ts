@@ -15,7 +15,12 @@ export const runShowCommand = (
   command: { readonly validationRunId: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const loaded = loadCandidateValidationRunInspection({ cwd: environment.cwd });
+  const loaded = loadCandidateValidationRunInspection({
+    cwd: environment.cwd,
+    ...(environment.operationalRepoRoot === undefined
+      ? {}
+      : { operationalRepoRoot: environment.operationalRepoRoot }),
+  });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
   return loaded.inspection.inspectRun(command.validationRunId).pipe(
     Effect.map((inspection) =>

@@ -14,9 +14,7 @@ export const runFindings = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> =>
   support.withResolvedChangeId(command.changeId, environment, "findings", (changeId) => {
-    const loaded = loadChangeFindings({
-      cwd: environment.cwd,
-    });
+    const loaded = loadChangeFindings(support.changeOperationInput(environment));
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.operation(changeId).pipe(
       Effect.map((result) =>

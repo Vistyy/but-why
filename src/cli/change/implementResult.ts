@@ -74,14 +74,6 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
       help: ["Use an open Change ID returned by `by change start`."],
     });
   }
-  if (result.code === "repo_config_invalid") {
-    return runtimeError({
-      code: result.code,
-      message: result.message,
-      details: { changeId: result.change.id, worktreePath: result.change.worktreePath },
-      help: ["Fix Repo Config in the Managed Worktree, then retry Change Implement."],
-    });
-  }
   if (result.code === "agent_profile_invalid") {
     return runtimeError({
       code: result.code,

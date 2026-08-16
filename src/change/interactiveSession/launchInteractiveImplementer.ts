@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 import {
   buildImplementerInitialPrompt,
@@ -25,7 +26,6 @@ export type ChangeImplementResult =
         | "launch_failed"
         | "launch_indeterminate"
         | "pane_not_ready"
-        | "repo_config_invalid"
         | "agent_profile_invalid";
       readonly message: string;
     }
@@ -33,6 +33,7 @@ export type ChangeImplementResult =
 
 export const launchInteractiveImplementer = (input: {
   readonly repositoryPath: string;
+  readonly repoConfig: RepoConfig;
   readonly change: ChangeStartRecord;
   readonly interactiveSessionHost: InteractiveSessionHost;
   readonly globalConfigPath: string;
@@ -42,13 +43,14 @@ export const launchInteractiveImplementer = (input: {
   Effect.gen(function* () {
     const {
       repositoryPath,
+      repoConfig,
       change,
       interactiveSessionHost,
       globalConfigPath,
       profileLoader,
       implementerPrompt,
     } = input;
-    const loadedProfile = profileLoader(change.worktreePath, globalConfigPath);
+    const loadedProfile = profileLoader(repoConfig, change.worktreePath, globalConfigPath);
     if (!loadedProfile.ok) return { ...loadedProfile, change };
     const resolvedAgentProfile = loadedProfile.profile;
     const launched = yield* Effect.tryPromise({

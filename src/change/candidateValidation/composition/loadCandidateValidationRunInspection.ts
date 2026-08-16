@@ -19,8 +19,9 @@ export type LoadCandidateValidationRunInspectionResult =
 
 export const loadCandidateValidationRunInspection = (input: {
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
 }): LoadCandidateValidationRunInspectionResult => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return loaded;
   const { context } = loaded.runtime;
   const inspectionFor = Effect.all({

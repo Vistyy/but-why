@@ -91,6 +91,9 @@ export const inspectionFailure = <A>(
 
 export const changeOperationInput = (environment: ChangeCommandEnvironment) => ({
   cwd: environment.cwd,
+  ...(environment.operationalRepoRoot === undefined
+    ? {}
+    : { operationalRepoRoot: environment.operationalRepoRoot }),
   ...(environment.interactiveSessionHost === undefined
     ? {}
     : { interactiveSessionHost: environment.interactiveSessionHost }),

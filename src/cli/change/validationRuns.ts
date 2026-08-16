@@ -13,9 +13,7 @@ export const runValidationRuns = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> =>
   support.withResolvedChangeId(command.changeId, environment, "validation-runs", (changeId) => {
-    const loaded = loadChangeValidationRuns({
-      cwd: environment.cwd,
-    });
+    const loaded = loadChangeValidationRuns(support.changeOperationInput(environment));
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.operation(changeId).pipe(
       Effect.map((result) =>
