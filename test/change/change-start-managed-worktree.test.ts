@@ -166,6 +166,41 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("recovers a linked Change without rereading current reviewer configuration", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const taskId = yield* createTask(
+        root,
+        "Recover without current policy",
+        "Keep the recorded policy.\n",
+      );
+      yield* passTaskReviewFixture(root, taskId, now);
+      const globalConfigPath = join(root, ".test-global-config.json");
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId],
+        now,
+        { globalConfigPath },
+      );
+      expect(started.status).toBe(0);
+      const startedOutput = JSON.parse(started.stdout) as ChangeOutput;
+
+      writeFileSync(globalConfigPath, "malformed");
+      const recovered = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId],
+        now,
+        { globalConfigPath },
+      );
+
+      expect(recovered.status).toBe(0);
+      expect(JSON.parse(recovered.stdout)).toMatchObject({
+        change: { id: startedOutput.change.id, taskId },
+      });
+    }),
+  );
+
   it.effect("rejects a local-only remote as a publication remote", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
@@ -282,10 +317,7 @@ describe("Change Start Managed Worktree boundaries", () => {
             code: "managed_worktree_path_unavailable",
             changeId: expect.any(String),
             worktreePath: expect.stringMatching(
-              new RegExp(
-                `^${escapeRegExp(join(siblingRoot, "but-why", `${taskId.toLowerCase()}-`))}`,
-                "u",
-              ),
+              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "change-"))}`, "u"),
             ),
           },
           help: [
@@ -656,7 +688,6 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     branchRef: "refs/heads/but-why/change-1",
     baseRef: "refs/heads/main",
     baseRemoteUrl: "https://github.com/acme/repo.git",
-    taskId: null,
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,

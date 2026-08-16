@@ -1,16 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
-import {
-  type CancellationDependencies,
-  openCancellationUseCases,
-} from "../../src/change/cancelChange.js";
 import type { ChangeCleanup, ChangeRecord } from "../../src/change/change.js";
 import type { TerminalCleanupChange } from "../../src/change/changePorts.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
+import {
+  type CancellationDependencies,
+  openCancellationUseCases,
+} from "../../src/taskChange/cancelTaskChange.js";
+import type { TaskChangeCancellationChange } from "../../src/taskChange/taskChangePorts.js";
 import {
   noOpTerminalCleanupDependencies,
   openTerminalCleanup,
@@ -357,7 +357,7 @@ const changeRecord = (input: {
   readonly closeReason: "completed" | "cancelled" | null;
   readonly cleanup: ChangeCleanup;
   readonly state?: "open" | "closed";
-}): ChangeRecord & TerminalCleanupChange => ({
+}): ChangeRecord & TerminalCleanupChange & TaskChangeCancellationChange => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
@@ -449,7 +449,7 @@ const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullReque
 
 const cancellationDependencies = (input: {
   readonly task: TaskRecord;
-  readonly change: ChangeRecord & TerminalCleanupChange;
+  readonly change: ChangeRecord & TerminalCleanupChange & TaskChangeCancellationChange;
   readonly events: string[];
 }): CancellationDependencies & {
   readonly cancellation: ReturnType<typeof openCancellationUseCases>;

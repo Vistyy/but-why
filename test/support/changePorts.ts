@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
-  ChangeCancellationPort,
   ChangeReadPort,
   ChangeReconciliationPort,
   ChangeReviewerSessionPort,
@@ -12,33 +11,44 @@ import type {
 } from "../../src/change/changePorts.js";
 import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
 import { openSqliteChangeReadPort } from "../../src/sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
 import { openSqliteChangeReviewerTranscriptPort } from "../../src/sqlite/sqliteChangeReviewerTranscriptPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../src/sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
+import {
+  openSqliteTaskChangeReconciliationCompletion,
+  openSqliteTaskChangeSubmissionCompletion,
+} from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 
 type ChangeDeliveryTestPort = {
   readonly getChangeById: ChangeReconciliationPort["getChangeById"];
   readonly listChangesForReconciliation: ChangeReconciliationPort["listChangesForReconciliation"];
   readonly completeMergedChange: ChangeReconciliationPort["completeMergedChange"];
-  readonly cancelChange: ChangeCancellationPort["cancelChange"];
+  readonly cancelChange: TaskChangeCancellationPort["cancelChange"];
   readonly recordCleanup: TerminalChangeCleanupPort["recordCleanup"];
 };
 
 const openChangeDeliveryTestPort = () =>
   Effect.all({
-    reconciliation: openSqliteChangeReconciliationPort(),
-    cancellation: openSqliteChangeCancellationPort(),
+    reconciliationOwner: openSqliteChangeReconciliationPort(),
+    reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(),
+    cancellation: openSqliteTaskChangeCancellationPort(),
     cleanup: openSqliteTerminalChangeCleanupPort(),
   }).pipe(
     Effect.map(
-      ({ reconciliation, cancellation, cleanup }): ChangeDeliveryTestPort => ({
-        getChangeById: reconciliation.getChangeById,
-        listChangesForReconciliation: reconciliation.listChangesForReconciliation,
-        completeMergedChange: reconciliation.completeMergedChange,
+      ({
+        reconciliationOwner,
+        reconciliationCompletion,
+        cancellation,
+        cleanup,
+      }): ChangeDeliveryTestPort => ({
+        getChangeById: reconciliationOwner.getChangeById,
+        listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+        completeMergedChange: reconciliationCompletion,
         cancelChange: cancellation.cancelChange,
         recordCleanup: cleanup.recordCleanup,
       }),
@@ -53,8 +63,44 @@ export const openSqliteChangeTestDependencies = () =>
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     publication: openSqliteCandidatePublicationPort(),
-    submission: openSqliteChangeSubmissionPort(),
-  });
+    submissionOwner: openSqliteChangeSubmissionPort(),
+    submissionCompletion: openSqliteTaskChangeSubmissionCompletion(),
+  }).pipe(
+    Effect.map(
+      ({
+        authority,
+        delivery,
+        reads,
+        reviewerSessions,
+        reviewerTranscripts,
+        publication,
+        submissionOwner,
+        submissionCompletion,
+      }) => {
+        const submission: ChangeSubmissionPort = {
+          getChangeById: submissionOwner.getChangeById,
+          ...(submissionOwner.agentSessionConfigurationCanBeCorrected === undefined
+            ? {}
+            : {
+                agentSessionConfigurationCanBeCorrected:
+                  submissionOwner.agentSessionConfigurationCanBeCorrected,
+              }),
+          getChangeForOutputById: submissionOwner.getChangeForOutputById,
+          getCompletedPublicationEvidence: submissionOwner.getCompletedPublicationEvidence,
+          completeMergedChange: submissionCompletion,
+        };
+        return {
+          authority,
+          delivery,
+          reads,
+          reviewerSessions,
+          reviewerTranscripts,
+          publication,
+          submission,
+        };
+      },
+    ),
+  );
 
 export type ChangeTestDependencies = {
   readonly authority: ChangeAuthorityPort;

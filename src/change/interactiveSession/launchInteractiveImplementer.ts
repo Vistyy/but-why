@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 
-import { taskSlugForId } from "../../task/taskId.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 import {
   buildImplementerInitialPrompt,
@@ -100,9 +99,9 @@ export const launchInteractiveImplementer = (input: {
   });
 
 const hostSessionNameForChange = (change: ChangeStartRecord): string =>
-  change.taskId === null ? `change-${change.id.slice(0, 8)}` : taskSlugForId(change.taskId);
+  `change-${change.id.slice(0, 8)}`;
 
 const agentSessionNameForChange = (change: ChangeStartRecord): string =>
-  change.taskId === null || change.acceptanceContext === null
+  change.acceptanceContext === null
     ? `Change ${change.id}`
-    : `${change.taskId} ${change.acceptanceContext.title}`;
+    : `${change.id} ${change.acceptanceContext.title}`;

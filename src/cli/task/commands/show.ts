@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { loadChangeTaskProjection } from "../../../change/composition/loadChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
@@ -26,7 +26,7 @@ export const runTaskShowCommand = (
       if (task === undefined) return taskNotFound(taskId.taskId);
       const change =
         environment.taskUseCases === undefined
-          ? loadChangeTaskProjection({ cwd: environment.cwd })
+          ? loadTaskChangeProjection({ cwd: environment.cwd })
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);

@@ -2,6 +2,10 @@
 
 This context owns requested intent, Task Submission, dependencies, and user-facing Task progress.
 
+Task/Change coordination is the only application boundary that may cross Task and Change state.
+Task state transitions remain Task-owned, and an unlinked Task cannot become Done.
+A linked Task becomes Done only when coordination records exact merged evidence for its linked Change.
+
 ## Language
 
 **Work Route Selection**:
@@ -96,7 +100,9 @@ _Avoid_: proposal identity change, Revision record
 **Task Lifecycle**:
 The user-facing progress of a Task through New, Todo, Done, or Cancelled.
 Todo means approved and unfinished, even while a linked Change reports Change Activity.
-_Avoid_: Validation Run state, generic pipeline
+A Task without a link cannot transition to Done.
+Coordination records the Done transition for a linked Task only after exact merged Change evidence.
+_Avoid_: Validation Run state, Change Activity, generic pipeline
 
 **Transient Task State**:
 A retired persisted Task-state value other than New, Todo, Done, or Cancelled.

@@ -45,7 +45,11 @@ import type {
 import type { TaskReviewPolicyResolutionResult } from "./taskReviewConfig.js";
 import { settleTaskReviewEvidence } from "./taskReviewEvidenceSettlement.js";
 import { decodeTaskReviewerOutput, type TaskReviewerOutput } from "./taskReviewerOutput.js";
-import type { CompleteTaskReviewSuccess, TaskReviewPersistence } from "./taskReviewPersistence.js";
+import type {
+  CompleteTaskReviewSuccess,
+  TaskReviewAdmissionPersistence,
+  TaskReviewPersistence,
+} from "./taskReviewPersistence.js";
 
 export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
@@ -147,6 +151,7 @@ export const openTaskReviewUseCases = (input: {
     baseCommit: string,
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
+  readonly admission?: TaskReviewAdmissionPersistence;
   readonly reviewerSessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
@@ -191,7 +196,8 @@ const submitTaskReview = (
   Effect.gen(function* () {
     const reusableJudgment = yield* input.persistence.reuseJudgment(taskId, now);
     if (reusableJudgment !== undefined) return reusableJudgment;
-    const rejected = yield* input.persistence.checkAdmission(taskId);
+    const admission = input.admission ?? input.persistence;
+    const rejected = yield* admission.checkAdmission(taskId);
     if (rejected !== undefined) return rejected;
 
     const base = yield* input.readReviewBase(input.mainCheckoutRoot);
@@ -223,7 +229,7 @@ const submitTaskReview = (
     }
     const reviewId = randomUUID();
     const workspacePath = expectedDisposableWorkspacePath(input.mainCheckoutRoot, reviewId);
-    const admitted = yield* input.persistence.admit({
+    const admitted = yield* admission.admit({
       reviewId,
       taskId,
       policy: resolvedPolicy.policy.snapshot,

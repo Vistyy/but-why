@@ -119,7 +119,6 @@ describe("owned pull request observation", () => {
       branchRef: "refs/heads/change-1",
       baseRef: "refs/remotes/origin/main",
       baseRemoteUrl: "https://github.com/acme/repo.git",
-      taskId: null,
       startingCommit: null,
       worktreePath: "/repo",
       acceptanceContext: null,

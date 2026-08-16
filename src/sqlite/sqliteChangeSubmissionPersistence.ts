@@ -21,14 +21,13 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
-  validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import {
   decodeChangeState,
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
-import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
+import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -53,7 +52,7 @@ export const openSqliteChangeSubmissionPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeMergedChange(sql, input);
+            const result = yield* completeChangeOnly(sql, input);
             if (!result.ok) return result;
             const changeId = yield* readCommittedCompletionId(sql, input.changeId);
             return { ...result, changeId };
@@ -271,7 +270,12 @@ const mapChangeWithoutHistoryRow = (
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
         const change = yield* decodePersisted(operationName, () => decodeChangeRow(row));
-        yield* validateChangeRelationships(sql, change, operationName);
+        yield* validateChangePublicationRelationships(
+          sql,
+          change.id,
+          change.publication,
+          operationName,
+        );
         return change;
       });
 const invalidData = (operationName: string, message: string) =>

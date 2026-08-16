@@ -21,6 +21,7 @@ import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githu
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
+import { openSqliteTaskChangeSubmissionCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
@@ -62,9 +63,22 @@ export const loadChangeSubmit = (input: {
 
   const programFor = (
     capturePersistence: CandidateCapturePersistence,
-    submission: ChangeSubmissionPort,
+    submissionOwner: ChangeSubmissionPort,
+    submissionCompletion: ChangeSubmissionPort["completeMergedChange"],
     publication: CandidatePublicationPort,
   ) => {
+    const submission: ChangeSubmissionPort = {
+      getChangeById: submissionOwner.getChangeById,
+      ...(submissionOwner.agentSessionConfigurationCanBeCorrected === undefined
+        ? {}
+        : {
+            agentSessionConfigurationCanBeCorrected:
+              submissionOwner.agentSessionConfigurationCanBeCorrected,
+          }),
+      getChangeForOutputById: submissionOwner.getChangeForOutputById,
+      getCompletedPublicationEvidence: submissionOwner.getCompletedPublicationEvidence,
+      completeMergedChange: submissionCompletion,
+    };
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
       github,
@@ -178,7 +192,8 @@ export const loadChangeSubmit = (input: {
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteCandidateValidationExecutionPort(),
-          submission: openSqliteChangeSubmissionPort(),
+          submissionOwner: openSqliteChangeSubmissionPort(),
+          submissionCompletion: openSqliteTaskChangeSubmissionCompletion(),
           reviewerSessions: openSqliteChangeReviewerSessionPort(),
           agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
@@ -187,12 +202,13 @@ export const loadChangeSubmit = (input: {
             ({
               capture,
               validation,
-              submission,
+              submissionOwner,
+              submissionCompletion,
               reviewerSessions,
               agentPersistence,
               publication,
             }) =>
-              programFor(capture, submission, publication)
+              programFor(capture, submissionOwner, submissionCompletion, publication)
                 .submit(submitInput)
                 .pipe(Effect.provide(layerFor(validation, reviewerSessions, agentPersistence))),
           ),

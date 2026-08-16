@@ -5,6 +5,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import {
   passTaskReviewFixture,
   setTerminalTaskStateFixture,
@@ -100,6 +101,7 @@ it.scoped(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const reviews = yield* openSqliteTaskReviewPersistence();
+        const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
@@ -108,14 +110,21 @@ it.scoped(
         yield* repository.operation(
           "link Todo Task fixture to Change",
           (sql) => sql`INSERT INTO changes (
-          id, repository_common_directory, branch_ref, task_id, state, acceptance_context,
+          id, repository_common_directory, branch_ref, state, acceptance_context,
           base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
         ) VALUES (
-          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'BY-1', 'open',
+          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
           '{"version":1,"title":"Linked","description":"Linked intent"}',
           'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
           '/repo-worktrees/change-linked', ${now}, ${now}
         )`,
+        );
+        yield* repository.operation(
+          "link Todo Task fixture to Change",
+          (sql) => sql`
+            INSERT INTO task_change_links (task_id, change_id)
+            VALUES ('BY-1', 'change-linked')
+          `,
         );
         yield* reviews.admit({
           reviewId: "review-active",
@@ -129,11 +138,13 @@ it.scoped(
         yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
         yield* setTerminalTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
 
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual({
-          ok: false,
-          code: "task_change_linked",
-          changeId: "change-linked",
-        });
+        expect(yield* taskChanges.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual(
+          {
+            ok: false,
+            code: "task_change_linked",
+            changeId: "change-linked",
+          },
+        );
         expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toEqual({
           ok: false,
           code: "active_task_review",

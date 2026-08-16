@@ -13,7 +13,6 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   baseRemoteUrl: "https://github.com/acme/repo.git",
   startingCommit: "1111111111111111111111111111111111111111",
   worktreePath: "/repo-worktrees/but-why/by-197-change-1",
-  taskId: "BY-197" as PublicTaskId,
   acceptanceContext: {
     version: 1,
     title: "Accepted title",
@@ -27,10 +26,23 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
 
 describe("Change lifecycle CLI results", () => {
   it("renders successful Change Start identity for a Change linked to a Task", () => {
-    expect(startResult({ ok: true, change: change() })).toEqual({
+    expect(startResult({ ok: true, change: change(), taskId: "BY-197" })).toEqual({
       exitCode: 0,
       stdout: {
         change: { id: "change-1", taskId: "BY-197" },
+        branch: "refs/heads/but-why/by-197-change-1",
+        baseRef: "refs/remotes/origin/main",
+        startingCommit: "1111111111111111111111111111111111111111",
+        worktreePath: "/repo-worktrees/but-why/by-197-change-1",
+      },
+    });
+  });
+
+  it("renders successful Change Start identity without a Task ID", () => {
+    expect(startResult({ ok: true, change: change() })).toEqual({
+      exitCode: 0,
+      stdout: {
+        change: { id: "change-1", taskId: null },
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
         startingCommit: "1111111111111111111111111111111111111111",

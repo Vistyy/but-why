@@ -3,12 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
-import type {
-  DependencyValidationCode,
-  TaskContext,
-  TaskDependencyFact,
-  TaskSummary,
-} from "../task/task.js";
+import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
@@ -81,9 +76,9 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
     return { ok: true as const, task: created, context };
   });
 
-const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
+export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
   Effect.gen(function* () {
-    const target = yield* taskDependencyEditTarget(sql, input.taskId);
+    const target = yield* validateTaskDependencyEditTarget(sql, input.taskId);
     if (!target.ok) return target;
 
     if (input.operation === "replace" && input.prerequisiteTaskIds.length === 0) {
@@ -234,7 +229,7 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
     );
   });
 
-const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
       SELECT id, numeric_id AS numericId, title, description, state,
@@ -248,6 +243,23 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     return yield* rowToStoredTaskRecord(sql, decoded, "read Task");
   });
 
+export const completeTask = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
+  sql`
+    UPDATE tasks SET state = 'done', updated_at = ${now}
+    WHERE id = ${taskId} AND state = 'todo'
+  `;
+
+export const cancelTaskState = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  reason: string,
+  now: string,
+) =>
+  sql`
+    UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}, updated_at = ${now}
+    WHERE id = ${taskId} AND state <> 'cancelled'
+  `;
+
 const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow>`
@@ -255,35 +267,7 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    const task = yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row));
-    const resolutions = yield* readTaskResolutions(sql, taskId);
-    return {
-      ...task,
-      ...(resolutions.length === 0 ? {} : { resolutions }),
-    } satisfies TaskContext;
-  });
-
-const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredResolutionRow>`
-      SELECT implementation_blockers.sequence,
-        implementation_blockers.id,
-        implementation_blockers.resolved_at AS resolvedAt,
-        implementation_blockers.resolution_id AS resolutionId,
-        implementation_blockers.resolution_recorded_at AS resolutionRecordedAt,
-        implementation_blockers.resolution_content AS resolutionContent
-      FROM implementation_blockers
-      JOIN changes ON changes.id = implementation_blockers.change_id
-      WHERE changes.task_id = ${taskId}
-        AND (
-          implementation_blockers.resolved_at IS NOT NULL
-          OR implementation_blockers.resolution_id IS NOT NULL
-          OR implementation_blockers.resolution_recorded_at IS NOT NULL
-          OR implementation_blockers.resolution_content IS NOT NULL
-        )
-      ORDER BY implementation_blockers.sequence ASC
-    `;
-    return rows.map((row) => row.resolutionContent);
+    return yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row));
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
@@ -315,24 +299,11 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     return { ok: true as const, task: updated, context };
   });
 
-const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
+export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state !== "new" && current.state !== "todo") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
-    }
-    const linkedChanges = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${input.taskId} LIMIT 1
-    `;
-    const linkedChange = linkedChanges[0];
-    if (linkedChange !== undefined) {
-      return {
-        ok: false as const,
-        code: "task_change_linked" as const,
-        changeId: linkedChange.id,
-      };
-    }
+    const validated = yield* validateTaskRevisionTarget(sql, input.taskId);
+    if (!validated.ok) return validated;
+    const current = validated.task;
     if (current.state === "new") {
       const activeReview = yield* activeTaskReviewId(sql, input.taskId);
       if (activeReview !== undefined) {
@@ -371,19 +342,23 @@ const cancelTask = (
     return { ok: true as const, changed: true, task: updated };
   });
 
+export const validateTaskRevisionTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, taskId);
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (current.state !== "new" && current.state !== "todo") {
+      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+    }
+    return { ok: true as const, task: current };
+  });
+
 const taskDependenciesAreEditable = (state: TaskState): boolean => state === "new";
 
-const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const validateTaskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const current = yield* getTaskById(sql, taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (!taskDependenciesAreEditable(current.state)) {
-      return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
-    }
-    const linked = yield* sql<{ readonly found: number }>`
-      SELECT 1 AS found FROM changes WHERE task_id = ${taskId} LIMIT 1
-    `;
-    if (linked.length > 0) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
     return { ok: true as const, task: current };
@@ -592,4 +567,3 @@ const invalidData = (operationName: string, message: string) =>
 
 type StoredMaximumNumericIdRow = { readonly maximumNumericId: number | null };
 type StoredCountRow = { readonly count: number };
-type StoredResolutionRow = { readonly resolutionContent: string };

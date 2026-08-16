@@ -8,8 +8,10 @@ import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCa
 import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
+import { openSqliteTaskChangeReconciliationCompletion } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
@@ -40,7 +42,7 @@ describe("SQLite Change decoding", () => {
             now: "2026-08-09T20:00:00.000Z",
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
-          expect(created).toMatchObject({ ok: true, change: { taskId: null } });
+          expect(created).toMatchObject({ ok: true, change: { acceptanceContext: null } });
 
           yield* repository.operation("install historical Acceptance Context", (sql) =>
             Effect.gen(function* () {
@@ -53,12 +55,29 @@ describe("SQLite Change decoding", () => {
               )
             `;
               yield* sql`
-              UPDATE changes
-              SET task_id = 'BY-901', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Historical intent","description":"Preserve snapshots.","comments":["first\\ncomment","second"],"resolutions":["keep  spacing"]}'
               WHERE id = 'change-decoded'
             `;
             }),
+          );
+
+          const storedWithoutLink = yield* changes.reads.getChangeById("change-decoded");
+          expect(storedWithoutLink?.acceptanceContext).toEqual({
+            version: 1,
+            title: "Historical intent",
+            description: "Preserve snapshots.",
+            comments: ["first\ncomment", "second"],
+            resolutions: ["keep  spacing"],
+          });
+          yield* expectPersistedDataInvalid(starts.getById("change-decoded"));
+
+          yield* repository.operation(
+            "install Change Task link",
+            (sql) => sql`
+            INSERT INTO task_change_links (task_id, change_id)
+            VALUES ('BY-901', 'change-decoded')
+          `,
           );
 
           const stored = yield* changes.reads.getChangeById("change-decoded");
@@ -69,6 +88,9 @@ describe("SQLite Change decoding", () => {
             comments: ["first\ncomment", "second"],
             resolutions: ["keep  spacing"],
           });
+          expect((yield* starts.getById("change-decoded"))?.acceptanceContext).toEqual(
+            stored?.acceptanceContext,
+          );
         }),
       ),
   );
@@ -97,7 +119,6 @@ describe("SQLite Change decoding", () => {
           (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
         );
         expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
-          taskId: null,
           startingCommit: null,
         });
         yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
@@ -288,9 +309,13 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = 'BY-902', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed intent","description":"Reject it.","unexpected":true}'
               WHERE id = 'change-malformed'
+            `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES ('BY-902', 'change-malformed')
             `;
           }),
         );
@@ -306,8 +331,11 @@ describe("SQLite Change decoding", () => {
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "restore Change without a Task context",
-          (sql) =>
-            sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
+          (sql) => sql`UPDATE changes SET acceptance_context = NULL WHERE id = 'change-malformed'`,
+        );
+        yield* repository.operation(
+          "remove malformed Change link",
+          (sql) => sql`DELETE FROM task_change_links WHERE change_id = 'change-malformed'`,
         );
       }),
     ),
@@ -357,15 +385,20 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = ' BY-904', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed selected metadata","description":"Reject it."}'
               WHERE id = 'change-publication-selection'
             `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES (' BY-904', 'change-publication-selection')
+            `;
           }),
         );
-        yield* expectPersistedDataInvalid(
-          publication.getChangeById("change-publication-selection"),
-        );
+        expect(yield* publication.getChangeById("change-publication-selection")).toMatchObject({
+          id: "change-publication-selection",
+          publication: null,
+        });
       }),
     ),
   );
@@ -375,8 +408,14 @@ describe("SQLite Change decoding", () => {
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
-        const cancellation = yield* openSqliteChangeCancellationPort();
-        const reconciliation = yield* openSqliteChangeReconciliationPort();
+        const cancellation = yield* openSqliteTaskChangeCancellationPort();
+        const reconciliationOwner = yield* openSqliteChangeReconciliationPort();
+        const reconciliationCompletion = yield* openSqliteTaskChangeReconciliationCompletion();
+        const reconciliation = {
+          getChangeById: reconciliationOwner.getChangeById,
+          listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+          completeMergedChange: reconciliationCompletion,
+        };
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -398,11 +437,15 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = 'BY-903', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
                 base_remote_url = 'https://github.com/acme/repo.git',
                 starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
               WHERE id = ${captured.changeId}
+            `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES ('BY-903', ${captured.changeId})
             `;
           }),
         );
@@ -513,7 +556,7 @@ describe("SQLite Change decoding", () => {
             id: captured.changeId,
             state: "closed",
             closeReason: "cancelled",
-            cancelReason: null,
+            cancelReason: "Exercise reconciliation selection.",
             cleanup: { state: "pending", blockingReason: null },
           },
         });
@@ -528,7 +571,7 @@ describe("SQLite Change decoding", () => {
         );
         const [closedPublication, closedTaskProjection] = yield* Effect.all([
           Effect.either(changes.publication.getChangeById(captured.changeId)),
-          Effect.either(changes.reads.getChangeByTaskId("BY-903")),
+          Effect.either(cancellation.getChangeByTaskId("BY-903")),
         ]);
         expect(closedPublication).toMatchObject({ _tag: "Right", right: { state: "closed" } });
         expect(closedTaskProjection).toMatchObject({
@@ -552,7 +595,13 @@ describe("SQLite Change decoding", () => {
         const changes = yield* openSqliteChangeTestDependencies();
         const publication = yield* openSqliteCandidatePublicationPort();
         const cancellation = yield* openSqliteChangeCancellationPort();
-        const reconciliation = yield* openSqliteChangeReconciliationPort();
+        const reconciliationOwner = yield* openSqliteChangeReconciliationPort();
+        const reconciliationCompletion = yield* openSqliteTaskChangeReconciliationCompletion();
+        const reconciliation = {
+          getChangeById: reconciliationOwner.getChangeById,
+          listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+          completeMergedChange: reconciliationCompletion,
+        };
         const cleanup = yield* openSqliteTerminalChangeCleanupPort();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({

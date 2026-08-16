@@ -39,16 +39,6 @@ export const openSqliteChangeReviewerSessionPort = () =>
                 cause: new Error("Invocation Session is missing"),
               }),
             );
-          const taskOwners = yield* sql<{ readonly taskId: string }>`
-            SELECT id AS taskId FROM tasks WHERE reviewer_agent_session_id = ${sessionId}
-          `;
-          if (taskOwners.length > 0)
-            return yield* Effect.fail(
-              new RepositoryPersistedDataInvalid({
-                operationName: "link Change Agent Invocation",
-                cause: new Error("Agent Session already has another owner"),
-              }),
-            );
           const existingOwners = yield* sql<{ readonly agentSessionId: number }>`
             SELECT agent_session_id AS agentSessionId
             FROM change_agent_sessions

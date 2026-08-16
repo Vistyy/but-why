@@ -315,15 +315,19 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
       `,
         );
-        yield* repository.operation(
-          "attach Task publication metadata",
-          (sql) => sql`
-        UPDATE changes
-        SET task_id = 'BY-1',
-            acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
-            base_remote_url = 'https://github.test/acme/widgets.git'
-        WHERE id = ${fixture.captured.changeId}
-      `,
+        yield* repository.operation("attach Task publication metadata", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+                UPDATE changes
+                SET acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
+                    base_remote_url = 'https://github.test/acme/widgets.git'
+                WHERE id = ${fixture.captured.changeId}
+              `;
+            yield* sql`
+                INSERT INTO task_change_links (task_id, change_id)
+                VALUES ('BY-1', ${fixture.captured.changeId})
+              `;
+          }),
         );
         const validationRunId = yield* completeValidation(
           fixture.validation,

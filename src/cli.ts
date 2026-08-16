@@ -1,7 +1,6 @@
 import type { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "./agent/reviewerOutput.js";
-import type { CancellationUseCases } from "./change/cancelChange.js";
 import type { InteractiveSessionHost } from "./change/interactiveSession/interactiveSessionHost.js";
 import type { TextInputStdin } from "./cli/input/textInput.js";
 import { runCommandTree } from "./cliCommandTree.js";
@@ -13,6 +12,7 @@ import type {
   TaskReviewSubmissionUseCases,
 } from "./task/review/taskReviewUseCases.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
+import type { CancellationUseCases } from "./taskChange/cancelTaskChange.js";
 
 export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {

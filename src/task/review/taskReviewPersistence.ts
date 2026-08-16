@@ -162,3 +162,8 @@ export type TaskReviewPersistence = {
     review: TaskReviewRecord,
   ) => Effect.Effect<boolean, RepositoryStorageError>;
 };
+
+export type TaskReviewAdmissionPersistence = Pick<
+  TaskReviewPersistence,
+  "checkAdmission" | "admit"
+>;

@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { onTestFinished } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
-import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
 import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
@@ -14,6 +13,7 @@ import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRun
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import type { CancellationUseCases } from "../../src/taskChange/cancelTaskChange.js";
 import { passTaskReviewFixture as passStoredTaskReviewFixture } from "./repository.js";
 import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";

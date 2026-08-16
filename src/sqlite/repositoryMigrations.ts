@@ -41,6 +41,7 @@ import { currentCandidateSelectionMigration as currentCandidateSelection } from 
 import { candidateValidationReuseMigration as candidateValidationReuse } from "./migrations/0039_candidate_validation_reuse.js";
 import { agentSessionsMigration as agentSessions } from "./migrations/0040_agent_sessions.js";
 import { agentInvocationCacheWriteTokensMigration as agentInvocationCacheWriteTokens } from "./migrations/0041_agent_invocation_cache_write_tokens.js";
+import { taskChangeBoundaryMigration as taskChangeBoundary } from "./migrations/0042_task_change_boundary.js";
 
 const migrations = {
   "0001_baseline": baseline,
@@ -84,6 +85,7 @@ const migrations = {
   "0039_candidate_validation_reuse": candidateValidationReuse,
   "0040_agent_sessions": agentSessions,
   "0041_agent_invocation_cache_write_tokens": agentInvocationCacheWriteTokens,
+  "0042_task_change_boundary": taskChangeBoundary,
 };
 
 const migrationKeys = Object.keys(migrations).sort();

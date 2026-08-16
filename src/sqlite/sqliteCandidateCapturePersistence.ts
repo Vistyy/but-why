@@ -83,10 +83,10 @@ const createStoredChange = (
     const changeId = randomUUID();
     yield* sql`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, task_id, state,
+        id, repository_common_directory, branch_ref, base_ref, state,
         close_reason, created_at, updated_at, closed_at
       ) VALUES (
-        ${changeId}, ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL, NULL,
+        ${changeId}, ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL,
         'open', NULL, ${input.now}, ${input.now}, NULL
       )
     `;

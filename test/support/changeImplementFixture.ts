@@ -52,14 +52,13 @@ export const createChangeImplementFixture = (
           "create Change Implement fixture",
           (sql) => sql`
             INSERT INTO changes (
-              id, repository_common_directory, branch_ref, base_ref, base_remote_url, task_id,
+              id, repository_common_directory, branch_ref, base_ref, base_remote_url,
               starting_commit, worktree_path, acceptance_context,
               prepare_command, prepare_timeout_seconds, prepare_failure,
               state, close_reason, created_at, updated_at, closed_at, cleanup_state
             ) VALUES (
               ${id}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
               'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
-              ${options.taskId ?? null},
               '18fca05273fefafb6a99d64e81d2b698d60e17a4', ${worktreePath},
               ${
                 options.acceptanceContext === undefined
@@ -79,6 +78,15 @@ export const createChangeImplementFixture = (
             )
           `,
         );
+        if (options.taskId !== undefined) {
+          yield* repository.operation(
+            "link Change Implement fixture to its Task",
+            (sql) => sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES (${options.taskId}, ${id})
+            `,
+          );
+        }
       }),
     );
     return { id, worktreePath };

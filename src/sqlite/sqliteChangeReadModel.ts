@@ -11,7 +11,6 @@ import type {
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { LegacyReviewerTranscriptReference } from "../change/legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { storedPublicTaskId } from "../task/taskId.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -34,7 +33,6 @@ export const changeReadColumns = [
   "branch_ref AS branchRef",
   "base_ref AS baseRef",
   "base_remote_url AS baseRemoteUrl",
-  "task_id AS taskId",
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
@@ -68,7 +66,6 @@ export type StoredChangeRow = {
   readonly branchRef: unknown;
   readonly baseRef: unknown;
   readonly baseRemoteUrl: unknown;
-  readonly taskId: unknown;
   readonly startingCommit: unknown;
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
@@ -92,14 +89,10 @@ export type ChangeWithoutAuthorityHistory = Omit<
 >;
 
 export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHistory => {
-  const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
   const encodedAcceptanceContext = decodeStoredNullableString(
     row.acceptanceContext,
     "Change Acceptance Context",
   );
-  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-    throw new Error("Stored Change Task relationship is incomplete");
-  }
   const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
   const prepareTimeoutSeconds =
     row.prepareTimeoutSeconds === null
@@ -144,7 +137,6 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
     branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
     baseRef: decodeStoredNullableString(row.baseRef, "Change Base ref"),
     baseRemoteUrl: decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL"),
-    taskId: taskId === null ? null : storedPublicTaskId(taskId),
     startingCommit: decodeStoredNullableString(row.startingCommit, "Change starting commit"),
     worktreePath: decodeStoredNullableString(row.worktreePath, "Change worktree path"),
     acceptanceContext:
@@ -350,30 +342,6 @@ export const decodeReviewerTranscript = (
   if (row.changeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
   return row;
 };
-
-export const validateChangeRelationships = (
-  sql: SqlClient.SqlClient,
-  change: ChangeWithoutAuthorityHistory,
-  operationName: string,
-) =>
-  Effect.gen(function* () {
-    if (change.taskId !== null) {
-      const taskRows = yield* sql<{ readonly id: string }>`
-        SELECT id FROM tasks WHERE id = ${change.taskId}
-      `;
-      yield* decodePersisted(operationName, () => {
-        const taskId = taskRows[0]?.id;
-        if (taskId !== change.taskId) throw new Error("Change belongs to an unknown Task");
-      });
-    }
-
-    yield* validateChangePublicationRelationships(
-      sql,
-      change.id,
-      change.publication,
-      operationName,
-    );
-  });
 
 export const validateChangePublicationRelationships = (
   sql: SqlClient.SqlClient,

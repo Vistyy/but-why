@@ -1,4 +1,18 @@
 import { Effect } from "effect";
+import type { ChangeCleanup } from "../change/change.js";
+import type { TerminalCleanupOperation } from "../change/cleanupTerminalChange.js";
+import {
+  classifyOwnedPullRequest,
+  observedMergedChangeEvidence,
+  observeOwnedPullRequest,
+  ownedPublication,
+} from "../change/ownedPullRequestClassifier.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestCloser,
+  PublicationFailureEvidence,
+} from "../change/ownedPullRequestGateway.js";
+import type { ActiveValidationRunPort } from "../change/validation/changeValidationPorts.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import {
   RepositoryPersistedDataInvalid,
@@ -6,23 +20,12 @@ import {
 } from "../contracts/repositoryStorageError.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
-import type { PublicTaskId } from "../task/taskId.js";
+import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
-import type { ChangeCleanup } from "./change.js";
-import type { CancellationChange, ChangeCancellationPort } from "./changePorts.js";
-import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
-import {
-  classifyOwnedPullRequest,
-  observedMergedChangeEvidence,
-  observeOwnedPullRequest,
-  ownedPublication,
-} from "./ownedPullRequestClassifier.js";
 import type {
-  GitHubPullRequest,
-  GitHubPullRequestCloser,
-  PublicationFailureEvidence,
-} from "./ownedPullRequestGateway.js";
-import type { ActiveValidationRunPort } from "./validation/changeValidationPorts.js";
+  TaskChangeCancellationChange,
+  TaskChangeCancellationPort,
+} from "./taskChangePorts.js";
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
@@ -41,7 +44,7 @@ export type CancellationUseCases = {
 export type CancellationDependencies = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
-  readonly changes: ChangeCancellationPort;
+  readonly changes: TaskChangeCancellationPort;
   readonly github: GitHubPullRequestCloser;
   readonly validation: ActiveValidationRunPort;
   readonly executionLock: ExecutionLock;
@@ -54,7 +57,7 @@ export type TaskCancellationResult =
       readonly status: "cancelled" | "completed";
       readonly changed: boolean;
       readonly task: TaskRecord;
-      readonly change: CancellationChange | null;
+      readonly change: TaskChangeCancellationChange | null;
       readonly cleanup: ChangeCleanup | null;
     }
   | {
@@ -80,7 +83,7 @@ export type ChangeCancellationResult =
       readonly ok: true;
       readonly status: "cancelled" | "completed";
       readonly changed: boolean;
-      readonly change: CancellationChange;
+      readonly change: TaskChangeCancellationChange;
       readonly task: TaskRecord | null;
     }
   | {
@@ -166,7 +169,10 @@ const cancelChangeWithLock = (
 const cancelTask = (
   dependencies: CancellationDependencies,
   input: Parameters<CancellationUseCases["cancelTask"]>[0],
-  selected?: { readonly task: TaskRecord; readonly change: CancellationChange | undefined },
+  selected?: {
+    readonly task: TaskRecord;
+    readonly change: TaskChangeCancellationChange | undefined;
+  },
 ): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const task = selected?.task ?? (yield* dependencies.tasks.getTaskById(input.taskId));
@@ -299,11 +305,11 @@ const cancelChange = (
 
 const loadLinkedTask = (
   dependencies: CancellationDependencies,
-  change: CancellationChange,
+  change: TaskChangeCancellationChange,
 ): Effect.Effect<TaskRecord | null, RepositoryStorageError> =>
   change.taskId === null
     ? Effect.succeed(null)
-    : Effect.flatMap(dependencies.tasks.getTaskById(change.taskId), (task) =>
+    : Effect.flatMap(dependencies.tasks.getTaskById(storedPublicTaskId(change.taskId)), (task) =>
         task === undefined
           ? Effect.fail(
               new RepositoryPersistedDataInvalid({
@@ -316,7 +322,7 @@ const loadLinkedTask = (
 
 const completeMerged = (
   dependencies: CancellationDependencies,
-  change: CancellationChange,
+  change: TaskChangeCancellationChange,
   now: string,
   mergedPullRequest: GitHubPullRequest,
 ): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
@@ -354,7 +360,7 @@ const completeMerged = (
 
 const closeOwnedPullRequest = (
   dependencies: CancellationDependencies,
-  change: CancellationChange,
+  change: TaskChangeCancellationChange,
 ):
   | { readonly ok: true; readonly status: "closed"; readonly pullRequest: null }
   | { readonly ok: true; readonly status: "merged"; readonly pullRequest: GitHubPullRequest }
@@ -426,10 +432,10 @@ const conflictingRecoveryEvidence = {
 
 const cleanupTerminalChange = (
   dependencies: CancellationDependencies,
-  change: CancellationChange,
+  change: TaskChangeCancellationChange,
   now: string,
 ): Effect.Effect<
-  { readonly change: CancellationChange; readonly cleanup: ChangeCleanup },
+  { readonly change: TaskChangeCancellationChange; readonly cleanup: ChangeCleanup },
   RepositoryStorageError
 > =>
   Effect.map(dependencies.cleanupTerminal(change, now), (result) =>

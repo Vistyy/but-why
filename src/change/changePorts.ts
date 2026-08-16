@@ -2,8 +2,6 @@ import type { Effect } from "effect";
 import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { TaskRecord } from "../task/task.js";
-import type { PublicTaskId } from "../task/taskId.js";
 import type {
   ChangeCleanup,
   ChangeCloseReason,
@@ -11,8 +9,11 @@ import type {
   ChangePublication,
   ChangeRecord,
   ChangeState,
-  RemoteChangeBranch,
+  TerminalCleanupChange,
 } from "./change.js";
+
+export type { TerminalCleanupChange } from "./change.js";
+
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
@@ -112,12 +113,6 @@ export type ChangeAuthorityPort = {
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
 };
 
-export type ChangeTaskProjectionRecord = {
-  readonly id: string;
-  readonly state: ChangeState;
-  readonly activeBlocker: ImplementationBlocker | null;
-};
-
 export type ChangeListRecord = {
   readonly id: string;
   readonly state: ChangeState;
@@ -128,9 +123,6 @@ export type ChangeListRecord = {
 
 export type ChangeReadPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
-  readonly getChangeByTaskId: (
-    taskId: string,
-  ) => StorageEffect<ChangeTaskProjectionRecord | undefined>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeListRecord[]>;
 };
 
@@ -157,17 +149,6 @@ export type ChangeReviewerTranscriptPort = {
   ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
-export type TerminalCleanupChange = {
-  readonly id: string;
-  readonly state: ChangeState;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly worktreePath: string | null;
-  readonly publication: ChangePublication | null;
-  readonly cleanup: ChangeCleanup;
-  readonly remoteChangeBranch: RemoteChangeBranch | null;
-};
-
 export type SubmissionChange = {
   readonly id: string;
   readonly state: ChangeState;
@@ -183,15 +164,19 @@ export type SubmissionChange = {
 
 export type ReconciliationChange = TerminalCleanupChange;
 
-export type CancellationChange = TerminalCleanupChange & {
-  readonly taskId: PublicTaskId | null;
+export type ChangeCancellationRecord = TerminalCleanupChange & {
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
 };
 
-type CompleteMergedFailure = {
+export type ChangeCancellationCompletionFailure = {
   readonly ok: false;
   readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
+};
+
+export type ChangeCancellationMutationFailure = {
+  readonly ok: false;
+  readonly code: "change_not_found" | "change_already_completed";
 };
 
 export type ChangeSubmissionPort = {
@@ -227,29 +212,28 @@ export type ChangeReconciliationPort = {
   >;
 };
 
-export type ChangeCancellationPort = {
-  readonly getChangeById: (changeId: string) => StorageEffect<CancellationChange | undefined>;
-  readonly getChangeByTaskId: (taskId: string) => StorageEffect<CancellationChange | undefined>;
-  readonly completeMergedChange: (input: CompleteMergedChangeInput) => StorageEffect<
-    | {
-        readonly ok: true;
-        readonly changed: boolean;
-        readonly change: CancellationChange;
-        readonly task: TaskRecord | null;
-      }
-    | CompleteMergedFailure
+type CompleteMergedFailure = {
+  readonly ok: false;
+  readonly code:
+    | "change_not_found"
+    | "change_already_closed"
+    | "publication_mismatch"
+    | "task_completion_rejected";
+};
+
+export type ChangeCancellationOwnerPort = {
+  readonly getChangeById: (changeId: string) => StorageEffect<ChangeCancellationRecord | undefined>;
+  readonly completeMergedChange: (
+    input: CompleteMergedChangeInput,
+  ) => StorageEffect<
+    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
+    | ChangeCancellationCompletionFailure
   >;
-  readonly cancelChange: (input: CancelChangeInput) => StorageEffect<
-    | {
-        readonly ok: true;
-        readonly changed: boolean;
-        readonly change: CancellationChange;
-        readonly task: TaskRecord | null;
-      }
-    | {
-        readonly ok: false;
-        readonly code: "change_not_found" | "change_already_completed";
-      }
+  readonly cancelChange: (
+    input: CancelChangeInput,
+  ) => StorageEffect<
+    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
+    | ChangeCancellationMutationFailure
   >;
 };
 

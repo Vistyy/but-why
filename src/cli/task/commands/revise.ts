@@ -9,7 +9,7 @@ import {
   type TaskIdCommand,
   taskMutationView,
   taskNotFound,
-  withTasks,
+  withTaskChangeTasks,
 } from "../taskCliSupport.js";
 
 export const runReviseCommand = (
@@ -18,7 +18,7 @@ export const runReviseCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, (tasks) => {
+  return withTaskChangeTasks(environment, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.map(
