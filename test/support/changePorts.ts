@@ -12,7 +12,7 @@ import type {
 } from "../../src/change/changePorts.js";
 import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
+import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { openSqliteChangeReadPort } from "../../src/sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
@@ -31,7 +31,7 @@ type ChangeDeliveryTestPort = {
 const openChangeDeliveryTestPort = () =>
   Effect.all({
     reconciliation: openSqliteChangeReconciliationPort(),
-    cancellation: openSqliteChangeCancellationPort(),
+    cancellation: openSqliteTaskChangeCancellationPort(),
     cleanup: openSqliteTerminalChangeCleanupPort(),
   }).pipe(
     Effect.map(

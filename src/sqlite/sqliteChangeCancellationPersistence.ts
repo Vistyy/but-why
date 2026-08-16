@@ -6,7 +6,7 @@ import type { CancellationChange, ChangeCancellationPort } from "../change/chang
 import type { CancelChangeInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskDependencyFact } from "../task/task.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import {
@@ -82,14 +82,15 @@ const decodeCancellationChange = (
     cancelReason,
   };
 };
-const readCancellationChange = (
+export const readCancellationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCancellationChangeRow>(
-      `SELECT ${terminalChangeSelectionColumns}, task_id AS taskId,
+      `SELECT ${terminalChangeSelectionColumns},
+        (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId,
         close_reason AS closeReason, cancel_reason AS cancelReason
        FROM changes WHERE id = ?`,
       [changeId],
@@ -107,7 +108,7 @@ const readCancellationChange = (
     );
     return selected;
   });
-const requireCancellationChange = (sql: SqlClient.SqlClient, changeId: string) =>
+export const requireCancellationChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(readCancellationChange(sql, changeId, "read committed cancellation"), (change) =>
     change === undefined
       ? invalidData("read committed cancellation", "Change disappeared")
@@ -121,7 +122,7 @@ const readRequiredCancellationTask = (sql: SqlClient.SqlClient, change: Cancella
           ? invalidData("read committed cancellation", "Linked Task was not found")
           : Effect.succeed(task),
       );
-const readCancellationTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const readCancellationTask = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const operationName = "read committed cancellation";
     const rows = yield* sql<StoredTaskRecordRow>`
@@ -149,7 +150,7 @@ const readCancellationTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   });
 const cancellationTaskDependencyFacts = (
   sql: SqlClient.SqlClient,
-  taskId: PublicTaskId,
+  taskId: string,
   direction: "prerequisites" | "dependents",
   operationName: string,
 ) =>
@@ -170,7 +171,9 @@ const cancellationTaskDependencyFacts = (
             WHERE task_dependencies.prerequisite_task_id = ${taskId}
             ORDER BY tasks.numeric_id ASC
           `;
-    return yield* decodePersisted(operationName, () => decodeTaskDependencyFacts(rows, taskId));
+    return yield* decodePersisted(operationName, () =>
+      decodeTaskDependencyFacts(rows, storedPublicTaskId(taskId)),
+    );
   });
 const cancellationTaskRecord = (
   row: DecodedStoredTaskRecordRow,
@@ -189,13 +192,16 @@ const cancellationTaskRecord = (
     dependents,
   };
 };
-const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
+export const readCancellationChangeByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const operationName = "read Change by Task for cancellation";
     const rows = yield* sql.unsafe<StoredCancellationChangeRow>(
-      `SELECT ${terminalChangeSelectionColumns}, task_id AS taskId,
+      `SELECT ${terminalChangeSelectionColumns},
+        (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId,
         close_reason AS closeReason, cancel_reason AS cancelReason
-       FROM changes WHERE task_id = ?`,
+       FROM changes
+       INNER JOIN task_change_links ON task_change_links.change_id = changes.id
+       WHERE task_change_links.task_id = ?`,
       [taskId],
     );
     const row = rows[0];
@@ -216,7 +222,8 @@ const readCancelChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const operationName = "cancel Change";
     const rows = yield* sql<StoredChangeLifecycleRow & { readonly taskId: unknown }>`
-      SELECT id, state, close_reason AS closeReason, task_id AS taskId
+      SELECT id, state, close_reason AS closeReason,
+        (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId
       FROM changes WHERE id = ${changeId}
     `;
     const row = rows[0];
@@ -235,7 +242,7 @@ const decodeSelectedChangeLifecycle = (row: StoredChangeLifecycleRow, changeId: 
   id: decodeSelectedChangeState(row, changeId).id,
   ...decodeChangeLifecycle(row),
 });
-const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
+export const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
   Effect.gen(function* () {
     const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "cancel Change");
     if (lifecycle === undefined) return { ok: false as const, code: "change_not_found" as const };
@@ -247,11 +254,10 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
     }
     const change = yield* readCancelChange(sql, input.changeId);
     if (change === undefined) return yield* invalidData("cancel Change", "Change disappeared");
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${change.taskId === null ? input.reason : null}, cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
-    if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now} WHERE id = ${change.taskId}`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${input.reason}, cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
     return { ok: true as const, changed: true };
   });
+
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 type StoredChangeStateRow = {

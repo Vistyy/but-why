@@ -427,7 +427,10 @@ const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) 
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
     const linkedChanges = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
+      SELECT change_id AS id
+      FROM task_change_links
+      WHERE task_id = ${taskId}
+      LIMIT 1
     `;
     const linkedChange = linkedChanges[0];
     if (linkedChange !== undefined) {

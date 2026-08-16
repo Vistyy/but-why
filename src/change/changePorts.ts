@@ -2,8 +2,6 @@ import type { Effect } from "effect";
 import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { TaskRecord } from "../task/task.js";
-import type { PublicTaskId } from "../task/taskId.js";
 import type {
   ChangeCleanup,
   ChangeCloseReason,
@@ -11,8 +9,9 @@ import type {
   ChangePublication,
   ChangeRecord,
   ChangeState,
-  RemoteChangeBranch,
+  TerminalCleanupChange,
 } from "./change.js";
+export type { TerminalCleanupChange } from "./change.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
@@ -157,17 +156,6 @@ export type ChangeReviewerTranscriptPort = {
   ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
-export type TerminalCleanupChange = {
-  readonly id: string;
-  readonly state: ChangeState;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly worktreePath: string | null;
-  readonly publication: ChangePublication | null;
-  readonly cleanup: ChangeCleanup;
-  readonly remoteChangeBranch: RemoteChangeBranch | null;
-};
-
 export type SubmissionChange = {
   readonly id: string;
   readonly state: ChangeState;
@@ -183,15 +171,39 @@ export type SubmissionChange = {
 
 export type ReconciliationChange = TerminalCleanupChange;
 
+type CancellationTaskState = "new" | "todo" | "done" | "cancelled";
+type CancellationTaskDependencyFact = {
+  readonly id: string;
+  readonly title: string;
+  readonly state: CancellationTaskState;
+};
+type CancellationTaskRecord = {
+  readonly id: string;
+  readonly title: string;
+  readonly state: CancellationTaskState;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly startable: boolean;
+  readonly blockedBy: readonly CancellationTaskDependencyFact[];
+  readonly description: string;
+  readonly cancelReason: string | null;
+  readonly prerequisites: readonly CancellationTaskDependencyFact[];
+  readonly dependents: readonly CancellationTaskDependencyFact[];
+};
+
 export type CancellationChange = TerminalCleanupChange & {
-  readonly taskId: PublicTaskId | null;
+  readonly taskId: string | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
 };
 
 type CompleteMergedFailure = {
   readonly ok: false;
-  readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
+  readonly code:
+    | "change_not_found"
+    | "change_already_closed"
+    | "publication_mismatch"
+    | "task_completion_rejected";
 };
 
 export type ChangeSubmissionPort = {
@@ -235,7 +247,7 @@ export type ChangeCancellationPort = {
         readonly ok: true;
         readonly changed: boolean;
         readonly change: CancellationChange;
-        readonly task: TaskRecord | null;
+        readonly task: CancellationTaskRecord | null;
       }
     | CompleteMergedFailure
   >;
@@ -244,7 +256,7 @@ export type ChangeCancellationPort = {
         readonly ok: true;
         readonly changed: boolean;
         readonly change: CancellationChange;
-        readonly task: TaskRecord | null;
+        readonly task: CancellationTaskRecord | null;
       }
     | {
         readonly ok: false;

@@ -136,7 +136,7 @@ describe("Change Start orchestration", () => {
         });
         expect(backed.events).toEqual([
           "prepareTask",
-          expect.stringMatching(/^resolveIntent:by-197-[a-f0-9]+:main$/u),
+          expect.stringMatching(/^resolveIntent:change-[a-f0-9]{8}:main$/u),
           "create",
           "provisionWorktree:create",
           expect.stringMatching(/^recordPrepareOutcome:/u),

@@ -1,6 +1,4 @@
 import { Schema } from "effect";
-
-import type { PublicTaskId } from "../task/taskId.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
@@ -70,13 +68,24 @@ export type ChangePublication = {
   readonly pullRequest: ChangeOwnedPullRequest | null;
 };
 
+export type TerminalCleanupChange = {
+  readonly id: string;
+  readonly state: ChangeState;
+  readonly repositoryCommonDirectory: string;
+  readonly branchRef: string;
+  readonly worktreePath: string | null;
+  readonly publication: ChangePublication | null;
+  readonly cleanup: ChangeCleanup;
+  readonly remoteChangeBranch: RemoteChangeBranch | null;
+};
+
 export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string | null;
   readonly baseRemoteUrl: string | null;
-  readonly taskId: PublicTaskId | null;
+  readonly taskId: string | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;

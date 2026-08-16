@@ -126,14 +126,21 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
         "link New Task fixture to Change",
         (sql) =>
           sql`INSERT INTO changes (
-          id, repository_common_directory, branch_ref, task_id, state, acceptance_context,
+          id, repository_common_directory, branch_ref, state, acceptance_context,
           base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
         ) VALUES (
-          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'BY-1', 'open',
+          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
           '{"version":1,"title":"Linked proposal","description":"Exact"}',
           'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
           '/repo-worktrees/change-linked', ${now}, ${now}
         )`,
+      );
+      yield* repository.operation(
+        "link New Task fixture to Change",
+        (sql) => sql`
+          INSERT INTO task_change_links (task_id, change_id)
+          VALUES ('BY-1', 'change-linked')
+        `,
       );
 
       expect(

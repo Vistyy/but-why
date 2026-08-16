@@ -34,7 +34,7 @@ export const changeReadColumns = [
   "branch_ref AS branchRef",
   "base_ref AS baseRef",
   "base_remote_url AS baseRemoteUrl",
-  "task_id AS taskId",
+  "(SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId",
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
@@ -359,7 +359,9 @@ export const validateChangeRelationships = (
   Effect.gen(function* () {
     if (change.taskId !== null) {
       const taskRows = yield* sql<{ readonly id: string }>`
-        SELECT id FROM tasks WHERE id = ${change.taskId}
+        SELECT task_id AS id
+        FROM task_change_links
+        WHERE change_id = ${change.id} AND task_id = ${change.taskId}
       `;
       yield* decodePersisted(operationName, () => {
         const taskId = taskRows[0]?.id;

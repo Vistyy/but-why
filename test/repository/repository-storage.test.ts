@@ -2013,10 +2013,10 @@ describe("repository SQL storage", () => {
           "prepare failed Candidate capture",
           (sql) => sql`
             INSERT INTO changes (
-              id, repository_common_directory, branch_ref, base_ref, task_id, state,
+              id, repository_common_directory, branch_ref, base_ref, state,
               close_reason, created_at, updated_at, closed_at
             ) VALUES (
-              'change-1', ${input.commonDirectory}, 'refs/heads/feature', NULL, NULL,
+              'change-1', ${input.commonDirectory}, 'refs/heads/feature', NULL,
               'open', NULL, '2026-07-17T23:00:00.000Z', '2026-07-17T23:00:00.000Z', NULL
             )
           `,
@@ -2257,11 +2257,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(41);
+          expect(yield* initializeMigrationCount).toBe(42);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(41);
+          expect(yield* readMigrationCount).toBe(42);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2361,9 +2361,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(41);
+              expect(migrations.length).toBe(42);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 41 }, (_, index) => index + 1),
+                Array.from({ length: 42 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2462,7 +2462,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 41,
+              migrationCount: 42,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

@@ -5,7 +5,6 @@ import {
 } from "../../contracts/repositoryStorageError.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
 import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
@@ -25,13 +24,10 @@ import type { ListChangesInput } from "../changeStore.js";
 import {
   queryChangeDetail,
   queryChangeFindings,
-  queryChangeTaskProjection,
   queryChangeValidationRuns,
 } from "../inspectChange.js";
 
-type LoadChangeInspectionError =
-  | ResolveLocalRepositoryError
-  | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+type LoadChangeInspectionError = ResolveLocalRepositoryError;
 
 type LoadedChangeInspectionOperation<A> =
   | {
@@ -66,30 +62,6 @@ export const loadChangeList = (input: LoadInput) =>
     (context) => (listInput: ListChangesInput) =>
       context.provide(
         Effect.flatMap(openSqliteChangeReadPort(), (changes) => changes.listChanges(listInput)),
-      ),
-  );
-
-export const loadChangeTaskProjection = (input: LoadInput) =>
-  loadOperation(
-    input,
-    (context) => (taskId: string) =>
-      context.provide(
-        Effect.all({
-          changes: openSqliteChangeReadPort(),
-          authority: openSqliteChangeAuthorityPort(),
-          activeValidation: openSqliteActiveValidationRunPort(),
-        }).pipe(
-          Effect.flatMap(({ changes, authority, activeValidation }) =>
-            queryChangeTaskProjection(
-              {
-                getChangeByTaskId: changes.getChangeByTaskId,
-                getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
-                getActiveForChange: activeValidation.getActiveForChange,
-              },
-              taskId,
-            ),
-          ),
-        ),
       ),
   );
 

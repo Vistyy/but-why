@@ -10,17 +10,7 @@ import type {
 import type { ChangeRecord } from "./change.js";
 import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
 import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
-import type {
-  ActiveValidationRunPort,
-  ChangeValidationReadPort,
-} from "./validation/changeValidationPorts.js";
-
-export type ChangeActivity = "blocked" | "validating" | "ready" | "implementing";
-
-export type ChangeTaskProjection = {
-  readonly id: string;
-  readonly activity?: ChangeActivity;
-};
+import type { ChangeValidationReadPort } from "./validation/changeValidationPorts.js";
 
 export type ChangeLegacyReviewerEvidence = {
   readonly classification: "legacy";
@@ -49,34 +39,6 @@ export type ChangeValidationRunHistory = {
   readonly change: ChangeRecord;
   readonly validationRuns: readonly CandidateValidationRunRecord[];
 };
-
-type ChangeTaskProjectionDependencies = {
-  readonly getChangeByTaskId: ChangeReadPort["getChangeByTaskId"];
-  readonly getCurrentPassingEvidence: ChangeAuthorityPort["getCurrentPassingEvidence"];
-  readonly getActiveForChange: ActiveValidationRunPort["getActiveForChange"];
-};
-
-export const queryChangeTaskProjection = (
-  dependencies: ChangeTaskProjectionDependencies,
-  taskId: string,
-): Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const change = yield* dependencies.getChangeByTaskId(taskId);
-    if (change === undefined) return null;
-    if (change.state === "closed") return { id: change.id };
-    if (change.activeBlocker !== null) {
-      return { id: change.id, activity: "blocked" };
-    }
-    if ((yield* dependencies.getActiveForChange(change.id)) !== undefined) {
-      return { id: change.id, activity: "validating" };
-    }
-
-    const evidence = yield* dependencies.getCurrentPassingEvidence(change.id);
-    return {
-      id: change.id,
-      activity: evidence === undefined ? "implementing" : "ready",
-    };
-  });
 
 type ChangeDetailDependencies = {
   readonly getChangeById: ChangeReadPort["getChangeById"];

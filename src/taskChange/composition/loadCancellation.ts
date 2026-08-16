@@ -6,15 +6,15 @@ import {
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
-import { openSqliteChangeCancellationPort } from "../../sqlite/sqliteChangeCancellationPersistence.js";
+import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
-import { type CancellationUseCases, openCancellationUseCases } from "../cancelChange.js";
-import { composeTerminalCleanup } from "./terminalCleanup.js";
+import { type CancellationUseCases, openCancellationUseCases } from "../cancelTaskChange.js";
+import { composeTerminalCleanup } from "../../change/composition/terminalCleanup.js";
 
-export type WithCancellationUseCasesResult<A> =
+type WithCancellationUseCasesResult<A> =
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly error: RepositoryRuntimeLoadError };
 
@@ -28,7 +28,7 @@ export const withCancellationUseCases = <A, E, R>(
 
   return loaded.runtime.provide(
     Effect.all({
-      changes: openSqliteChangeCancellationPort(),
+      changes: openSqliteTaskChangeCancellationPort(),
       tasks: openSqliteTaskPersistence(context.taskPrefix),
       activeValidation: openSqliteActiveValidationRunPort(),
       cleanupTerminal: composeTerminalCleanup(context),

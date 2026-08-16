@@ -303,13 +303,17 @@ describe("Candidate validation", () => {
                     'Run each eligible phase in its fixed order.', 'todo', ${now}, ${now})
                 `;
                 yield* sql`
-                  UPDATE changes SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({
+                  UPDATE changes SET acceptance_context = ${JSON.stringify({
                     version: 1,
                     title: "Validate the fixed Gate",
                     description: "Run each eligible phase in its fixed order.",
                   })}, base_remote_url = 'https://github.com/acme/repo.git',
                     starting_commit = ${captured.changeBaseSha}, worktree_path = ${mainCheckout}
                   WHERE id = ${captured.changeId}
+                `;
+                yield* sql`
+                  INSERT INTO task_change_links (task_id, change_id)
+                  VALUES ('BY-1', ${captured.changeId})
                 `;
               }),
             ),

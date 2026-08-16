@@ -119,10 +119,10 @@ exit 1
               "create process Change fixture",
               (sql) => sql`
               INSERT INTO changes (
-                id, repository_common_directory, branch_ref, task_id, state,
+                id, repository_common_directory, branch_ref, state,
                 close_reason, created_at, updated_at, closed_at
               ) VALUES
-                (${changeId}, ${join(root, ".git")}, 'refs/heads/process', NULL, 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+                (${changeId}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
             `,
             );
           }),

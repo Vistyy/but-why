@@ -10,7 +10,7 @@ import type {
 } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
@@ -55,7 +55,7 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
       ),
   }));
 
-const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const existing = yield* getByTaskId(sql, taskId);
     if (existing !== undefined) {
@@ -98,26 +98,32 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
 
     yield* sql`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, base_remote_url, task_id,
+        id, repository_common_directory, branch_ref, base_ref, base_remote_url,
         starting_commit, worktree_path, acceptance_context, reviewer_configuration,
         prepare_command, prepare_timeout_seconds, prepare_failure,
         state, close_reason, created_at, updated_at, closed_at
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
-        ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
+        ${input.baseRemoteUrl}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${JSON.stringify(input.reviewerConfiguration)},
         ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
     `;
+    if (input.taskId !== undefined) {
+      yield* sql`
+        INSERT INTO task_change_links (task_id, change_id)
+        VALUES (${input.taskId}, ${input.id})
+      `;
+    }
     const change = yield* getById(sql, input.id);
     if (change === undefined)
       return yield* invalidData("create Change Start", "Change disappeared");
     return { ok: true as const, change };
   });
 
-const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const readEligibility = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredEligibilityTaskRow>`
       SELECT id, title, description, state FROM tasks WHERE id = ${taskId}
@@ -139,14 +145,14 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       ORDER BY tasks.numeric_id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
-      decodeTaskDependencyFacts(dependencyRows, taskId),
+      decodeTaskDependencyFacts(dependencyRows, storedPublicTaskId(taskId)),
     )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
       ? { ok: true as const, task }
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
   });
 
-const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const readTask = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly state: unknown }>`
       SELECT state FROM tasks WHERE id = ${taskId}
@@ -178,7 +184,8 @@ const recordPrepareOutcome = (
 const changeStartSelectionColumns = `
   id, repository_common_directory AS repositoryCommonDirectory,
   branch_ref AS branchRef, base_ref AS baseRef, base_remote_url AS baseRemoteUrl,
-  task_id AS taskId, starting_commit AS startingCommit, worktree_path AS worktreePath,
+  (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId,
+  starting_commit AS startingCommit, worktree_path AS worktreePath,
   acceptance_context AS acceptanceContext, reviewer_configuration AS reviewerConfiguration,
   prepare_command AS prepareCommand,
   prepare_timeout_seconds AS prepareTimeoutSeconds,
@@ -202,10 +209,13 @@ type StoredChangeStartRow = {
   readonly state: unknown;
 };
 
-const getByTaskId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeStartRow>(
-      `SELECT ${changeStartSelectionColumns} FROM changes WHERE task_id = ?`,
+      `SELECT ${changeStartSelectionColumns}
+       FROM changes
+       INNER JOIN task_change_links ON task_change_links.change_id = changes.id
+       WHERE task_change_links.task_id = ?`,
       [taskId],
     ),
     (rows) => mapRow(rows[0]),

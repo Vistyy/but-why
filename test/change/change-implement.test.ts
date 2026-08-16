@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
-import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import {
@@ -204,7 +203,7 @@ describe("by change implement", () => {
   );
 
   it.effect(
-    "names a session for a Change linked to a Task from its Task ID and immutable title",
+    "names a session for a Change linked to a Task from its Change ID and immutable title",
     () =>
       Effect.gen(function* () {
         const root = yield* readyRepository();
@@ -229,8 +228,8 @@ describe("by change implement", () => {
         expect(result.status).toBe(0);
         expect(launchInput).toMatchObject({
           changeId: fixture.id,
-          hostSessionName: taskSlugForId(publicTaskId(taskId)),
-          agentSessionName: `${taskId} Record cancellation reasons`,
+          hostSessionName: `change-${fixture.id.slice(0, 8)}`,
+          agentSessionName: `${fixture.id} Record cancellation reasons`,
         });
       }),
   );

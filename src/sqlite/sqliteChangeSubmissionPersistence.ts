@@ -28,7 +28,7 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
-import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
+import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -53,7 +53,7 @@ export const openSqliteChangeSubmissionPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeMergedChange(sql, input);
+            const result = yield* completeLinkedChange(sql, input);
             if (!result.ok) return result;
             const changeId = yield* readCommittedCompletionId(sql, input.changeId);
             return { ...result, changeId };

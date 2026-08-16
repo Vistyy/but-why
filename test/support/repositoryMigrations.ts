@@ -43,6 +43,7 @@ import { currentCandidateSelectionMigration } from "../../src/sqlite/migrations/
 import { candidateValidationReuseMigration } from "../../src/sqlite/migrations/0039_candidate_validation_reuse.js";
 import { agentSessionsMigration } from "../../src/sqlite/migrations/0040_agent_sessions.js";
 import { agentInvocationCacheWriteTokensMigration } from "../../src/sqlite/migrations/0041_agent_invocation_cache_write_tokens.js";
+import { taskChangeBoundaryMigration } from "../../src/sqlite/migrations/0042_task_change_boundary.js";
 
 export const testRepositoryMigrationLedger = [
   ["0001_baseline", baselineMigration],
@@ -98,6 +99,7 @@ export const testRepositoryMigrationLedger = [
   ["0039_candidate_validation_reuse", candidateValidationReuseMigration],
   ["0040_agent_sessions", agentSessionsMigration],
   ["0041_agent_invocation_cache_write_tokens", agentInvocationCacheWriteTokensMigration],
+  ["0042_task_change_boundary", taskChangeBoundaryMigration],
 ] as const;
 
 export const migrateTestRepositoryThrough = (lastMigrationId: number) => {

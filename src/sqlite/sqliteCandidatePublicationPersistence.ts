@@ -14,7 +14,6 @@ import type {
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
@@ -82,7 +81,7 @@ const getPublicationById = (
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCandidatePublicationChangeRow>(
       `SELECT ${publicationSelectionColumns}, branch_ref AS branchRef,
-        starting_commit AS startingCommit, task_id AS taskId,
+        starting_commit AS startingCommit,
         acceptance_context AS acceptanceContext
        FROM changes WHERE id = ?`,
       [changeId],
@@ -91,8 +90,6 @@ const getPublicationById = (
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => {
       const state = decodeSelectedChangeState(row, changeId);
-      const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
-      if (taskId !== null) storedPublicTaskId(taskId);
       return {
         ...state,
         branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
@@ -422,6 +419,5 @@ type PublicationSelectionRow = StoredChangeStateRow & SqliteChangePublicationRow
 type StoredCandidatePublicationChangeRow = PublicationSelectionRow & {
   readonly branchRef: unknown;
   readonly startingCommit: unknown;
-  readonly taskId: unknown;
   readonly acceptanceContext: unknown;
 };

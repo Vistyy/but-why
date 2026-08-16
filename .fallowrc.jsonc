@@ -75,6 +75,14 @@
         "patterns": ["src/change/**/composition/**"]
       },
       {
+        "name": "task-change-composition",
+        "patterns": ["src/taskChange/composition/**"]
+      },
+      {
+        "name": "task-change",
+        "patterns": ["src/taskChange/**"]
+      },
+      {
         "name": "repository-runtime-composition",
         "patterns": ["src/repositorySnapshot/composition/**"]
       },
@@ -115,7 +123,7 @@
     "rules": [
       {
         "from": "adapters",
-        "allow": ["agent", "change", "repository-runtime", "shared", "task"]
+        "allow": ["agent", "change", "repository-runtime", "shared", "task", "task-change"]
       },
       {
         "from": "agent",
@@ -130,8 +138,31 @@
         "allow": ["adapters", "agent", "repository-runtime", "reviewer-prompts", "shared", "task"]
       },
       {
+        "from": "task-change-composition",
+        "allow": [
+          "adapters",
+          "change",
+          "change-composition",
+          "repository-runtime",
+          "shared",
+          "task",
+          "task-change"
+        ]
+      },
+      {
+        "from": "task-change",
+        "allow": ["change", "repository-runtime", "shared", "task", "task-change"]
+      },
+      {
         "from": "change-composition",
-        "allow": ["adapters", "agent", "change", "repository-runtime", "shared", "task"]
+        "allow": [
+          "adapters",
+          "agent",
+          "change",
+          "repository-runtime",
+          "shared",
+          "task-change-composition"
+        ]
       },
       {
         "from": "repository-runtime-composition",
@@ -141,6 +172,8 @@
         "from": "cli",
         "allow": [
           "agent",
+          "task-change",
+          "task-change-composition",
           "change",
           "change-composition",
           "repository-runtime",
@@ -156,7 +189,14 @@
       },
       {
         "from": "change",
-        "allow": ["agent", "repository-runtime", "reviewer-prompts", "shared", "task"]
+        "allow": [
+          "agent",
+          "repository-runtime",
+          "reviewer-prompts",
+          "shared",
+          "task-change",
+          "task-change-composition"
+        ]
       },
       {
         "from": "repository-runtime",
@@ -179,6 +219,8 @@
           "reviewer-prompts",
           "shared",
           "task",
+          "task-change",
+          "task-change-composition",
           "task-composition"
         ]
       }

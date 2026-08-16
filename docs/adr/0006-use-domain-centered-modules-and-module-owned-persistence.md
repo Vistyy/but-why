@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 0012-separate-task-and-change-coordination
 ---
 
 # Use domain-centered modules and module-owned persistence

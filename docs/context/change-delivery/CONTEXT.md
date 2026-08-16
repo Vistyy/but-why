@@ -2,6 +2,10 @@
 
 This context owns code lineage, implementation, Candidate selection, validation, publication, reconciliation, and Change completion.
 
+Task/Change coordination is the only application boundary that crosses Task and Change state.
+Change persistence owns Change state, authority, Candidate and Validation evidence, publication, closure, and cleanup.
+It does not mutate Task state or expose the correlation link as public Change inspection data.
+
 ## Language
 
 **Change**:
@@ -81,7 +85,7 @@ _Avoid_: Current Candidate, mutable pull request state, Submission
 **Exact Merged Candidate**:
 An Exact Merged Candidate is the Candidate in current publication.
 Its owned pull request is observed as closed and merged with matching repository, base branch, head branch, head commit, and pull request identity.
-It is the only external evidence that can complete the Change and, when present, its linked Task.
+It is the only external evidence that can complete the Change and, through Task/Change coordination, its linked Task.
 _Avoid_: Merged pull request, historical Candidate, current Candidate
 
 **Acceptance Context**:
@@ -217,7 +221,8 @@ _Avoid_: Artifact metadata, archived content, expired content
 
 **Change Start**:
 The operation that creates a Change, its Managed Worktree, and its starting commit.
-It may link an approved Task and capture its Acceptance Context.
+A linked start is coordinated with one approved Task and captures its initial Acceptance Context.
+An unlinked start has no Acceptance Context.
 _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
 **Implementation Authorization**:

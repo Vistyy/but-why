@@ -144,12 +144,12 @@ export const createChangeFixture = (
         "create Change inspection fixture",
         (sql) => sql`
           INSERT INTO changes (
-            id, repository_common_directory, branch_ref, task_id, acceptance_context, state,
+            id, repository_common_directory, branch_ref, acceptance_context, state,
             close_reason, created_at, updated_at, closed_at, base_ref, base_remote_url,
             worktree_path, starting_commit
           ) VALUES (
-            ${id}, ${join(root, ".git")}, ${branchRef}, ${options.taskId ?? null},
-            ${acceptanceContext}, 'open', NULL, ${createdAt}, ${createdAt}, NULL,
+            ${id}, ${join(root, ".git")}, ${branchRef}, ${acceptanceContext}, 'open', NULL,
+            ${createdAt}, ${createdAt}, NULL,
             ${options.baseRef === undefined && taskBacked ? "refs/remotes/origin/main" : (options.baseRef ?? null)},
             ${taskBacked ? "https://github.test/acme/repo.git" : null},
             ${options.worktreePath === undefined && taskBacked ? join(root, "worktree") : (options.worktreePath ?? null)},
@@ -157,6 +157,15 @@ export const createChangeFixture = (
           )
         `,
       );
+      if (options.taskId !== undefined) {
+        yield* repository.operation(
+          "link Change inspection fixture to its Task",
+          (sql) => sql`
+            INSERT INTO task_change_links (task_id, change_id)
+            VALUES (${options.taskId}, ${id})
+          `,
+        );
+      }
       return { id };
     }),
   );
@@ -189,7 +198,9 @@ export const closeChangeFixture = (
           (sql) => sql`
             UPDATE tasks
             SET state = 'done', updated_at = ${closedAt}
-            WHERE id = (SELECT task_id FROM changes WHERE id = ${changeId})
+            WHERE id = (
+              SELECT task_id FROM task_change_links WHERE change_id = ${changeId}
+            )
           `,
         );
       }

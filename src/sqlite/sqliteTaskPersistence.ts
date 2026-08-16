@@ -234,7 +234,7 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
     );
   });
 
-const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
       SELECT id, numeric_id AS numericId, title, description, state,
@@ -247,6 +247,29 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     const decoded = yield* decodePersisted("read Task", () => decodeStoredTaskRecordRow(row));
     return yield* rowToStoredTaskRecord(sql, decoded, "read Task");
   });
+
+export const taskExists = (sql: SqlClient.SqlClient, taskId: string) =>
+  Effect.map(
+    sql<{ readonly id: string }>`SELECT id FROM tasks WHERE id = ${taskId}`,
+    (rows) => rows.length > 0,
+  );
+
+export const completeTask = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
+  sql`
+    UPDATE tasks SET state = 'done', updated_at = ${now}
+    WHERE id = ${taskId} AND state = 'todo'
+  `;
+
+export const cancelTaskState = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  reason: string,
+  now: string,
+) =>
+  sql`
+    UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}, updated_at = ${now}
+    WHERE id = ${taskId} AND state <> 'cancelled'
+  `;
 
 const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
@@ -273,8 +296,8 @@ const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
         implementation_blockers.resolution_recorded_at AS resolutionRecordedAt,
         implementation_blockers.resolution_content AS resolutionContent
       FROM implementation_blockers
-      JOIN changes ON changes.id = implementation_blockers.change_id
-      WHERE changes.task_id = ${taskId}
+      JOIN task_change_links ON task_change_links.change_id = implementation_blockers.change_id
+      WHERE task_change_links.task_id = ${taskId}
         AND (
           implementation_blockers.resolved_at IS NOT NULL
           OR implementation_blockers.resolution_id IS NOT NULL
@@ -323,7 +346,10 @@ const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
     const linkedChanges = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE task_id = ${input.taskId} LIMIT 1
+      SELECT task_change_links.change_id AS id
+      FROM task_change_links
+      WHERE task_change_links.task_id = ${input.taskId}
+      LIMIT 1
     `;
     const linkedChange = linkedChanges[0];
     if (linkedChange !== undefined) {
@@ -381,7 +407,10 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
     const linked = yield* sql<{ readonly found: number }>`
-      SELECT 1 AS found FROM changes WHERE task_id = ${taskId} LIMIT 1
+      SELECT 1 AS found
+      FROM task_change_links
+      WHERE task_id = ${taskId}
+      LIMIT 1
     `;
     if (linked.length > 0) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };

@@ -6,6 +6,7 @@ import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/reposi
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteTaskChangeStartPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -57,7 +58,7 @@ export const withChangeStart = <A, E, R>(
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
-    openSqliteChangeStartPersistence().pipe(
+    openSqliteTaskChangeStartPersistence().pipe(
       Effect.flatMap((store) =>
         use((command) =>
           Effect.gen(function* () {

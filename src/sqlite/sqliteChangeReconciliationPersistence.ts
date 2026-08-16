@@ -5,7 +5,7 @@ import type { ChangeReconciliationPort } from "../change/changePorts.js";
 import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
-import { completeMergedChange } from "./sqliteCompleteMergedChangeStorage.js";
+import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,
@@ -30,7 +30,7 @@ export const openSqliteChangeReconciliationPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeMergedChange(sql, input);
+            const result = yield* completeLinkedChange(sql, input);
             if (!result.ok) return result;
             const change = yield* requireTerminalChange(
               sql,

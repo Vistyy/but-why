@@ -53,10 +53,13 @@ describe("SQLite Change decoding", () => {
               )
             `;
               yield* sql`
-              UPDATE changes
-              SET task_id = 'BY-901', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Historical intent","description":"Preserve snapshots.","comments":["first\\ncomment","second"],"resolutions":["keep  spacing"]}'
               WHERE id = 'change-decoded'
+            `;
+              yield* sql`
+                INSERT INTO task_change_links (task_id, change_id)
+                VALUES ('BY-901', 'change-decoded')
             `;
             }),
           );
@@ -288,9 +291,13 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = 'BY-902', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed intent","description":"Reject it.","unexpected":true}'
               WHERE id = 'change-malformed'
+            `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES ('BY-902', 'change-malformed')
             `;
           }),
         );
@@ -306,8 +313,11 @@ describe("SQLite Change decoding", () => {
         yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
         yield* repository.operation(
           "restore Change without a Task context",
-          (sql) =>
-            sql`UPDATE changes SET task_id = NULL, acceptance_context = NULL WHERE id = 'change-malformed'`,
+          (sql) => sql`UPDATE changes SET acceptance_context = NULL WHERE id = 'change-malformed'`,
+        );
+        yield* repository.operation(
+          "remove malformed Change link",
+          (sql) => sql`DELETE FROM task_change_links WHERE change_id = 'change-malformed'`,
         );
       }),
     ),
@@ -357,15 +367,20 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = ' BY-904', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed selected metadata","description":"Reject it."}'
               WHERE id = 'change-publication-selection'
             `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES (' BY-904', 'change-publication-selection')
+            `;
           }),
         );
-        yield* expectPersistedDataInvalid(
-          publication.getChangeById("change-publication-selection"),
-        );
+        expect(yield* publication.getChangeById("change-publication-selection")).toMatchObject({
+          id: "change-publication-selection",
+          publication: null,
+        });
       }),
     ),
   );
@@ -398,11 +413,15 @@ describe("SQLite Change decoding", () => {
               )
             `;
             yield* sql`
-              UPDATE changes SET task_id = 'BY-903', acceptance_context =
+              UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
                 base_remote_url = 'https://github.com/acme/repo.git',
                 starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
               WHERE id = ${captured.changeId}
+            `;
+            yield* sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              VALUES ('BY-903', ${captured.changeId})
             `;
           }),
         );
@@ -513,7 +532,7 @@ describe("SQLite Change decoding", () => {
             id: captured.changeId,
             state: "closed",
             closeReason: "cancelled",
-            cancelReason: null,
+            cancelReason: "Exercise reconciliation selection.",
             cleanup: { state: "pending", blockingReason: null },
           },
         });

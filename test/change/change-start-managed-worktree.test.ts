@@ -282,10 +282,7 @@ describe("Change Start Managed Worktree boundaries", () => {
             code: "managed_worktree_path_unavailable",
             changeId: expect.any(String),
             worktreePath: expect.stringMatching(
-              new RegExp(
-                `^${escapeRegExp(join(siblingRoot, "but-why", `${taskId.toLowerCase()}-`))}`,
-                "u",
-              ),
+              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "change-"))}`, "u"),
             ),
           },
           help: [

@@ -6,7 +6,6 @@ import {
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
-import { type PublicTaskId, taskSlugForId } from "../task/taskId.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
 import type {
   ChangeStartGitOperations,
@@ -48,7 +47,7 @@ export const startChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: {
-    readonly taskId?: PublicTaskId;
+    readonly taskId?: string;
     readonly baseBranch?: string;
     readonly reviewerConfiguration?: ChangeReviewerConfiguration;
     readonly now: string;
@@ -76,7 +75,7 @@ export const startChange = (
     }
 
     const id = randomUUID();
-    const slug = input.taskId === undefined ? `change-${id}` : taskSlugForId(input.taskId);
+    const slug = `change-${id.slice(0, 8)}`;
     const gitIntent = git.resolveIntent(slug, input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
     const created = yield* store.create({
@@ -97,7 +96,7 @@ const resumeTaskChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
-  taskId: PublicTaskId,
+  taskId: string,
   requestedBaseBranch: string | undefined,
   now: string,
 ): Effect.Effect<ChangeStartResult | undefined, RepositoryStorageError> =>

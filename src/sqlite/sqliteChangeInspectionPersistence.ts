@@ -25,6 +25,12 @@ import {
 } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
+export const changeExists = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.map(
+    sql<{ readonly id: string }>`SELECT id FROM changes WHERE id = ${changeId}`,
+    (rows) => rows.length > 0,
+  );
+
 export const openSqliteChangeReadPort = () =>
   Effect.map(
     RepositorySql,
@@ -82,7 +88,10 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const operationName = "read Change by Task";
     const rows = yield* sql.unsafe<StoredTaskProjectionRow>(
-      "SELECT id, state FROM changes WHERE task_id = ?",
+      `SELECT changes.id, changes.state
+       FROM changes
+       INNER JOIN task_change_links ON task_change_links.change_id = changes.id
+       WHERE task_change_links.task_id = ?`,
       [taskId],
     );
     const row = rows[0];
@@ -97,7 +106,9 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeListRow>(
-      `SELECT id, task_id AS taskId, state, branch_ref AS branchRef,
+      `SELECT id,
+        (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId,
+        state, branch_ref AS branchRef,
         worktree_path AS worktreePath, created_at AS createdAt
        FROM changes
        WHERE repository_common_directory = ?${input.includeClosed ? "" : " AND state = 'open'"}`,

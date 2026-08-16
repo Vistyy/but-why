@@ -10,11 +10,7 @@ import {
   decodeChangePublication,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import {
-  decodeChangeLifecycle,
-  decodeStoredNullableString,
-  decodeStoredString,
-} from "./sqliteChangeValueDecoders.js";
+import { decodeChangeLifecycle, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 const operationName = "complete merged Change";
@@ -29,8 +25,7 @@ const completeChangeSelectionColumns = `
   publication_expected_head_sha AS publicationExpectedHeadSha,
   publication_pr_number AS publicationPrNumber,
   publication_pr_url AS publicationPrUrl,
-  close_reason AS closeReason,
-  task_id AS taskId
+  close_reason AS closeReason
 `;
 
 export const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
@@ -49,8 +44,6 @@ export const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMe
       return { ok: false as const, code: "publication_mismatch" as const };
     }
     yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
-    if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'done', updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return { ok: true as const, changed: true };
   });
 
@@ -87,7 +80,6 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
       return {
         id,
         ...decodeChangeLifecycle(row),
-        taskId: decodeStoredNullableString(row.taskId, "Change Task id"),
         publication: decodeChangePublication(row),
       };
     });
@@ -128,7 +120,4 @@ type StoredChangeLifecycleRow = {
   readonly state: unknown;
   readonly closeReason: unknown;
 };
-type StoredCompleteChangeRow = StoredChangeLifecycleRow &
-  SqliteChangePublicationRow & {
-    readonly taskId: unknown;
-  };
+type StoredCompleteChangeRow = StoredChangeLifecycleRow & SqliteChangePublicationRow;

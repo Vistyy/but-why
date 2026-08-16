@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 import type { CancellationUseCases } from "../../change/cancelChange.js";
-import { withCancellationUseCases } from "../../change/composition/loadCancellation.js";
+import { withCancellationUseCases } from "../../taskChange/composition/loadCancellation.js";
 import {
   type CliResult,
   repoStateLoadError,

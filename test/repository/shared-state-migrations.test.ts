@@ -184,6 +184,71 @@ const migrationPreconditionCases = [
 ] as const;
 
 describe("Shared Repository State migrations", () => {
+  it.effect("moves linked Change relationships into the coordination table", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-task-change-migration-"))),
+      (directory) => {
+        const statePath = join(directory, "state.sqlite");
+        return Effect.gen(function* () {
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(41);
+              yield* sql`
+                INSERT INTO tasks (id, numeric_id, title, description, state, cancel_reason, created_at, updated_at)
+                VALUES ('BW-1', 1, 'Implement boundary', 'Keep the approved intent.', 'todo', NULL, '2026-08-01', '2026-08-01')
+              `;
+              yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                  created_at, updated_at, closed_at, base_ref, base_remote_url, starting_commit,
+                  worktree_path, acceptance_context
+                ) VALUES (
+                  'change-1', ${directory}, 'refs/heads/change-1', 'BW-1', 'open', NULL,
+                  '2026-08-01', '2026-08-01', NULL, 'refs/heads/main', 'https://example.test/repo.git',
+                  'commit-1', ${join(directory, "worktree")},
+                  '{"version":1,"title":"Implement boundary","description":"Keep the approved intent."}'
+                )
+              `;
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const columns = yield* repository.operation(
+                "read migrated Change columns",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                  SELECT name FROM pragma_table_info('changes') WHERE name IN ('task_id', 'acceptance_context')
+                  ORDER BY name
+                `,
+              );
+              expect(columns).toEqual([{ name: "acceptance_context" }]);
+              const links = yield* repository.operation(
+                "read migrated Task Change links",
+                (sql) =>
+                  sql<{ readonly taskId: string; readonly changeId: string }>`
+                  SELECT task_id AS taskId, change_id AS changeId FROM task_change_links
+                `,
+              );
+              expect(links).toEqual([{ taskId: "BW-1", changeId: "change-1" }]);
+            }).pipe(
+              Effect.provide(
+                productionRepositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  lifecycle: "open",
+                }),
+              ),
+            ),
+          );
+        });
+      },
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect(
     "drops Candidate Publication chronology while preserving current publication facts",
     () =>
