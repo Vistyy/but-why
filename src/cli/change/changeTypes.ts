@@ -2,8 +2,8 @@
 
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
-import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSession/interactiveSessionHost.js";
+import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
 import type { TextInputStdin } from "../input/textInput.js";
 export type ChangeCommandEnvironment = {
   readonly cwd: string;

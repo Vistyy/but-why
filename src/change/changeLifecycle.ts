@@ -17,7 +17,6 @@ import type { InteractiveSessionHost } from "./interactiveSession/interactiveSes
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
 import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
-import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 export type { ChangeImplementResult };
 
@@ -43,7 +42,6 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly acceptanceContext?: AcceptanceContextSnapshotV1;
     readonly reviewerConfiguration?: ChangeReviewerConfiguration;
     readonly now: string;
   },
@@ -64,9 +62,6 @@ export const startChange = <CreationFailure extends object = never>(
     const created = yield* store.create({
       id,
       ...gitIntent.intent,
-      ...(input.acceptanceContext === undefined
-        ? {}
-        : { acceptanceContext: input.acceptanceContext }),
       reviewerConfiguration: input.reviewerConfiguration,
       now: input.now,
     });

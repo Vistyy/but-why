@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import type {
   CandidatePublicationPort,
   ChangeAuthorityPort,
-  ChangeCancellationPort,
   ChangeReadPort,
   ChangeReconciliationPort,
   ChangeReviewerSessionPort,
@@ -23,12 +22,13 @@ import {
   openSqliteTaskChangeReconciliationPort,
   openSqliteTaskChangeSubmissionPort,
 } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 
 type ChangeDeliveryTestPort = {
   readonly getChangeById: ChangeReconciliationPort["getChangeById"];
   readonly listChangesForReconciliation: ChangeReconciliationPort["listChangesForReconciliation"];
   readonly completeMergedChange: ChangeReconciliationPort["completeMergedChange"];
-  readonly cancelChange: ChangeCancellationPort["cancelChange"];
+  readonly cancelChange: TaskChangeCancellationPort["cancelChange"];
   readonly recordCleanup: TerminalChangeCleanupPort["recordCleanup"];
 };
 

@@ -32,7 +32,6 @@ export type CreateChangeStartInput = {
   readonly baseRemoteUrl: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
-  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly now: string;

@@ -173,39 +173,19 @@ export type SubmissionChange = {
 
 export type ReconciliationChange = TerminalCleanupChange;
 
-type CancellationTaskState = "new" | "todo" | "done" | "cancelled";
-type CancellationTaskDependencyFact = {
-  readonly id: string;
-  readonly title: string;
-  readonly state: CancellationTaskState;
-};
-type CancellationTaskRecord = {
-  readonly id: string;
-  readonly title: string;
-  readonly state: CancellationTaskState;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly startable: boolean;
-  readonly blockedBy: readonly CancellationTaskDependencyFact[];
-  readonly description: string;
-  readonly cancelReason: string | null;
-  readonly prerequisites: readonly CancellationTaskDependencyFact[];
-  readonly dependents: readonly CancellationTaskDependencyFact[];
-};
-
-export type CancellationChange = TerminalCleanupChange & {
-  readonly taskId: string | null;
+export type ChangeCancellationRecord = TerminalCleanupChange & {
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
 };
 
-type CompleteMergedFailure = {
+export type ChangeCancellationCompletionFailure = {
   readonly ok: false;
-  readonly code:
-    | "change_not_found"
-    | "change_already_closed"
-    | "publication_mismatch"
-    | "task_completion_rejected";
+  readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
+};
+
+export type ChangeCancellationMutationFailure = {
+  readonly ok: false;
+  readonly code: "change_not_found" | "change_already_completed";
 };
 
 export type ChangeSubmissionPort = {
@@ -241,29 +221,28 @@ export type ChangeReconciliationPort = {
   >;
 };
 
-export type ChangeCancellationPort = {
-  readonly getChangeById: (changeId: string) => StorageEffect<CancellationChange | undefined>;
-  readonly getChangeByTaskId: (taskId: string) => StorageEffect<CancellationChange | undefined>;
-  readonly completeMergedChange: (input: CompleteMergedChangeInput) => StorageEffect<
-    | {
-        readonly ok: true;
-        readonly changed: boolean;
-        readonly change: CancellationChange;
-        readonly task: CancellationTaskRecord | null;
-      }
-    | CompleteMergedFailure
+type CompleteMergedFailure = {
+  readonly ok: false;
+  readonly code:
+    | "change_not_found"
+    | "change_already_closed"
+    | "publication_mismatch"
+    | "task_completion_rejected";
+};
+
+export type ChangeCancellationOwnerPort = {
+  readonly getChangeById: (changeId: string) => StorageEffect<ChangeCancellationRecord | undefined>;
+  readonly completeMergedChange: (
+    input: CompleteMergedChangeInput,
+  ) => StorageEffect<
+    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
+    | ChangeCancellationCompletionFailure
   >;
-  readonly cancelChange: (input: CancelChangeInput) => StorageEffect<
-    | {
-        readonly ok: true;
-        readonly changed: boolean;
-        readonly change: CancellationChange;
-        readonly task: CancellationTaskRecord | null;
-      }
-    | {
-        readonly ok: false;
-        readonly code: "change_not_found" | "change_already_completed";
-      }
+  readonly cancelChange: (
+    input: CancelChangeInput,
+  ) => StorageEffect<
+    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
+    | ChangeCancellationMutationFailure
   >;
 };
 

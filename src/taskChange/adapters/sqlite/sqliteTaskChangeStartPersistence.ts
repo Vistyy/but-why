@@ -5,7 +5,7 @@ import { RepositoryPersistedDataInvalid } from "../../../contracts/repositorySto
 import { RepositorySql } from "../../../sqlite/repositorySql.js";
 import {
   createChange,
-  insertChange,
+  insertLinkedChange,
   readChangeStartById,
   recordPrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
@@ -83,13 +83,10 @@ const createLinked = (sql: SqlClient.SqlClient, input: TaskChangeStartCreationIn
     if (prepared.existing !== undefined) {
       return { ok: false as const, code: "change_start_conflict" as const };
     }
-    const inserted = yield* insertChange(sql, {
-      ...input,
-      acceptanceContext: {
-        version: 1,
-        title: prepared.task.title,
-        description: prepared.task.description,
-      },
+    const inserted = yield* insertLinkedChange(sql, input, {
+      version: 1,
+      title: prepared.task.title,
+      description: prepared.task.description,
     });
     if (!inserted.ok) return inserted;
     yield* sql`

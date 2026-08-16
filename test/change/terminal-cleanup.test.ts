@@ -1,16 +1,15 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
-import {
-  type CancellationDependencies,
-  openCancellationUseCases,
-} from "../../src/change/cancelChange.js";
 import type { ChangeCleanup, ChangeRecord } from "../../src/change/change.js";
 import type { TerminalCleanupChange } from "../../src/change/changePorts.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
+import {
+  type CancellationDependencies,
+  openCancellationUseCases,
+} from "../../src/taskChange/cancelTaskChange.js";
 import {
   noOpTerminalCleanupDependencies,
   openTerminalCleanup,

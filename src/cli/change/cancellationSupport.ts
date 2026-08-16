@@ -1,12 +1,11 @@
 import { Effect } from "effect";
-
-import type { CancellationUseCases } from "../../change/cancelChange.js";
 import {
   type CliResult,
   repoStateLoadError,
   repositoryStorageErrorResult,
 } from "../../cliResults.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
 import { withCancellationUseCases } from "../../taskChange/composition/loadCancellation.js";
 
 export type CancellationCommandEnvironment = {

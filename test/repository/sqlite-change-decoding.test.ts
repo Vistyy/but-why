@@ -9,6 +9,7 @@ import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandi
 import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import { openSqliteTaskChangeReconciliationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -391,7 +392,7 @@ describe("SQLite Change decoding", () => {
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
-        const cancellation = yield* openSqliteChangeCancellationPort();
+        const cancellation = yield* openSqliteTaskChangeCancellationPort();
         const reconciliation = yield* openSqliteTaskChangeReconciliationPort(
           openSqliteChangeReconciliationPort(),
         );

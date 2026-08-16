@@ -3,18 +3,18 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import {
-  type CancellationDependencies,
-  openCancellationUseCases,
-} from "../../src/change/cancelChange.js";
 import type { ChangeRecord } from "../../src/change/change.js";
-import type { CancellationChange } from "../../src/change/changePorts.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestMutationResult,
 } from "../../src/change/ownedPullRequestGateway.js";
 import type { TaskRecord } from "../../src/task/task.js";
 import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
+import {
+  type CancellationDependencies,
+  openCancellationUseCases,
+} from "../../src/taskChange/cancelTaskChange.js";
+import type { TaskChangeCancellationChange as CancellationChange } from "../../src/taskChange/taskChangePorts.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,

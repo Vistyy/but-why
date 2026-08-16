@@ -8,7 +8,6 @@ import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
-import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 
@@ -27,7 +26,7 @@ const intent = {
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
   ...input,
   taskId: null,
-  acceptanceContext: input.acceptanceContext ?? null,
+  acceptanceContext: null,
   reviewerConfiguration: input.reviewerConfiguration ?? null,
   prepare: input.prepare ?? null,
   prepareFailure: null,
@@ -94,45 +93,21 @@ const fixture = (options: FixtureOptions = {}) => {
 };
 
 describe("Change Start orchestration", () => {
-  it.effect(
-    "creates a Change with optional captured Acceptance Context in provisioning order",
-    () =>
-      Effect.gen(function* () {
-        const changeWithoutTask = fixture();
-        const changeWithoutTaskResult = yield* changeWithoutTask.operations.start({ now });
-        expect(changeWithoutTaskResult).toMatchObject({
-          ok: true,
-          change: { taskId: null, acceptanceContext: null },
-        });
-        expect(changeWithoutTask.events).toEqual([
-          expect.stringMatching(/^resolveIntent:change-/u),
-          "create",
-          "provisionWorktree:create",
-          expect.stringMatching(/^recordPrepareOutcome:/u),
-        ]);
-
-        const backed = fixture();
-        const acceptanceContext: AcceptanceContextSnapshotV1 = {
-          version: 1,
-          title: "Accepted title",
-          description: "Accepted description",
-        };
-        const backedResult = yield* backed.operations.start({
-          baseBranch: "main",
-          acceptanceContext,
-          now,
-        });
-        expect(backedResult).toMatchObject({
-          ok: true,
-          change: { taskId: null, acceptanceContext },
-        });
-        expect(backed.events).toEqual([
-          expect.stringMatching(/^resolveIntent:change-[a-f0-9]{8}:main$/u),
-          "create",
-          "provisionWorktree:create",
-          expect.stringMatching(/^recordPrepareOutcome:/u),
-        ]);
-      }),
+  it.effect("creates an unlinked Change in provisioning order", () =>
+    Effect.gen(function* () {
+      const changeWithoutTask = fixture();
+      const changeWithoutTaskResult = yield* changeWithoutTask.operations.start({ now });
+      expect(changeWithoutTaskResult).toMatchObject({
+        ok: true,
+        change: { taskId: null, acceptanceContext: null },
+      });
+      expect(changeWithoutTask.events).toEqual([
+        expect.stringMatching(/^resolveIntent:change-/u),
+        "create",
+        "provisionWorktree:create",
+        expect.stringMatching(/^recordPrepareOutcome:/u),
+      ]);
+    }),
   );
 
   it.effect("requires reviewer configuration before creating a new Change", () =>

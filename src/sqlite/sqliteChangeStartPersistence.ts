@@ -8,6 +8,7 @@ import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../change/changeStartStore.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -52,7 +53,20 @@ export const createChange = (sql: SqlClient.SqlClient, input: CreateChangeStartI
     return { ok: true as const, change };
   });
 
-export const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
+const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
+  insertChangeRow(sql, input, null);
+
+export const insertLinkedChange = (
+  sql: SqlClient.SqlClient,
+  input: CreateChangeStartInput,
+  acceptanceContext: AcceptanceContextSnapshotV1,
+) => insertChangeRow(sql, input, acceptanceContext);
+
+const insertChangeRow = (
+  sql: SqlClient.SqlClient,
+  input: CreateChangeStartInput,
+  acceptanceContext: AcceptanceContextSnapshotV1 | null,
+) =>
   Effect.gen(function* () {
     const conflicts = yield* sql<{ readonly id: string }>`
       SELECT id FROM changes
@@ -74,7 +88,7 @@ export const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartI
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.startingCommit}, ${input.worktreePath},
-        ${input.acceptanceContext === undefined ? null : encodeSqliteAcceptanceContextSnapshot(input.acceptanceContext)},
+        ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${JSON.stringify(input.reviewerConfiguration)},
         ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL

@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
-import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import type { CliResult } from "../../cliResults.js";
 import {
@@ -29,6 +28,7 @@ import type {
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
+import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 
