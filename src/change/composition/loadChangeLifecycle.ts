@@ -20,6 +20,7 @@ import {
 import {
   type ChangeImplementResult,
   type ChangePrepareResult,
+  type ChangeStartResult,
   implementChange,
   prepareChange,
   startChange,
@@ -54,7 +55,7 @@ export const withChangeStart = <A, E, R>(
       command:
         | TaskChangeStartInput
         | (Parameters<typeof startChange>[3] & { readonly taskId?: never }),
-    ) => Effect.Effect<TaskChangeStartResult, RepositoryStorageError>,
+    ) => Effect.Effect<ChangeStartResult | TaskChangeStartResult, RepositoryStorageError>,
   ) => Effect.Effect<A, E, R>,
 ): Effect.Effect<LoadedChangeOperationResult<A>, E | RepositoryStorageError, R> => {
   const loaded = loadContext(input);

@@ -42,7 +42,7 @@ describe("SQLite Change decoding", () => {
             now: "2026-08-09T20:00:00.000Z",
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
           });
-          expect(created).toMatchObject({ ok: true, change: { taskId: null } });
+          expect(created).toMatchObject({ ok: true, change: { acceptanceContext: null } });
 
           yield* repository.operation("install historical Acceptance Context", (sql) =>
             Effect.gen(function* () {
@@ -59,11 +59,25 @@ describe("SQLite Change decoding", () => {
                 '{"version":1,"title":"Historical intent","description":"Preserve snapshots.","comments":["first\\ncomment","second"],"resolutions":["keep  spacing"]}'
               WHERE id = 'change-decoded'
             `;
-              yield* sql`
-                INSERT INTO task_change_links (task_id, change_id)
-                VALUES ('BY-901', 'change-decoded')
-            `;
             }),
+          );
+
+          const storedWithoutLink = yield* changes.reads.getChangeById("change-decoded");
+          expect(storedWithoutLink?.acceptanceContext).toEqual({
+            version: 1,
+            title: "Historical intent",
+            description: "Preserve snapshots.",
+            comments: ["first\ncomment", "second"],
+            resolutions: ["keep  spacing"],
+          });
+          yield* expectPersistedDataInvalid(starts.getById("change-decoded"));
+
+          yield* repository.operation(
+            "install Change Task link",
+            (sql) => sql`
+            INSERT INTO task_change_links (task_id, change_id)
+            VALUES ('BY-901', 'change-decoded')
+          `,
           );
 
           const stored = yield* changes.reads.getChangeById("change-decoded");
@@ -74,6 +88,9 @@ describe("SQLite Change decoding", () => {
             comments: ["first\ncomment", "second"],
             resolutions: ["keep  spacing"],
           });
+          expect((yield* starts.getById("change-decoded"))?.acceptanceContext).toEqual(
+            stored?.acceptanceContext,
+          );
         }),
       ),
   );
@@ -102,7 +119,6 @@ describe("SQLite Change decoding", () => {
           (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
         );
         expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
-          taskId: null,
           startingCommit: null,
         });
         yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
@@ -551,7 +567,7 @@ describe("SQLite Change decoding", () => {
         );
         const [closedPublication, closedTaskProjection] = yield* Effect.all([
           Effect.either(changes.publication.getChangeById(captured.changeId)),
-          Effect.either(changes.reads.getChangeByTaskId("BY-903")),
+          Effect.either(cancellation.getChangeByTaskId("BY-903")),
         ]);
         expect(closedPublication).toMatchObject({ _tag: "Right", right: { state: "closed" } });
         expect(closedTaskProjection).toMatchObject({

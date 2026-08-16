@@ -23,19 +23,6 @@ export type TaskChangeLinkPort = {
   ) => Effect.Effect<TaskChangeLink | undefined, RepositoryStorageError>;
 };
 
-export type TaskChangeLinkMutationResult =
-  | { readonly ok: true; readonly link: TaskChangeLink }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found" | "change_not_found" | "task_change_conflict";
-    };
-
-export type TaskChangeLinkMutationPort = TaskChangeLinkPort & {
-  readonly link: (
-    input: TaskChangeLink,
-  ) => Effect.Effect<TaskChangeLinkMutationResult, RepositoryStorageError>;
-};
-
 export type TaskChangeCancellationChange = ChangeCancellationRecord & {
   readonly taskId: string | null;
 };

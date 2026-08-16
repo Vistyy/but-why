@@ -14,7 +14,6 @@ export type ChangeStartRecord = {
   readonly branchRef: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
-  readonly taskId: string | null;
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;

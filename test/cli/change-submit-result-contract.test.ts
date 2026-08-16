@@ -29,7 +29,6 @@ const change: ChangeRecord = {
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
-  taskId: null,
   startingCommit: "starting",
   worktreePath: "/repo-worktrees/change-1",
   acceptanceContext: null,

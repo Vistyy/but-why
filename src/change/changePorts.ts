@@ -113,12 +113,6 @@ export type ChangeAuthorityPort = {
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
 };
 
-export type ChangeTaskProjectionRecord = {
-  readonly id: string;
-  readonly state: ChangeState;
-  readonly activeBlocker: ImplementationBlocker | null;
-};
-
 export type ChangeListRecord = {
   readonly id: string;
   readonly state: ChangeState;
@@ -129,9 +123,6 @@ export type ChangeListRecord = {
 
 export type ChangeReadPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
-  readonly getChangeByTaskId: (
-    taskId: string,
-  ) => StorageEffect<ChangeTaskProjectionRecord | undefined>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeListRecord[]>;
 };
 

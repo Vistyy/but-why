@@ -21,7 +21,6 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
-  validateChangeRelationships,
 } from "./sqliteChangeReadModel.js";
 import {
   decodeChangeState,
@@ -271,7 +270,12 @@ const mapChangeWithoutHistoryRow = (
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
         const change = yield* decodePersisted(operationName, () => decodeChangeRow(row));
-        yield* validateChangeRelationships(sql, change, operationName);
+        yield* validateChangePublicationRelationships(
+          sql,
+          change.id,
+          change.publication,
+          operationName,
+        );
         return change;
       });
 const invalidData = (operationName: string, message: string) =>

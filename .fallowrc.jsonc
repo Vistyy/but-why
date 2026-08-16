@@ -189,14 +189,7 @@
       },
       {
         "from": "change",
-        "allow": [
-          "agent",
-          "repository-runtime",
-          "reviewer-prompts",
-          "shared",
-          "task-change",
-          "task-change-composition"
-        ]
+        "allow": ["agent", "repository-runtime", "reviewer-prompts", "shared"]
       },
       {
         "from": "repository-runtime",

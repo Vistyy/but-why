@@ -82,7 +82,7 @@ export type TaskChangeReviewerConfigurationResolution =
   | { readonly ok: false; readonly message: string };
 
 export type TaskChangeStartResult =
-  | ChangeStartResult
+  | (ChangeStartResult & { readonly taskId: string })
   | TaskChangeStartEligibilityError
   | {
       readonly ok: false;
@@ -112,8 +112,11 @@ export const startTaskChange = (
         };
       }
       const provisioned = git.provisionWorktree(prepared.existing, true);
-      if (!provisioned.ok) return { ...provisioned, change: prepared.existing };
-      return yield* prepareExistingChange(store, executor, prepared.existing, input.now);
+      if (!provisioned.ok) {
+        return { ...provisioned, change: prepared.existing, taskId: input.taskId };
+      }
+      const recovered = yield* prepareExistingChange(store, executor, prepared.existing, input.now);
+      return { ...recovered, taskId: input.taskId };
     }
 
     const reviewerConfiguration = resolveReviewerConfiguration();
@@ -122,6 +125,7 @@ export const startTaskChange = (
         ok: false as const,
         code: "reviewer_configuration_invalid" as const,
         message: reviewerConfiguration.message,
+        taskId: input.taskId,
       };
     }
 
@@ -134,9 +138,10 @@ export const startTaskChange = (
       getById: store.getById,
       recordPrepareOutcome: store.recordPrepareOutcome,
     };
-    return yield* startChange(ownerStore, git, executor, {
+    const started = yield* startChange(ownerStore, git, executor, {
       ...(input.baseBranch === undefined ? {} : { baseBranch: input.baseBranch }),
       reviewerConfiguration: reviewerConfiguration.configuration,
       now: input.now,
     });
+    return { ...started, taskId: input.taskId };
   });

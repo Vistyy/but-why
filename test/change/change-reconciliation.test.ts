@@ -472,7 +472,6 @@ describe("by change reconcile", () => {
           expect(yield* changes.reads.getChangeById(created.change.id)).toMatchObject({
             state: "closed",
             closeReason: "completed",
-            taskId: null,
           });
         }),
       ),

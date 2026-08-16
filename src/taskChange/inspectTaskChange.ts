@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { ChangeAuthorityPort, ChangeReadPort } from "../change/changePorts.js";
 import type { ActiveValidationRunPort } from "../change/validation/changeValidationPorts.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskChangeLinkPort } from "./taskChangePorts.js";
 
@@ -27,6 +28,14 @@ export const queryTaskChangeProjection = (
     if (link === undefined) return null;
     const change = yield* dependencies.changes.getChangeById(link.changeId);
     if (change === undefined) return null;
+    if (change.acceptanceContext === null) {
+      return yield* Effect.fail(
+        new RepositoryPersistedDataInvalid({
+          operationName: "read Task Change projection",
+          cause: new Error("Linked Change has no Acceptance Context"),
+        }),
+      );
+    }
     if (change.state === "closed") return { id: change.id };
     if (change.activeBlocker !== null) return { id: change.id, activity: "blocked" };
     if ((yield* dependencies.activeValidation.getActiveForChange(change.id)) !== undefined) {

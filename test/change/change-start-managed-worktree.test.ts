@@ -688,7 +688,6 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     branchRef: "refs/heads/but-why/change-1",
     baseRef: "refs/heads/main",
     baseRemoteUrl: "https://github.com/acme/repo.git",
-    taskId: null,
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,

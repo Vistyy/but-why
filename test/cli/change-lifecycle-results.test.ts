@@ -2,8 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { describe } from "vitest";
 
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { prepareResult, startResult } from "../../src/cli/change/lifecycleResults.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
+import { prepareResult, startResult } from "../../src/cli/change/lifecycleResults.js";
 
 const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): ChangeStartRecord => ({
   id: "change-1",
@@ -13,7 +13,6 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   baseRemoteUrl: "https://github.com/acme/repo.git",
   startingCommit: "1111111111111111111111111111111111111111",
   worktreePath: "/repo-worktrees/but-why/by-197-change-1",
-  taskId: "BY-197" as PublicTaskId,
   acceptanceContext: {
     version: 1,
     title: "Accepted title",
@@ -27,7 +26,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
 
 describe("Change lifecycle CLI results", () => {
   it("renders successful Change Start identity for a Change linked to a Task", () => {
-    expect(startResult({ ok: true, change: change() })).toEqual({
+    expect(startResult({ ok: true, change: change(), taskId: "BY-197" })).toEqual({
       exitCode: 0,
       stdout: {
         change: { id: "change-1", taskId: "BY-197" },

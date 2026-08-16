@@ -117,7 +117,6 @@ export const recordPrepareOutcome = (
 const changeStartSelectionColumns = `
   id, repository_common_directory AS repositoryCommonDirectory,
   branch_ref AS branchRef, base_ref AS baseRef, base_remote_url AS baseRemoteUrl,
-  (SELECT task_id FROM task_change_links WHERE change_id = changes.id) AS taskId,
   starting_commit AS startingCommit, worktree_path AS worktreePath,
   acceptance_context AS acceptanceContext, reviewer_configuration AS reviewerConfiguration,
   prepare_command AS prepareCommand,
@@ -131,7 +130,6 @@ type StoredChangeStartRow = {
   readonly branchRef: unknown;
   readonly baseRef: unknown;
   readonly baseRemoteUrl: unknown;
-  readonly taskId: unknown;
   readonly startingCommit: unknown;
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
@@ -169,14 +167,10 @@ const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
   ) {
     throw new Error("Stored Change Start relationship is incomplete");
   }
-  const taskId = decodeStoredNullableString(row.taskId, "Change Task id");
   const encodedAcceptanceContext = decodeStoredNullableString(
     row.acceptanceContext,
     "Change Acceptance Context",
   );
-  if ((taskId === null) !== (encodedAcceptanceContext === null)) {
-    throw new Error("Stored Change Task relationship is incomplete");
-  }
   const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
   const prepareTimeoutSeconds =
     row.prepareTimeoutSeconds === null
@@ -209,7 +203,6 @@ const decodeChangeStart = (row: StoredChangeStartRow): ChangeStartRecord => {
     branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
     baseRef,
     baseRemoteUrl,
-    taskId,
     startingCommit,
     worktreePath,
     acceptanceContext:

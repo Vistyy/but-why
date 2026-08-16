@@ -25,7 +25,6 @@ const intent = {
 
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
   ...input,
-  taskId: null,
   acceptanceContext: null,
   reviewerConfiguration: input.reviewerConfiguration ?? null,
   prepare: input.prepare ?? null,
@@ -99,7 +98,7 @@ describe("Change Start orchestration", () => {
       const changeWithoutTaskResult = yield* changeWithoutTask.operations.start({ now });
       expect(changeWithoutTaskResult).toMatchObject({
         ok: true,
-        change: { taskId: null, acceptanceContext: null },
+        change: { acceptanceContext: null },
       });
       expect(changeWithoutTask.events).toEqual([
         expect.stringMatching(/^resolveIntent:change-/u),

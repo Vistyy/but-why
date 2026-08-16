@@ -7,7 +7,9 @@ import type { TaskChangeStartResult } from "../../taskChange/taskChangeStart.js"
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult | TaskChangeStartResult): CliResult => {
-  if (result.ok) return success(changeView(result.change, true));
+  if (result.ok) {
+    return success(changeView(result.change, "taskId" in result ? result.taskId : null));
+  }
   if (result.code === "reviewer_configuration_invalid") {
     return runtimeError({
       code: result.code,
@@ -68,7 +70,7 @@ export const startResult = (result: ChangeStartResult | TaskChangeStartResult): 
 };
 
 export const prepareResult = (result: ChangePrepareResult): CliResult => {
-  if (result.ok) return success(changeView(result.change, false));
+  if (result.ok) return success(changeView(result.change, undefined));
   if (result.code === "change_not_found" || result.code === "change_not_open") {
     return runtimeError({
       code: result.code,
@@ -79,8 +81,8 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
   return operationalError(result, false);
 };
 
-export const changeView = (change: ChangeStartRecord, includeTaskId: boolean) => ({
-  change: { id: change.id, ...(includeTaskId ? { taskId: change.taskId } : {}) },
+export const changeView = (change: ChangeStartRecord, taskId: string | null | undefined) => ({
+  change: { id: change.id, ...(taskId === undefined ? {} : { taskId }) },
   branch: change.branchRef,
   baseRef: change.baseRef,
   startingCommit: change.startingCommit,
@@ -93,24 +95,26 @@ export const changeView = (change: ChangeStartRecord, includeTaskId: boolean) =>
 type OperationalErrorInput = {
   readonly code: string;
   readonly change?: ChangeStartRecord;
+  readonly taskId?: string;
   readonly attachedPath?: string;
 };
 
 const cancelChangeHelp = (
   change: ChangeStartRecord | undefined,
+  taskId: string | undefined,
   includeTaskCancellation: boolean,
 ): string =>
-  change === undefined || change.taskId === null || !includeTaskCancellation
+  change === undefined || taskId === undefined || !includeTaskCancellation
     ? change === undefined
       ? "Or cancel the work with the applicable cancellation command."
       : `Or cancel the Change with \`by change cancel ${change.id} --reason "<reason>"\`.`
-    : `Or cancel the Task with \`by task cancel ${change.taskId} --reason "<reason>"\`.`;
+    : `Or cancel the Task with \`by task cancel ${taskId} --reason "<reason>"\`.`;
 
 export const operationalError = (
   result: OperationalErrorInput,
   includeTaskCancellation: boolean,
 ): CliResult => {
-  const { code, change } = result;
+  const { code, change, taskId } = result;
   const identityDetails =
     change === undefined
       ? {}
@@ -127,7 +131,7 @@ export const operationalError = (
       details: identityDetails,
       help: [
         `Recover the branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change, includeTaskCancellation),
+        cancelChangeHelp(change, taskId, includeTaskCancellation),
       ],
     });
   }
@@ -141,7 +145,7 @@ export const operationalError = (
       },
       help: [
         `Remove or relocate the worktree that holds the branch, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change, includeTaskCancellation),
+        cancelChangeHelp(change, taskId, includeTaskCancellation),
       ],
     });
   }
@@ -152,7 +156,7 @@ export const operationalError = (
       details: identityDetails,
       help: [
         `Move the conflicting files aside or remove them, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change, includeTaskCancellation),
+        cancelChangeHelp(change, taskId, includeTaskCancellation),
       ],
     });
   }

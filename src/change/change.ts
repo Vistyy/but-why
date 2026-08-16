@@ -85,7 +85,6 @@ export type ChangeRecord = {
   readonly branchRef: string;
   readonly baseRef: string | null;
   readonly baseRemoteUrl: string | null;
-  readonly taskId: string | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;

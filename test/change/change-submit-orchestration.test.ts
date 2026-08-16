@@ -24,7 +24,6 @@ import { GlobalConfigValidationFailed } from "../../src/contracts/configErrors.j
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
-import { publicTaskId } from "../../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -655,7 +654,6 @@ describe("Change Submit orchestration", () => {
       let seenPublishInput: PublishCandidateInput | undefined;
       let seenValidationInput: Readonly<Record<string, unknown>> | undefined;
       const change = readyChange({
-        taskId: publicTaskId("BY-1"),
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -822,7 +820,6 @@ describe("Change Submit orchestration", () => {
       Effect.gen(function* () {
         const events: string[] = [];
         const change = readyChange({
-          taskId: publicTaskId("BY-1"),
           acceptanceContext: {
             version: 1,
             title: "Approved intent",
@@ -986,7 +983,6 @@ describe("Change Submit orchestration", () => {
     Effect.gen(function* () {
       const events: string[] = [];
       const change = readyChange({
-        taskId: publicTaskId("BY-1"),
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -1368,7 +1364,6 @@ describe("Change Submit orchestration", () => {
           dependencies({
             events,
             change: readyChange({
-              taskId: publicTaskId("BY-1"),
               acceptanceContext: {
                 version: 1,
                 title: "Approved intent",
@@ -1473,7 +1468,6 @@ describe("Change Submit orchestration", () => {
   it.effect("returns Findings", () =>
     Effect.gen(function* () {
       const change = readyChange({
-        taskId: publicTaskId("BY-1"),
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -1515,7 +1509,6 @@ describe("Change Submit orchestration", () => {
   it.effect("returns Tooling Failures", () =>
     Effect.gen(function* () {
       const change = readyChange({
-        taskId: publicTaskId("BY-1"),
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -1818,7 +1811,6 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.test/acme/repo.git",
-  taskId: null,
   startingCommit: "base",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,

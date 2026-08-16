@@ -248,12 +248,6 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     return yield* rowToStoredTaskRecord(sql, decoded, "read Task");
   });
 
-export const taskExists = (sql: SqlClient.SqlClient, taskId: string) =>
-  Effect.map(
-    sql<{ readonly id: string }>`SELECT id FROM tasks WHERE id = ${taskId}`,
-    (rows) => rows.length > 0,
-  );
-
 export const completeTask = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
   sql`
     UPDATE tasks SET state = 'done', updated_at = ${now}

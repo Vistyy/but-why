@@ -156,7 +156,6 @@ describe("repository SQL storage", () => {
         });
         if (!created.ok) throw new Error(`Change Start failed: ${created.code}`);
         expect(yield* starts.getById(created.change.id)).toMatchObject({
-          taskId,
           acceptanceContext: {
             version: 1,
             title: "Persist exact accepted intent",
