@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -21,12 +20,12 @@ export const createChangeImplementFixture = (
   options: ChangeImplementFixtureOptions = {},
 ): Effect.Effect<{ readonly id: string; readonly worktreePath: string }, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const id = randomUUID();
-    const worktreePath = join(root, "fixture-worktrees", "but-why", `change-${id.slice(0, 8)}`);
+    const id = "BY-C1";
+    const worktreePath = join(root, "fixture-worktrees", "but-why", id);
     mkdirSync(join(worktreePath, ".but-why"), { recursive: true });
     writeFileSync(
       join(worktreePath, ".but-why", "config.json"),
-      `${JSON.stringify(options.managedRepoConfig ?? { taskPrefix: "BY" }, null, 2)}\n`,
+      `${JSON.stringify(options.managedRepoConfig ?? { idPrefix: "BY" }, null, 2)}\n`,
     );
     yield* withTestRepository(
       root,
@@ -38,9 +37,9 @@ export const createChangeImplementFixture = (
             "create Change Implement fixture Task for a Change linked to a Task",
             (sql) => sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, created_at, updated_at
+                id, title, description, state, created_at, updated_at
               ) VALUES (
-                ${options.taskId}, ${numericId},
+                ${numericId},
                 ${options.acceptanceContext?.title ?? "Fixture Task"},
                 ${options.acceptanceContext?.description ?? ""},
                 'todo', '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z'

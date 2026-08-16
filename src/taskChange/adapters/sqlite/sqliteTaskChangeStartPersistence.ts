@@ -34,8 +34,8 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
     create: (input: TaskChangeStartCreateInput) =>
       repository.transactionImmediate("create Change Start", (sql) =>
         input.taskId === undefined
-          ? createChange(sql, input)
-          : createLinked(sql, { ...input, taskId: input.taskId }),
+          ? createChange(sql, input, repository.idPrefix)
+          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix),
       ),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
@@ -43,7 +43,7 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
       ),
     createLinked: (input) =>
       repository.transactionImmediate("create linked Change Start", (sql) =>
-        createLinked(sql, input),
+        createLinked(sql, input, repository.idPrefix),
       ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => readTaskChangeStartById(sql, changeId)),
@@ -65,11 +65,11 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
     const existing = yield* readExistingByTaskId(sql, taskId);
     if (existing !== undefined) return { ok: true as const, existing, task };
     const dependencyRows = yield* sql<StoredTaskDependencyFactRow>`
-      SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
+      SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
       FROM task_dependencies
       LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId}
-      ORDER BY tasks.numeric_id ASC
+      ORDER BY tasks.id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
       decodeTaskDependencyFacts(dependencyRows, storedPublicTaskId(taskId)),
@@ -79,24 +79,33 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
   });
 
-const createLinked = (sql: SqlClient.SqlClient, input: TaskChangeStartCreationInput) =>
+const createLinked = (
+  sql: SqlClient.SqlClient,
+  input: TaskChangeStartCreationInput,
+  idPrefix = "BY",
+) =>
   Effect.gen(function* () {
     const prepared = yield* prepareTask(sql, input.taskId);
     if (!prepared.ok) return prepared;
     if (prepared.existing !== undefined) {
       return { ok: false as const, code: "change_start_conflict" as const };
     }
-    const inserted = yield* insertLinkedChange(sql, input, {
-      version: 1,
-      title: prepared.task.title,
-      description: prepared.task.description,
-    });
+    const inserted = yield* insertLinkedChange(
+      sql,
+      input,
+      {
+        version: 1,
+        title: prepared.task.title,
+        description: prepared.task.description,
+      },
+      idPrefix,
+    );
     if (!inserted.ok) return inserted;
     yield* sql`
       INSERT INTO task_change_links (task_id, change_id)
-      VALUES (${input.taskId}, ${input.id})
+      VALUES (${input.taskId}, ${inserted.changeId})
     `;
-    const change = yield* readTaskChangeStartById(sql, input.id);
+    const change = yield* readTaskChangeStartById(sql, inserted.changeId);
     if (change === undefined) {
       return yield* invalidData("create linked Change Start", "Change disappeared");
     }

@@ -113,7 +113,7 @@ it.scoped(
           id, repository_common_directory, branch_ref, state, acceptance_context,
           base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
         ) VALUES (
-          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
+          1, '/repo/.git', 'refs/heads/change-linked', 'open',
           '{"version":1,"title":"Linked","description":"Linked intent"}',
           'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
           '/repo-worktrees/change-linked', ${now}, ${now}
@@ -123,7 +123,7 @@ it.scoped(
           "link Todo Task fixture to Change",
           (sql) => sql`
             INSERT INTO task_change_links (task_id, change_id)
-            VALUES ('BY-1', 'change-linked')
+            VALUES (1, 1)
           `,
         );
         yield* reviews.admit({
@@ -142,7 +142,7 @@ it.scoped(
           {
             ok: false,
             code: "task_change_linked",
-            changeId: "change-linked",
+            changeId: "BY-C1",
           },
         );
         expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toEqual({

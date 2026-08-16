@@ -13,7 +13,7 @@ const profile = (model: string) => ({
 });
 
 const repoConfig = (instructionsFile?: string): RepoConfig => ({
-  taskPrefix: "BY",
+  idPrefix: "BY",
   review: {
     acceptance: {
       agentProfile: { scope: "repo", name: "strict" },
@@ -49,7 +49,7 @@ describe("Acceptance Review configuration", () => {
 
     expect(
       resolveAcceptanceReviewPolicy({
-        repoConfig: { taskPrefix: "BY" },
+        repoConfig: { idPrefix: "BY" },
         globalConfig: globalConfig("reviewers/acceptance.md"),
         repoRoot: join(root, "repo"),
         globalConfigPath,
@@ -58,7 +58,7 @@ describe("Acceptance Review configuration", () => {
 
     expect(
       resolveAcceptanceReviewPolicy({
-        repoConfig: { taskPrefix: "BY" },
+        repoConfig: { idPrefix: "BY" },
         globalConfig: globalConfig(),
         repoRoot: join(root, "repo"),
         globalConfigPath,
@@ -152,7 +152,7 @@ describe("Acceptance Review configuration", () => {
     expect(
       resolve(
         {
-          taskPrefix: "BY",
+          idPrefix: "BY",
           review: { acceptance: { agentProfile: { scope: "repo", name: "repo" } } },
           agentProfiles: { repo: profiles.repo },
         },
@@ -164,14 +164,14 @@ describe("Acceptance Review configuration", () => {
     ).toMatchObject({ ok: true, policy: { profile: { agentProfile: "repo", scope: "repo" } } });
     expect(
       resolve(
-        { taskPrefix: "BY" },
+        { idPrefix: "BY" },
         {
           ...baseGlobal,
           review: { acceptance: { agentProfile: { scope: "global", name: "global" } } },
         },
       ),
     ).toMatchObject({ ok: true, policy: { profile: { agentProfile: "global", scope: "global" } } });
-    expect(resolve({ taskPrefix: "BY" }, baseGlobal)).toMatchObject({
+    expect(resolve({ idPrefix: "BY" }, baseGlobal)).toMatchObject({
       ok: true,
       policy: { profile: { agentProfile: "default", scope: "global" } },
     });

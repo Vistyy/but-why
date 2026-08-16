@@ -15,7 +15,7 @@ import type {
 import { openSqliteTaskChangeTaskPersistence } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 
 type TaskChangeTaskUseCases = {
-  readonly taskPrefix: string;
+  readonly idPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
@@ -42,7 +42,7 @@ export const withTaskChangeTaskUseCases = <A, E, R>(
     openSqliteTaskChangeTaskPersistence().pipe(
       Effect.flatMap((persistence) =>
         use({
-          taskPrefix: context.taskPrefix,
+          idPrefix: context.idPrefix,
           resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
           editTaskDependencies: persistence.editTaskDependencies,
           reviseTask: persistence.reviseTask,

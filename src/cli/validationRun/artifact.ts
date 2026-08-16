@@ -42,6 +42,6 @@ export const runArtifactCommand = (
         : artifactFailure(result.code, command.validationRunId, command.artifactRef),
     ),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(loaded.taskPrefix))),
+    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(loaded.idPrefix))),
   );
 };

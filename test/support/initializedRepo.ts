@@ -9,7 +9,7 @@ import { createTestWorkspace } from "./testWorkspace.js";
 
 export const createInitializedRepo = (workspace?: string): string => {
   const root = createGitRepo(workspace);
-  const result = runBy(root, "init", "--task-prefix", "BY");
+  const result = runBy(root, "init", "--id-prefix", "BY");
 
   if (result.status !== 0) {
     throw new Error(result.stdout || result.stderr);

@@ -9,7 +9,7 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -67,7 +67,7 @@ export const withTasks = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -82,7 +82,7 @@ export const withTaskChangeTasks = (
     (environment.taskUseCases === undefined
       ? undefined
       : {
-          taskPrefix: environment.taskUseCases.taskPrefix,
+          idPrefix: environment.taskUseCases.idPrefix,
           resolveTaskId: environment.taskUseCases.resolveTaskId,
           editTaskDependencies: environment.taskUseCases.editTaskDependencies,
           reviseTask: environment.taskUseCases.reviseTask,
@@ -96,7 +96,7 @@ export const withTaskChangeTasks = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -165,7 +165,7 @@ export const withTaskReviewSubmission = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -178,7 +178,7 @@ const catchTaskReviewStorageError = (
   program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );

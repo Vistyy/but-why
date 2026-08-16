@@ -362,8 +362,8 @@ describe("Change Submit orchestration", () => {
               },
             }),
             trackPolicyResolution: true,
-            candidateRepoConfig: { taskPrefix: "BY", review: { specialists: ["candidate"] } },
-            baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
+            candidateRepoConfig: { idPrefix: "BY", review: { specialists: ["candidate"] } },
+            baselineRepoConfig: { idPrefix: "BY", review: { specialists: ["baseline"] } },
             refreshResult: { ok: true, base: refreshedBase },
             resolvePolicy: (
               _acceptanceContextSupplied,
@@ -1645,13 +1645,13 @@ const dependencies = (input: {
     github: pullRequestGateway(input, events, pullRequestObservations),
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
-      return { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } };
+      return { ok: true as const, config: input.candidateRepoConfig ?? { idPrefix: "BY" } };
     },
     loadRepoConfigAtCommit: () => {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
       const error = input.baselineRepoConfigError;
       return error === undefined
-        ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
+        ? { ok: true as const, config: input.baselineRepoConfig ?? { idPrefix: "BY" } }
         : { ok: false as const, message: error };
     },
     resolvePolicy: (

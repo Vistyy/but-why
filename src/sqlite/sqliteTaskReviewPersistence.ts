@@ -587,11 +587,11 @@ const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewR
 
 const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.map(
-    sql<{ readonly id: string }>`
-      SELECT prerequisite_task_id AS id FROM task_dependencies
+    sql<{ readonly taskId: string }>`
+      SELECT prerequisite_task_id AS taskId FROM task_dependencies
       WHERE dependent_task_id = ${taskId} ORDER BY prerequisite_task_id ASC
     `,
-    (dependencies) => dependencies.map((dependency) => dependency.id),
+    (dependencies) => dependencies.map((dependency) => dependency.taskId),
   );
 
 const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>

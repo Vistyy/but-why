@@ -29,7 +29,7 @@ export type RepoStateLoadError =
   | ResolveLocalRepositoryError
   | {
       readonly code: "state_store_unavailable";
-      readonly taskPrefix?: string;
+      readonly idPrefix?: string;
     };
 
 /**
@@ -60,9 +60,11 @@ export const repoStateLoadError = (error: RepoStateLoadError): CliResult => {
     case "invalid_repo_config":
       return invalidRepoConfig(error.error);
     case "state_store_unavailable":
-      return stateStoreUnavailable(error.taskPrefix);
+      return stateStoreUnavailable(error.idPrefix);
     case "shared_state_identity_conflict":
       return sharedStateIdentityConflict();
+    case "id_prefix_conflict":
+      return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
   }
 };
 
@@ -70,7 +72,7 @@ const notInitialized = (): CliResult =>
   runtimeError({
     code: "not_initialized",
     message: "This workspace is not initialized for But Why?.",
-    help: ["Run `by init --task-prefix BY` in the repository root."],
+    help: ["Run `by init --id-prefix BY` in the repository root."],
   });
 
 const mainCheckoutUnavailable = (path: string | undefined): CliResult =>
@@ -91,33 +93,35 @@ const invalidRepoConfig = (
       path: error.path ?? ".but-why/config.json",
       diagnostics: structuredContractDiagnostics(error.diagnostics),
     },
-    help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
+    help: ["Fix the JSON or run `by init --id-prefix <prefix>` after moving it aside."],
   });
 
-export const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult =>
+export const stateStoreUnavailable = (idPrefix: string | undefined): CliResult =>
   runtimeError({
     code: "state_store_unavailable",
     message: "Shared But Why? state is unavailable.",
     help: [
-      taskPrefix === undefined
-        ? "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
-        : `Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
+      idPrefix === undefined
+        ? "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --id-prefix <prefix>`."
+        : `Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --id-prefix ${idPrefix}\`.`,
     ],
   });
 
 export const repositoryStorageErrorResult = (
   error: RepositoryStorageError,
-  taskPrefix?: string,
+  idPrefix?: string,
 ): CliResult => {
   switch (error._tag) {
     case "RepositoryIdentityConflict":
       return sharedStateIdentityConflict();
+    case "RepositoryIdPrefixConflict":
+      return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
     case "RepositoryPersistedDataInvalid":
       return persistedDataInvalid(error.operationName);
     case "RepositoryRestoredTransientState":
       return restoredTransientState(error.tasks, error.changes);
     default:
-      return stateStoreUnavailable(taskPrefix);
+      return stateStoreUnavailable(idPrefix);
   }
 };
 
@@ -147,9 +151,19 @@ export const restoredTransientState = (
     ],
   });
 
+const idPrefixConflict = (configuredIdPrefix: string, storedIdPrefix: string): CliResult =>
+  runtimeError({
+    code: "id_prefix_conflict",
+    message: `Repo Config ID Prefix ${configuredIdPrefix} conflicts with initialized Shared Repository State prefix ${storedIdPrefix}.`,
+    details: { configuredIdPrefix, storedIdPrefix },
+    help: [
+      `Restore .but-why/config.json to use idPrefix ${storedIdPrefix}, then retry with the predecessor executable.`,
+    ],
+  });
+
 const sharedStateIdentityConflict = (): CliResult =>
   runtimeError({
     code: "shared_state_identity_conflict",
     message: "Shared But Why? state belongs to a different Git repository.",
-    help: ["Restore the repository's own shared state, then run `by init --task-prefix <prefix>`."],
+    help: ["Restore the repository's own shared state, then run `by init --id-prefix <prefix>`."],
   });

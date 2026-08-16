@@ -7,6 +7,7 @@ import { describe } from "vitest";
 import type { CurrentChangeEvidenceQuery } from "../../src/change/changePorts.js";
 import {
   RepositoryIdentityConflict,
+  RepositoryIdPrefixConflict,
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
@@ -2015,7 +2016,7 @@ describe("repository SQL storage", () => {
               id, repository_common_directory, branch_ref, base_ref, state,
               close_reason, created_at, updated_at, closed_at
             ) VALUES (
-              'change-1', ${input.commonDirectory}, 'refs/heads/feature', NULL,
+              1, ${input.commonDirectory}, 'refs/heads/feature', NULL,
               'open', NULL, '2026-07-17T23:00:00.000Z', '2026-07-17T23:00:00.000Z', NULL
             )
           `,
@@ -2035,7 +2036,7 @@ describe("repository SQL storage", () => {
           .commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
-            expectedChangeId: "change-1",
+            expectedChangeId: "BY-C1",
             baseRef: "refs/heads/main",
             changeBaseSha: "base",
             headSha: "head",
@@ -2043,7 +2044,7 @@ describe("repository SQL storage", () => {
           })
           .pipe(Effect.flip);
 
-        expect(yield* capture.getChangeById("change-1")).toMatchObject({ baseRef: null });
+        expect(yield* capture.getChangeById("BY-C1")).toMatchObject({ baseRef: null });
         const candidates = yield* repository.operation(
           "read failed Candidate capture",
           (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM candidates`,
@@ -2065,7 +2066,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-a', 'a', 'refs/heads/a',
+                1, 'a', 'refs/heads/a',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2074,7 +2075,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-b', 'b', 'refs/heads/b',
+                2, 'b', 'refs/heads/b',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2085,27 +2086,25 @@ describe("repository SQL storage", () => {
             yield* sql`
               INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
               VALUES
-                ('change-transcript-a', 'acceptance', 'session-a-1', 'reviewer-sessions/review_session-a-1.jsonl'),
-                ('change-transcript-a', 'standards', 'session-a-2', 'reviewer-sessions/review_session-a-2.jsonl'),
-                ('change-transcript-b', 'acceptance', 'session-b-1', 'reviewer-sessions/review_session-b-1.jsonl')
+                (1, 'acceptance', 'session-a-1', 'reviewer-sessions/review_session-a-1.jsonl'),
+                (1, 'standards', 'session-a-2', 'reviewer-sessions/review_session-a-2.jsonl'),
+                (2, 'acceptance', 'session-b-1', 'reviewer-sessions/review_session-b-1.jsonl')
             `;
           }),
         );
 
-        const first =
-          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-a");
-        const second =
-          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-b");
+        const first = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C1");
+        const second = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C2");
 
         expect(first).toEqual([
           {
-            changeId: "change-transcript-a",
+            changeId: "BY-C1",
             producer: "acceptance",
             piSessionId: "session-a-1",
             filePath: "reviewer-sessions/review_session-a-1.jsonl",
           },
           {
-            changeId: "change-transcript-a",
+            changeId: "BY-C1",
             producer: "standards",
             piSessionId: "session-a-2",
             filePath: "reviewer-sessions/review_session-a-2.jsonl",
@@ -2113,7 +2112,7 @@ describe("repository SQL storage", () => {
         ]);
         expect(second).toEqual([
           {
-            changeId: "change-transcript-b",
+            changeId: "BY-C2",
             producer: "acceptance",
             piSessionId: "session-b-1",
             filePath: "reviewer-sessions/review_session-b-1.jsonl",
@@ -2135,7 +2134,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-retained', 'retained', 'refs/heads/retained',
+                1, 'retained', 'refs/heads/retained',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2145,32 +2144,28 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
-              VALUES ('change-transcript-retained', 'acceptance', 'fingerprint', 'session-live')
+              VALUES (1, 'acceptance', 'fingerprint', 'session-live')
             `;
             yield* sql`
               INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
-              VALUES ('change-transcript-retained', 'acceptance', 'session-live', 'reviewer-sessions/review_session-live.jsonl')
+              VALUES (1, 'acceptance', 'session-live', 'reviewer-sessions/review_session-live.jsonl')
             `;
           }),
         );
 
-        const live = yield* changes.reviewerSessions.listReviewerSessions(
-          "change-transcript-retained",
-        );
+        const live = yield* changes.reviewerSessions.listReviewerSessions("BY-C1");
         expect(live).toEqual([
           {
-            ownerId: "change-transcript-retained",
+            ownerId: "BY-C1",
             producer: "acceptance",
             fingerprint: "fingerprint",
             sessionReference: "session-live",
           },
         ]);
-        const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
-          "change-transcript-retained",
-        );
+        const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C1");
         expect(transcripts).toEqual([
           {
-            changeId: "change-transcript-retained",
+            changeId: "BY-C1",
             producer: "acceptance",
             piSessionId: "session-live",
             filePath: "reviewer-sessions/review_session-live.jsonl",
@@ -2242,6 +2237,41 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.effect("rejects a configured ID Prefix that conflicts with Shared Repository State", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) => {
+        const statePath = join(directory, "state.sqlite");
+        const acquire = (idPrefix: string, lifecycle?: "initialize") =>
+          Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  idPrefix,
+                  ...(lifecycle === undefined ? {} : { lifecycle }),
+                }),
+              ),
+            ),
+          );
+
+        return Effect.gen(function* () {
+          yield* acquire("BY", "initialize");
+          const error = yield* acquire("AC").pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryIdPrefixConflict);
+          expect(error).toMatchObject({
+            _tag: "RepositoryIdPrefixConflict",
+            configuredIdPrefix: "AC",
+            storedIdPrefix: "BY",
+          });
+        });
+      },
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("closes and reopens the same migrated repository state", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
@@ -2256,11 +2286,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(42);
+          expect(yield* initializeMigrationCount).toBe(43);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(42);
+          expect(yield* readMigrationCount).toBe(43);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2360,9 +2390,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(42);
+              expect(migrations.length).toBe(43);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 42 }, (_, index) => index + 1),
+                Array.from({ length: 43 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2461,7 +2491,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 42,
+              migrationCount: 43,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

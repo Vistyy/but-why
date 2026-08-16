@@ -101,7 +101,7 @@ describe("Change Start orchestration", () => {
         change: { acceptanceContext: null },
       });
       expect(changeWithoutTask.events).toEqual([
-        expect.stringMatching(/^resolveIntent:change-/u),
+        "resolveIntent:pending-change-start:default",
         "create",
         "provisionWorktree:create",
         expect.stringMatching(/^recordPrepareOutcome:/u),
@@ -133,7 +133,7 @@ describe("Change Start orchestration", () => {
       if (!("change" in result)) return;
       expect(result.change).toBe(captured.current());
       expect(captured.events).toEqual([
-        expect.stringMatching(/^resolveIntent:change-/u),
+        "resolveIntent:pending-change-start:default",
         "create",
         "provisionWorktree:create",
       ]);

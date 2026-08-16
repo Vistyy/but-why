@@ -1,5 +1,10 @@
+import { dirname, join } from "node:path";
+
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+
+import { changeBranchRefForSlug } from "../change/changeBranch.js";
+import { publicChangeId } from "../change/changeId.js";
 
 import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
@@ -34,7 +39,9 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
 > =>
   Effect.map(RepositorySql, (repository) => ({
     create: (input) =>
-      repository.transactionImmediate("create Change Start", (sql) => createChange(sql, input)),
+      repository.transactionImmediate("create Change Start", (sql) =>
+        createChange(sql, input, repository.idPrefix),
+      ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => readChangeStartById(sql, changeId)),
     recordPrepareOutcome: (changeId, failure, now) =>
@@ -43,35 +50,40 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
       ),
   }));
 
-export const createChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
+export const createChange = (
+  sql: SqlClient.SqlClient,
+  input: CreateChangeStartInput,
+  idPrefix = "BY",
+) =>
   Effect.gen(function* () {
-    const inserted = yield* insertChange(sql, input);
+    const inserted = yield* insertChange(sql, input, idPrefix);
     if (!inserted.ok) return inserted;
-    const change = yield* readChangeStartById(sql, input.id);
+    const change = yield* readChangeStartById(sql, inserted.changeId);
     if (change === undefined)
       return yield* invalidData("create Change Start", "Change disappeared");
     return { ok: true as const, change };
   });
 
-const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
-  insertChangeRow(sql, input, null);
+const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput, idPrefix: string) =>
+  insertChangeRow(sql, input, null, idPrefix);
 
 export const insertLinkedChange = (
   sql: SqlClient.SqlClient,
   input: CreateChangeStartInput,
   acceptanceContext: AcceptanceContextSnapshotV1,
-) => insertChangeRow(sql, input, acceptanceContext);
+  idPrefix = "BY",
+) => insertChangeRow(sql, input, acceptanceContext, idPrefix);
 
 const insertChangeRow = (
   sql: SqlClient.SqlClient,
   input: CreateChangeStartInput,
   acceptanceContext: AcceptanceContextSnapshotV1 | null,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const conflicts = yield* sql<{ readonly id: string }>`
       SELECT id FROM changes
-      WHERE id = ${input.id}
-        OR (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${input.branchRef})
+      WHERE (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${input.branchRef})
         OR worktree_path = ${input.worktreePath}
       LIMIT 1
     `;
@@ -79,22 +91,46 @@ const insertChangeRow = (
       return { ok: false as const, code: "change_start_conflict" as const };
     }
 
-    yield* sql`
+    const allocated = yield* sql<{ readonly id: string }>`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, base_remote_url,
+        repository_common_directory, branch_ref, base_ref, base_remote_url,
         starting_commit, worktree_path, acceptance_context, reviewer_configuration,
         prepare_command, prepare_timeout_seconds, prepare_failure,
         state, close_reason, created_at, updated_at, closed_at
       ) VALUES (
-        ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
+        ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${JSON.stringify(input.reviewerConfiguration)},
         ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
+      RETURNING id
     `;
-    return { ok: true as const };
+    const allocatedId = allocated[0]?.id;
+    if (allocatedId === undefined) {
+      return yield* invalidData("create Change Start", "Change identity was not allocated");
+    }
+    const internalId = Number(allocatedId.slice(allocatedId.lastIndexOf("C") + 1));
+    const changeId = publicChangeId(idPrefix, internalId);
+    const branchRef = changeBranchRefForSlug(changeId);
+    const worktreePath = join(dirname(input.worktreePath), changeId);
+    const finalConflicts = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes
+      WHERE id <> ${changeId} AND (
+        (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${branchRef})
+        OR worktree_path = ${worktreePath}
+      )
+      LIMIT 1
+    `;
+    if (finalConflicts.length > 0) {
+      return { ok: false as const, code: "change_start_conflict" as const };
+    }
+    yield* sql`
+      UPDATE changes SET branch_ref = ${branchRef}, worktree_path = ${worktreePath}
+      WHERE id = ${changeId}
+    `;
+    return { ok: true as const, changeId };
   });
 
 export const recordPrepareOutcome = (

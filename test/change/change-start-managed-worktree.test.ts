@@ -46,14 +46,14 @@ describe("Change Start Managed Worktree boundaries", () => {
         const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
         expect(output).toMatchObject({
           change: { id: expect.any(String), taskId: null },
-          branch: expect.stringMatching(/^refs\/heads\/but-why\/change-/u),
+          branch: expect.stringMatching(/^refs\/heads\/but-why\/BY-C[1-9][0-9]*$/u),
           baseRef: "refs/remotes/origin/main",
           startingCommit,
           worktreePath: expect.any(String),
         });
         expect(output.worktreePath).toMatch(
           new RegExp(
-            `^${escapeRegExp(join(dirname(root), `${basename(root)}-worktrees`, "but-why"))}/change-`,
+            `^${escapeRegExp(join(dirname(root), `${basename(root)}-worktrees`, "but-why"))}/BY-C[1-9][0-9]*$`,
             "u",
           ),
         );
@@ -317,7 +317,7 @@ describe("Change Start Managed Worktree boundaries", () => {
             code: "managed_worktree_path_unavailable",
             changeId: expect.any(String),
             worktreePath: expect.stringMatching(
-              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "change-"))}`, "u"),
+              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "BY-C"))}[1-9][0-9]*$`, "u"),
             ),
           },
           help: [

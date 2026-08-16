@@ -122,8 +122,7 @@ const stateEntry = "but-why-change-continuation";
 const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const blockerPollingIntervalMs = 30_000;
-const changeIdPattern =
-  /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
+const changeIdPattern = /^\s*Change identity:\s*([A-Z][A-Z0-9]{1,9}-C[1-9][0-9]*)\.?\s*$/mu;
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
 const defaultCommandPrefix: ButWhyCommandPrefix = "npx -y but-why";

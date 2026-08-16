@@ -28,7 +28,7 @@ export const runTaskShowCommand = (
         environment.taskUseCases === undefined
           ? loadTaskChangeProjection({ cwd: environment.cwd })
           : undefined;
-      if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
+      if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.idPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);
       return yield* withTaskReviewInspection(environment, (reviews) =>
         Effect.gen(function* () {

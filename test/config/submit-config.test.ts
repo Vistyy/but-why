@@ -3,7 +3,7 @@ import { submitRepoConfig } from "../../src/change/submit/submitRepoConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 
 const checkConfig = {
-  taskPrefix: "BY",
+  idPrefix: "BY",
   validation: { checks: [{ id: "quality", command: "true" }] },
 } satisfies RepoConfig;
 
@@ -18,7 +18,7 @@ describe("submit repository configuration", () => {
   });
 
   it("rejects missing and duplicate validation checks", () => {
-    expect(submitRepoConfig({ taskPrefix: "BY" })).toMatchObject({
+    expect(submitRepoConfig({ idPrefix: "BY" })).toMatchObject({
       ok: false,
       error: {
         _tag: "RepoConfigValidationFailed",
@@ -28,7 +28,7 @@ describe("submit repository configuration", () => {
 
     expect(
       submitRepoConfig({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         validation: {
           checks: [
             { id: "quality", command: "true" },

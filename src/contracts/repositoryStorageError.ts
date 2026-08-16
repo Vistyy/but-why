@@ -29,6 +29,11 @@ export class RepositoryIdentityConflict extends Data.TaggedError("RepositoryIden
   readonly actualCommonDirectory: string;
 }> {}
 
+export class RepositoryIdPrefixConflict extends Data.TaggedError("RepositoryIdPrefixConflict")<{
+  readonly configuredIdPrefix: string;
+  readonly storedIdPrefix: string;
+}> {}
+
 export class RepositorySqlOperationFailed extends Data.TaggedError("RepositorySqlOperationFailed")<{
   readonly operationName: string;
   readonly cause: unknown;
@@ -56,6 +61,7 @@ export class RepositoryPersistedDataInvalid extends Data.TaggedError(
 export type RepositoryStorageError =
   | RepositoryStateUnavailable
   | RepositoryIdentityConflict
+  | RepositoryIdPrefixConflict
   | RepositorySqlOperationFailed
   | RepositoryMigrationFailed
   | RepositoryRestoredTransientState

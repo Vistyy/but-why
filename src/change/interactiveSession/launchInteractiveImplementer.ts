@@ -98,8 +98,7 @@ export const launchInteractiveImplementer = (input: {
     };
   });
 
-const hostSessionNameForChange = (change: ChangeStartRecord): string =>
-  `change-${change.id.slice(0, 8)}`;
+const hostSessionNameForChange = (change: ChangeStartRecord): string => change.id;
 
 const agentSessionNameForChange = (change: ChangeStartRecord): string =>
   change.acceptanceContext === null

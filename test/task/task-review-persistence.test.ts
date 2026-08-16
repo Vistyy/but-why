@@ -131,7 +131,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
           id, repository_common_directory, branch_ref, state, acceptance_context,
           base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
         ) VALUES (
-          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
+          1, '/repo/.git', 'refs/heads/change-linked', 'open',
           '{"version":1,"title":"Linked proposal","description":"Exact"}',
           'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
           '/repo-worktrees/change-linked', ${now}, ${now}
@@ -141,7 +141,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
         "link New Task fixture to Change",
         (sql) => sql`
           INSERT INTO task_change_links (task_id, change_id)
-          VALUES ('BY-1', 'change-linked')
+          VALUES (1, 1)
         `,
       );
 
@@ -155,7 +155,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
           workspacePath: "/tmp/review-rejected",
           now,
         }),
-      ).toEqual({ ok: false, code: "task_change_linked", changeId: "change-linked" });
+      ).toEqual({ ok: false, code: "task_change_linked", changeId: "BY-C1" });
       expect(yield* reviews.listForTask(publicTaskId("BY-1"))).toEqual([]);
     }),
   ),
@@ -187,7 +187,7 @@ it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an ear
       yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later });
       yield* repository.operation(
         "restore New Task after earlier passing Review",
-        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-2'`,
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 2`,
       );
       const finding = (title: string) => ({
         title,
@@ -256,7 +256,7 @@ it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an ear
         "change irrelevant dependency evidence",
         (sql) =>
           sql`UPDATE tasks SET title = 'Renamed dependency', description = 'Changed', state = 'done'
-              WHERE id = 'BY-1'`,
+              WHERE id = 1`,
       );
 
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
@@ -276,14 +276,14 @@ it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an ear
         "change direct dependency set",
         (sql) =>
           sql`DELETE FROM task_dependencies
-              WHERE dependent_task_id = 'BY-2' AND prerequisite_task_id = 'BY-1'`,
+              WHERE dependent_task_id = 2 AND prerequisite_task_id = 1`,
       );
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toBeUndefined();
       yield* repository.operation(
         "restore direct dependency set",
         (sql) =>
           sql`INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-            VALUES ('BY-2', 'BY-1')`,
+            VALUES (2, 1)`,
       );
       yield* reviews.admit({
         reviewId: "review-active",
@@ -319,7 +319,7 @@ it.scoped("atomically applies a reused passing judgment and rejects malformed ev
       yield* reviews.complete({ reviewId: "review-passed", findings: [], now: later });
       yield* repository.operation(
         "restore New Task fixture",
-        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`,
+        (sql) => sql`UPDATE tasks SET state = 'new' WHERE id = 1`,
       );
 
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-1"), later)).toMatchObject({
@@ -332,7 +332,7 @@ it.scoped("atomically applies a reused passing judgment and rejects malformed ev
 
       yield* repository.operation("malform reusable Review evidence", (sql) =>
         Effect.gen(function* () {
-          yield* sql`UPDATE tasks SET state = 'new' WHERE id = 'BY-1'`;
+          yield* sql`UPDATE tasks SET state = 'new' WHERE id = 1`;
           yield* sql`UPDATE task_reviews SET proposal_snapshot = '{' WHERE id = 'review-passed'`;
         }),
       );

@@ -24,6 +24,6 @@ export const runShowCommand = (
         : success(candidateValidationRunInspectionView(inspection)),
     ),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(loaded.taskPrefix))),
+    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(loaded.idPrefix))),
   );
 };

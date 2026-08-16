@@ -27,7 +27,7 @@ export const resolveChangeStartGitIntent = (
   if (!configSource.ok) return { ok: false, code: "committed_repo_config_missing" };
 
   const config = decodeRepoConfigSource(configSource.stdout);
-  if (!config.ok || config.config.taskPrefix !== context.taskPrefix) {
+  if (!config.ok || config.config.idPrefix !== context.idPrefix) {
     return { ok: false, code: "committed_repo_config_invalid" };
   }
 

@@ -12,7 +12,7 @@ import {
 export type LoadCandidateValidationRunInspectionResult =
   | {
       readonly ok: true;
-      readonly taskPrefix: string;
+      readonly idPrefix: string;
       readonly inspection: CandidateValidationRunInspectionUseCases;
     }
   | { readonly ok: false; readonly error: ResolveLocalRepositoryError };
@@ -37,7 +37,7 @@ export const loadCandidateValidationRunInspection = (input: {
   );
   return {
     ok: true,
-    taskPrefix: context.taskPrefix,
+    idPrefix: context.idPrefix,
     inspection: {
       inspectRun: (validationRunId) =>
         loaded.runtime.provide(

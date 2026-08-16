@@ -52,31 +52,36 @@ export const decodeTaskState = (value: unknown): TaskState => {
   return value;
 };
 
-export const decodeTaskSummaryRow = (row: StoredTaskSummaryRow): DecodedTaskSummaryRow => ({
+export const decodeTaskSummaryRow = (
+  row: StoredTaskSummaryRow,
+  idPrefix = "BY",
+): DecodedTaskSummaryRow => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: storedPublicTaskId(row.id, idPrefix),
   state: decodeTaskState(row.state),
 });
 
 export const decodeStoredTaskRecordRow = (
   row: StoredTaskRecordRow,
+  idPrefix = "BY",
 ): DecodedStoredTaskRecordRow => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: storedPublicTaskId(row.id, idPrefix),
   state: decodeTaskState(row.state),
 });
 
-export const decodeTaskContextRow = (row: StoredTaskContextRow) => ({
+export const decodeTaskContextRow = (row: StoredTaskContextRow, idPrefix = "BY") => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: storedPublicTaskId(row.id, idPrefix),
 });
 
 export const decodeTaskDependencyFacts = (
   rows: readonly StoredTaskDependencyFactRow[],
   ownerTaskId: PublicTaskId,
+  idPrefix = "BY",
 ): readonly TaskDependencyFact[] =>
   rows.map((row) => {
-    const id = storedPublicTaskId(row.id);
+    const id = storedPublicTaskId(row.id, idPrefix);
     if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
     return { id, title: row.title, state: decodeTaskState(row.state) };
   });

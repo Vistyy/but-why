@@ -9,9 +9,9 @@ import {
 } from "./agentConfig.js";
 import { RepoConfigValidationFailed } from "./configErrors.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
-import { taskPrefixPattern } from "./taskPrefix.js";
+import { idPrefixPattern } from "./idPrefix.js";
 
-const taskPrefixSchema = Schema.String.pipe(Schema.pattern(taskPrefixPattern));
+const idPrefixSchema = Schema.String.pipe(Schema.pattern(idPrefixPattern));
 const checkIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9_-]*$/u));
 const timeoutSecondsSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
 export const repoRelativePathSchema = Schema.String.pipe(
@@ -75,7 +75,7 @@ const repoReviewConfigSchema = Schema.Struct({
 });
 
 const repoConfigSchema = Schema.Struct({
-  taskPrefix: taskPrefixSchema,
+  idPrefix: idPrefixSchema,
   agentEnvironment: Schema.optional(repoAgentEnvironmentConfigSchema),
   prepare: Schema.optional(repoPrepareConfigSchema),
   validation: Schema.optional(repoValidationConfigSchema),

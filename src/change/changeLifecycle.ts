@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import {
@@ -55,12 +54,10 @@ export const startChange = <CreationFailure extends object = never>(
       };
     }
 
-    const id = randomUUID();
-    const slug = `change-${id.slice(0, 8)}`;
-    const gitIntent = git.resolveIntent(slug, input.baseBranch);
+    const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
     const created = yield* store.create({
-      id,
+      id: "pending-change-start",
       ...gitIntent.intent,
       reviewerConfiguration: input.reviewerConfiguration,
       now: input.now,

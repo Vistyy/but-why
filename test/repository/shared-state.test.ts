@@ -179,7 +179,7 @@ describe("shared repository state", () => {
           message: "Shared But Why? state belongs to a different Git repository.",
         },
         help: [
-          "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
+          "Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.",
         ],
       });
     }),
@@ -189,7 +189,7 @@ describe("shared repository state", () => {
 const initializedRepo = (): Effect.Effect<string> =>
   Effect.gen(function* () {
     const root = createGitRepo();
-    expect((yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
+    expect((yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"])).status).toBe(0);
     return root;
   });
 

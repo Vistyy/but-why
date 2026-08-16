@@ -7,6 +7,7 @@ export type TaskIdParseErrorCode =
   | "empty_task_id"
   | "task_id_has_whitespace"
   | "task_id_has_control"
+  | "task_id_invalid_shape"
   | "task_id_too_long";
 
 export type PublicTaskIdParseResult =
@@ -50,6 +51,10 @@ export const parsePublicTaskId = (value: string): PublicTaskIdParseResult => {
     return { ok: false, code: "task_id_too_long", maxLength: maxTaskIdLength };
   }
 
+  if (!hasPublicTaskIdShape(value)) {
+    return { ok: false, code: "task_id_invalid_shape" };
+  }
+
   return { ok: true, taskId: brandPublicTaskId(value) };
 };
 
@@ -66,14 +71,23 @@ export const publicTaskId = (value: string): PublicTaskId => {
 export const generatedPublicTaskId = (prefix: string, numericId: number): PublicTaskId =>
   publicTaskId(`${prefix}-${numericId}`);
 
-export const storedPublicTaskId = (value: string): PublicTaskId => {
-  const parsed = parsePublicTaskId(value);
+export const storedPublicTaskId = (value: string | number, idPrefix?: string): PublicTaskId => {
+  const source = typeof value === "number" ? `${idPrefix ?? "BY"}-${value}` : value;
+  const parsed = parsePublicTaskId(source);
 
   if (!parsed.ok) {
     throw new Error("Invalid stored Task ID");
   }
 
   return parsed.taskId;
+};
+
+export const internalTaskId = (value: PublicTaskId | string, idPrefix: string): number => {
+  const match = new RegExp(`^${idPrefix}-([1-9][0-9]*)$`, "u").exec(value);
+  const id = match?.[1] === undefined ? Number.NaN : Number(match[1]);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw new Error("Task ID does not belong to this repository");
+  return id;
 };
 
 export const taskSlugForId = (taskId: PublicTaskId): TaskSlug => {

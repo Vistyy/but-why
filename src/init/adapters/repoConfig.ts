@@ -94,8 +94,8 @@ export const decodeRepoConfigSource = (
     : { ok: false, error: result.left };
 };
 
-export const writeRepoConfig = (path: string, taskPrefix: string): void => {
-  writeFileSync(path, `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
+export const writeRepoConfig = (path: string, idPrefix: string): void => {
+  writeFileSync(path, `${JSON.stringify({ idPrefix }, null, 2)}\n`);
 };
 
 const configReadFailure = <Config, Failure>(

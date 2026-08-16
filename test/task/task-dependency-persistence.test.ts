@@ -128,7 +128,7 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
           id, repository_common_directory, branch_ref, state, acceptance_context,
           base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
         ) VALUES (
-          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
+          1, '/repo/.git', 'refs/heads/change-linked', 'open',
           '{"version":1,"title":"Linked","description":"Linked"}',
           'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
           '/repo-worktrees/change-linked', ${firstNow}, ${firstNow}
@@ -138,7 +138,7 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
         "link Task fixture to Change",
         (sql) => sql`
           INSERT INTO task_change_links (task_id, change_id)
-          VALUES ('BY-1', 'change-linked')
+          VALUES (1, 1)
         `,
       );
 

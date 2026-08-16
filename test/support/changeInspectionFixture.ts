@@ -18,7 +18,7 @@ export const createInspectionRepository = (): string => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(
     join(root, ".but-why", "config.json"),
-    `${JSON.stringify({ taskPrefix: "BY" }, null, 2)}\n`,
+    `${JSON.stringify({ idPrefix: "BY" }, null, 2)}\n`,
   );
   const fakeGitDirectory = join(root, ".inspection-bin");
   mkdirSync(fakeGitDirectory);
@@ -96,9 +96,9 @@ export const createTaskFixture = (
         "create Task inspection fixture",
         (sql) => sql`
           INSERT INTO tasks (
-            id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+            id, title, description, state, cancel_reason, created_at, updated_at
           ) VALUES (
-            ${input.id}, ${input.numericId}, ${input.title}, ${input.description}, ${input.state},
+            ${input.numericId}, ${input.title}, ${input.description}, ${input.state},
             NULL, ${input.createdAt}, ${input.updatedAt}
           )
         `,
@@ -115,7 +115,6 @@ export const createChangeFixture = (
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const id = randomUUID();
       const repository = yield* RepositorySql;
       let acceptanceContext: string | null = null;
       if (options.taskId !== undefined) {
@@ -140,23 +139,26 @@ export const createChangeFixture = (
         });
       }
       const taskBacked = options.taskId !== undefined;
-      yield* repository.operation(
+      const inserted = yield* repository.operation(
         "create Change inspection fixture",
-        (sql) => sql`
+        (sql) => sql<{ readonly id: string }>`
           INSERT INTO changes (
-            id, repository_common_directory, branch_ref, acceptance_context, state,
+            repository_common_directory, branch_ref, acceptance_context, state,
             close_reason, created_at, updated_at, closed_at, base_ref, base_remote_url,
             worktree_path, starting_commit
           ) VALUES (
-            ${id}, ${join(root, ".git")}, ${branchRef}, ${acceptanceContext}, 'open', NULL,
+            ${join(root, ".git")}, ${branchRef}, ${acceptanceContext}, 'open', NULL,
             ${createdAt}, ${createdAt}, NULL,
             ${options.baseRef === undefined && taskBacked ? "refs/remotes/origin/main" : (options.baseRef ?? null)},
             ${taskBacked ? "https://github.test/acme/repo.git" : null},
             ${options.worktreePath === undefined && taskBacked ? join(root, "worktree") : (options.worktreePath ?? null)},
             ${options.startingCommit === undefined && taskBacked ? "inspection-base" : (options.startingCommit ?? null)}
           )
+          RETURNING id
         `,
       );
+      const id = inserted[0]?.id;
+      if (id === undefined) return yield* Effect.dieMessage("Change identity was not allocated.");
       if (options.taskId !== undefined) {
         yield* repository.operation(
           "link Change inspection fixture to its Task",

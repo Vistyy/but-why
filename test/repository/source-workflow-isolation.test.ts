@@ -31,7 +31,7 @@ const prepareSourceRepository = () => {
   git(main, "config", "user.name", "But Why Test");
   git(main, "config", "user.email", "but-why@example.test");
   git(main, "branch", "-M", "main");
-  const initialized = runTestProcess("just", ["by", "init", "--task-prefix", "BY"], {
+  const initialized = runTestProcess("just", ["by", "init", "--id-prefix", "BY"], {
     cwd: main,
   });
   expect(initialized.status).toBe(0);

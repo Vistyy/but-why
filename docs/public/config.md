@@ -25,7 +25,7 @@ A complete example is:
 
 ```json
 {
-  "taskPrefix": "BY",
+  "idPrefix": "BY",
   "agentEnvironment": {
     "command": ["nix", "develop", "-c"]
   },
@@ -68,7 +68,8 @@ A complete example is:
 }
 ```
 
-`taskPrefix` is the repository's uppercase Task ID prefix.
+`idPrefix` is the repository's uppercase ID Prefix.
+But Why freezes it in Shared Repository State and derives Task IDs as `<id-prefix>-<task-integer>` and Change IDs as `<id-prefix>-C<change-integer>`.
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.

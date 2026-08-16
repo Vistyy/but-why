@@ -7,6 +7,7 @@ import type { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
   RepositoryIdentityConflict,
+  RepositoryIdPrefixConflict,
   RepositoryMigrationFailed,
   RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
@@ -14,7 +15,7 @@ import {
   type RestoredTransientChangeFact,
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
-import { isTaskPrefix } from "../contracts/taskPrefix.js";
+import { isIdPrefix } from "../contracts/idPrefix.js";
 import { findCurrentWorktreeFacts, findGitRoot } from "../init/adapters/git.js";
 import { readRepoConfig, writeRepoConfig } from "../init/adapters/repoConfig.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
@@ -36,14 +37,14 @@ export type LocalRepositoryContext = {
   readonly root: string;
   readonly mainCheckoutRoot: string;
   readonly commonDirectory: string;
-  readonly taskPrefix: string;
+  readonly idPrefix: string;
   readonly config: RepoConfig;
   readonly paths: LocalRepositoryPaths;
 };
 
 export type InitRepoInput = {
   readonly cwd: string;
-  readonly taskPrefix: string;
+  readonly idPrefix: string;
 };
 
 export type InitRepoResult =
@@ -51,7 +52,7 @@ export type InitRepoResult =
       readonly ok: true;
       readonly status: "initialized" | "repaired" | "unchanged";
       readonly root: string;
-      readonly taskPrefix: string;
+      readonly idPrefix: string;
       readonly created: readonly string[];
       readonly updated: readonly string[];
     }
@@ -62,8 +63,8 @@ export type InitRepoResult =
 
 export type InitRepoError =
   | {
-      readonly code: "invalid_task_prefix";
-      readonly taskPrefix: string;
+      readonly code: "invalid_id_prefix";
+      readonly idPrefix: string;
     }
   | {
       readonly code: "not_git_work_tree";
@@ -73,9 +74,9 @@ export type InitRepoError =
       readonly error: RepoConfigValidationFailed;
     }
   | {
-      readonly code: "task_prefix_conflict";
-      readonly existingTaskPrefix: string;
-      readonly requestedTaskPrefix: string;
+      readonly code: "id_prefix_conflict";
+      readonly existingIdPrefix: string;
+      readonly requestedIdPrefix: string;
     }
   | {
       readonly code: "invalid_repo_state";
@@ -94,10 +95,7 @@ export type InitRepoError =
       readonly changes: readonly RestoredTransientChangeFact[];
     };
 
-export type LocalRepositorySubmissionContext = Omit<
-  LocalRepositoryContext,
-  "config" | "taskPrefix"
->;
+export type LocalRepositorySubmissionContext = Omit<LocalRepositoryContext, "config">;
 
 export type ResolveLocalRepositoryResult =
   | {
@@ -125,8 +123,13 @@ export type ResolveLocalRepositoryError =
       readonly code: "shared_state_identity_conflict";
     }
   | {
+      readonly code: "id_prefix_conflict";
+      readonly configuredIdPrefix: string;
+      readonly storedIdPrefix: string;
+    }
+  | {
       readonly code: "state_store_unavailable";
-      readonly taskPrefix: string;
+      readonly idPrefix: string;
     };
 
 const repoLocalPaths = (root: string, commonDirectory: string): LocalRepositoryPaths => {
@@ -158,14 +161,14 @@ type PrepareRepoInitializationResult =
   | { readonly ok: false; readonly result: InitRepoResult };
 
 const prepareRepoInitialization = (input: InitRepoInput): PrepareRepoInitializationResult => {
-  if (!isTaskPrefix(input.taskPrefix)) {
+  if (!isIdPrefix(input.idPrefix)) {
     return {
       ok: false,
       result: {
         ok: false,
         error: {
-          code: "invalid_task_prefix",
-          taskPrefix: input.taskPrefix,
+          code: "invalid_id_prefix",
+          idPrefix: input.idPrefix,
         },
       },
     };
@@ -181,7 +184,7 @@ const prepareRepoInitialization = (input: InitRepoInput): PrepareRepoInitializat
   mkdirSync(paths.butWhyDir, { recursive: true });
   mkdirSync(paths.operationalDir, { recursive: true });
 
-  const configResult = ensureRepoConfig(paths.configPath, input.taskPrefix);
+  const configResult = ensureRepoConfig(paths.configPath, input.idPrefix);
 
   if (!configResult.ok) {
     return { ok: false, result: { ok: false, error: configResult.error } };
@@ -227,7 +230,7 @@ const completeRepoInitialization = (
     ok: true,
     status,
     root: prepared.root,
-    taskPrefix: prepared.input.taskPrefix,
+    idPrefix: prepared.input.idPrefix,
     created,
     updated,
   };
@@ -246,6 +249,7 @@ export const initializeRepositoryRuntime = (
       repositorySqlLayer({
         statePath: prepared.paths.statePath,
         commonDirectory: prepared.commonDirectory,
+        idPrefix: prepared.input.idPrefix,
         lifecycle: "initialize",
       }),
     ),
@@ -259,23 +263,32 @@ export const initializeRepositoryRuntime = (
               ok: false,
               error: { code: "shared_state_identity_conflict" },
             })
-          : error instanceof RepositoryRestoredTransientState
+          : error instanceof RepositoryIdPrefixConflict
             ? Effect.succeed<InitRepoResult>({
                 ok: false,
                 error: {
-                  code: "restored_transient_state",
-                  tasks: error.tasks,
-                  changes: error.changes,
+                  code: "id_prefix_conflict",
+                  existingIdPrefix: error.storedIdPrefix,
+                  requestedIdPrefix: error.configuredIdPrefix,
                 },
               })
-            : error instanceof RepositoryStateUnavailable ||
-                error instanceof RepositoryMigrationFailed ||
-                error instanceof RepositorySqlOperationFailed
+            : error instanceof RepositoryRestoredTransientState
               ? Effect.succeed<InitRepoResult>({
                   ok: false,
-                  error: { code: "state_store_unavailable" },
+                  error: {
+                    code: "restored_transient_state",
+                    tasks: error.tasks,
+                    changes: error.changes,
+                  },
                 })
-              : Effect.die(error),
+              : error instanceof RepositoryStateUnavailable ||
+                  error instanceof RepositoryMigrationFailed ||
+                  error instanceof RepositorySqlOperationFailed
+                ? Effect.succeed<InitRepoResult>({
+                    ok: false,
+                    error: { code: "state_store_unavailable" },
+                  })
+                : Effect.die(error),
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );
@@ -286,29 +299,10 @@ export const resolveLocalRepositorySubmission = (
 ):
   | { readonly ok: true; readonly context: LocalRepositorySubmissionContext }
   | { readonly ok: false; readonly error: ResolveLocalRepositoryError } => {
-  const gitRoot = findGitRoot(cwd);
-
-  if (!gitRoot.ok) {
-    return {
-      ok: false,
-      error:
-        gitRoot.code === "main_checkout_unavailable"
-          ? { code: gitRoot.code, ...(gitRoot.path === undefined ? {} : { path: gitRoot.path }) }
-          : { code: "not_initialized" },
-    };
-  }
-
-  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
-
-  return {
-    ok: true,
-    context: {
-      root: gitRoot.root,
-      mainCheckoutRoot: gitRoot.mainCheckoutRoot,
-      commonDirectory: gitRoot.commonDirectory,
-      paths,
-    },
-  };
+  const resolved = resolveLocalRepository(cwd);
+  if (!resolved.ok) return resolved;
+  const { config: _config, ...context } = resolved.context;
+  return { ok: true, context };
 };
 
 export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResult => {
@@ -343,7 +337,7 @@ export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResul
       mainCheckoutRoot: gitRoot.mainCheckoutRoot,
       commonDirectory: gitRoot.commonDirectory,
       paths,
-      taskPrefix: repoConfig.config.taskPrefix,
+      idPrefix: repoConfig.config.idPrefix,
       config: repoConfig.config,
     },
   };
@@ -353,9 +347,9 @@ type RepoConfigEnsureResult =
   | { readonly ok: true; readonly created: boolean }
   | { readonly ok: false; readonly error: InitRepoError };
 
-const ensureRepoConfig = (configPath: string, taskPrefix: string): RepoConfigEnsureResult => {
+const ensureRepoConfig = (configPath: string, idPrefix: string): RepoConfigEnsureResult => {
   if (!existsSync(configPath)) {
-    writeRepoConfig(configPath, taskPrefix);
+    writeRepoConfig(configPath, idPrefix);
     return { ok: true, created: true };
   }
 
@@ -365,13 +359,13 @@ const ensureRepoConfig = (configPath: string, taskPrefix: string): RepoConfigEns
     return { ok: false, error: { code: "invalid_repo_config", error: config.error } };
   }
 
-  if (config.config.taskPrefix !== taskPrefix) {
+  if (config.config.idPrefix !== idPrefix) {
     return {
       ok: false,
       error: {
-        code: "task_prefix_conflict",
-        existingTaskPrefix: config.config.taskPrefix,
-        requestedTaskPrefix: taskPrefix,
+        code: "id_prefix_conflict",
+        existingIdPrefix: config.config.idPrefix,
+        requestedIdPrefix: idPrefix,
       },
     };
   }

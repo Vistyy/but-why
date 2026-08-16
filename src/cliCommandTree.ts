@@ -690,12 +690,12 @@ validationRunCommand = group(
 
 const initCommand = withCliHandler(
   leaf("init", "Create repo-local But Why? state.", {
-    taskPrefix: Options.text("task-prefix"),
+    idPrefix: Options.text("id-prefix"),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/initCli.js")).pipe(
       Effect.flatMap(({ runInitCommand }) =>
-        runInitCommand({ taskPrefix: values.taskPrefix }, environment),
+        runInitCommand({ idPrefix: values.idPrefix }, environment),
       ),
     ),
 );

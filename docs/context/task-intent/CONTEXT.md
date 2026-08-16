@@ -29,6 +29,7 @@ _Avoid_: Task Recording Authorization, Task Review, reusable judgment
 
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
+A Task has a SQLite-allocated internal integer identity, and its public ID is `<id-prefix>-<task-integer>`.
 _Avoid_: Change, issue draft, implementation session
 
 **Task Context**:

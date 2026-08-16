@@ -80,16 +80,18 @@ const createStoredChange = (
     if (destination !== undefined) {
       return { ok: false, code: "destination_branch_has_history" } as const;
     }
-    const changeId = randomUUID();
-    yield* sql`
+    const inserted = yield* sql<{ readonly id: string }>`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, state,
+        repository_common_directory, branch_ref, base_ref, state,
         close_reason, created_at, updated_at, closed_at
       ) VALUES (
-        ${changeId}, ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL,
+        ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL,
         'open', NULL, ${input.now}, ${input.now}, NULL
       )
+      RETURNING id
     `;
+    const changeId = inserted[0]?.id;
+    if (changeId === undefined) return yield* invalidData("Change identity was not allocated");
     const change = yield* getChangeById(sql, changeId);
     if (change === undefined)
       return yield* invalidData("Change disappeared after capture creation");

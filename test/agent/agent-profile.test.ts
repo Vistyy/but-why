@@ -46,7 +46,7 @@ describe("Agent Profiles", () => {
     expect(
       resolveInteractiveSessionAgentProfile({
         repoConfig: {
-          taskPrefix: "BY",
+          idPrefix: "BY",
           interactiveSession: { agentProfile: { scope: "repo", name: "implementation" } },
           agentProfiles: { implementation: piProfile("repo-model") },
         },
@@ -64,7 +64,7 @@ describe("Agent Profiles", () => {
   it("uses the Global default when neither Interactive Session selection exists", () => {
     expect(
       resolveInteractiveSessionAgentProfile({
-        repoConfig: { taskPrefix: "BY" },
+        repoConfig: { idPrefix: "BY" },
         globalConfig: {
           defaultAgentProfile: { scope: "global", name: "review" },
           agentProfiles: { review: piProfile("review-model") },
@@ -79,7 +79,7 @@ describe("Agent Profiles", () => {
   it("rejects a configured but missing Global default profile", () => {
     expect(
       resolveInteractiveSessionAgentProfile({
-        repoConfig: { taskPrefix: "BY" },
+        repoConfig: { idPrefix: "BY" },
         globalConfig: {
           defaultAgentProfile: { scope: "global", name: "missing" },
           agentProfiles: {},
@@ -199,7 +199,7 @@ describe("Agent Profiles", () => {
   it("preserves Pi defaults when no profile is selected", () => {
     expect(
       resolveInteractiveSessionAgentProfile({
-        repoConfig: { taskPrefix: "BY" },
+        repoConfig: { idPrefix: "BY" },
         globalConfig: {},
       }),
     ).toEqual({ ok: true, profile: undefined });

@@ -27,7 +27,7 @@ export const loadTaskContextInspection = (
       getTaskContextById: (taskId) =>
         loaded.runtime.provide(
           Effect.all({
-            tasks: openSqliteTaskPersistence(loaded.runtime.context.taskPrefix),
+            tasks: openSqliteTaskPersistence(loaded.runtime.context.idPrefix),
             links: openSqliteTaskChangeLinkPort(),
             authority: openSqliteChangeAuthorityPort(),
           }).pipe(

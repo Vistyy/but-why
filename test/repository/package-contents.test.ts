@@ -297,10 +297,10 @@ describe("release package boundary", () => {
         const repository = createGitRepo();
         mkdirSync(join(repository, ".git", "but-why"), { recursive: true });
         mkdirSync(join(repository, ".but-why"));
-        writeFileSync(join(repository, ".but-why", "config.json"), '{"taskPrefix":"BY"}\n');
+        writeFileSync(join(repository, ".but-why", "config.json"), '{"idPrefix":"BY"}\n');
         const change = yield* createChangeImplementFixture(repository, {
           managedRepoConfig: {
-            taskPrefix: "BY",
+            idPrefix: "BY",
             agentEnvironment: { command: ["nix", "develop", "-c"] },
           },
         });
@@ -360,7 +360,7 @@ exit 1
           env: {
             ...env,
             BY_FAKE_WORKTREE: change.worktreePath,
-            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+            BY_FAKE_SESSION: change.id,
           },
           isolatedHome,
           timeout: packageProcessTimeoutMs,
@@ -388,7 +388,7 @@ exit 1
           env: {
             ...env,
             BY_FAKE_WORKTREE: change.worktreePath,
-            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+            BY_FAKE_SESSION: change.id,
           },
           isolatedHome,
           timeout: packageProcessTimeoutMs,
@@ -410,7 +410,7 @@ exit 1
           env: {
             ...env,
             BY_FAKE_WORKTREE: change.worktreePath,
-            BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
+            BY_FAKE_SESSION: change.id,
           },
           isolatedHome,
           timeout: packageProcessTimeoutMs,

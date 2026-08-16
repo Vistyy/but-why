@@ -319,7 +319,7 @@ describe("Change inspection CLI", () => {
       writeFileSync(
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "base", command: "true" }] } },
+          { idPrefix: "BY", validation: { checks: [{ id: "base", command: "true" }] } },
           null,
           2,
         )}\n`,
@@ -335,7 +335,7 @@ describe("Change inspection CLI", () => {
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
           {
-            taskPrefix: "BY",
+            idPrefix: "BY",
             validation: { checks: [{ id: "caller", command: "false" }] },
             review: { specialists: ["caller"] },
             reviewers: {
@@ -356,7 +356,7 @@ describe("Change inspection CLI", () => {
         join(change.worktreePath, ".but-why", "config.json"),
         `${JSON.stringify(
           {
-            taskPrefix: "BY",
+            idPrefix: "BY",
             validation: { checks: [{ id: "managed", command: "false" }] },
             review: { specialists: ["candidate"] },
             reviewers: {

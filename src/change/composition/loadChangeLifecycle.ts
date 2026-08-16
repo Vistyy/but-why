@@ -35,7 +35,7 @@ import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =
   | ResolveLocalRepositoryError
-  | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+  | { readonly code: "state_store_unavailable"; readonly idPrefix: string };
 
 export type LoadedChangeOperationResult<A> =
   | { readonly ok: true; readonly value: A }

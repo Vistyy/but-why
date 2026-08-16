@@ -33,7 +33,7 @@ const now = "2026-08-15T12:00:00.000Z";
 it.effect("submits through the supported Task Review operation with a real Agent Session", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
-    const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     expect(initialized.status, initialized.stdout).toBe(0);
     commitButWhyConfigAndRecordDefault(root);
     const baseCommit = runTestProcess("git", ["rev-parse", "HEAD"], { cwd: root }).stdout.trim();
@@ -82,7 +82,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
 
         const useCases = openTaskReviewUseCases({
           mainCheckoutRoot: root,
-          loadRepoConfig: () => ({ ok: true as const, config: { taskPrefix: "BY" } }),
+          loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
           resolvePolicy: () => ({
             ok: true as const,
             policy: { profile, snapshot: policy },

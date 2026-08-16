@@ -135,7 +135,7 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       mainCheckoutRoot: createTestWorkspace(),
       loadRepoConfig: () => {
         calls.repoConfig += 1;
-        return { ok: true, config: { taskPrefix: "BY" } };
+        return { ok: true, config: { idPrefix: "BY" } };
       },
       resolvePolicy: () => {
         calls.policy += 1;
@@ -246,7 +246,7 @@ it.effect("preserves repository load errors for Task Review commands", () =>
         code: "not_initialized",
         message: "This workspace is not initialized for But Why?.",
       },
-      help: ["Run `by init --task-prefix BY` in the repository root."],
+      help: ["Run `by init --id-prefix BY` in the repository root."],
     });
   }),
 );
@@ -254,7 +254,7 @@ it.effect("preserves repository load errors for Task Review commands", () =>
 it.effect("rejects a missing required default Agent Profile before Task Review admission", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
-    const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     expect(initialized.status).toBe(0);
     commitButWhyConfigAndRecordDefault(root);
     const proposalPath = join(root, "proposal.txt");
@@ -282,12 +282,12 @@ it.effect("rejects missing Review Base guidance before Task Review admission", (
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     writeFileSync(
       join(root, ".but-why", "config.json"),
       JSON.stringify({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         review: { task: { instructionsFile: ".but-why/reviewers/missing.md" } },
       }),
     );
@@ -334,14 +334,14 @@ it.effect("rejects a Review Base directory as guidance before Task Review admiss
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     mkdirSync(join(root, ".but-why", "reviewers", "task"), { recursive: true });
     writeFileSync(join(root, ".but-why", "reviewers", "task", "guidance.md"), "Guidance\n");
     writeFileSync(
       join(root, ".but-why", "config.json"),
       JSON.stringify({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         review: { task: { instructionsFile: ".but-why/reviewers/task" } },
       }),
     );
@@ -391,7 +391,7 @@ it.effect("rejects missing Agent Profile resources before Task Review admission"
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     writeFileSync(
       globalConfigPath,
@@ -434,7 +434,7 @@ it.effect("rejects missing Agent Profile resources before Task Review admission"
 it.effect("inspects and abandons only one exact Active Task Review workspace", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     const proposalPath = join(root, "proposal.txt");
     writeFileSync(proposalPath, "Exact proposal");
@@ -484,7 +484,7 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
               yield* repository.transactionImmediate("seed legacy Task Reviewer Session", (sql) =>
                 sql`
                   INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
-                  VALUES ('BY-1', 'legacy-fingerprint', 'legacy-session')
+                  VALUES (1, 'legacy-fingerprint', 'legacy-session')
                 `.pipe(Effect.asVoid),
               );
               yield* repository.transactionImmediate("seed legacy Task Review evidence", (sql) =>
@@ -604,7 +604,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     mkdirSync(join(root, ".but-why", "reviewers"), { recursive: true });
     mkdirSync(join(root, "skills", "task"), { recursive: true });
@@ -613,7 +613,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     writeFileSync(
       join(root, ".but-why", "config.json"),
       JSON.stringify({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         prepare: { command: "true" },
         review: {
           task: {
@@ -784,7 +784,7 @@ it.effect("reviews an unchanged New proposal again after a Finding-blocked Revie
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     writeFileSync(
       globalConfigPath,
@@ -873,7 +873,7 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
   Effect.gen(function* () {
     const root = createGitRepo();
     const globalConfigPath = join(root, "global.json");
-    const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     expect(initialized.status).toBe(0);
     commitButWhyConfigAndRecordDefault(root);
     writeFileSync(
@@ -932,7 +932,7 @@ it.effect(
     Effect.gen(function* () {
       const root = createGitRepo();
       const globalConfigPath = join(root, "global.json");
-      yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       commitButWhyConfigAndRecordDefault(root);
       const globalConfig = JSON.stringify({
         defaultAgentProfile: { scope: "global", name: "review" },

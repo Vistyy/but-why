@@ -149,9 +149,10 @@ describe("Change Implement continuation policy", () => {
   });
 
   it("extracts the Change identity from the implementer prompt", () => {
-    expect(extractChangeId("Change identity: de32d32a-ecd8-46b4-b2d8-5a08d2128869.")).toBe(
-      "de32d32a-ecd8-46b4-b2d8-5a08d2128869",
-    );
+    expect(extractChangeId("Change identity: BY-C42.")).toBe("BY-C42");
+    expect(
+      extractChangeId("Change identity: de32d32a-ecd8-46b4-b2d8-5a08d2128869."),
+    ).toBeUndefined();
     expect(extractChangeId("The assistant said Change identity: not-a-change.")).toBeUndefined();
   });
 

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -86,7 +85,7 @@ exit 1
           ...baseEnv,
           BY_FAKE_CAPTURE: capture,
           BY_FAKE_WORKTREE: fixture.worktreePath,
-          BY_FAKE_SESSION: `change-${fixture.id.slice(0, 8)}`,
+          BY_FAKE_SESSION: fixture.id,
         };
 
         const piped = runBuiltByWithInput(
@@ -110,7 +109,7 @@ exit 1
     () =>
       Effect.gen(function* () {
         const root = createInitializedRepo();
-        const changeId = randomUUID();
+        const changeId = "BY-C1";
         yield* withTestRepository(
           root,
           Effect.gen(function* () {

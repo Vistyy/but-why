@@ -43,7 +43,7 @@ const withPersistence = <A, E>(
 const initializedRepository = () =>
   Effect.gen(function* () {
     const root = createGitRepo();
-    const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+    const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     expect(initialized.status, initialized.stdout).toBe(0);
     return root;
   });

@@ -30,6 +30,7 @@ const runtimeFor = <Context extends LocalRepositorySubmissionContext>(
   const layer = repositorySqlLayer({
     statePath: context.paths.statePath,
     commonDirectory: context.commonDirectory,
+    idPrefix: context.idPrefix,
     lifecycle: "open",
   });
   return {
@@ -50,16 +51,16 @@ export const openRepositoryRuntime = (
       ok: false,
       error: {
         code: "state_store_unavailable",
-        taskPrefix: resolved.context.taskPrefix,
+        idPrefix: resolved.context.idPrefix,
       },
     };
   }
   return { ok: true, runtime: runtimeFor(resolved.context) };
 };
 
-export const resolveRepositoryTaskPrefix = (cwd: string): string | undefined => {
+export const resolveRepositoryIdPrefix = (cwd: string): string | undefined => {
   const resolved = resolveLocalRepository(cwd);
-  return resolved.ok ? resolved.context.taskPrefix : undefined;
+  return resolved.ok ? resolved.context.idPrefix : undefined;
 };
 
 export const openSubmissionRepositoryRuntime = (
