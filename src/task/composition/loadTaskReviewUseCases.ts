@@ -28,6 +28,7 @@ import {
   readRepositoryFileAtCommit,
   repositoryPathExistsAtCommit,
 } from "../../submissionEnvironment/adapters/repositoryFile.js";
+import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { type RepoTaskIdResolution, resolveRepoTaskId } from "../repoTaskIds.js";
 import {
   readCanonicalMainReviewBase,
@@ -182,10 +183,11 @@ const submitFreshTaskReview = <A, E, R>(
     return use(resolved).pipe(Effect.map((value) => ({ ok: true as const, value })));
   return loaded.runtime.provide(
     Effect.all({
+      admission: openSqliteTaskChangeReviewAdmissionPersistence(),
       persistence: openSqliteTaskReviewPersistence(),
       agentPersistence: openSqliteAgentSessionPersistence(),
     }).pipe(
-      Effect.flatMap(({ persistence, agentPersistence }) =>
+      Effect.flatMap(({ admission, persistence, agentPersistence }) =>
         openTaskReviewUseCases({
           mainCheckoutRoot: context.mainCheckoutRoot,
           reviewerSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
@@ -237,6 +239,7 @@ const submitFreshTaskReview = <A, E, R>(
                 repositoryPathExistsAtCommit(context.mainCheckoutRoot, commit, path),
             });
           },
+          admission,
           persistence,
           agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,

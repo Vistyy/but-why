@@ -5,6 +5,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import {
   passTaskReviewFixture,
   setTerminalTaskStateFixture,
@@ -100,6 +101,7 @@ it.scoped(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const reviews = yield* openSqliteTaskReviewPersistence();
+        const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
@@ -136,11 +138,13 @@ it.scoped(
         yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
         yield* setTerminalTaskStateFixture(publicTaskId("BY-4"), "cancelled", now);
 
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual({
-          ok: false,
-          code: "task_change_linked",
-          changeId: "change-linked",
-        });
+        expect(yield* taskChanges.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toEqual(
+          {
+            ok: false,
+            code: "task_change_linked",
+            changeId: "change-linked",
+          },
+        );
         expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toEqual({
           ok: false,
           code: "active_task_review",

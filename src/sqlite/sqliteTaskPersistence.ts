@@ -76,9 +76,9 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
     return { ok: true as const, task: created, context };
   });
 
-const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
+export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
   Effect.gen(function* () {
-    const target = yield* taskDependencyEditTarget(sql, input.taskId);
+    const target = yield* validateTaskDependencyEditTarget(sql, input.taskId);
     if (!target.ok) return target;
 
     if (input.operation === "replace" && input.prerequisiteTaskIds.length === 0) {
@@ -299,27 +299,11 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     return { ok: true as const, task: updated, context };
   });
 
-const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
+export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state !== "new" && current.state !== "todo") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
-    }
-    const linkedChanges = yield* sql<{ readonly id: string }>`
-      SELECT task_change_links.change_id AS id
-      FROM task_change_links
-      WHERE task_change_links.task_id = ${input.taskId}
-      LIMIT 1
-    `;
-    const linkedChange = linkedChanges[0];
-    if (linkedChange !== undefined) {
-      return {
-        ok: false as const,
-        code: "task_change_linked" as const,
-        changeId: linkedChange.id,
-      };
-    }
+    const validated = yield* validateTaskRevisionTarget(sql, input.taskId);
+    if (!validated.ok) return validated;
+    const current = validated.task;
     if (current.state === "new") {
       const activeReview = yield* activeTaskReviewId(sql, input.taskId);
       if (activeReview !== undefined) {
@@ -358,22 +342,23 @@ const cancelTask = (
     return { ok: true as const, changed: true, task: updated };
   });
 
+export const validateTaskRevisionTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, taskId);
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (current.state !== "new" && current.state !== "todo") {
+      return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
+    }
+    return { ok: true as const, task: current };
+  });
+
 const taskDependenciesAreEditable = (state: TaskState): boolean => state === "new";
 
-const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const validateTaskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const current = yield* getTaskById(sql, taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (!taskDependenciesAreEditable(current.state)) {
-      return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
-    }
-    const linked = yield* sql<{ readonly found: number }>`
-      SELECT 1 AS found
-      FROM task_change_links
-      WHERE task_id = ${taskId}
-      LIMIT 1
-    `;
-    if (linked.length > 0) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
     }
     return { ok: true as const, task: current };

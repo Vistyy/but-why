@@ -29,6 +29,10 @@ import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
+import {
+  type TaskChangeTaskUseCases,
+  withTaskChangeTaskUseCases,
+} from "../../taskChange/composition/loadTaskChangeTaskUseCases.js";
 import type { TaskContextInspectionUseCases } from "../../taskChange/inspectTaskChange.js";
 
 export type TaskIdCommand = { readonly taskId: string };
@@ -39,6 +43,7 @@ export type TaskCommandEnvironment = {
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
+  readonly taskChangeTaskUseCases?: TaskChangeTaskUseCases;
   readonly taskContextInspectionUseCases?: TaskContextInspectionUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
@@ -59,6 +64,35 @@ export const withTasks = (
         )
       : use(environment.taskUseCases);
 
+  return program.pipe(
+    Effect.catchAll((error) =>
+      Effect.succeed(
+        repositoryStorageErrorResult(error, resolveRepositoryTaskPrefix(environment.cwd)),
+      ),
+    ),
+  );
+};
+
+export const withTaskChangeTasks = (
+  environment: TaskCommandEnvironment,
+  use: (tasks: TaskChangeTaskUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> => {
+  const injected =
+    environment.taskChangeTaskUseCases ??
+    (environment.taskUseCases === undefined
+      ? undefined
+      : {
+          taskPrefix: environment.taskUseCases.taskPrefix,
+          resolveTaskId: environment.taskUseCases.resolveTaskId,
+          editTaskDependencies: environment.taskUseCases.editTaskDependencies,
+          reviseTask: environment.taskUseCases.reviseTask,
+        });
+  const program =
+    injected === undefined
+      ? withTaskChangeTaskUseCases({ cwd: environment.cwd }, use).pipe(
+          Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
+        )
+      : use(injected);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
@@ -158,10 +192,10 @@ const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
       })
     : repoStateLoadError(error);
 
-export type ResolvedTaskIdResult =
+export type ResolvedTaskIdResult<T> =
   | {
       readonly ok: true;
-      readonly tasks: TaskUseCases;
+      readonly tasks: T;
       readonly taskId: PublicTaskId;
     }
   | {
@@ -169,7 +203,10 @@ export type ResolvedTaskIdResult =
       readonly result: CliResult;
     };
 
-export const resolveTaskId = (tasks: TaskUseCases, taskId: PublicTaskId): ResolvedTaskIdResult => {
+export const resolveTaskId = <T extends Pick<TaskUseCases, "resolveTaskId">>(
+  tasks: T,
+  taskId: PublicTaskId,
+): ResolvedTaskIdResult<T> => {
   const resolvedTaskId = tasks.resolveTaskId(taskId);
   if (!resolvedTaskId.ok) {
     return { ok: false, result: taskIdResolutionError(resolvedTaskId) };

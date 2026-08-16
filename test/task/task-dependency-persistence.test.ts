@@ -4,6 +4,7 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
+import { openSqliteTaskChangeTaskPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { passTaskReviewFixture, withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -111,6 +112,46 @@ it.scoped(
         }
       }),
     ),
+);
+
+it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "Linked");
+      yield* createTask(tasks, "Dependency");
+      yield* repository.operation(
+        "create linked Change fixture",
+        (sql) => sql`INSERT INTO changes (
+          id, repository_common_directory, branch_ref, state, acceptance_context,
+          base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
+        ) VALUES (
+          'change-linked', '/repo/.git', 'refs/heads/change-linked', 'open',
+          '{"version":1,"title":"Linked","description":"Linked"}',
+          'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
+          '/repo-worktrees/change-linked', ${firstNow}, ${firstNow}
+        )`,
+      );
+      yield* repository.operation(
+        "link Task fixture to Change",
+        (sql) => sql`
+          INSERT INTO task_change_links (task_id, change_id)
+          VALUES ('BY-1', 'change-linked')
+        `,
+      );
+
+      expect(
+        yield* taskChanges.editTaskDependencies({
+          taskId: publicTaskId("BY-1"),
+          operation: "add",
+          prerequisiteTaskIds: [publicTaskId("BY-2")],
+        }),
+      ).toEqual({ ok: false, code: "dependencies_locked", state: "new" });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ prerequisites: [] });
+    }),
+  ),
 );
 
 it.scoped("continues to reject direct Task dependency edits for terminal Tasks", () =>

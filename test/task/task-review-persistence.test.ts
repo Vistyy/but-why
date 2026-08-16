@@ -6,6 +6,7 @@ import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const now = "2026-08-11T12:00:00.000Z";
@@ -120,6 +121,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
+      const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Linked proposal", description: "Exact", now });
       yield* repository.operation(
@@ -144,7 +146,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
       );
 
       expect(
-        yield* reviews.admit({
+        yield* admission.admit({
           reviewId: "review-rejected",
           taskId: publicTaskId("BY-1"),
           policy,

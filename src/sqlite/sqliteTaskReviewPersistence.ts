@@ -1,4 +1,5 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
+import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
 import type {
   AgentInvocationRecord,
@@ -20,7 +21,10 @@ import type {
   TaskReviewToolingFailure,
 } from "../task/review/taskReview.js";
 import type {
+  AdmitTaskReviewInput,
+  AdmitTaskReviewResult,
   CompleteTaskReviewSuccess,
+  TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -100,40 +104,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         taskReviewAdmissionRejection(sql, taskId),
       ),
     admit: (input) =>
-      repository.transactionImmediate("admit Task Review", (sql) =>
-        Effect.gen(function* () {
-          const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId);
-          if (rejected !== undefined) return rejected;
-          const tasks = yield* sql<{
-            readonly title: string;
-            readonly description: string;
-          }>`SELECT title, description FROM tasks WHERE id = ${input.taskId}`;
-          const task = tasks[0];
-          if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
-          const dependencies = yield* dependencyEvidence(sql, input.taskId);
-          const proposal: TaskReviewProposal = {
-            title: task.title,
-            description: task.description,
-            dependencyIds: dependencies.map((dependency) => dependency.id),
-          };
-          yield* sql`
-            INSERT INTO task_reviews (
-              id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
-              base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
-              tooling_failure, abandon_reason, created_at, updated_at
-            ) VALUES (
-              ${input.reviewId}, ${input.taskId}, ${JSON.stringify(proposal)},
-              ${JSON.stringify(dependencies)}, ${JSON.stringify(input.policy)}, ${input.baseRef},
-              ${input.baseCommit}, ${input.workspacePath}, 'running', NULL, 'not_created',
-              NULL, NULL, ${input.now}, ${input.now}
-            )
-          `;
-          const review = yield* getReview(sql, input.reviewId);
-          if (review === undefined)
-            return yield* invalid("admit Task Review", "Review disappeared");
-          return { ok: true as const, review, proposal, dependencyEvidence: dependencies };
-        }),
-      ),
+      repository.transactionImmediate("admit Task Review", (sql) => admitTaskReview(sql, input)),
     recordCleanup: (reviewId, cleanup, now) =>
       repository.transactionImmediate("record Task Review cleanup", (sql) =>
         sql`UPDATE task_reviews SET workspace_cleanup = ${cleanup}, updated_at = ${now} WHERE id = ${reviewId}`.pipe(
@@ -416,7 +387,14 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
   }));
 
-const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) =>
+export const taskReviewAdmissionRejection = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  linkedChangeId?: string,
+): Effect.Effect<
+  TaskReviewAdmissionRejection | undefined,
+  SqlError | RepositoryPersistedDataInvalid
+> =>
   Effect.gen(function* () {
     const tasks = yield* sql<{ readonly state: string }>`
       SELECT state FROM tasks WHERE id = ${taskId}
@@ -426,19 +404,8 @@ const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) 
     if (task.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
-    const linkedChanges = yield* sql<{ readonly id: string }>`
-      SELECT change_id AS id
-      FROM task_change_links
-      WHERE task_id = ${taskId}
-      LIMIT 1
-    `;
-    const linkedChange = linkedChanges[0];
-    if (linkedChange !== undefined) {
-      return {
-        ok: false as const,
-        code: "task_change_linked" as const,
-        changeId: linkedChange.id,
-      };
+    if (linkedChangeId !== undefined) {
+      return { ok: false as const, code: "task_change_linked" as const, changeId: linkedChangeId };
     }
     const active = yield* sql<{ readonly id: string }>`
       SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
@@ -451,6 +418,43 @@ const taskReviewAdmissionRejection = (sql: SqlClient.SqlClient, taskId: string) 
           code: "active_task_review" as const,
           reviewId: activeReview.id,
         };
+  });
+
+export const admitTaskReview = (
+  sql: SqlClient.SqlClient,
+  input: AdmitTaskReviewInput,
+  linkedChangeId?: string,
+): Effect.Effect<AdmitTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.gen(function* () {
+    const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId, linkedChangeId);
+    if (rejected !== undefined) return rejected;
+    const tasks = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+    }>`SELECT title, description FROM tasks WHERE id = ${input.taskId}`;
+    const task = tasks[0];
+    if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
+    const dependencies = yield* dependencyEvidence(sql, input.taskId);
+    const proposal: TaskReviewProposal = {
+      title: task.title,
+      description: task.description,
+      dependencyIds: dependencies.map((dependency) => dependency.id),
+    };
+    yield* sql`
+      INSERT INTO task_reviews (
+        id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
+        base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
+        tooling_failure, abandon_reason, created_at, updated_at
+      ) VALUES (
+        ${input.reviewId}, ${input.taskId}, ${JSON.stringify(proposal)},
+        ${JSON.stringify(dependencies)}, ${JSON.stringify(input.policy)}, ${input.baseRef},
+        ${input.baseCommit}, ${input.workspacePath}, 'running', NULL, 'not_created',
+        NULL, NULL, ${input.now}, ${input.now}
+      )
+    `;
+    const review = yield* getReview(sql, input.reviewId);
+    if (review === undefined) return yield* invalid("admit Task Review", "Review disappeared");
+    return { ok: true as const, review, proposal, dependencyEvidence: dependencies };
   });
 
 const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
