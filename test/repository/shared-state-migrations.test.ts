@@ -39,6 +39,150 @@ const createPreNativeCleanupTable = Effect.gen(function* () {
   `);
 });
 
+const migrationPreconditionCases = [
+  {
+    condition: "openChanges",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      sql`
+        INSERT INTO changes (
+          id, repository_common_directory, branch_ref, state, created_at, updated_at, cleanup_state
+        ) VALUES (
+          'open-change', ${directory}, 'refs/heads/open', 'open',
+          '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z', 'complete'
+        )
+      `.pipe(Effect.asVoid),
+  },
+  {
+    condition: "activeTaskReviews",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT INTO tasks (
+            id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+          ) VALUES (
+            'BY-1', 1, 'Active review task', '', 'new', NULL,
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z'
+          )
+        `;
+        yield* sql`
+          INSERT INTO task_reviews (
+            id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
+            base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
+            tooling_failure, abandon_reason, created_at, updated_at
+          ) VALUES (
+            'active-review', 'BY-1', '{}', '[]', '{}', 'refs/heads/main', 'base',
+            ${`${directory}/review`}, 'running', NULL, 'not_created', NULL, NULL,
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z'
+          )
+        `;
+      }).pipe(Effect.asVoid),
+  },
+  {
+    condition: "activeValidationRuns",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT INTO changes (
+            id, repository_common_directory, branch_ref, state, close_reason,
+            created_at, updated_at, closed_at, cleanup_state
+          ) VALUES (
+            'validation-change', ${directory}, 'refs/heads/validation', 'closed', 'completed',
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z',
+            '2026-08-14T12:00:00.000Z', 'complete'
+          )
+        `;
+        yield* sql`
+          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+          VALUES ('validation-candidate', 'validation-change', 'base', 'head', '2026-08-14T12:00:00.000Z')
+        `;
+        yield* sql`
+          INSERT INTO candidate_validation_runs (
+            id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at,
+            implementation_decisions, latest_resolved_blocker_id
+          ) VALUES (
+            'active-validation', 'validation-candidate', '{}', 'running', NULL,
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z', '[]', NULL
+          )
+        `;
+      }).pipe(Effect.asVoid),
+  },
+  {
+    condition: "pendingTaskReviewCleanup",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT INTO tasks (
+            id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+          ) VALUES (
+            'BY-1', 1, 'Pending review cleanup task', '', 'new', NULL,
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z'
+          )
+        `;
+        yield* sql`
+          INSERT INTO task_reviews (
+            id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
+            base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
+            tooling_failure, abandon_reason, created_at, updated_at
+          ) VALUES (
+            'pending-review-cleanup', 'BY-1', '{}', '[]', '{}', 'refs/heads/main', 'base',
+            ${`${directory}/review`}, 'complete', 'passed', 'failed', NULL, NULL,
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z'
+          )
+        `;
+      }).pipe(Effect.asVoid),
+  },
+  {
+    condition: "pendingValidationCleanup",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      Effect.gen(function* () {
+        yield* sql`
+          INSERT INTO changes (
+            id, repository_common_directory, branch_ref, state, close_reason,
+            created_at, updated_at, closed_at, cleanup_state
+          ) VALUES (
+            'cleanup-change', ${directory}, 'refs/heads/cleanup', 'closed', 'completed',
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z',
+            '2026-08-14T12:00:00.000Z', 'complete'
+          )
+        `;
+        yield* sql`
+          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+          VALUES ('cleanup-candidate', 'cleanup-change', 'base', 'head', '2026-08-14T12:00:00.000Z')
+        `;
+        yield* sql`
+          INSERT INTO candidate_validation_runs (
+            id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at,
+            implementation_decisions, latest_resolved_blocker_id
+          ) VALUES (
+            'cleanup-validation', 'cleanup-candidate', '{}', 'complete', 'passed',
+            '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z', '[]', NULL
+          )
+        `;
+        yield* sql`
+          INSERT INTO candidate_snapshot_workspaces (
+            validation_run_id, expected_commit_sha, cleanup_workspace, created_at, workspace_path
+          ) VALUES (
+            'cleanup-validation', 'base', 'failed', '2026-08-14T12:00:00.000Z', ${`${directory}/workspace`}
+          )
+        `;
+      }).pipe(Effect.asVoid),
+  },
+  {
+    condition: "pendingChangeCleanup",
+    seed: (sql: SqlClient.SqlClient, directory: string) =>
+      sql`
+        INSERT INTO changes (
+          id, repository_common_directory, branch_ref, state, close_reason,
+          created_at, updated_at, closed_at, cleanup_state
+        ) VALUES (
+          'pending-change-cleanup', ${directory}, 'refs/heads/pending-cleanup',
+          'closed', 'completed', '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z',
+          '2026-08-14T12:00:00.000Z', 'pending'
+        )
+      `.pipe(Effect.asVoid),
+  },
+] as const;
+
 describe("Shared Repository State migrations", () => {
   it.effect(
     "drops Candidate Publication chronology while preserving current publication facts",
@@ -174,81 +318,77 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
-  it.effect("keeps prerelease state unchanged when Agent storage installation is blocked", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
-      (directory) =>
-        Effect.gen(function* () {
-          const statePath = join(directory, "state.sqlite");
-          yield* Effect.scoped(
-            Effect.gen(function* () {
-              const sql = yield* SqlClient.SqlClient;
-              yield* migrateTestRepositoryThrough(39);
-              yield* sql`
-                INSERT INTO changes (
-                  id, repository_common_directory, branch_ref, state, created_at, updated_at,
-                  cleanup_state
-                ) VALUES (
-                  'open-before-agent-migration', ${directory}, 'refs/heads/open', 'open',
-                  '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:00.000Z', 'complete'
-                )
-              `;
-            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-          );
+  it.effect.each(migrationPreconditionCases)(
+    "keeps prerelease state unchanged when Agent storage installation is blocked by $condition",
+    ({ condition, seed }) =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                yield* migrateTestRepositoryThrough(39);
+                yield* seed(sql, directory);
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
 
-          const migration = yield* Effect.exit(
-            Effect.scoped(
-              RepositorySql.pipe(
-                Effect.provide(
-                  productionRepositorySqlLayer({
-                    commonDirectory: directory,
-                    statePath,
-                    lifecycle: "initialize",
-                  }),
+            const migration = yield* Effect.exit(
+              Effect.scoped(
+                RepositorySql.pipe(
+                  Effect.provide(
+                    productionRepositorySqlLayer({
+                      commonDirectory: directory,
+                      statePath,
+                      lifecycle: "initialize",
+                    }),
+                  ),
                 ),
               ),
-            ),
-          );
-          expect(migration._tag).toBe("Failure");
-          if (migration._tag === "Failure") {
-            const failure = Cause.failureOption(migration.cause);
-            expect(failure._tag).toBe("Some");
-            if (failure._tag === "Some" && failure.value instanceof RepositoryMigrationFailed) {
-              const message = Array.from(Cause.defects(failure.value.cause as Cause.Cause<unknown>))
-                .map((defect) =>
-                  typeof defect === "object" && defect !== null && "cause" in defect
-                    ? `${String(defect)}\n${String(defect.cause)}`
-                    : String(defect),
+            );
+            expect(migration._tag).toBe("Failure");
+            if (migration._tag === "Failure") {
+              const failure = Cause.failureOption(migration.cause);
+              expect(failure._tag).toBe("Some");
+              if (failure._tag === "Some" && failure.value instanceof RepositoryMigrationFailed) {
+                const message = Array.from(
+                  Cause.defects(failure.value.cause as Cause.Cause<unknown>),
                 )
-                .join("\n");
-              expect(message).toContain("Pinned predecessor reconciliation is required");
-              expect(message).toContain("openChanges=1");
-              expect(message).toContain("do not restore or initialize Shared Repository State");
+                  .map((defect) =>
+                    typeof defect === "object" && defect !== null && "cause" in defect
+                      ? `${String(defect)}\n${String(defect.cause)}`
+                      : String(defect),
+                  )
+                  .join("\n");
+                expect(message).toContain("Pinned predecessor reconciliation is required");
+                expect(message).toContain(`${condition}=1`);
+                expect(message).toContain("do not restore or initialize Shared Repository State");
+              }
             }
-          }
 
-          yield* Effect.scoped(
-            Effect.gen(function* () {
-              const sql = yield* SqlClient.SqlClient;
-              const ledger = yield* sql<{ readonly migrationId: number }>`
-                SELECT migration_id AS migrationId
-                FROM effect_sql_migrations ORDER BY migration_id DESC LIMIT 1
-              `;
-              const agentTables = yield* sql<{ readonly name: string }>`
-                SELECT name FROM sqlite_schema
-                WHERE type = 'table' AND name IN ('agent_sessions', 'agent_invocations')
-              `;
-              const taskColumns = yield* sql<{ readonly name: string }>`
-                PRAGMA table_info(tasks)
-              `;
-              expect(ledger).toEqual([{ migrationId: 39 }]);
-              expect(agentTables).toEqual([]);
-              expect(taskColumns.map(({ name }) => name)).not.toContain("reviewer_configuration");
-            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-          );
-        }),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                const ledger = yield* sql<{ readonly migrationId: number }>`
+                  SELECT migration_id AS migrationId
+                  FROM effect_sql_migrations ORDER BY migration_id DESC LIMIT 1
+                `;
+                const agentTables = yield* sql<{ readonly name: string }>`
+                  SELECT name FROM sqlite_schema
+                  WHERE type = 'table' AND name IN ('agent_sessions', 'agent_invocations')
+                `;
+                const taskColumns = yield* sql<{ readonly name: string }>`
+                  PRAGMA table_info(tasks)
+                `;
+                expect(ledger).toEqual([{ migrationId: 39 }]);
+                expect(agentTables).toEqual([]);
+                expect(taskColumns.map(({ name }) => name)).not.toContain("reviewer_configuration");
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
   );
 
   it.effect("backfills the newest-created Candidate as the current selection", () => {
