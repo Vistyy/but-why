@@ -1,11 +1,12 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import { Cause, Clock, Effect } from "effect";
+import { Cause, Clock, Effect, Option } from "effect";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../contracts/repositoryStorageError.js";
 import type { ResolvedPiAgentProfile } from "../agentProfiles.js";
+import { findUniquePiSessionTranscript } from "../piSessionTranscript.js";
 import type { ReviewerAgentResult, ReviewerAgentRuntime } from "../reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../reviewerExecution.js";
 import type { TokenUsage } from "../tokenUsage.js";
@@ -118,6 +119,21 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       );
       const interrupted =
         reviewExit._tag === "Failure" && Cause.isInterruptedOnly(reviewExit.cause);
+      const interruptedSessionFilePath =
+        interrupted && resumeSessionFilePath === undefined
+          ? Option.getOrUndefined(
+              yield* Effect.option(
+                Effect.try({
+                  try: () =>
+                    findUniquePiSessionTranscript(
+                      input.sessionStorageRoot,
+                      dispatch.dispatch.piSessionId,
+                    ),
+                  catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+                }),
+              ),
+            )
+          : resumeSessionFilePath;
       const result: ReviewerAgentResult<Output> =
         reviewExit._tag === "Success"
           ? reviewExit.value
@@ -133,13 +149,17 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                   : "Agent Invocation failed.",
                 sessionUsability: "unknown",
                 ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
-                ...(interrupted && resumeSessionFilePath !== undefined
-                  ? { sessionFilePath: resumeSessionFilePath }
+                ...(interrupted && interruptedSessionFilePath !== undefined
+                  ? { sessionFilePath: interruptedSessionFilePath }
                   : {}),
               },
               sessionUsability: "unknown",
               attempts: 1,
               stdout: "",
+              ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
+              ...(interrupted && interruptedSessionFilePath !== undefined
+                ? { sessionFilePath: interruptedSessionFilePath }
+                : {}),
             };
       lastResult = result;
       const settlement = settlementFor(

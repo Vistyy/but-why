@@ -1,13 +1,12 @@
 import {
   chmodSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 
 import { Effect } from "effect";
 import {
@@ -27,6 +26,7 @@ import {
   isPiSessionRecord,
 } from "../piJsonl.js";
 import { piResourceArgs } from "../piRuntime.js";
+import { findUniquePiSessionTranscript } from "../piSessionTranscript.js";
 import type {
   ReviewerProcessExecutor,
   ReviewerProcessInput,
@@ -99,7 +99,7 @@ const executePiReviewerProcess = (
         input.resumeSession === undefined
           ? sessionReference === undefined || sessionStorageRoot === undefined
             ? undefined
-            : findUniqueSessionFile(sessionStorageRoot, sessionReference)
+            : findUniquePiSessionTranscript(sessionStorageRoot, sessionReference)
           : input.resumeSessionFilePath,
       catch: (error) => reviewerProcessExecutionFailed(error),
     });
@@ -290,27 +290,6 @@ const decodeJsonlObject = (line: string, message: string): Readonly<Record<strin
   }
 };
 
-const findUniqueSessionFile = (root: string, sessionId: string): string | undefined => {
-  let rootStat: ReturnType<typeof statSync>;
-  try {
-    rootStat = statSync(root);
-  } catch (error) {
-    if (nodeErrorCode(error) === "ENOENT") return undefined;
-    throw error;
-  }
-  if (!rootStat.isDirectory()) {
-    throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
-  }
-  const matches = readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-    .map((entry) => join(root, entry.name))
-    .filter((path) => hasSessionHeader(path, sessionId));
-  if (matches.length > 1) {
-    throw new Error(`Multiple Reviewer Session transcripts have id "${sessionId}".`);
-  }
-  return matches[0];
-};
-
 const requiredResumeSessionFilePath = (input: ReviewerProcessInput): string => {
   if (input.resumeSessionFilePath === undefined) {
     throw new Error(`resumeSession "${input.resumeSession}" has no persisted transcript path.`);
@@ -341,24 +320,6 @@ const validateContainedSessionFile = (root: string, path: string): void => {
     candidate.startsWith(`..${sep}`)
   ) {
     throw new Error(`resumeSession transcript "${path}" is outside ${root}.`);
-  }
-};
-
-const hasSessionHeader = (path: string, sessionId: string): boolean => {
-  let firstLine: string | undefined;
-  try {
-    firstLine = readFileSync(path, "utf8").split("\n", 1)[0];
-  } catch (error) {
-    if (nodeErrorCode(error) === "ENOENT") return false;
-    throw error;
-  }
-  if (firstLine === undefined) return false;
-  try {
-    const entry = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
-    if (!isPiSessionRecord(entry)) return false;
-    return decodePiSessionHeader(entry)?.id === sessionId;
-  } catch {
-    return false;
   }
 };
 
@@ -397,7 +358,7 @@ const sessionFileMetadata = (
 ): { readonly sessionFilePath?: string } => {
   if (root === undefined) return {};
   try {
-    const sessionFilePath = findUniqueSessionFile(root, sessionReference);
+    const sessionFilePath = findUniquePiSessionTranscript(root, sessionReference);
     return sessionFilePath === undefined ? {} : { sessionFilePath };
   } catch {
     return {};

@@ -314,6 +314,69 @@ it.effect("does not resume a continuation marked unusable despite its transcript
   }),
 );
 
+it.effect("discovers an initial transcript after interruption and keeps it resumable", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const transcript = join(root, "interrupted-initial.jsonl");
+        const result = yield* executeAgentSession({
+          configuration,
+          agentPersistence: persistence,
+          linkInvocation: noOpLink,
+          reviewerRuntime: {
+            review: (reviewInput) => {
+              writeFileSync(
+                transcript,
+                `${JSON.stringify({
+                  type: "session",
+                  id: reviewInput.sessionId,
+                  cwd: root,
+                })}\n`,
+              );
+              return Effect.interrupt;
+            },
+          },
+          reviewerExecutor: { execute: () => Effect.die("Reviewer process must not run") },
+          decodeOutput: (output) => Effect.succeed(output),
+          prompt: "Review.",
+          continuationPrompt: "Continue.",
+          commandCwd: root,
+          resourceRoot: root,
+          profile: {
+            agentProfile: "review",
+            scope: "global",
+            profile: { agentRuntime: "pi", runtimeConfig: { model: configuration.model } },
+          },
+          reviewer: "test",
+          sessionStorageRoot: root,
+        });
+
+        expect(result.result).toMatchObject({
+          ok: false,
+          sessionFilePath: transcript,
+        });
+        expect(result.evidence.invocations).toMatchObject([
+          {
+            settlementKind: "return_unknown",
+            continuation: {
+              transcriptPath: "interrupted-initial.jsonl",
+              unusableReason: null,
+            },
+          },
+        ]);
+        const resumed = yield* persistence.beginInvocation({
+          agentSessionId: result.evidence.agentSessionId,
+          configuration,
+          createdAt: "2026-08-14T12:00:02.000Z",
+          linkInvocation: noOpLink,
+        });
+        expect(resumed).toMatchObject({ ok: true, dispatch: { resumed: true } });
+      }),
+    );
+  }),
+);
+
 it.effect("keeps an interrupted invocation resumable when its transcript is known", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();
