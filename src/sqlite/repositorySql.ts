@@ -1,12 +1,9 @@
 import { existsSync } from "node:fs";
-
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { internalTaskId, storedPublicTaskId } from "../task/taskId.js";
-
 import { MigrationError } from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Clock, Context, Effect, Layer } from "effect";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import {
   RepositoryIdentityConflict,
   RepositoryIdPrefixConflict,
@@ -18,6 +15,7 @@ import {
   type RepositoryStorageError,
   RestoredTransientStateError,
 } from "../contracts/repositoryStorageError.js";
+import { internalTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import {
   migrateRepositoryState,
