@@ -22,6 +22,9 @@ export const runInitCommand = (
 ): Effect.Effect<CliResult> =>
   initializeRepositoryRuntime({
     cwd: environment.cwd,
+    ...(environment.operationalRepoRoot === undefined
+      ? {}
+      : { operationalRepoRoot: environment.operationalRepoRoot }),
     taskPrefix: command.taskPrefix,
   }).pipe(
     Effect.map((initResult) => {

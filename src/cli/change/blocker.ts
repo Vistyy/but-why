@@ -24,7 +24,7 @@ export const runBlocker = (
   const action = command.action;
   const changeId = command.changeId;
   if (action === "list") {
-    const loaded = loadImplementationBlockers({ cwd: environment.cwd });
+    const loaded = loadImplementationBlockers(support.changeOperationInput(environment));
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.operation(changeId).pipe(
       Effect.map((history) =>
@@ -37,8 +37,8 @@ export const runBlocker = (
   if (!content.ok) return Effect.succeed(blockerInputError(content.error));
   const loaded =
     action === "raise"
-      ? loadRaiseImplementationBlocker({ cwd: environment.cwd })
-      : loadResolveImplementationBlocker({ cwd: environment.cwd });
+      ? loadRaiseImplementationBlocker(support.changeOperationInput(environment))
+      : loadResolveImplementationBlocker(support.changeOperationInput(environment));
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   return loaded
     .operation({

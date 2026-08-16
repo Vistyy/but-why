@@ -1,23 +1,15 @@
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { resolveInteractiveSessionAgentProfile } from "../../../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../../../agent/piRuntime.js";
 import { readGlobalConfig } from "../../../init/adapters/globalConfig.js";
-import { readRepoConfig } from "../../../init/adapters/repoConfig.js";
 import type { InteractiveSessionProfileLoader } from "../interactiveSessionProfile.js";
 
 export const loadLocalInteractiveSessionProfile: InteractiveSessionProfileLoader = (
+  repoConfig,
   worktreePath,
   globalConfigPath,
 ) => {
-  const managedRepoConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-  if (!managedRepoConfig.ok) {
-    return {
-      ok: false,
-      code: "repo_config_invalid",
-      message: `Managed Worktree Repo Config is invalid: ${managedRepoConfig.error.message}`,
-    };
-  }
   const globalConfig = readGlobalConfig(globalConfigPath);
   if (!globalConfig.ok) {
     return {
@@ -27,7 +19,7 @@ export const loadLocalInteractiveSessionProfile: InteractiveSessionProfileLoader
     };
   }
   const agentProfile = resolveInteractiveSessionAgentProfile({
-    repoConfig: managedRepoConfig.config,
+    repoConfig,
     globalConfig: globalConfig.config,
     globalConfigDirectory: dirname(globalConfigPath),
   });

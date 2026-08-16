@@ -18,6 +18,7 @@ export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;

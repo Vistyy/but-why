@@ -12,9 +12,7 @@ export const runList = (
   command: { readonly all: boolean },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const loaded = loadChangeList({
-    cwd: environment.cwd,
-  });
+  const loaded = loadChangeList(support.changeOperationInput(environment));
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const now = environment.now().getTime();
   return loaded

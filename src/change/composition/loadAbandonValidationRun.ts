@@ -17,8 +17,9 @@ export type LoadAbandonValidationRunResult =
 
 export const loadAbandonValidationRun = (input: {
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
 }): LoadAbandonValidationRunResult => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return loaded;
   const { context } = loaded.runtime;
 

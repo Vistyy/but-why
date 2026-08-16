@@ -439,11 +439,11 @@ describe("by change implement", () => {
       }),
   );
 
-  it.effect("rejects invalid Managed Worktree Repo Config before launching", () =>
+  it.effect("does not decode future Managed Worktree Repo Config before launching", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const fixture = yield* createChangeImplementFixture(root, {
-        managedRepoConfig: { taskPrefix: "BY", agentEnvironment: { command: [] } },
+        managedRepoConfig: { idPrefix: "BY" },
       });
       let launches = 0;
 
@@ -456,11 +456,16 @@ describe("by change implement", () => {
         },
       });
 
-      expect(result.status).toBe(1);
+      expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "repo_config_invalid" },
+        changeId: fixture.id,
+        worktreePath: fixture.worktreePath,
+        host: "herdr",
+        status: "started",
+        agentProfile: "implementation",
+        profileScope: "global",
       });
-      expect(launches).toBe(0);
+      expect(launches).toBe(1);
     }),
   );
 

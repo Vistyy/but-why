@@ -43,7 +43,7 @@ function runSourceGuarded(commandArgs) {
         ],
       });
     }
-    runPinnedPredecessor(pinned, commandArgs);
+    runPinnedPredecessor(pinned, commandArgs, mainCheckout.path);
     return;
   }
 
@@ -71,12 +71,20 @@ function runSourceGuarded(commandArgs) {
             ...commandArgs,
           ],
           {
-            env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: join(repoDir, "bin/by") },
+            env: {
+              ...process.env,
+              BUT_WHY_EXECUTABLE_PATH: join(repoDir, "bin/by"),
+              BUT_WHY_SOURCE_TRUSTED_ROOT: mainCheckout.path,
+            },
             stdio: "inherit",
           },
         )
       : spawnSync(trustedExecutable, commandArgs, {
-          env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: trustedExecutable },
+          env: {
+            ...process.env,
+            BUT_WHY_EXECUTABLE_PATH: trustedExecutable,
+            BUT_WHY_SOURCE_TRUSTED_ROOT: mainCheckout.path,
+          },
           stdio: "inherit",
         });
 
@@ -92,12 +100,13 @@ function runSourceGuarded(commandArgs) {
   process.exitCode = child.status ?? 1;
 }
 
-function runPinnedPredecessor(manifest, commandArgs) {
+function runPinnedPredecessor(manifest, commandArgs, mainCheckoutRoot) {
   const child = spawnSync(manifest.executable, commandArgs, {
     cwd: process.cwd(),
     env: {
       ...process.env,
       BUT_WHY_EXECUTABLE_PATH: manifest.executable,
+      BUT_WHY_SOURCE_TRUSTED_ROOT: mainCheckoutRoot,
     },
     stdio: "inherit",
   });

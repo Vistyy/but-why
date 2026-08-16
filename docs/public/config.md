@@ -274,7 +274,7 @@ Reviewer operations require `runtimeConfig.model`.
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
 Change Start resolves Acceptance Review and Specialist profile selections from its Change Base Repo Config, then Global Config, then Global `defaultAgentProfile`.
-Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
+In a published target repository, Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists for user-configured resources.
 An empty array disables that user-configured resource type.

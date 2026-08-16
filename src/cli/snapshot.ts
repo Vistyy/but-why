@@ -7,7 +7,12 @@ import { type CliResult, repoStateLoadError, runtimeError, success } from "../cl
 import { loadSnapshotUseCases } from "../repositorySnapshot/composition/loadSnapshotUseCases.js";
 
 export const runSnapshotCommand = (environment: CliEnvironment): Effect.Effect<CliResult> =>
-  loadSnapshotUseCases(environment.cwd).pipe(
+  loadSnapshotUseCases({
+    cwd: environment.cwd,
+    ...(environment.operationalRepoRoot === undefined
+      ? {}
+      : { operationalRepoRoot: environment.operationalRepoRoot }),
+  }).pipe(
     Effect.flatMap((loaded) => {
       if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
 
