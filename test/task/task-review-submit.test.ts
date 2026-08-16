@@ -481,6 +481,12 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 now: "2026-08-11T12:00:00.000Z",
               });
               const repository = yield* RepositorySql;
+              yield* repository.transactionImmediate("seed legacy Task Reviewer Session", (sql) =>
+                sql`
+                  INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
+                  VALUES ('BY-1', 'legacy-fingerprint', 'legacy-session')
+                `.pipe(Effect.asVoid),
+              );
               yield* repository.transactionImmediate("seed legacy Task Review evidence", (sql) =>
                 sql`
                   UPDATE task_reviews
@@ -518,6 +524,10 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
         },
         legacyReviewerEvidence: {
           classification: "legacy",
+          legacyTaskReviewerSession: {
+            fingerprint: "legacy-fingerprint",
+            sessionReference: "legacy-session",
+          },
           pendingExecutions: [{ sessionReference: "session-1" }],
         },
         identity: { verified: true, workspace: { state: "matching" } },

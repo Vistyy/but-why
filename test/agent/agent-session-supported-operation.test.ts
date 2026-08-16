@@ -3,21 +3,22 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import type { ResolvedPiAgentProfile } from "../../src/agent/agentProfiles.js";
-import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
+import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
-  piReviewerAgentRuntime,
-  ReviewerExecutionFailed,
-} from "../../src/agent/reviewerAgentRuntime.js";
-import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
+  cleanupExactDisposableWorkspace,
+  inspectDisposableWorktree,
+} from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
+import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
-  decodeTaskReviewerOutput,
-  type TaskReviewerOutput,
-} from "../../src/task/review/taskReviewerOutput.js";
+  readCanonicalMainReviewBase,
+  verifyRecordedTaskReviewBase,
+} from "../../src/task/review/adapters/taskReviewGit.js";
+import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -29,7 +30,7 @@ import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-08-15T12:00:00.000Z";
 
-it.effect("settles a real Agent Session and exposes it through Task Review inspection", () =>
+it.effect("submits through the supported Task Review operation with a real Agent Session", () =>
   Effect.gen(function* () {
     const root = createGitRepo();
     const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -40,7 +41,6 @@ it.effect("settles a real Agent Session and exposes it through Task Review inspe
 
     const loaded = openRepositoryRuntime(root);
     if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
-    const reviewId = "real-agent-review";
     const profile: ResolvedPiAgentProfile = {
       agentProfile: "review",
       scope: "global",
@@ -67,98 +67,67 @@ it.effect("settles a real Agent Session and exposes it through Task Review inspe
       "task-review-sessions",
     );
 
-    yield* loaded.runtime.provide(
+    const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const reviews = yield* openSqliteTaskReviewPersistence();
         const agents = yield* openSqliteAgentSessionPersistence();
         const created = yield* tasks.createTask({
           title: "Real Agent Session sentinel",
-          description: "Exercise the supported Task Review inspection boundary.",
+          description: "Exercise the supported Task Review submission boundary.",
           now,
         });
         expect(created).toMatchObject({ ok: true, task: { id: "BY-1", state: "new" } });
-        if (!created.ok) return;
-        const admitted = yield* reviews.admit({
-          reviewId,
-          taskId: publicTaskId("BY-1"),
-          policy,
-          baseRef: "refs/heads/main",
-          baseCommit,
-          workspacePath: expectedDisposableWorkspacePath(root, reviewId),
-          now,
-        });
-        expect(admitted).toMatchObject({ ok: true, review: { state: "running" } });
-        if (!admitted.ok) return;
-        yield* reviews.recordCleanup(reviewId, "removed", now);
-        const configuration = {
-          harness: "pi" as const,
-          provider: null,
-          model: "but-why-test/deterministic-reviewer",
-          thinking: "off" as const,
-        };
-        const execution = yield* executeAgentSession<TaskReviewerOutput>({
-          configuration,
-          agentPersistence: agents,
-          linkInvocation: reviews.linkAgentInvocation({
-            taskId: publicTaskId("BY-1"),
-            reviewId,
-            configuration,
-            configurationSnapshot: policy,
+        if (!created.ok) return undefined;
+
+        const useCases = openTaskReviewUseCases({
+          mainCheckoutRoot: root,
+          loadRepoConfig: () => ({ ok: true as const, config: { taskPrefix: "BY" } }),
+          resolvePolicy: () => ({
+            ok: true as const,
+            policy: { profile, snapshot: policy },
           }),
+          persistence: reviews,
+          reviewerSessionStorageRoot: sessionStorageRoot,
+          agentPersistence: agents,
           reviewerRuntime: piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
-          decodeOutput: (output, invocation) =>
-            decodeTaskReviewerOutput({ attempts: invocation, output }).pipe(
-              Effect.mapError(
-                (error) =>
-                  new ReviewerExecutionFailed({
-                    kind: "output_contract",
-                    operationName: error.operationName,
-                    message: error.message,
-                    diagnostics: error.diagnostics,
-                  }),
-              ),
-            ),
-          prompt: "Return the empty findings result for this supported-operation sentinel.",
-          continuationPrompt:
-            "Return the empty findings result for this supported-operation sentinel.",
-          commandCwd: root,
-          resourceRoot: root,
-          profile,
-          reviewer: "task",
-          sessionStorageRoot,
-          agentEnvironment: [],
-          settleDomain: ({ result }) =>
-            Effect.succeed(
-              reviews.settleAgentReview({
-                reviewId,
-                findings: result.ok ? result.report.findings : [],
-                ...(result.ok
-                  ? {}
-                  : {
-                      toolingFailure: {
-                        operation: result.failure.operationName,
-                        message: result.failure.message,
-                      },
-                    }),
-                now,
-                complete: result.ok,
-              }),
-            ),
+          readReviewBase: (mainCheckoutRoot) => readCanonicalMainReviewBase(mainCheckoutRoot),
+          verifyReviewBase: (mainCheckoutRoot, base) =>
+            verifyRecordedTaskReviewBase(mainCheckoutRoot, base),
+          runWorkspace: (input) => runDisposableExactCommitWorkspace(input),
+          cleanupWorkspace: (mainCheckoutRoot, cleanup) =>
+            cleanupExactDisposableWorkspace(mainCheckoutRoot, cleanup),
+          inspectWorkspace: (mainCheckoutRoot, workspaceId, commitSha, worktreePath) =>
+            inspectDisposableWorktree(mainCheckoutRoot, workspaceId, commitSha, worktreePath),
         });
-        expect(execution.result).toMatchObject({ ok: true, report: { findings: [] } });
-        expect(execution.evidence.invocations).toMatchObject([
+        return yield* useCases.submit(publicTaskId("BY-1"), now);
+      }),
+    );
+
+    expect(submitted).toMatchObject({
+      ok: true,
+      outcome: "passed",
+      review: {
+        state: "complete",
+        findings: [],
+        agentInvocations: [
           {
             settlementKind: "returned",
             usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             continuation: { transcriptPath: expect.any(String) },
           },
-        ]);
-      }),
-    );
+        ],
+      },
+    });
+    if (submitted === undefined || !submitted.ok) return;
 
-    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", reviewId]);
+    const shown = yield* runByInProcessEffect(root, [
+      "task",
+      "review",
+      "show",
+      submitted.review.id,
+    ]);
     expect(shown.status, shown.stdout).toBe(0);
     expect(JSON.parse(shown.stdout)).toMatchObject({
       review: {
@@ -175,6 +144,7 @@ it.effect("settles a real Agent Session and exposes it through Task Review inspe
         },
         legacyReviewerEvidence: {
           classification: "legacy",
+          legacyTaskReviewerSession: null,
           sessions: [],
           transcripts: [],
         },

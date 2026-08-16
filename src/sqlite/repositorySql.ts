@@ -281,7 +281,58 @@ const migrationFailureToStorageError = (
       changes: restored.cause.changes,
     });
   }
-  return new RepositoryMigrationFailed({ statePath, cause });
+  return new RepositoryMigrationFailed({
+    statePath,
+    cause: addAgentSessionMigrationGuidance(cause),
+  });
+};
+
+const addAgentSessionMigrationGuidance = (cause: Cause.Cause<unknown>): Cause.Cause<unknown> => {
+  const migration = Array.from(Cause.defects(cause)).find(isMigrationError);
+  if (migration !== undefined) {
+    const guided = agentSessionMigrationGuidance(migration);
+    return guided === undefined ? cause : Cause.die(guided);
+  }
+  const failure = Cause.failureOption(cause);
+  if (failure._tag === "Some" && isMigrationError(failure.value)) {
+    const guided = agentSessionMigrationGuidance(failure.value);
+    return guided === undefined ? cause : Cause.fail(guided);
+  }
+  return cause;
+};
+
+const isMigrationError = (error: unknown): error is MigrationError =>
+  error instanceof MigrationError;
+
+const agentSessionMigrationGuidance = (error: MigrationError): MigrationError | undefined => {
+  if (!/^Migration "(?:0040|40)_agent_sessions" failed$/u.test(error.message)) return undefined;
+  const causeMessage = error.cause instanceof Error ? error.cause.message : String(error.cause);
+  const match = /^Agent Session migration requires settled prerelease state: (\{.*\})$/u.exec(
+    causeMessage,
+  );
+  if (match === null || match[1] === undefined) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+  const blocked = Object.entries(parsed)
+    .filter(([, count]) => typeof count === "number" && count !== 0)
+    .map(([condition, count]) => `${condition}=${count}`)
+    .join(", ");
+  if (blocked.length === 0) return undefined;
+
+  return new MigrationError({
+    ...error,
+    cause: new Error(
+      `Pinned predecessor reconciliation is required before the Agent Session migration can proceed. ` +
+        `Blocked prerelease conditions: ${blocked}. ` +
+        `Run the pinned predecessor executable to reconcile these conditions; do not restore or initialize Shared Repository State.`,
+    ),
+  });
 };
 
 export const repositorySqlLayer = (

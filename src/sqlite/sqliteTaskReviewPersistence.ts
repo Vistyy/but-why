@@ -9,6 +9,7 @@ import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type {
+  LegacyTaskReviewerSession,
   LegacyTaskReviewToolingFailure,
   TaskReviewDependencyEvidence,
   TaskReviewExecution,
@@ -61,6 +62,8 @@ type TranscriptRow = {
   readonly piSessionId: string;
   readonly filePath: string;
 };
+
+type LegacyTaskReviewerSessionRow = LegacyTaskReviewerSession;
 
 type AgentInvocationRow = {
   readonly id: number;
@@ -856,6 +859,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
       WHERE observation.review_id = ${row.id}
       ORDER BY transcript.sequence ASC
     `;
+    const legacyTaskReviewerSession = yield* readLegacyTaskReviewerSession(sql, row.taskId);
     return yield* Effect.try({
       try: (): TaskReviewRecord => ({
         id: row.id,
@@ -883,6 +887,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
           invocationUsage: parseInvocationUsage(execution.invocationUsage),
         })),
         transcripts,
+        ...(legacyTaskReviewerSession === undefined ? {} : { legacyTaskReviewerSession }),
         ...(agentSessionId === undefined && agentInvocations.length === 0
           ? {}
           : {
@@ -897,6 +902,13 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
         new RepositoryPersistedDataInvalid({ operationName: "read Task Review", cause }),
     });
   });
+
+const readLegacyTaskReviewerSession = (sql: SqlClient.SqlClient, taskId: string) =>
+  sql<LegacyTaskReviewerSessionRow>`
+    SELECT fingerprint, session_reference AS sessionReference
+    FROM task_reviewer_sessions
+    WHERE task_id = ${taskId}
+  `.pipe(Effect.map((rows) => rows[0]));
 
 type TaskReviewJsonObject = Record<string, unknown> & {
   readonly id?: unknown;

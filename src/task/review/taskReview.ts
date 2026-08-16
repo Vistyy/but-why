@@ -50,6 +50,11 @@ export type TaskReviewerTranscript = {
   readonly filePath: string;
 };
 
+export type LegacyTaskReviewerSession = {
+  readonly fingerprint: string;
+  readonly sessionReference: string;
+};
+
 export type TaskReviewExecution = ReviewerExecutionEvidence & {
   readonly sessionReference: string | null;
 };
@@ -71,6 +76,7 @@ export type TaskReviewRecord = {
   readonly findings: readonly TaskReviewFinding[];
   readonly sessions: readonly TaskReviewExecution[];
   readonly transcripts: readonly TaskReviewerTranscript[];
+  readonly legacyTaskReviewerSession?: LegacyTaskReviewerSession;
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
   readonly reviewerConfiguration?: TaskReviewPolicySnapshot;

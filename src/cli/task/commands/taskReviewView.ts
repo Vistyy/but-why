@@ -68,6 +68,7 @@ export const taskReviewView = (
     : { sessions: review.sessions, transcripts: review.transcripts }),
   legacyReviewerEvidence: {
     classification: "legacy",
+    legacyTaskReviewerSession: review.legacyTaskReviewerSession ?? null,
     sessions: review.sessions,
     transcripts: review.transcripts,
     ...legacyPendingExecutions(review.toolingFailure),
