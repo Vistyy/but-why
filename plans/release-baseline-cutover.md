@@ -542,6 +542,15 @@ Only implementation work that must complete before cutover should be recorded in
 Record the seven implementation Tasks just in time rather than populating the old state with later release work.
 Each prerelease Task must be completed and reconciled before the cutover.
 Record Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-cutover work only after the new baseline state is active.
+
+### Deferred Candidate Publication presentation Task
+
+After cutover, record a Task to associate each published Change's local Repository Branch with its exact Remote Change Branch through standard Git upstream configuration.
+Candidate Publication must establish or repair that association after it verifies the exact remote commit, without another push or any change to Candidate or publication identity.
+The behavior must use the configured publication remote, support initial, revised, and already-completed publication, and leave no stale branch configuration after Terminal Cleanup.
+It must not write VS Code GitHub Pull Requests extension metadata or depend on that extension's private state.
+Verification must use standard Git upstream inspection and confirm that the remote commit is unchanged.
+
 The archive preserves old Task history, but the new database does not import it.
 The baseline Candidate must be submitted, merged, and reconciled with the Task 6 Trusted But Why Executable before that executable loses access to prerelease state.
 Before merging Task 7, build its Task 6 predecessor as a pinned production bundle outside the checkout, record its Git commit and SHA-256, and verify that exact bundle on a disposable repository.
