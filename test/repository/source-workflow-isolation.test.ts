@@ -117,6 +117,9 @@ test("source workflow uses an integrity-checked predecessor only for exact recon
   expect(rejected.status).toBe(1);
   expect(JSON.parse(rejected.stdout)).toMatchObject({
     error: { code: "pinned_predecessor_scope", changeId: "BY-1" },
+    help: [
+      "Run `by change reconcile BY-1` only after stopping the new executable and before opening Shared Repository State with it.",
+    ],
   });
 
   const tamperedBundle = createTestWorkspace();

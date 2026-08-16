@@ -288,7 +288,7 @@ function fail(failure) {
       message: failure.message,
       ...(failure.details ?? {}),
     },
-    help: [failure.help],
+    help: Array.isArray(failure.help) ? failure.help : [failure.help],
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(1);
