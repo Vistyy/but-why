@@ -14,7 +14,9 @@ The Implementer may return control only when one of these conditions applies:
 - An uncertain or operator-owned Submit failure provides no Submit Recovery Guidance.
 - The Operator pauses or stops implementation, cancels the work, or withdraws Implementation Authorization.
 
-When the Operator-controlled return condition applies, do not mutate the Change or Managed Worktree further and report only the current Change state and whether the Managed Worktree contains uncommitted or unsubmitted work.
+When an Operator-controlled return condition applies, do not mutate the Change or Managed Worktree further.
+Report the return condition, current Change state, whether the Managed Worktree contains uncommitted or unsubmitted work, the exact Operator action required when applicable, and any new material Implementation Decisions.
+Do not include unrelated progress or implementation detail.
 Incomplete design, routine implementation, focused Check failure, Findings, and authorized Submit recovery do not permit the Implementer to return control.
 
 ## 1. Read the accepted context
@@ -43,6 +45,9 @@ Use `<but-why> change decision add <change-id> --choice "<selected approach>" --
 The Choice names the selected approach.
 The Rationale explains why that approach was selected and its material trade-off.
 Do not record routine coding choices.
+An Implementation Decision records non-authoritative rationale and does not require Operator approval.
+Do not return control or interrupt implementation only to discuss an Implementation Decision.
+Summarize new material Implementation Decisions the next time another return condition requires an Operator-facing report.
 Implementation Decisions cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
 Continue through recoverable problems and local implementation choices.
 Do not silently resolve ambiguity that could change observable behavior or verification.
@@ -69,7 +74,7 @@ If implementation is blocked, complete this step by raising the blocker and wait
 ## Implementation Blockers
 
 Raise a blocker with `<but-why> change blocker raise <change-id> --file <path|->`.
-The UTF-8 text report must state the unresolved issue, why continuing is unsafe, and the external decision or action required.
+The UTF-8 text report must begin with the exact external decision or action required, then state the unresolved issue and why continuing is unsafe.
 The report is non-authoritative evidence and does not amend Acceptance Context.
 The main operator inspects the blocker with `<but-why> change blocker list <change-id>` and records an approved Resolution with `<but-why> change blocker resolve <change-id> --file <path|->`.
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
@@ -136,6 +141,16 @@ If another return condition applies, this step is complete when the applicable b
 ## 4. Hand control back for completion
 
 When Change Submit reports a ready owned pull request, report its URL and wait.
+Begin every Operator-facing return with this concise preamble:
+
+```text
+Bottom line: <current Change result or conclusion>
+Need from you: <none, an exact authorization, or one related decision round>
+Changed: <material commitments or understanding changed since the previous report>
+```
+
+After the preamble, include only the evidence and explanation needed for the result or required Operator action.
+Do not begin with an inventory of Findings, alternatives, or implementation details.
 But Why does not merge pull requests.
 The main operator session owns completion after human merge.
 The user closes the Herdr Interactive Session manually before reconciliation.
