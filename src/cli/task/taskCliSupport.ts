@@ -39,6 +39,7 @@ export type TaskIdCommand = { readonly taskId: string };
 
 export type TaskCommandEnvironment = {
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
@@ -59,7 +60,7 @@ export const withTasks = (
 ): Effect.Effect<CliResult> => {
   const program =
     environment.taskUseCases === undefined
-      ? withTaskUseCases({ cwd: environment.cwd }, use).pipe(
+      ? withTaskUseCases(taskRepositoryInput(environment), use).pipe(
           Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
         )
       : use(environment.taskUseCases);
@@ -67,7 +68,10 @@ export const withTasks = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        repositoryStorageErrorResult(
+          error,
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
+        ),
       ),
     ),
   );
@@ -89,14 +93,17 @@ export const withTaskChangeTasks = (
         });
   const program =
     injected === undefined
-      ? withTaskChangeTaskUseCases({ cwd: environment.cwd }, use).pipe(
+      ? withTaskChangeTaskUseCases(taskRepositoryInput(environment), use).pipe(
           Effect.map((result) => (result.ok ? result.value : repoStateLoadError(result.error))),
         )
       : use(injected);
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        repositoryStorageErrorResult(
+          error,
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
+        ),
       ),
     ),
   );
@@ -109,7 +116,7 @@ export const withTaskReviewInspection = (
   const injected = environment.taskReviewInspectionUseCases;
   const program =
     injected === undefined
-      ? withTaskReviewInspectionUseCases({ cwd: environment.cwd }, use).pipe(
+      ? withTaskReviewInspectionUseCases(taskRepositoryInput(environment), use).pipe(
           Effect.map((result) =>
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
@@ -125,7 +132,7 @@ export const withTaskReviewRecovery = (
   const injected = environment.taskReviewRecoveryUseCases;
   const program =
     injected === undefined
-      ? withTaskReviewRecoveryUseCases({ cwd: environment.cwd }, use).pipe(
+      ? withTaskReviewRecoveryUseCases(taskRepositoryInput(environment), use).pipe(
           Effect.map((result) =>
             result.ok ? result.value : taskReviewLoadErrorResult(result.error),
           ),
@@ -144,7 +151,7 @@ export const withTaskReviewSubmission = (
     environment.taskReviewSubmissionUseCases === undefined
       ? withTaskReviewSubmissionUseCases(
           {
-            cwd: environment.cwd,
+            ...taskRepositoryInput(environment),
             globalConfigPath: environment.globalConfigPath ?? "",
             ...(environment.taskReviewerAgentRuntime === undefined
               ? {}
@@ -165,7 +172,10 @@ export const withTaskReviewSubmission = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        repositoryStorageErrorResult(
+          error,
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
+        ),
       ),
     ),
   );
@@ -178,10 +188,20 @@ const catchTaskReviewStorageError = (
   program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
+        repositoryStorageErrorResult(
+          error,
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
+        ),
       ),
     ),
   );
+
+export const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
+  cwd: environment.cwd,
+  ...(environment.operationalRepoRoot === undefined
+    ? {}
+    : { operationalRepoRoot: environment.operationalRepoRoot }),
+});
 
 const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
   error.code === "task_review_config_invalid"

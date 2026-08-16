@@ -9,6 +9,7 @@ import {
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
+  taskRepositoryInput,
   withTasks,
 } from "../taskCliSupport.js";
 
@@ -24,7 +25,7 @@ export const runContextCommand = (
     const contextInspection =
       environment.taskContextInspectionUseCases === undefined &&
       environment.taskUseCases === undefined
-        ? loadTaskContextInspection({ cwd: environment.cwd })
+        ? loadTaskContextInspection(taskRepositoryInput(environment))
         : undefined;
     if (contextInspection !== undefined && !contextInspection.ok) {
       return Effect.succeed(stateStoreUnavailable(tasks.idPrefix));

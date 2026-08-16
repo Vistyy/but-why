@@ -30,8 +30,8 @@ _Avoid_: Task Archive, restore point, retention policy
 
 **Trusted But Why Executable**:
 The command executable authorized to operate a Local Repository's Shared Repository State.
-Before publication, it is the executable in the canonical main checkout.
-Published executable selection is governed by the post-publication compatibility policy.
+Before publication, it is the executable in the canonical main checkout and resolves operational Repo Config from that checkout.
+Published executable selection and target-repository Repo Config resolution are governed by the post-publication compatibility policy.
 _Avoid_: Candidate CLI, current-worktree executable
 
 **Source Checkout Guard**:
@@ -78,6 +78,6 @@ _Avoid_: Reviewer instructions, agent role, validation phase
 
 **Pinned Predecessor Executable**:
 The Trusted But Why Executable selected from the canonical main checkout while the source repository is unreleased.
-Every source-repository But Why command uses this executable rather than the Candidate worktree's code.
+The Source Checkout Guard binds every source-repository But Why command to this executable and its canonical operational Repo Config rather than the Candidate worktree's code or Repo Config.
 After publication, the published But Why Executable replaces this temporary rule.
 _Avoid_: Candidate executable, current-worktree executable, published package before publication

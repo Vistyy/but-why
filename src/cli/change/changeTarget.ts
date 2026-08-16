@@ -16,10 +16,14 @@ export const resolveChangeId = (
   changeId: string | undefined,
   cwd: string,
   commandName: string,
+  operationalRepoRoot?: string,
 ): Effect.Effect<ChangeTargetResolution> => {
   if (changeId !== undefined) return Effect.succeed({ ok: true, changeId });
 
-  const loaded = loadChangeList({ cwd });
+  const loaded = loadChangeList({
+    cwd,
+    ...(operationalRepoRoot === undefined ? {} : { operationalRepoRoot }),
+  });
   if (!loaded.ok) return Effect.succeed({ ok: false, result: repoStateLoadError(loaded.error) });
 
   const facts = findCurrentRepositoryWorktreeFacts(cwd);

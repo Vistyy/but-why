@@ -44,6 +44,7 @@ export type LoadedChangeOperationResult<A> =
 
 type LoadInput = {
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
@@ -56,7 +57,8 @@ export type UnlinkedChangeStartInput = {
 
 export type ChangeStartCommand = TaskChangeStartInput | UnlinkedChangeStartInput;
 
-const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
+const loadContext = (input: LoadInput) =>
+  openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
 
 export const withChangeStart = <A, E, R>(
   input: LoadInput,
@@ -174,6 +176,7 @@ export const withChangeImplement = <A, E, R>(
         use((changeId, implementerPrompt) =>
           implementChange(
             context.mainCheckoutRoot,
+            context.config,
             store,
             input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
             input.globalConfigPath,

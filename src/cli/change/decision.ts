@@ -39,7 +39,7 @@ export const runDecision = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   if (command.action === "list") {
-    const loaded = loadImplementationDecisions({ cwd: environment.cwd });
+    const loaded = loadImplementationDecisions(support.changeOperationInput(environment));
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.operation(command.changeId).pipe(
       Effect.map((decisions) =>
@@ -52,7 +52,7 @@ export const runDecision = (
   }
   const validation = validateDecisionInput(command.choice, command.rationale);
   if (!validation.ok) return Effect.succeed(decisionInputError(validation.code));
-  const loaded = loadRecordImplementationDecision({ cwd: environment.cwd });
+  const loaded = loadRecordImplementationDecision(support.changeOperationInput(environment));
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   return loaded
     .operation({

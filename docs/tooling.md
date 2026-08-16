@@ -26,8 +26,9 @@ Focused test selections do not wait for that lock.
 
 ## Source-repository executable
 
-Before npm publication, `just by ...` uses the Trusted But Why Executable from the canonical main checkout.
-It does not load CLI or migration code from a Candidate worktree.
+Before npm publication, `just by ...` uses the Trusted But Why Executable and operational Repo Config from the canonical main checkout.
+The Source Checkout Guard preserves the caller checkout for command inputs and Git inspection while it binds operational policy to canonical main.
+It does not load CLI, migration code, or operational Repo Config from a Candidate worktree.
 Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
 
 Change Submit treats the Candidate Repo Config as opaque to the Trusted But Why Executable.
@@ -39,9 +40,10 @@ The validator reads only `.but-why/config.json` and does not open Shared Reposit
 Do not invoke the Candidate CLI for this validation.
 
 While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
-The command must resolve the executable from the canonical main checkout before it reads or mutates Shared Repository State.
-A Candidate worktree must not invoke its own CLI for repository state operations.
-After publication, packaged commands use the published But Why Executable instead.
+The command must resolve the executable and operational Repo Config from the canonical main checkout before it reads or mutates Shared Repository State.
+A Candidate worktree must not supply its own CLI or Repo Config as trusted repository policy for those operations.
+Change Base-controlled validation remains the only path that decodes Candidate Repo Config.
+After publication, packaged commands use the published But Why Executable and the target repository's normal Repo Config resolution instead.
 
 ### Pinned Predecessor Executable for migration reconciliation
 

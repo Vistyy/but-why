@@ -9,7 +9,7 @@ import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
 import type { TaskListLimit } from "../../../task/taskStore.js";
 import { loadTaskChangeProjection } from "../../../taskChange/composition/loadTaskChangeInspection.js";
-import { type TaskCommandEnvironment, withTasks } from "../taskCliSupport.js";
+import { type TaskCommandEnvironment, taskRepositoryInput, withTasks } from "../taskCliSupport.js";
 
 export type TaskListCommand = {
   readonly all: boolean;
@@ -36,7 +36,7 @@ export const runListCommand = (
       (result) => {
         const changeInspection =
           environment.taskUseCases === undefined
-            ? loadTaskChangeProjection({ cwd: environment.cwd })
+            ? loadTaskChangeProjection(taskRepositoryInput(environment))
             : undefined;
         if (changeInspection !== undefined && !changeInspection.ok) {
           return Effect.succeed(stateStoreUnavailable(taskUseCases.idPrefix));

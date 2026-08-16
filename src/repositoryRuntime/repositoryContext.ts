@@ -46,6 +46,7 @@ export type LocalRepositoryContext = {
 
 export type InitRepoInput = {
   readonly cwd: string;
+  readonly operationalRepoRoot?: string;
   readonly idPrefix: string;
 };
 
@@ -138,8 +139,12 @@ export type ResolveLocalRepositoryError =
       readonly idPrefix: string;
     };
 
-const repoLocalPaths = (root: string, commonDirectory: string): LocalRepositoryPaths => {
-  const butWhyDir = join(root, ".but-why");
+const repoLocalPaths = (
+  root: string,
+  commonDirectory: string,
+  configRoot = root,
+): LocalRepositoryPaths => {
+  const butWhyDir = join(configRoot, ".but-why");
   const operationalDir = join(commonDirectory, "but-why");
 
   return {
@@ -186,7 +191,11 @@ const prepareRepoInitialization = (input: InitRepoInput): PrepareRepoInitializat
     return { ok: false, result: { ok: false, error: { code: "not_git_work_tree" } } };
   }
 
-  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
+  const paths = repoLocalPaths(
+    gitRoot.root,
+    gitRoot.commonDirectory,
+    operationalRepoRoot(gitRoot, input.operationalRepoRoot),
+  );
   mkdirSync(paths.butWhyDir, { recursive: true });
   mkdirSync(paths.operationalDir, { recursive: true });
 
@@ -319,7 +328,10 @@ export const resolveLocalRepositorySubmission = (
   return { ok: true, context };
 };
 
-export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResult => {
+export const resolveLocalRepository = (
+  cwd: string,
+  requestedOperationalRepoRoot?: string,
+): ResolveLocalRepositoryResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
@@ -332,7 +344,11 @@ export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResul
     };
   }
 
-  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
+  const paths = repoLocalPaths(
+    gitRoot.root,
+    gitRoot.commonDirectory,
+    operationalRepoRoot(gitRoot, requestedOperationalRepoRoot),
+  );
 
   if (!existsSync(paths.configPath)) {
     return { ok: false, error: { code: "not_initialized" } };
@@ -356,6 +372,17 @@ export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResul
     },
   };
 };
+
+const operationalRepoRoot = (
+  gitRoot: {
+    readonly root: string;
+    readonly mainCheckoutRoot: string;
+  },
+  requestedOperationalRepoRoot: string | undefined,
+): string =>
+  requestedOperationalRepoRoot === gitRoot.mainCheckoutRoot
+    ? gitRoot.mainCheckoutRoot
+    : gitRoot.root;
 
 type RepoConfigEnsureResult =
   | { readonly ok: true; readonly created: boolean }

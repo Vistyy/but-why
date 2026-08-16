@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { RepoConfig } from "../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import {
   type RepositoryPreparationEffectExecutor,
@@ -90,6 +91,7 @@ export const prepareChange = (
 
 export const implementChange = (
   repositoryPath: string,
+  repoConfig: RepoConfig,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,
@@ -103,6 +105,7 @@ export const implementChange = (
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     return yield* launchInteractiveImplementer({
       repositoryPath,
+      repoConfig,
       change,
       interactiveSessionHost,
       globalConfigPath,

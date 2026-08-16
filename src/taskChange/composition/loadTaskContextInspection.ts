@@ -13,12 +13,12 @@ export type LoadedTaskContextInspection<A> =
   | { readonly ok: true; readonly commonDirectory: string; readonly operation: A }
   | { readonly ok: false; readonly error: LoadTaskContextInspectionError };
 
-type LoadInput = { readonly cwd: string };
+type LoadInput = { readonly cwd: string; readonly operationalRepoRoot?: string };
 
 export const loadTaskContextInspection = (
   input: LoadInput,
 ): LoadedTaskContextInspection<TaskContextInspectionUseCases> => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return loaded;
   return {
     ok: true,

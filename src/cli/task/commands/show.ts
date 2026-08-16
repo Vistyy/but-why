@@ -8,6 +8,7 @@ import {
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
+  taskRepositoryInput,
   withTaskReviewInspection,
   withTasks,
 } from "../taskCliSupport.js";
@@ -26,7 +27,7 @@ export const runTaskShowCommand = (
       if (task === undefined) return taskNotFound(taskId.taskId);
       const change =
         environment.taskUseCases === undefined
-          ? loadTaskChangeProjection({ cwd: environment.cwd })
+          ? loadTaskChangeProjection(taskRepositoryInput(environment))
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.idPrefix);
       const projection = change === undefined ? null : yield* change.operation(taskId.taskId);

@@ -1,4 +1,5 @@
 import type { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
+import type { RepoConfig } from "../../contracts/repoConfig.js";
 
 export type InteractiveSessionProfileLoadResult =
   | {
@@ -13,11 +14,12 @@ export type InteractiveSessionProfileLoadResult =
     }
   | {
       readonly ok: false;
-      readonly code: "repo_config_invalid" | "agent_profile_invalid";
+      readonly code: "agent_profile_invalid";
       readonly message: string;
     };
 
 export type InteractiveSessionProfileLoader = (
+  repoConfig: RepoConfig,
   worktreePath: string,
   globalConfigPath: string,
 ) => InteractiveSessionProfileLoadResult;

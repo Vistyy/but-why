@@ -41,10 +41,11 @@ const runtimeFor = <Context extends LocalRepositorySubmissionContext>(
 
 export const openRepositoryRuntime = (
   cwd: string,
+  operationalRepoRoot?: string,
 ):
   | { readonly ok: true; readonly runtime: RepositoryRuntime<LocalRepositoryContext> }
   | { readonly ok: false; readonly error: RepositoryRuntimeLoadError } => {
-  const resolved = resolveLocalRepository(cwd);
+  const resolved = resolveLocalRepository(cwd, operationalRepoRoot);
   if (!resolved.ok) return resolved;
   if (!existsSync(resolved.context.paths.statePath)) {
     return {
@@ -58,8 +59,11 @@ export const openRepositoryRuntime = (
   return { ok: true, runtime: runtimeFor(resolved.context) };
 };
 
-export const resolveRepositoryIdPrefix = (cwd: string): string | undefined => {
-  const resolved = resolveLocalRepository(cwd);
+export const resolveRepositoryIdPrefix = (
+  cwd: string,
+  operationalRepoRoot?: string,
+): string | undefined => {
+  const resolved = resolveLocalRepository(cwd, operationalRepoRoot);
   return resolved.ok ? resolved.context.idPrefix : undefined;
 };
 

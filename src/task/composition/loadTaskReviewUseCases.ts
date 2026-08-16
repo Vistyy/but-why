@@ -52,7 +52,7 @@ export type LoadTaskReviewError =
   | { readonly code: "task_review_config_invalid"; readonly message: string };
 
 export const withTaskReviewInspectionUseCases = <A, E, R>(
-  input: { readonly cwd: string },
+  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
   use: (reviews: TaskReviewInspectionUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
@@ -60,7 +60,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
@@ -88,7 +88,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
 };
 
 export const withTaskReviewRecoveryUseCases = <A, E, R>(
-  input: { readonly cwd: string },
+  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
   use: (reviews: TaskReviewRecoveryUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
@@ -96,7 +96,7 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
@@ -129,6 +129,7 @@ export type TaskReviewRepositorySubmitResult =
 export const withTaskReviewSubmissionUseCases = <A, E, R>(
   input: {
     readonly cwd: string;
+    readonly operationalRepoRoot?: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
     readonly progress?: SubmitProgress;
@@ -162,6 +163,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
 const submitFreshTaskReview = <A, E, R>(
   input: {
     readonly cwd: string;
+    readonly operationalRepoRoot?: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
     readonly progress?: SubmitProgress;
@@ -175,7 +177,7 @@ const submitFreshTaskReview = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd);
+  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   const resolved = resolveRepoTaskId(context, input.taskId);
