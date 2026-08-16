@@ -9,9 +9,16 @@ import type {
 } from "./changeStartGitOperations.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "./changeStartStore.js";
 
+export type ChangeStartRollbackFailure = {
+  readonly ok: false;
+  readonly code: "change_start_rollback_failed";
+  readonly change: ChangeStartRecord;
+};
+
 export type ChangeStartCreationResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | { readonly ok: false; readonly code: "change_start_conflict" }
+  | ChangeStartRollbackFailure
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangeStartProvisioner = (change: ChangeStartRecord) => ProvisionChangeWorktreeResult;
@@ -43,15 +50,24 @@ export const recoverProvisionedChangeCreation = <CreationFailure>(input: {
       if (expected === undefined || input.rollback === undefined) return Effect.fail(creationError);
       return input.getById(expected.id).pipe(
         Effect.matchEffect({
-          onFailure: () => Effect.fail(creationError),
-          onSuccess: (committed) => {
+          onFailure: (): Effect.Effect<ChangeStartCreationResult, RepositoryStorageError> =>
+            Effect.fail(creationError),
+          onSuccess: (
+            committed,
+          ): Effect.Effect<ChangeStartCreationResult, RepositoryStorageError> => {
             if (committed !== undefined) {
               return sameResourceOwnership(expected, committed)
                 ? Effect.succeed({ ok: true as const, change: committed })
                 : Effect.fail(creationError);
             }
-            input.rollback?.(expected);
-            return Effect.fail(creationError);
+            const rolledBack = input.rollback?.(expected) ?? { ok: false as const };
+            return rolledBack.ok
+              ? Effect.fail(creationError)
+              : Effect.succeed({
+                  ok: false as const,
+                  code: "change_start_rollback_failed" as const,
+                  change: expected,
+                });
           },
         }),
       );

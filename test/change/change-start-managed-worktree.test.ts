@@ -221,6 +221,73 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("reports exact retained resources when forced rollback cannot clean the worktree", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const loaded = openRepositoryRuntime(root);
+      if (!loaded.ok) throw new Error(`Repository runtime failed: ${loaded.error.code}`);
+      const intent = resolveChangeStartGitIntent(loaded.runtime.context, "pending-change-start");
+      if (!intent.ok) throw new Error(`Change Start intent failed: ${intent.code}`);
+      const input = {
+        id: "pending-change-start",
+        ...intent.intent,
+        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        now,
+      };
+
+      const attempted = yield* loaded.runtime.provide(
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const forcedRollbackRepository: typeof repository = {
+            ...repository,
+            transactionImmediate: (operationName, use) =>
+              repository.transactionImmediate(operationName, (sql) =>
+                Effect.flatMap(use(sql), () =>
+                  Effect.fail(
+                    new RepositorySqlOperationFailed({
+                      operationName,
+                      cause: new Error("forced rollback after contaminated provisioning"),
+                    }),
+                  ),
+                ),
+              ),
+          };
+          const starts = yield* openSqliteChangeStartPersistence().pipe(
+            Effect.provideService(RepositorySql, forcedRollbackRepository),
+          );
+          return yield* starts.create(
+            input,
+            (change) => {
+              const provisioned = provisionChangeWorktree(root, change, false);
+              if (provisioned.ok) {
+                writeFileSync(join(change.worktreePath, "retained.txt"), "preserve this work\n");
+              }
+              return provisioned;
+            },
+            (change) => rollbackProvisionedChangeWorktree(root, change),
+          );
+        }),
+      );
+
+      expect(attempted).toMatchObject({
+        ok: false,
+        code: "change_start_rollback_failed",
+        change: {
+          id: "BY-C1",
+          branchRef: "refs/heads/but-why/BY-C1",
+          worktreePath: expect.stringMatching(/\/but-why\/BY-C1$/u),
+        },
+      });
+      if (!("change" in attempted)) return;
+      expect(git(root, "rev-parse", `${attempted.change.branchRef}^{commit}`)).toBe(
+        attempted.change.startingCommit,
+      );
+      expect(existsSync(join(attempted.change.worktreePath, "retained.txt"))).toBe(true);
+      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+    }),
+  );
+
   it.effect("records no Task-linked Change when its allocated branch already exists", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

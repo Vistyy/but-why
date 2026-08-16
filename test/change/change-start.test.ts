@@ -186,6 +186,37 @@ describe("Change Start orchestration", () => {
     }),
   );
 
+  it.effect("reports retained resources when failed creation cannot roll back provisioning", () =>
+    Effect.gen(function* () {
+      const prospective = recordFrom({
+        id: "BY-C1",
+        ...intent,
+        reviewerConfiguration,
+        now,
+      });
+      const result = yield* recoverProvisionedChangeCreation({
+        create: (provision) => {
+          expect(provision?.(prospective)).toEqual({ ok: true });
+          return Effect.fail(
+            new RepositoryPersistedDataInvalid({
+              operationName: "roll back Change Start",
+              cause: new Error("transaction rolled back"),
+            }),
+          );
+        },
+        getById: () => Effect.succeed(undefined),
+        provision: () => ({ ok: true }),
+        rollback: () => ({ ok: false, code: "git_tooling_error" }),
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        code: "change_start_rollback_failed",
+        change: prospective,
+      });
+    }),
+  );
+
   it.effect("does not retain a prospective Change when its exact branch conflicts", () =>
     Effect.gen(function* () {
       const captured = fixture({ provision: { ok: false, code: "change_start_conflict" } });

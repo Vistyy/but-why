@@ -11,7 +11,10 @@ import type {
   ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
-import type { ChangeStartPersistence } from "./changeStartPersistence.js";
+import type {
+  ChangeStartPersistence,
+  ChangeStartRollbackFailure,
+} from "./changeStartPersistence.js";
 import type { ChangeReviewerConfiguration, ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
@@ -28,6 +31,7 @@ export type ChangeStartResult =
       readonly message: string;
     }
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
+  | ChangeStartRollbackFailure
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangePrepareResult =
