@@ -96,7 +96,13 @@ const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTas
       return yield* invalidData("create Task", "Task identity was not allocated");
     const taskId = storedPublicTaskId(allocatedId);
     const prerequisiteTaskIds = input.dependsOn ?? [];
-    const dependencyError = yield* validateDependencies(sql, taskId, prerequisiteTaskIds, false);
+    const dependencyError = yield* validateDependencies(
+      sql,
+      taskId,
+      prerequisiteTaskIds,
+      false,
+      idPrefix,
+    );
     if (dependencyError !== undefined) return dependencyError;
     yield* insertDependencies(sql, taskId, prerequisiteTaskIds);
     const created = yield* getTaskById(sql, taskId, idPrefix);
@@ -122,7 +128,7 @@ export const editTaskDependencies = (
     const dependencyError =
       input.operation === "clear"
         ? undefined
-        : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true);
+        : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true, idPrefix);
     if (dependencyError !== undefined) return dependencyError;
 
     const currentIds = yield* Effect.forEach(target.task.prerequisites, (dependency) =>
@@ -438,6 +444,7 @@ const validateDependencies = (
   dependentTaskId: PublicTaskId,
   prerequisiteTaskIds: readonly PublicTaskId[],
   dependentExists: boolean,
+  idPrefix: string,
 ): Effect.Effect<
   DependencyValidationResult | undefined,
   SqlError | RepositoryPersistedDataInvalid
@@ -452,6 +459,7 @@ const validateDependencies = (
         dependentTaskId,
         prerequisiteTaskId,
         dependentExists,
+        idPrefix,
       );
       if (storedError !== undefined) return storedError;
     }
@@ -477,6 +485,7 @@ const validateStoredDependency = (
   dependentTaskId: PublicTaskId,
   prerequisiteTaskId: PublicTaskId,
   dependentExists: boolean,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly id: number }>`
@@ -490,7 +499,7 @@ const validateStoredDependency = (
       };
     }
     if (!dependentExists) return undefined;
-    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
+    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId, idPrefix))
       ? { ok: false as const, code: "dependency_cycle" as const }
       : undefined;
   });
@@ -499,9 +508,10 @@ const dependencyPathExists = (
   sql: SqlClient.SqlClient,
   fromTaskId: PublicTaskId,
   targetTaskId: PublicTaskId,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly taskId: number | null }>`
+    const rows = yield* sql<{ readonly taskId: string | null }>`
       WITH RECURSIVE prerequisites(task_id) AS (
         SELECT ${fromTaskId}
         UNION
@@ -516,7 +526,7 @@ const dependencyPathExists = (
     const reachableTaskIds = yield* decodePersisted("validate Task dependencies", () =>
       rows.map((row) => {
         if (row.taskId === null) throw new Error("Task dependency references an unknown Task");
-        return row.taskId as unknown as PublicTaskId;
+        return storedPublicTaskId(row.taskId, idPrefix);
       }),
     );
     return reachableTaskIds.includes(targetTaskId);
