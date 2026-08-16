@@ -3,12 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
-import type {
-  DependencyValidationCode,
-  TaskContext,
-  TaskDependencyFact,
-  TaskSummary,
-} from "../task/task.js";
+import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
@@ -272,35 +267,7 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    const task = yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row));
-    const resolutions = yield* readTaskResolutions(sql, taskId);
-    return {
-      ...task,
-      ...(resolutions.length === 0 ? {} : { resolutions }),
-    } satisfies TaskContext;
-  });
-
-const readTaskResolutions = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredResolutionRow>`
-      SELECT implementation_blockers.sequence,
-        implementation_blockers.id,
-        implementation_blockers.resolved_at AS resolvedAt,
-        implementation_blockers.resolution_id AS resolutionId,
-        implementation_blockers.resolution_recorded_at AS resolutionRecordedAt,
-        implementation_blockers.resolution_content AS resolutionContent
-      FROM implementation_blockers
-      JOIN task_change_links ON task_change_links.change_id = implementation_blockers.change_id
-      WHERE task_change_links.task_id = ${taskId}
-        AND (
-          implementation_blockers.resolved_at IS NOT NULL
-          OR implementation_blockers.resolution_id IS NOT NULL
-          OR implementation_blockers.resolution_recorded_at IS NOT NULL
-          OR implementation_blockers.resolution_content IS NOT NULL
-        )
-      ORDER BY implementation_blockers.sequence ASC
-    `;
-    return rows.map((row) => row.resolutionContent);
+    return yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row));
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
@@ -615,4 +582,3 @@ const invalidData = (operationName: string, message: string) =>
 
 type StoredMaximumNumericIdRow = { readonly maximumNumericId: number | null };
 type StoredCountRow = { readonly count: number };
-type StoredResolutionRow = { readonly resolutionContent: string };

@@ -29,6 +29,7 @@ import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js";
+import type { TaskContextInspectionUseCases } from "../../taskChange/inspectTaskChange.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 
@@ -38,6 +39,7 @@ export type TaskCommandEnvironment = {
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
+  readonly taskContextInspectionUseCases?: TaskContextInspectionUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;
   readonly taskReviewRecoveryUseCases?: TaskReviewRecoveryUseCases;
   readonly taskReviewSubmissionUseCases?: TaskReviewSubmissionUseCases;

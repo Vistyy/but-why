@@ -3,6 +3,9 @@ import type { ChangeAuthorityPort, ChangeReadPort } from "../change/changePorts.
 import type { ActiveValidationRunPort } from "../change/validation/changeValidationPorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { TaskContext } from "../task/task.js";
+import type { PublicTaskId } from "../task/taskId.js";
+import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { TaskChangeLinkPort } from "./taskChangePorts.js";
 
 export type TaskChangeActivity = "blocked" | "validating" | "ready" | "implementing";
@@ -18,6 +21,32 @@ type TaskChangeInspectionDependencies = {
   readonly authority: Pick<ChangeAuthorityPort, "getCurrentPassingEvidence">;
   readonly activeValidation: Pick<ActiveValidationRunPort, "getActiveForChange">;
 };
+
+type TaskContextInspectionDependencies = {
+  readonly tasks: Pick<TaskPersistence, "getTaskContextById">;
+  readonly links: Pick<TaskChangeLinkPort, "getByTaskId">;
+  readonly authority: Pick<ChangeAuthorityPort, "listImplementationBlockers">;
+};
+
+export type TaskContextInspectionUseCases = {
+  readonly getTaskContextById: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskContext | undefined, RepositoryStorageError>;
+};
+
+export const queryTaskContext = (
+  dependencies: TaskContextInspectionDependencies,
+  taskId: PublicTaskId,
+): Effect.Effect<TaskContext | undefined, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const context = yield* dependencies.tasks.getTaskContextById(taskId);
+    if (context === undefined) return undefined;
+    const link = yield* dependencies.links.getByTaskId(taskId);
+    if (link === undefined) return context;
+    const history = yield* dependencies.authority.listImplementationBlockers(link.changeId);
+    if (history === undefined || history.resolutions.length === 0) return context;
+    return { ...context, resolutions: history.resolutions.map((resolution) => resolution.content) };
+  });
 
 export const queryTaskChangeProjection = (
   dependencies: TaskChangeInspectionDependencies,
