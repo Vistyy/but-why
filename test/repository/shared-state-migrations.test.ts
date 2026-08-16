@@ -318,6 +318,51 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
+  it.effect("backfills cache-write usage for existing Agent Invocations", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            yield* migrateTestRepositoryThrough(40);
+            yield* sql`INSERT INTO agent_sessions (id) VALUES (1)`;
+            yield* sql`
+              INSERT INTO agent_continuations (
+                id, agent_session_id, harness, provider, model, thinking,
+                transcript_path, unusable_reason
+              ) VALUES (1, 1, 'pi', 'provider', 'model', NULL, NULL, NULL)
+            `;
+            yield* sql`
+              INSERT INTO agent_invocations (
+                id, continuation_id, created_at, settled_at, settlement_kind,
+                input_tokens, cached_input_tokens, output_tokens, total_tokens
+              ) VALUES
+                (1, 1, '2026-08-14T12:00:00.000Z', '2026-08-14T12:00:01.000Z',
+                 'returned', 10, 2, 4, 16),
+                (2, 1, '2026-08-14T12:00:02.000Z', '2026-08-14T12:00:03.000Z',
+                 'returned', NULL, NULL, NULL, NULL)
+            `;
+
+            yield* migrateTestRepositoryThrough(41);
+
+            const usage = yield* sql<{
+              readonly id: number;
+              readonly cacheWriteTokens: number | null;
+            }>`
+              SELECT id, cache_write_tokens AS cacheWriteTokens
+              FROM agent_invocations ORDER BY id
+            `;
+            expect(usage).toEqual([
+              { id: 1, cacheWriteTokens: 0 },
+              { id: 2, cacheWriteTokens: null },
+            ]);
+          }).pipe(Effect.provide(nodeSqliteLayer(join(directory, "state.sqlite")))),
+        ),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect.each(migrationPreconditionCases)(
     "keeps prerelease state unchanged when Agent storage installation is blocked by $condition",
     ({ condition, seed }) =>

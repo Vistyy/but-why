@@ -59,6 +59,7 @@ export type ReviewerAgentInput<Output> = {
   readonly sessionStorageRoot?: string;
   readonly sessionId?: string;
   readonly resumeSession?: string;
+  readonly resumeSessionFilePath?: string;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -98,6 +99,9 @@ const reviewWithPi = <Output>(
         : { sessionStorageRoot: input.sessionStorageRoot }),
       ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
       ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+      ...(input.resumeSessionFilePath === undefined
+        ? {}
+        : { resumeSessionFilePath: input.resumeSessionFilePath }),
     };
     const initial = yield* Effect.either(runReviewerProcess(input.reviewerExecutor, processInput));
     if (initial._tag === "Left") return reviewerProcessFailure(initial.left, 1, "");

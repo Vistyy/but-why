@@ -74,6 +74,7 @@ type AgentInvocationRow = {
   readonly settlementKind: string | null;
   readonly inputTokens: number | null;
   readonly cachedInputTokens: number | null;
+  readonly cacheWriteTokens: number | null;
   readonly outputTokens: number | null;
   readonly totalTokens: number | null;
   readonly harness: string;
@@ -507,7 +508,13 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
   ) {
     throw new Error(`Invalid Agent Invocation settlement kind: ${row.settlementKind}`);
   }
-  const tokenValues = [row.inputTokens, row.cachedInputTokens, row.outputTokens, row.totalTokens];
+  const tokenValues = [
+    row.inputTokens,
+    row.cachedInputTokens,
+    row.cacheWriteTokens,
+    row.outputTokens,
+    row.totalTokens,
+  ];
   const hasTokens = tokenValues.some((value) => value !== null);
   if (
     hasTokens &&
@@ -525,6 +532,7 @@ const decodeAgentInvocation = (row: AgentInvocationRow): AgentInvocationRecord =
       ? {
           inputTokens: row.inputTokens as number,
           cachedInputTokens: row.cachedInputTokens as number,
+          cacheWriteTokens: row.cacheWriteTokens as number,
           outputTokens: row.outputTokens as number,
           totalTokens: row.totalTokens as number,
         }
@@ -836,6 +844,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
         invocation.settlement_kind AS settlementKind,
         invocation.input_tokens AS inputTokens,
         invocation.cached_input_tokens AS cachedInputTokens,
+        invocation.cache_write_tokens AS cacheWriteTokens,
         invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens,
         continuation.harness,
@@ -966,7 +975,13 @@ const parseInvocationUsage = (source: string): readonly (TokenUsage | null)[] =>
     const cachedInputTokens = requiredTokenCount(cachedInputTokenValue);
     const outputTokens = requiredTokenCount(outputTokenValue);
     const totalTokens = requiredTokenCount(totalTokenValue);
-    return { inputTokens, cachedInputTokens, outputTokens, totalTokens };
+    return {
+      inputTokens,
+      cachedInputTokens,
+      cacheWriteTokens: 0,
+      outputTokens,
+      totalTokens,
+    };
   });
 };
 const requiredTokenCount = (value: unknown): number => {

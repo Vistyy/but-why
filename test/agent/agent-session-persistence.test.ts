@@ -66,7 +66,13 @@ it.effect("records and resumes a usable Agent Continuation with exact token evid
           settlement: {
             settledAt: "2026-08-14T12:00:01.000Z",
             kind: "returned",
-            usage: { inputTokens: 10, cachedInputTokens: 2, outputTokens: 4, totalTokens: 16 },
+            usage: {
+              inputTokens: 10,
+              cachedInputTokens: 2,
+              cacheWriteTokens: 3,
+              outputTokens: 4,
+              totalTokens: 19,
+            },
             transcriptPath: "sessions/one.jsonl",
           },
         });
@@ -90,7 +96,13 @@ it.effect("records and resumes a usable Agent Continuation with exact token evid
         expect(history).toHaveLength(2);
         expect(history[0]).toMatchObject({
           settlementKind: "returned",
-          usage: { inputTokens: 10, cachedInputTokens: 2, outputTokens: 4, totalTokens: 16 },
+          usage: {
+            inputTokens: 10,
+            cachedInputTokens: 2,
+            cacheWriteTokens: 3,
+            outputTokens: 4,
+            totalTokens: 19,
+          },
           continuation: {
             harness: "pi",
             provider: null,
@@ -249,7 +261,13 @@ it.effect("does not resume a continuation marked unusable despite its transcript
                 sessionReference: "known-session",
                 sessionFilePath: transcript,
                 invocationUsage: [
-                  { inputTokens: 4, cachedInputTokens: 1, outputTokens: 2, totalTokens: 7 },
+                  {
+                    inputTokens: 4,
+                    cachedInputTokens: 1,
+                    cacheWriteTokens: 0,
+                    outputTokens: 2,
+                    totalTokens: 7,
+                  },
                 ],
               }),
           },
@@ -271,7 +289,13 @@ it.effect("does not resume a continuation marked unusable despite its transcript
         expect(result.evidence.invocations).toMatchObject([
           {
             settlementKind: "failed",
-            usage: { inputTokens: 4, outputTokens: 2, totalTokens: 7 },
+            usage: {
+              inputTokens: 4,
+              cachedInputTokens: 1,
+              cacheWriteTokens: 0,
+              outputTokens: 2,
+              totalTokens: 7,
+            },
             continuation: {
               transcriptPath: "unusable-continuation.jsonl",
               unusableReason: "The continuation is corrupt.",

@@ -67,6 +67,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
   Effect.gen(function* () {
     let prompt = input.prompt;
     let resumeSession: string | undefined;
+    let resumeSessionFilePath: string | undefined;
     const invocationEvidence: AgentInvocationRecord[] = [];
     let lastResult: ReviewerAgentResult<Output> | undefined;
     let sessionId = input.agentSessionId;
@@ -88,6 +89,10 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       sessionId = dispatch.dispatch.agentSessionId;
       continuationId = dispatch.dispatch.continuation.id;
       resumeSession = dispatch.dispatch.resumed ? dispatch.dispatch.piSessionId : undefined;
+      resumeSessionFilePath =
+        dispatch.dispatch.resumed && dispatch.dispatch.continuation.transcriptPath !== null
+          ? resolve(input.sessionStorageRoot, dispatch.dispatch.continuation.transcriptPath)
+          : undefined;
 
       const reviewExit = yield* Effect.exit(
         input.reviewerRuntime.review({
@@ -108,6 +113,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
           sessionStorageRoot: input.sessionStorageRoot,
           sessionId: dispatch.dispatch.piSessionId,
           ...(resumeSession === undefined ? {} : { resumeSession }),
+          ...(resumeSessionFilePath === undefined ? {} : { resumeSessionFilePath }),
         }),
       );
       const interrupted =
@@ -127,13 +133,8 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                   : "Agent Invocation failed.",
                 sessionUsability: "unknown",
                 ...(interrupted ? { sessionReference: dispatch.dispatch.piSessionId } : {}),
-                ...(interrupted && dispatch.dispatch.continuation.transcriptPath !== null
-                  ? {
-                      sessionFilePath: resolve(
-                        input.sessionStorageRoot,
-                        dispatch.dispatch.continuation.transcriptPath,
-                      ),
-                    }
+                ...(interrupted && resumeSessionFilePath !== undefined
+                  ? { sessionFilePath: resumeSessionFilePath }
                   : {}),
               },
               sessionUsability: "unknown",

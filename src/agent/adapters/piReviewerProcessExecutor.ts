@@ -1,5 +1,13 @@
-import { chmodSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  chmodSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 import { Effect } from "effect";
 import {
@@ -86,10 +94,15 @@ const executePiReviewerProcess = (
       sessionStorageRoot === undefined
         ? undefined
         : (input.sessionId ?? parsed.sessionReference ?? input.resumeSession);
-    const sessionFilePath =
-      sessionReference === undefined || sessionStorageRoot === undefined
-        ? undefined
-        : findSessionFile(sessionStorageRoot, sessionReference);
+    const sessionFilePath = yield* Effect.try({
+      try: () =>
+        input.resumeSession === undefined
+          ? sessionReference === undefined || sessionStorageRoot === undefined
+            ? undefined
+            : findUniqueSessionFile(sessionStorageRoot, sessionReference)
+          : input.resumeSessionFilePath,
+      catch: (error) => reviewerProcessExecutionFailed(error),
+    });
     return {
       stdout: parsed.stdout,
       invocationUsage: parsed.usage ?? null,
@@ -137,7 +150,7 @@ const commandInvocation = (
         : input.sessionId.startsWith("by-agent-")
           ? ["--session-id", input.sessionId]
           : ["--session", input.sessionId]
-      : ["--session", input.resumeSession]),
+      : ["--session", requiredResumeSessionFilePath(input)]),
     "--name",
     `${input.reviewer} Review`,
     input.prompt,
@@ -156,12 +169,8 @@ const applyAgentEnvironment = (
 
 const preparePiSession = (input: ReviewerProcessInput): void => {
   if (input.resumeSession === undefined || input.sessionStorageRoot === undefined) return;
-  const path = findSessionFile(input.sessionStorageRoot, input.resumeSession);
-  if (path === undefined) {
-    throw new Error(
-      `resumeSession "${input.resumeSession}" not found under ${input.sessionStorageRoot}`,
-    );
-  }
+  const path = requiredResumeSessionFilePath(input);
+  validateContainedSessionFile(input.sessionStorageRoot, path);
   const content = readFileSync(path, "utf8");
   const lines = content.split("\n");
   const firstLine = lines[0];
@@ -192,6 +201,7 @@ const parsePiInvocationEvidence = (
   const usage = {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
   };
@@ -215,6 +225,7 @@ const parsePiInvocationEvidence = (
     }
     usage.inputTokens += messageUsage.inputTokens;
     usage.cachedInputTokens += messageUsage.cachedInputTokens;
+    usage.cacheWriteTokens += messageUsage.cacheWriteTokens;
     usage.outputTokens += messageUsage.outputTokens;
     usage.totalTokens += messageUsage.totalTokens;
   }
@@ -235,6 +246,7 @@ const parsePiOutput = (
   const usage = {
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
   };
@@ -254,6 +266,7 @@ const parsePiOutput = (
     }
     usage.inputTokens += messageUsage.inputTokens;
     usage.cachedInputTokens += messageUsage.cachedInputTokens;
+    usage.cacheWriteTokens += messageUsage.cacheWriteTokens;
     usage.outputTokens += messageUsage.outputTokens;
     usage.totalTokens += messageUsage.totalTokens;
   }
@@ -277,7 +290,7 @@ const decodeJsonlObject = (line: string, message: string): Readonly<Record<strin
   }
 };
 
-const findSessionFile = (root: string, sessionId: string): string | undefined => {
+const findUniqueSessionFile = (root: string, sessionId: string): string | undefined => {
   let rootStat: ReturnType<typeof statSync>;
   try {
     rootStat = statSync(root);
@@ -288,20 +301,47 @@ const findSessionFile = (root: string, sessionId: string): string | undefined =>
   if (!rootStat.isDirectory()) {
     throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
   }
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      const nested = findSessionFile(path, sessionId);
-      if (nested !== undefined) return nested;
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith(".jsonl") &&
-      (entry.name.includes(sessionId) || hasSessionHeader(path, sessionId))
-    ) {
-      return path;
-    }
+  const matches = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+    .map((entry) => join(root, entry.name))
+    .filter((path) => hasSessionHeader(path, sessionId));
+  if (matches.length > 1) {
+    throw new Error(`Multiple Reviewer Session transcripts have id "${sessionId}".`);
   }
-  return undefined;
+  return matches[0];
+};
+
+const requiredResumeSessionFilePath = (input: ReviewerProcessInput): string => {
+  if (input.resumeSessionFilePath === undefined) {
+    throw new Error(`resumeSession "${input.resumeSession}" has no persisted transcript path.`);
+  }
+  return input.resumeSessionFilePath;
+};
+
+const validateContainedSessionFile = (root: string, path: string): void => {
+  const rootStat = statSync(root);
+  if (!rootStat.isDirectory()) {
+    throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
+  }
+  const canonicalRoot = realpathSync(root);
+  let canonicalPath: string;
+  try {
+    canonicalPath = realpathSync(path);
+  } catch (error) {
+    if (nodeErrorCode(error) === "ENOENT") {
+      throw new Error(`resumeSession transcript "${path}" not found.`);
+    }
+    throw error;
+  }
+  const candidate = relative(canonicalRoot, canonicalPath);
+  if (
+    isAbsolute(candidate) ||
+    candidate === "" ||
+    candidate === ".." ||
+    candidate.startsWith(`..${sep}`)
+  ) {
+    throw new Error(`resumeSession transcript "${path}" is outside ${root}.`);
+  }
 };
 
 const hasSessionHeader = (path: string, sessionId: string): boolean => {
@@ -314,8 +354,9 @@ const hasSessionHeader = (path: string, sessionId: string): boolean => {
   }
   if (firstLine === undefined) return false;
   try {
-    const header = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
-    return decodePiSessionIdentity(header) === sessionId;
+    const entry = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
+    if (!isPiSessionRecord(entry)) return false;
+    return decodePiSessionHeader(entry)?.id === sessionId;
   } catch {
     return false;
   }
@@ -334,11 +375,16 @@ const sessionMetadataAfterFailure = (
   if (outputReference !== undefined) {
     return {
       sessionReference: outputReference,
-      ...sessionFileMetadata(input.sessionStorageRoot, outputReference),
+      ...(input.resumeSession !== undefined && input.resumeSessionFilePath !== undefined
+        ? { sessionFilePath: input.resumeSessionFilePath }
+        : sessionFileMetadata(input.sessionStorageRoot, outputReference)),
     };
   }
   const expectedReference = input.sessionId ?? input.resumeSession;
   if (expectedReference === undefined || input.sessionStorageRoot === undefined) return {};
+  if (input.resumeSession !== undefined && input.resumeSessionFilePath !== undefined) {
+    return { sessionReference: expectedReference, sessionFilePath: input.resumeSessionFilePath };
+  }
   const fileMetadata = sessionFileMetadata(input.sessionStorageRoot, expectedReference);
   return fileMetadata.sessionFilePath === undefined
     ? {}
@@ -351,7 +397,7 @@ const sessionFileMetadata = (
 ): { readonly sessionFilePath?: string } => {
   if (root === undefined) return {};
   try {
-    const sessionFilePath = findSessionFile(root, sessionReference);
+    const sessionFilePath = findUniqueSessionFile(root, sessionReference);
     return sessionFilePath === undefined ? {} : { sessionFilePath };
   } catch {
     return {};
@@ -383,7 +429,9 @@ const reviewerProcessExecutionFailed = (
   return new ReviewerProcessExecutionFailed({
     message,
     sessionUsability:
-      /^resumeSession ".+" not found(?: under|: expected)/m.test(message) ||
+      /^resumeSession ".+" (?:has no persisted transcript path|not found)/m.test(message) ||
+      /^resumeSession transcript ".+" (?:is outside |not found\.)/m.test(message) ||
+      /^Multiple Reviewer Session transcripts have id /m.test(message) ||
       /^Session resume failed:/m.test(message) ||
       /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
         message,

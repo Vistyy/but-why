@@ -31,6 +31,7 @@ export type ReviewerProcessInput = {
   /** The stable physical conversation identity used when starting a new continuation. */
   readonly sessionId?: string;
   readonly resumeSession?: string;
+  readonly resumeSessionFilePath?: string;
 };
 
 export type ReviewerProcessExecutor = {
