@@ -25,7 +25,7 @@ import type {
 import { decideTaskCompletion, type TaskCompletionDecision } from "../../taskChange.js";
 import type { TaskChangeLinkPort } from "../../taskChangePorts.js";
 
-export type TaskChangeTaskPersistence = {
+type TaskChangeTaskPersistence = {
   readonly editTaskDependencies: (
     input: EditTaskDependenciesInput,
   ) => Effect.Effect<EditTaskDependenciesResult, RepositoryStorageError>;
@@ -126,7 +126,7 @@ export const readTaskChangeLinkByTaskId = (sql: SqlClient.SqlClient, taskId: str
     (rows) => Effect.succeed(rows[0]),
   );
 
-export const readTaskChangeLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
+const readTaskChangeLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql<{ readonly taskId: string; readonly changeId: string }>`
       SELECT task_id AS taskId, change_id AS changeId
