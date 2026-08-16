@@ -59,6 +59,10 @@ export type ProvisionChangeWorktreeFailure = Exclude<
   { readonly ok: true }
 >;
 
+export type RollbackProvisionedWorktreeResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: "git_tooling_error" };
+
 export type ChangeStartGitOperations = {
   readonly resolveIntent: (
     slug: string,
@@ -68,4 +72,7 @@ export type ChangeStartGitOperations = {
     start: ChangeStartRecord,
     recovering: boolean,
   ) => ProvisionChangeWorktreeResult;
+  readonly rollbackProvisionedWorktree: (
+    start: ChangeStartRecord,
+  ) => RollbackProvisionedWorktreeResult;
 };

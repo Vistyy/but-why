@@ -5,15 +5,23 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
+import {
+  provisionChangeWorktree,
+  resolveChangeStartGitIntent,
+  rollbackProvisionedChangeWorktree,
+} from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
+import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
+import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -149,6 +157,64 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       rmSync(worktreePath, { recursive: true });
       git(root, "branch", "-D", branchName);
+      const retried = yield* runByInProcessEffect(root, ["change", "start"], now);
+      expect(retried.status).toBe(0);
+      expect(JSON.parse(retried.stdout)).toMatchObject({ change: { id: "BY-C1" }, branch });
+    }),
+  );
+
+  it.effect("removes provisioned resources after a forced SQLite rollback", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const loaded = openRepositoryRuntime(root);
+      if (!loaded.ok) throw new Error(`Repository runtime failed: ${loaded.error.code}`);
+      const intent = resolveChangeStartGitIntent(loaded.runtime.context, "pending-change-start");
+      if (!intent.ok) throw new Error(`Change Start intent failed: ${intent.code}`);
+      const input = {
+        id: "pending-change-start",
+        ...intent.intent,
+        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        now,
+      };
+
+      const attempted = yield* loaded.runtime.provide(
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const forcedRollbackRepository: typeof repository = {
+            ...repository,
+            transactionImmediate: (operationName, use) =>
+              repository.transactionImmediate(operationName, (sql) =>
+                Effect.flatMap(use(sql), () =>
+                  Effect.fail(
+                    new RepositorySqlOperationFailed({
+                      operationName,
+                      cause: new Error("forced rollback after provisioning"),
+                    }),
+                  ),
+                ),
+              ),
+          };
+          const starts = yield* openSqliteChangeStartPersistence().pipe(
+            Effect.provideService(RepositorySql, forcedRollbackRepository),
+          );
+          return yield* starts
+            .create(
+              input,
+              (change) => provisionChangeWorktree(root, change, false),
+              (change) => rollbackProvisionedChangeWorktree(root, change),
+            )
+            .pipe(Effect.either);
+        }),
+      );
+
+      expect(attempted._tag).toBe("Left");
+      const branch = "refs/heads/but-why/BY-C1";
+      const worktreePath = join(dirname(root), `${basename(root)}-worktrees`, "but-why", "BY-C1");
+      expect(gitResult(root, "show-ref", "--verify", "--quiet", branch).status).toBe(1);
+      expect(existsSync(worktreePath)).toBe(false);
+      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+
       const retried = yield* runByInProcessEffect(root, ["change", "start"], now);
       expect(retried.status).toBe(0);
       expect(JSON.parse(retried.stdout)).toMatchObject({ change: { id: "BY-C1" }, branch });
@@ -765,6 +831,8 @@ const createTask = (root: string, title: string, description: string) =>
   });
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+const gitResult = (cwd: string, ...args: readonly string[]) => runTestProcess("git", args, { cwd });
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });

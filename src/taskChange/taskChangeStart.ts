@@ -9,6 +9,7 @@ import type { ChangeStartGitOperations } from "../change/changeStartGitOperation
 import type {
   ChangeStartPersistence,
   ChangeStartProvisioner,
+  ChangeStartProvisionRollback,
 } from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
@@ -54,6 +55,7 @@ export type TaskChangeStartPersistence = {
   readonly create: (
     input: TaskChangeStartCreateInput,
     provision?: ChangeStartProvisioner,
+    rollback?: ChangeStartProvisionRollback,
   ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly prepareTask: (
     taskId: string,
@@ -61,6 +63,7 @@ export type TaskChangeStartPersistence = {
   readonly createLinked: (
     input: TaskChangeStartCreationInput,
     provision?: ChangeStartProvisioner,
+    rollback?: ChangeStartProvisionRollback,
   ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly getById: ChangeStartPersistence["getById"];
   readonly recordPrepareOutcome: ChangeStartPersistence["recordPrepareOutcome"];
@@ -125,13 +128,14 @@ export const startTaskChange = (
     }
 
     const ownerStore: ChangeStartPersistence<TaskChangeStartEligibilityError> = {
-      create: (createInput, provision) =>
+      create: (createInput, provision, rollback) =>
         store.createLinked(
           {
             ...createInput,
             taskId: input.taskId,
           },
           provision,
+          rollback,
         ),
       getById: store.getById,
       recordPrepareOutcome: store.recordPrepareOutcome,

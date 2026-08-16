@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import { recoverProvisionedChangeCreation } from "../../../change/changeStartPersistence.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import {
@@ -36,20 +37,43 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    create: (input: TaskChangeStartCreateInput, provision) =>
-      repository.transactionImmediate("create Change Start", (sql) =>
-        input.taskId === undefined
-          ? createChange(sql, input, repository.idPrefix, provision)
-          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix, provision),
-      ),
+    create: (input: TaskChangeStartCreateInput, provision, rollback) =>
+      recoverProvisionedChangeCreation({
+        create: (trackedProvision) =>
+          repository.transactionImmediate("create Change Start", (sql) =>
+            input.taskId === undefined
+              ? createChange(sql, input, repository.idPrefix, trackedProvision)
+              : createLinked(
+                  sql,
+                  { ...input, taskId: input.taskId },
+                  repository.idPrefix,
+                  trackedProvision,
+                ),
+          ),
+        getById: (changeId) =>
+          repository.transaction("reconcile Change Start creation", (sql) =>
+            readTaskChangeStartById(sql, changeId),
+          ),
+        ...(provision === undefined ? {} : { provision }),
+        ...(rollback === undefined ? {} : { rollback }),
+      }),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
         prepareTask(sql, taskId),
       ),
-    createLinked: (input, provision) =>
-      repository.transactionImmediate("create linked Change Start", (sql) =>
-        createLinked(sql, input, repository.idPrefix, provision),
-      ),
+    createLinked: (input, provision, rollback) =>
+      recoverProvisionedChangeCreation({
+        create: (trackedProvision) =>
+          repository.transactionImmediate("create linked Change Start", (sql) =>
+            createLinked(sql, input, repository.idPrefix, trackedProvision),
+          ),
+        getById: (changeId) =>
+          repository.transaction("reconcile linked Change Start creation", (sql) =>
+            readTaskChangeStartById(sql, changeId),
+          ),
+        ...(provision === undefined ? {} : { provision }),
+        ...(rollback === undefined ? {} : { rollback }),
+      }),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => readTaskChangeStartById(sql, changeId)),
     recordPrepareOutcome: (changeId, failure, now) =>

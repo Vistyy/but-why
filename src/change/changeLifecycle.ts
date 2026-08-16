@@ -64,6 +64,7 @@ export const startChange = <CreationFailure extends object = never>(
         now: input.now,
       },
       (change) => git.provisionWorktree(change, false),
+      (change) => git.rollbackProvisionedWorktree(change),
     );
     if (!("ok" in created)) return created;
     if (!created.ok) return created;

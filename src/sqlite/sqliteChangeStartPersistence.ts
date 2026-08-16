@@ -5,9 +5,10 @@ import { Effect } from "effect";
 import type { ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { publicChangeId } from "../change/changeId.js";
-import type {
-  ChangeStartPersistence,
-  ChangeStartProvisioner,
+import {
+  type ChangeStartPersistence,
+  type ChangeStartProvisioner,
+  recoverProvisionedChangeCreation,
 } from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
@@ -39,10 +40,19 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    create: (input, provision) =>
-      repository.transactionImmediate("create Change Start", (sql) =>
-        createChange(sql, input, repository.idPrefix, provision),
-      ),
+    create: (input, provision, rollback) =>
+      recoverProvisionedChangeCreation({
+        create: (trackedProvision) =>
+          repository.transactionImmediate("create Change Start", (sql) =>
+            createChange(sql, input, repository.idPrefix, trackedProvision),
+          ),
+        getById: (changeId) =>
+          repository.transaction("reconcile Change Start creation", (sql) =>
+            readChangeStartById(sql, changeId),
+          ),
+        ...(provision === undefined ? {} : { provision }),
+        ...(rollback === undefined ? {} : { rollback }),
+      }),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => readChangeStartById(sql, changeId)),
     recordPrepareOutcome: (changeId, failure, now) =>

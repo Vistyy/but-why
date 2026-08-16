@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
+  rollbackProvisionedChangeWorktree,
 } from "../../change/adapters/changeStartGit.js";
 import { resolveChangeReviewerConfiguration } from "../../change/composition/resolveChangeReviewerConfiguration.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -34,6 +35,9 @@ export const openTaskChangeStartOperation = (input: {
                 change: Parameters<typeof provisionChangeWorktree>[1],
                 recovering: boolean,
               ) => provisionChangeWorktree(input.context.root, change, recovering),
+              rollbackProvisionedWorktree: (
+                change: Parameters<typeof provisionChangeWorktree>[1],
+              ) => rollbackProvisionedChangeWorktree(input.context.root, change),
             };
             return yield* startTaskChange(
               store,

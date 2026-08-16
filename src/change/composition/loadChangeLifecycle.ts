@@ -16,6 +16,7 @@ import {
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
+  rollbackProvisionedChangeWorktree,
 } from "../adapters/changeStartGit.js";
 import {
   type ChangeImplementResult,
@@ -86,6 +87,9 @@ export const withChangeStart = <A, E, R>(
                 change: Parameters<typeof provisionChangeWorktree>[1],
                 recovering: boolean,
               ) => provisionChangeWorktree(context.root, change, recovering),
+              rollbackProvisionedWorktree: (
+                change: Parameters<typeof provisionChangeWorktree>[1],
+              ) => rollbackProvisionedChangeWorktree(context.root, change),
             };
             if (command.taskId !== undefined) {
               return yield* taskStart(command);
@@ -138,6 +142,8 @@ export const withChangePrepare = <A, E, R>(
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
               provisionWorktree: (change, recovering) =>
                 provisionChangeWorktree(context.root, change, recovering),
+              rollbackProvisionedWorktree: (change) =>
+                rollbackProvisionedChangeWorktree(context.root, change),
             },
             executeLocalRepositoryPreparation,
             changeId,
