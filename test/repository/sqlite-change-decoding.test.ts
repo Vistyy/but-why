@@ -10,7 +10,7 @@ import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeC
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
-import { openSqliteTaskChangeReconciliationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import { openSqliteTaskChangeReconciliationCompletion } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
@@ -409,9 +409,13 @@ describe("SQLite Change decoding", () => {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const cancellation = yield* openSqliteTaskChangeCancellationPort();
-        const reconciliation = yield* openSqliteTaskChangeReconciliationPort(
-          openSqliteChangeReconciliationPort(),
-        );
+        const reconciliationOwner = yield* openSqliteChangeReconciliationPort();
+        const reconciliationCompletion = yield* openSqliteTaskChangeReconciliationCompletion();
+        const reconciliation = {
+          getChangeById: reconciliationOwner.getChangeById,
+          listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+          completeMergedChange: reconciliationCompletion,
+        };
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -591,9 +595,13 @@ describe("SQLite Change decoding", () => {
         const changes = yield* openSqliteChangeTestDependencies();
         const publication = yield* openSqliteCandidatePublicationPort();
         const cancellation = yield* openSqliteChangeCancellationPort();
-        const reconciliation = yield* openSqliteTaskChangeReconciliationPort(
-          openSqliteChangeReconciliationPort(),
-        );
+        const reconciliationOwner = yield* openSqliteChangeReconciliationPort();
+        const reconciliationCompletion = yield* openSqliteTaskChangeReconciliationCompletion();
+        const reconciliation = {
+          getChangeById: reconciliationOwner.getChangeById,
+          listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+          completeMergedChange: reconciliationCompletion,
+        };
         const cleanup = yield* openSqliteTerminalChangeCleanupPort();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({

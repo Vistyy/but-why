@@ -7,7 +7,7 @@ import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeRec
 import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
-import { openSqliteTaskChangeReconciliationPort } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import { openSqliteTaskChangeReconciliationCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import {
   openTaskChangeStartOperation,
   type TaskChangeStartInput,
@@ -25,6 +25,7 @@ import {
   prepareChange,
   startChange,
 } from "../changeLifecycle.js";
+import type { ChangeReconciliationPort } from "../changePorts.js";
 import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
@@ -46,15 +47,21 @@ type LoadInput = {
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 
+export type UnlinkedChangeStartInput = {
+  readonly baseBranch?: string;
+  readonly now: string;
+  readonly taskId?: never;
+};
+
+export type ChangeStartCommand = TaskChangeStartInput | UnlinkedChangeStartInput;
+
 const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
 
 export const withChangeStart = <A, E, R>(
   input: LoadInput,
   use: (
     start: (
-      command:
-        | TaskChangeStartInput
-        | (Parameters<typeof startChange>[3] & { readonly taskId?: never }),
+      command: ChangeStartCommand,
     ) => Effect.Effect<ChangeStartResult | TaskChangeStartResult, RepositoryStorageError>,
   ) => Effect.Effect<A, E, R>,
 ): Effect.Effect<LoadedChangeOperationResult<A>, E | RepositoryStorageError, R> => {
@@ -80,7 +87,7 @@ export const withChangeStart = <A, E, R>(
                 recovering: boolean,
               ) => provisionChangeWorktree(context.root, change, recovering),
             };
-            if ("taskId" in command && command.taskId !== undefined) {
+            if (command.taskId !== undefined) {
               return yield* taskStart(command);
             }
             const reviewerConfiguration = resolveChangeReviewerConfiguration(
@@ -191,12 +198,16 @@ export const withChangeReconciliation = <A, E, R>(
   const github = localGitHubPullRequestGateway();
   return loaded.runtime.provide(
     Effect.all({
-      reconciliationStore: openSqliteTaskChangeReconciliationPort(
-        openSqliteChangeReconciliationPort(),
-      ),
+      reconciliationOwner: openSqliteChangeReconciliationPort(),
+      reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(),
       cleanupTerminal: composeTerminalCleanup(context),
     }).pipe(
-      Effect.flatMap(({ reconciliationStore, cleanupTerminal }) => {
+      Effect.flatMap(({ reconciliationOwner, reconciliationCompletion, cleanupTerminal }) => {
+        const reconciliationStore: ChangeReconciliationPort = {
+          getChangeById: reconciliationOwner.getChangeById,
+          listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+          completeMergedChange: reconciliationCompletion,
+        };
         const reconciliation = openChangeReconciliation({
           persistence: reconciliationStore,
           github,

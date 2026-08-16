@@ -38,6 +38,19 @@ describe("Change lifecycle CLI results", () => {
     });
   });
 
+  it("renders successful Change Start identity without a Task ID", () => {
+    expect(startResult({ ok: true, change: change() })).toEqual({
+      exitCode: 0,
+      stdout: {
+        change: { id: "change-1", taskId: null },
+        branch: "refs/heads/but-why/by-197-change-1",
+        baseRef: "refs/remotes/origin/main",
+        startingCommit: "1111111111111111111111111111111111111111",
+        worktreePath: "/repo-worktrees/but-why/by-197-change-1",
+      },
+    });
+  });
+
   it("renders incomplete Task prerequisites", () => {
     expect(
       startResult({

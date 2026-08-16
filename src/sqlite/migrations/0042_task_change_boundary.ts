@@ -147,9 +147,6 @@ export const taskChangeBoundaryMigration = Effect.gen(function* () {
     FROM changes_before_task_change_boundary
     WHERE task_id IS NOT NULL
   `);
-  yield* sql.unsafe(
-    "CREATE INDEX task_change_links_change_id_idx ON task_change_links (change_id)",
-  );
   yield* sql.unsafe("DROP TABLE changes_before_task_change_boundary");
   yield* sql.unsafe("PRAGMA legacy_alter_table = OFF");
 

@@ -19,8 +19,8 @@ import { openSqliteChangeSubmissionPort } from "../../src/sqlite/sqliteChangeSub
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import {
-  openSqliteTaskChangeReconciliationPort,
-  openSqliteTaskChangeSubmissionPort,
+  openSqliteTaskChangeReconciliationCompletion,
+  openSqliteTaskChangeSubmissionCompletion,
 } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import type { TaskChangeCancellationPort } from "../../src/taskChange/taskChangePorts.js";
 
@@ -34,15 +34,21 @@ type ChangeDeliveryTestPort = {
 
 const openChangeDeliveryTestPort = () =>
   Effect.all({
-    reconciliation: openSqliteTaskChangeReconciliationPort(openSqliteChangeReconciliationPort()),
+    reconciliationOwner: openSqliteChangeReconciliationPort(),
+    reconciliationCompletion: openSqliteTaskChangeReconciliationCompletion(),
     cancellation: openSqliteTaskChangeCancellationPort(),
     cleanup: openSqliteTerminalChangeCleanupPort(),
   }).pipe(
     Effect.map(
-      ({ reconciliation, cancellation, cleanup }): ChangeDeliveryTestPort => ({
-        getChangeById: reconciliation.getChangeById,
-        listChangesForReconciliation: reconciliation.listChangesForReconciliation,
-        completeMergedChange: reconciliation.completeMergedChange,
+      ({
+        reconciliationOwner,
+        reconciliationCompletion,
+        cancellation,
+        cleanup,
+      }): ChangeDeliveryTestPort => ({
+        getChangeById: reconciliationOwner.getChangeById,
+        listChangesForReconciliation: reconciliationOwner.listChangesForReconciliation,
+        completeMergedChange: reconciliationCompletion,
         cancelChange: cancellation.cancelChange,
         recordCleanup: cleanup.recordCleanup,
       }),
@@ -57,8 +63,44 @@ export const openSqliteChangeTestDependencies = () =>
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     publication: openSqliteCandidatePublicationPort(),
-    submission: openSqliteTaskChangeSubmissionPort(openSqliteChangeSubmissionPort()),
-  });
+    submissionOwner: openSqliteChangeSubmissionPort(),
+    submissionCompletion: openSqliteTaskChangeSubmissionCompletion(),
+  }).pipe(
+    Effect.map(
+      ({
+        authority,
+        delivery,
+        reads,
+        reviewerSessions,
+        reviewerTranscripts,
+        publication,
+        submissionOwner,
+        submissionCompletion,
+      }) => {
+        const submission: ChangeSubmissionPort = {
+          getChangeById: submissionOwner.getChangeById,
+          ...(submissionOwner.agentSessionConfigurationCanBeCorrected === undefined
+            ? {}
+            : {
+                agentSessionConfigurationCanBeCorrected:
+                  submissionOwner.agentSessionConfigurationCanBeCorrected,
+              }),
+          getChangeForOutputById: submissionOwner.getChangeForOutputById,
+          getCompletedPublicationEvidence: submissionOwner.getCompletedPublicationEvidence,
+          completeMergedChange: submissionCompletion,
+        };
+        return {
+          authority,
+          delivery,
+          reads,
+          reviewerSessions,
+          reviewerTranscripts,
+          publication,
+          submission,
+        };
+      },
+    ),
+  );
 
 export type ChangeTestDependencies = {
   readonly authority: ChangeAuthorityPort;
