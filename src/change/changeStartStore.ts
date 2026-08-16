@@ -1,11 +1,3 @@
-type TaskState = "new" | "todo" | "done" | "cancelled";
-
-type TaskDependencyFact = {
-  readonly id: string;
-  readonly title: string;
-  readonly state: TaskState;
-};
-
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
 import type { ChangePrepareDefinition, ChangePrepareFailure, ChangeState } from "./change.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
@@ -40,17 +32,8 @@ export type CreateChangeStartInput = {
   readonly baseRemoteUrl: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
-  readonly taskId?: string;
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly now: string;
 };
-
-export type ChangeStartEligibilityError =
-  | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
-  | {
-      readonly ok: false;
-      readonly code: "task_dependencies_unsatisfied";
-      readonly blockedBy: readonly TaskDependencyFact[];
-    };

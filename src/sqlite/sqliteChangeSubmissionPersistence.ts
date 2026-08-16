@@ -5,7 +5,6 @@ import type { ChangeRecord } from "../change/change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
@@ -29,6 +28,7 @@ import {
   decodeStoredNullableString,
   decodeStoredString,
 } from "./sqliteChangeValueDecoders.js";
+import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import { readCompletedCandidatePublicationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -53,7 +53,7 @@ export const openSqliteChangeSubmissionPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeLinkedChange(sql, input);
+            const result = yield* completeChangeOnly(sql, input);
             if (!result.ok) return result;
             const changeId = yield* readCommittedCompletionId(sql, input.changeId);
             return { ...result, changeId };

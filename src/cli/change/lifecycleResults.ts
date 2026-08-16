@@ -3,9 +3,10 @@
 import type { ChangePrepareResult, ChangeStartResult } from "../../change/changeLifecycle.js";
 import type { ChangeStartRecord } from "../../change/changeStartStore.js";
 import { type CliResult, runtimeError, success } from "../../cliResults.js";
+import type { TaskChangeStartResult } from "../../taskChange/taskChangeStart.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
-export const startResult = (result: ChangeStartResult): CliResult => {
+export const startResult = (result: ChangeStartResult | TaskChangeStartResult): CliResult => {
   if (result.ok) return success(changeView(result.change, true));
   if (result.code === "reviewer_configuration_invalid") {
     return runtimeError({

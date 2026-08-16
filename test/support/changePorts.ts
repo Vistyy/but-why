@@ -19,6 +19,10 @@ import { openSqliteChangeReviewerTranscriptPort } from "../../src/sqlite/sqliteC
 import { openSqliteChangeSubmissionPort } from "../../src/sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
+import {
+  openSqliteTaskChangeReconciliationPort,
+  openSqliteTaskChangeSubmissionPort,
+} from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 
 type ChangeDeliveryTestPort = {
   readonly getChangeById: ChangeReconciliationPort["getChangeById"];
@@ -30,7 +34,7 @@ type ChangeDeliveryTestPort = {
 
 const openChangeDeliveryTestPort = () =>
   Effect.all({
-    reconciliation: openSqliteChangeReconciliationPort(),
+    reconciliation: openSqliteTaskChangeReconciliationPort(openSqliteChangeReconciliationPort()),
     cancellation: openSqliteTaskChangeCancellationPort(),
     cleanup: openSqliteTerminalChangeCleanupPort(),
   }).pipe(
@@ -53,7 +57,7 @@ export const openSqliteChangeTestDependencies = () =>
     reviewerSessions: openSqliteChangeReviewerSessionPort(),
     reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
     publication: openSqliteCandidatePublicationPort(),
-    submission: openSqliteChangeSubmissionPort(),
+    submission: openSqliteTaskChangeSubmissionPort(openSqliteChangeSubmissionPort()),
   });
 
 export type ChangeTestDependencies = {

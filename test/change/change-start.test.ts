@@ -5,16 +5,14 @@ import { prepareChange, startChange } from "../../src/change/changeLifecycle.js"
 import type { ChangeStartGitOperations } from "../../src/change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../../src/change/changeStartPersistence.js";
 import type {
-  ChangeStartEligibilityError,
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
+import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
-import type { PublicTaskId } from "../../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-const taskId = "BY-197" as PublicTaskId;
 const reviewerConfiguration = { acceptanceReview: null, specialistReviews: [] } as const;
 
 const intent = {
@@ -28,11 +26,8 @@ const intent = {
 
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
   ...input,
-  taskId: input.taskId ?? null,
-  acceptanceContext:
-    input.taskId === undefined
-      ? null
-      : { version: 1, title: "Accepted title", description: "Accepted description" },
+  taskId: null,
+  acceptanceContext: input.acceptanceContext ?? null,
   reviewerConfiguration: input.reviewerConfiguration ?? null,
   prepare: input.prepare ?? null,
   prepareFailure: null,
@@ -41,7 +36,6 @@ const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
 
 type FixtureOptions = {
   readonly existing?: ChangeStartRecord;
-  readonly eligibility?: ChangeStartEligibilityError;
   readonly provision?: ReturnType<ChangeStartGitOperations["provisionWorktree"]>;
   readonly prepare?: Exclude<ChangeStartRecord["prepare"], null>;
   readonly execute?: RepositoryPreparationEffectExecutor;
@@ -56,10 +50,6 @@ const fixture = (options: FixtureOptions = {}) => {
   const events: string[] = [];
   let current = options.existing;
   const store: ChangeStartPersistence = {
-    prepareTask: () => {
-      events.push("prepareTask");
-      return Effect.succeed(options.eligibility ?? { ok: true as const, existing: current });
-    },
     create: (input) => {
       events.push("create");
       current = recordFrom({
@@ -105,7 +95,7 @@ const fixture = (options: FixtureOptions = {}) => {
 
 describe("Change Start orchestration", () => {
   it.effect(
-    "creates a Change without a Task and a Change linked to a Task in provisioning order with captured intent",
+    "creates a Change with optional captured Acceptance Context in provisioning order",
     () =>
       Effect.gen(function* () {
         const changeWithoutTask = fixture();
@@ -122,20 +112,21 @@ describe("Change Start orchestration", () => {
         ]);
 
         const backed = fixture();
-        const backedResult = yield* backed.operations.start({ taskId, baseBranch: "main", now });
+        const acceptanceContext: AcceptanceContextSnapshotV1 = {
+          version: 1,
+          title: "Accepted title",
+          description: "Accepted description",
+        };
+        const backedResult = yield* backed.operations.start({
+          baseBranch: "main",
+          acceptanceContext,
+          now,
+        });
         expect(backedResult).toMatchObject({
           ok: true,
-          change: {
-            taskId,
-            acceptanceContext: {
-              version: 1,
-              title: "Accepted title",
-              description: "Accepted description",
-            },
-          },
+          change: { taskId: null, acceptanceContext },
         });
         expect(backed.events).toEqual([
-          "prepareTask",
           expect.stringMatching(/^resolveIntent:change-[a-f0-9]{8}:main$/u),
           "create",
           "provisionWorktree:create",
@@ -153,67 +144,6 @@ describe("Change Start orchestration", () => {
         message: "A reviewer configuration is required to create a Change.",
       });
       expect(captured.events).toEqual([]);
-    }),
-  );
-
-  it.effect("returns Task eligibility failures before Git or persistence mutation", () =>
-    Effect.gen(function* () {
-      const failures: readonly ChangeStartEligibilityError[] = [
-        { ok: false, code: "task_not_found" },
-        { ok: false, code: "invalid_task_state", state: "new" },
-        {
-          ok: false,
-          code: "task_dependencies_unsatisfied",
-          blockedBy: [{ id: "BY-196" as PublicTaskId, title: "Prerequisite", state: "todo" }],
-        },
-      ];
-      for (const failure of failures) {
-        const captured = fixture({ eligibility: failure });
-        expect(yield* captured.operations.start({ taskId, now })).toEqual(failure);
-        expect(captured.events).toEqual(["prepareTask"]);
-      }
-    }),
-  );
-
-  it.effect("recovers and prepares the same existing Change linked to a Task", () =>
-    Effect.gen(function* () {
-      const existing = recordFrom({
-        id: "existing",
-        ...intent,
-        taskId,
-        prepare: { command: "prepare repository", timeoutSeconds: 17 },
-        reviewerConfiguration,
-        now,
-      });
-      const captured = fixture({ existing });
-      const result = yield* captured.operations.start({ taskId, now });
-      expect(result).toMatchObject({ ok: true, change: { id: existing.id, taskId } });
-      expect(captured.current()?.acceptanceContext).toBe(existing.acceptanceContext);
-      expect(captured.events).toEqual([
-        "prepareTask",
-        "provisionWorktree:recover",
-        "recordPrepareOutcome:existing",
-      ]);
-    }),
-  );
-
-  it.effect("rejects a conflicting requested base before recovering the same open Change", () =>
-    Effect.gen(function* () {
-      const existing = recordFrom({
-        id: "existing",
-        ...intent,
-        taskId,
-        reviewerConfiguration,
-        now,
-      });
-      const captured = fixture({ existing });
-      expect(yield* captured.operations.start({ taskId, baseBranch: "release", now })).toEqual({
-        ok: false,
-        code: "requested_base_conflict",
-        requestedBaseBranch: "release",
-        recordedBaseBranch: "main",
-      });
-      expect(captured.events).toEqual(["prepareTask"]);
     }),
   );
 

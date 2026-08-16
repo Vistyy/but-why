@@ -2,10 +2,10 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { ChangeReconciliationPort } from "../change/changePorts.js";
-import { completeLinkedChange } from "../taskChange/adapters/sqlite/sqliteTaskChangePersistence.js";
 import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
+import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,
@@ -30,7 +30,7 @@ export const openSqliteChangeReconciliationPort = () =>
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeLinkedChange(sql, input);
+            const result = yield* completeChangeOnly(sql, input);
             if (!result.ok) return result;
             const change = yield* requireTerminalChange(
               sql,

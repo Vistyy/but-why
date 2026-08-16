@@ -11,7 +11,7 @@ import {
   type RepositorySqlConfig,
   repositorySqlLayer,
 } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {
   noOpTerminalCleanupDependencies,

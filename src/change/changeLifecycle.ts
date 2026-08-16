@@ -5,7 +5,6 @@ import {
   type RepositoryPreparationEffectExecutor,
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
-import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
 import type {
   ChangeStartGitOperations,
@@ -13,15 +12,12 @@ import type {
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
-import type {
-  ChangeReviewerConfiguration,
-  ChangeStartEligibilityError,
-  ChangeStartRecord,
-} from "./changeStartStore.js";
+import type { ChangeReviewerConfiguration, ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
 import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
+import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 export type { ChangeImplementResult };
 
@@ -32,7 +28,6 @@ export type ChangeStartResult =
       readonly code: "reviewer_configuration_invalid";
       readonly message: string;
     }
-  | ChangeStartEligibilityError
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
@@ -42,30 +37,18 @@ export type ChangePrepareResult =
   | { readonly ok: false; readonly code: "change_not_open" }
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
-export const startChange = (
-  store: ChangeStartPersistence,
+export const startChange = <CreationFailure extends object = never>(
+  store: ChangeStartPersistence<CreationFailure>,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: {
-    readonly taskId?: string;
     readonly baseBranch?: string;
+    readonly acceptanceContext?: AcceptanceContextSnapshotV1;
     readonly reviewerConfiguration?: ChangeReviewerConfiguration;
     readonly now: string;
   },
-): Effect.Effect<ChangeStartResult, RepositoryStorageError> =>
+): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (input.taskId !== undefined) {
-      const resumed = yield* resumeTaskChange(
-        store,
-        git,
-        executor,
-        input.taskId,
-        input.baseBranch,
-        input.now,
-      );
-      if (resumed !== undefined) return resumed;
-    }
-
     if (input.reviewerConfiguration === undefined) {
       return {
         ok: false as const,
@@ -81,42 +64,18 @@ export const startChange = (
     const created = yield* store.create({
       id,
       ...gitIntent.intent,
-      ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+      ...(input.acceptanceContext === undefined
+        ? {}
+        : { acceptanceContext: input.acceptanceContext }),
       reviewerConfiguration: input.reviewerConfiguration,
       now: input.now,
     });
+    if (!("ok" in created)) return created;
     if (!created.ok) return created;
 
     const provisioned = git.provisionWorktree(created.change, false);
     if (!provisioned.ok) return { ...provisioned, change: created.change };
-    return yield* prepareExisting(store, executor, created.change, input.now);
-  });
-
-const resumeTaskChange = (
-  store: ChangeStartPersistence,
-  git: ChangeStartGitOperations,
-  executor: RepositoryPreparationEffectExecutor,
-  taskId: string,
-  requestedBaseBranch: string | undefined,
-  now: string,
-): Effect.Effect<ChangeStartResult | undefined, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const eligibility = yield* store.prepareTask(taskId);
-    if (!eligibility.ok) return eligibility;
-    if (eligibility.existing === undefined) return undefined;
-    const recordedBaseBranch = parseRemoteChangeBaseRef(eligibility.existing.baseRef)?.branchName;
-    if (requestedBaseBranch !== undefined && requestedBaseBranch !== recordedBaseBranch) {
-      return {
-        ok: false,
-        code: "requested_base_conflict",
-        requestedBaseBranch,
-        ...(recordedBaseBranch === undefined ? {} : { recordedBaseBranch }),
-      } as const;
-    }
-
-    const provisioned = git.provisionWorktree(eligibility.existing, true);
-    if (!provisioned.ok) return { ...provisioned, change: eligibility.existing };
-    return yield* prepareExisting(store, executor, eligibility.existing, now);
+    return yield* prepareExistingChange(store, executor, created.change, input.now);
   });
 
 export const prepareChange = (
@@ -132,7 +91,7 @@ export const prepareChange = (
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     const provisioned = git.provisionWorktree(change, true);
     if (!provisioned.ok) return { ...provisioned, change };
-    return yield* prepareExisting(store, executor, change, now);
+    return yield* prepareExistingChange(store, executor, change, now);
   });
 
 export const implementChange = (
@@ -160,8 +119,8 @@ export const implementChange = (
 
 type PreparationResult = { readonly ok: true; readonly change: ChangeStartRecord };
 
-const prepareExisting = (
-  store: ChangeStartPersistence,
+export const prepareExistingChange = (
+  store: Pick<ChangeStartPersistence, "recordPrepareOutcome">,
   executor: RepositoryPreparationEffectExecutor,
   change: ChangeStartRecord,
   now: string,

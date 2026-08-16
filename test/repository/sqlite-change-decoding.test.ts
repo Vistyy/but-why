@@ -8,8 +8,9 @@ import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCa
 import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
 import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteTaskChangeReconciliationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
+import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
@@ -391,7 +392,9 @@ describe("SQLite Change decoding", () => {
         const capture = yield* openSqliteCandidateCapturePersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const cancellation = yield* openSqliteChangeCancellationPort();
-        const reconciliation = yield* openSqliteChangeReconciliationPort();
+        const reconciliation = yield* openSqliteTaskChangeReconciliationPort(
+          openSqliteChangeReconciliationPort(),
+        );
         const repository = yield* RepositorySql;
         const captured = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -571,7 +574,9 @@ describe("SQLite Change decoding", () => {
         const changes = yield* openSqliteChangeTestDependencies();
         const publication = yield* openSqliteCandidatePublicationPort();
         const cancellation = yield* openSqliteChangeCancellationPort();
-        const reconciliation = yield* openSqliteChangeReconciliationPort();
+        const reconciliation = yield* openSqliteTaskChangeReconciliationPort(
+          openSqliteChangeReconciliationPort(),
+        );
         const cleanup = yield* openSqliteTerminalChangeCleanupPort();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
