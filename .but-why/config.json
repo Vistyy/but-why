@@ -10,6 +10,11 @@
   "validation": {
     "checks": [
       {
+        "id": "candidate-repo-config",
+        "command": "just validate-candidate-repo-config",
+        "timeoutSeconds": 120
+      },
+      {
         "id": "quality",
         "command": "just quality",
         "timeoutSeconds": 1200

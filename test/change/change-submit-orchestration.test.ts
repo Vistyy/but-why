@@ -347,103 +347,69 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect(
-    "loads the policy baseline before Candidate capture and reviewer config after capture",
-    () =>
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const submit = openChangeSubmit(
-          dependencies({
-            events,
-            change: readyChange({
-              reviewerConfiguration: {
-                acceptanceReview: storedAcceptanceReviewer,
-                specialistReviews: [storedCandidateReviewer],
-              },
-            }),
-            trackPolicyResolution: true,
-            candidateRepoConfig: { idPrefix: "BY", review: { specialists: ["candidate"] } },
-            baselineRepoConfig: { idPrefix: "BY", review: { specialists: ["baseline"] } },
-            refreshResult: { ok: true, base: refreshedBase },
-            resolvePolicy: (
-              _acceptanceContextSupplied,
-              repoConfig,
-              _worktreePath,
-              validationRepoConfig,
-            ) => {
-              expect(repoConfig.review?.specialists).toEqual(["candidate"]);
-              expect(validationRepoConfig?.review?.specialists).toEqual(["baseline"]);
-              return {
-                ok: true,
-                resolved: {
-                  acceptanceContextSupplied: false,
-                  policy: {
-                    ...changeWithoutTaskPolicy,
-                    specialistReviews: [
-                      {
-                        id: "candidate",
-                        instructions: "Candidate reviewer",
-                        instructionsSource: "repo",
-                        profile: {
-                          agentProfile: "candidate-reviewer",
-                          scope: "repo",
-                          profile: {
-                            agentRuntime: "pi",
-                            runtimeConfig: { model: "candidate/model" },
-                          },
-                        },
-                      },
-                    ],
-                  },
-                },
-              } satisfies CandidateValidationPolicyResolution;
+  it.effect("resolves validation policy only from trusted Change Base facts", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange({
+            reviewerConfiguration: {
+              acceptanceReview: storedAcceptanceReviewer,
+              specialistReviews: [storedCandidateReviewer],
             },
           }),
-        );
-        const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: (input) =>
-            Effect.sync(() => {
-              events.push("validate_changeWithoutTask");
-              expect(input.policy.specialistReviews).toMatchObject([
-                {
-                  id: "candidate",
-                  profile: {
-                    agentProfile: "candidate-reviewer",
-                    scope: "repo",
-                    profile: { runtimeConfig: { model: "candidate/model" } },
-                  },
+          trackPolicyResolution: true,
+          baselineRepoConfig: { idPrefix: "BY", review: { specialists: ["baseline"] } },
+          refreshResult: { ok: true, base: refreshedBase },
+          resolvePolicy: (_acceptanceContextSupplied, repoConfig) => {
+            expect(repoConfig.review?.specialists).toEqual(["baseline"]);
+            return {
+              ok: true,
+              resolved: {
+                acceptanceContextSupplied: false,
+                policy: {
+                  ...changeWithoutTaskPolicy,
+                  specialistReviews: [storedCandidateReviewer],
                 },
-              ]);
-              return {
-                ok: true,
-                reused: false,
-                validationRunId: "run-1",
-                outcome: "passed",
-              } as const;
-            }),
-          validateAcceptanceContextCandidate: () =>
-            Effect.die("Acceptance Review was not expected"),
-          listFindings: () => Effect.succeed([]),
-          listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
-        });
+              },
+            } satisfies CandidateValidationPolicyResolution;
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: (input) =>
+          Effect.sync(() => {
+            events.push("validate_changeWithoutTask");
+            expect(input.policy.specialistReviews).toEqual([storedCandidateReviewer]);
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
 
-        const result = yield* submit
-          .submit({ changeId: "change-1", now })
-          .pipe(Effect.provide(validationLayer));
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
 
-        expect(result).toMatchObject({ ok: true, status: "published" });
-        expect(events).toEqual([
-          "refresh_base",
-          "capture",
-          "load_base_repo_config",
-          "load_candidate_repo_config",
-          "resolve_policy",
-          "detect_target",
-          "validate_changeWithoutTask",
-          "publish",
-        ]);
-      }),
+      expect(result).toMatchObject({ ok: true, status: "published" });
+      expect(events).toEqual([
+        "refresh_base",
+        "capture",
+        "load_base_repo_config",
+        "resolve_policy",
+        "detect_target",
+        "validate_changeWithoutTask",
+        "publish",
+      ]);
+    }),
   );
 
   it.effect("rejects invalid Change Base Repo Config after Candidate capture", () =>
@@ -1566,13 +1532,11 @@ const dependencies = (input: {
   readonly agentEnvironment?: readonly string[];
   readonly baselineRepoConfigError?: string;
   readonly trackPolicyResolution?: boolean;
-  readonly candidateRepoConfig?: RepoConfig;
   readonly baselineRepoConfig?: RepoConfig;
   readonly resolvePolicy?: (
     acceptanceContextSupplied: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
-    validationRepoConfig?: RepoConfig,
   ) => CandidateValidationPolicyResolution;
   readonly policyRejection?: SubmitRejectionError | GlobalConfigValidationFailed;
   readonly findings?: readonly (typeof finding)[];
@@ -1643,10 +1607,6 @@ const dependencies = (input: {
         }),
     } satisfies ChangeSubmissionPort,
     github: pullRequestGateway(input, events, pullRequestObservations),
-    loadRepoConfig: () => {
-      if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
-      return { ok: true as const, config: input.candidateRepoConfig ?? { idPrefix: "BY" } };
-    },
     loadRepoConfigAtCommit: () => {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
       const error = input.baselineRepoConfigError;
@@ -1658,16 +1618,10 @@ const dependencies = (input: {
       acceptanceContextSupplied: boolean,
       repoConfig: RepoConfig,
       worktreePath: string,
-      validationRepoConfig?: RepoConfig,
     ) => {
       if (input.trackPolicyResolution) events.push("resolve_policy");
       if (input.resolvePolicy !== undefined) {
-        return input.resolvePolicy(
-          acceptanceContextSupplied,
-          repoConfig,
-          worktreePath,
-          validationRepoConfig,
-        );
+        return input.resolvePolicy(acceptanceContextSupplied, repoConfig, worktreePath);
       }
       if (input.policyRejection !== undefined) {
         return { ok: false as const, error: input.policyRejection };

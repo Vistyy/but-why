@@ -136,9 +136,10 @@ History does not select or invalidate current passing evidence by recency alone.
 _Avoid_: Mutable current report
 
 **Validation Policy Snapshot**:
-The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
+The immutable resolved Prepare, Checks, copied local files, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
+Change Submit resolves current policy from the exact fetched Change Base and retains stored Change Start reviewer authority instead of reading Candidate Repo Config as policy.
 Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
-_Avoid_: Mutable current config, raw config hash, retroactive policy
+_Avoid_: Mutable current config, Candidate-controlled policy, raw config hash, retroactive policy
 
 **Agent Session**:
 The durable conversation owner for one Task Reviewer or one Change reviewer producer.
