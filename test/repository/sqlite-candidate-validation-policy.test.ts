@@ -30,6 +30,7 @@ const currentPolicy = {
     profile: {
       agentProfile: "acceptance",
       scope: "global" as const,
+      globalConfigDirectory: "/home/test/.config/but-why",
       profile: {
         agentRuntime: "pi" as const,
         runtimeConfig: {
