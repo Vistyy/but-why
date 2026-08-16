@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../sqlite/repositorySql.js";
 import {
@@ -23,7 +24,6 @@ import type {
   TaskChangeStartCreationInput,
   TaskChangeStartPersistence,
 } from "../../taskChangeStart.js";
-import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 
 export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
   TaskChangeStartPersistence,

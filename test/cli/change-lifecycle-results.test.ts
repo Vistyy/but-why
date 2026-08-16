@@ -2,8 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { describe } from "vitest";
 
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import type { PublicTaskId } from "../../src/task/taskId.js";
 import { prepareResult, startResult } from "../../src/cli/change/lifecycleResults.js";
+import type { PublicTaskId } from "../../src/task/taskId.js";
 
 const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): ChangeStartRecord => ({
   id: "change-1",
