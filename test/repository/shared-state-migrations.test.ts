@@ -348,24 +348,28 @@ describe("Shared Repository State migrations", () => {
               ),
             );
             expect(migration._tag).toBe("Failure");
-            if (migration._tag === "Failure") {
-              const failure = Cause.failureOption(migration.cause);
-              expect(failure._tag).toBe("Some");
-              if (failure._tag === "Some" && failure.value instanceof RepositoryMigrationFailed) {
-                const message = Array.from(
-                  Cause.defects(failure.value.cause as Cause.Cause<unknown>),
-                )
-                  .map((defect) =>
-                    typeof defect === "object" && defect !== null && "cause" in defect
-                      ? `${String(defect)}\n${String(defect.cause)}`
-                      : String(defect),
-                  )
-                  .join("\n");
-                expect(message).toContain("Pinned predecessor reconciliation is required");
-                expect(message).toContain(`${condition}=1`);
-                expect(message).toContain("do not restore or initialize Shared Repository State");
-              }
+            if (migration._tag !== "Failure") {
+              throw new Error("Expected Agent Session migration to fail");
             }
+            const failure = Cause.failureOption(migration.cause);
+            expect(failure._tag).toBe("Some");
+            if (failure._tag !== "Some") {
+              throw new Error("Expected a failed migration cause");
+            }
+            expect(failure.value).toBeInstanceOf(RepositoryMigrationFailed);
+            if (!(failure.value instanceof RepositoryMigrationFailed)) {
+              throw new Error("Expected RepositoryMigrationFailed");
+            }
+            const message = Array.from(Cause.defects(failure.value.cause as Cause.Cause<unknown>))
+              .map((defect) =>
+                typeof defect === "object" && defect !== null && "cause" in defect
+                  ? `${String(defect)}\n${String(defect.cause)}`
+                  : String(defect),
+              )
+              .join("\n");
+            expect(message).toContain("Pinned predecessor reconciliation is required");
+            expect(message).toContain(`${condition}=1`);
+            expect(message).toContain("do not restore or initialize Shared Repository State");
 
             yield* Effect.scoped(
               Effect.gen(function* () {
