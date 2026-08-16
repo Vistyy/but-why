@@ -263,7 +263,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("rewrites a resumed session cwd and keeps each invocation usage separate", () =>
+  it.effect("rewrites only the resumed header and preserves later records", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-"));
       const sessions = join(root, "sessions");
@@ -279,7 +279,7 @@ describe("Pi reviewer process executor", () => {
           timestamp: "2026-08-11T20:00:00.000Z",
           version: 3,
           externalMetadata: { retained: true },
-        })}\n`,
+        })}\n{"type":"message"`,
       );
       let calls = 0;
       const executor = createPiReviewerProcessExecutor((command) => {
@@ -288,6 +288,7 @@ describe("Pi reviewer process executor", () => {
         expect(persistedSession).toContain('"cwd":"/validation/workspace"');
         expect(persistedSession).toContain('"timestamp":"2026-08-11T20:00:00.000Z"');
         expect(persistedSession).toContain('"externalMetadata":{"retained":true}');
+        expect(persistedSession.endsWith('{"type":"message"')).toBe(true);
         expect(command.args).toContain("--session");
         return Effect.succeed({
           exitCode: 0,

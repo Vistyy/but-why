@@ -163,22 +163,19 @@ const preparePiSession = (input: ReviewerProcessInput): void => {
     );
   }
   const content = readFileSync(path, "utf8");
-  let headerFound = false;
-  const rewritten = content
-    .split("\n")
-    .map((line) => {
-      if (line === "") return line;
-      const entry = decodeJsonlObject(line, "Reviewer Session JSONL is corrupt.");
-      if (!isPiSessionRecord(entry)) return line;
-      const header = decodePiSessionHeader(entry);
-      if (headerFound || header?.id !== input.resumeSession) {
-        throw new Error("Reviewer Session header is incompatible.");
-      }
-      headerFound = true;
-      return JSON.stringify({ ...header, cwd: input.commandCwd });
-    })
-    .join("\n");
-  if (!headerFound) throw new Error("Reviewer Session header is missing.");
+  const lines = content.split("\n");
+  const firstLine = lines[0];
+  if (firstLine === undefined || firstLine === "") {
+    throw new Error("Reviewer Session header is missing.");
+  }
+  const entry = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
+  if (!isPiSessionRecord(entry)) throw new Error("Reviewer Session header is missing.");
+  const header = decodePiSessionHeader(entry);
+  if (header?.id !== input.resumeSession) {
+    throw new Error("Reviewer Session header is incompatible.");
+  }
+  lines[0] = JSON.stringify({ ...header, cwd: input.commandCwd });
+  const rewritten = lines.join("\n");
   if (rewritten === content) return;
   const temporaryPath = `${path}.but-why-tmp`;
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
