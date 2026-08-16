@@ -16,6 +16,7 @@ import type {
   TaskReviewProposal,
   TaskReviewRecord,
   TaskReviewToolingFailure,
+  LegacyTaskReviewToolingFailure,
 } from "../task/review/taskReview.js";
 import type {
   CompleteTaskReviewSuccess,
@@ -381,19 +382,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             `;
           }
         }).pipe(Effect.asVoid),
-    getReviewerSession: (taskId, producer) =>
-      repository.transaction("read legacy Task Reviewer Session", (sql) =>
-        Effect.map(
-          sql<{ readonly fingerprint: string; readonly sessionReference: string }>`
-            SELECT fingerprint, session_reference AS sessionReference
-            FROM task_reviewer_sessions WHERE task_id = ${taskId}
-          `,
-          (rows) => {
-            const row = rows[0];
-            return row === undefined ? undefined : { ownerId: taskId, producer, ...row };
-          },
-        ),
-      ),
     recordActiveFailure: (reviewId, failure, now) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>
         Effect.asVoid(sql`
@@ -1056,15 +1044,17 @@ const parseWorkspaceCleanup = (value: string): TaskReviewRecord["workspaceCleanu
   if (value === "not_created" || value === "removed" || value === "failed") return value;
   throw new Error("Invalid Task Review workspace cleanup");
 };
-const parseFailure = (source: string): TaskReviewToolingFailure => {
+const parseFailure = (
+  source: string,
+): TaskReviewToolingFailure | LegacyTaskReviewToolingFailure => {
   const value = parseObject(source);
-  return {
+  const failure = {
     operation: requiredString(value.operation),
     message: requiredString(value.message),
-    ...(value.pendingExecution === undefined
-      ? {}
-      : { pendingExecution: parseExecution(value.pendingExecution) }),
   };
+  return value.pendingExecution === undefined
+    ? failure
+    : { ...failure, pendingExecution: parseExecution(value.pendingExecution) };
 };
 const parseExecution = (source: unknown): TaskReviewExecution => {
   const value = parseObject(JSON.stringify(source));

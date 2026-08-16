@@ -187,6 +187,11 @@ describe("Change inspection CLI", () => {
         currentValidationRun: null,
         findingCount: 0,
         toolingFailureCount: 0,
+        legacyReviewerEvidence: {
+          classification: "legacy",
+          sessions: [],
+          transcripts: [],
+        },
         pullRequest: null,
         cleanup: { state: "complete", blockingReason: null },
       });

@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, expect, vi } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   piReviewerAgentRuntime,
@@ -10,7 +10,6 @@ import type {
   ReviewerProcessExecutor,
   ReviewerProcessResult,
 } from "../../src/agent/reviewerExecution.js";
-import { ReviewerProcessExecutionFailed } from "../../src/agent/reviewerExecution.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
@@ -144,152 +143,26 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
-  it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
+  it.effect("does not retry an invalid output inside the process runtime", () =>
     Effect.gen(function* () {
-      const corrected = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      const resume = vi.fn(() => Effect.succeed(corrected));
-      const dangling = processResult(
-        '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
-        resume,
-      );
-
+      let executions = 0;
       const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: { execute: () => Effect.succeed(dangling) },
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile,
-      });
-
-      expect(result).toMatchObject({ ok: true, attempts: 2, report: { findings: [] } });
-      expect(resume).toHaveBeenCalledWith(expect.stringContaining("does not resolve"));
-    }),
-  );
-
-  it.effect("accepts a corrected report on the third attempt", () =>
-    Effect.gen(function* () {
-      const third = processResult('<reviewer-output>{"findings":[]}</reviewer-output>');
-      const resumeSecond = vi.fn(() => Effect.succeed(third));
-      const second = processResult(
-        '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
-        resumeSecond,
-      );
-      const resumeFirst = vi.fn(() => Effect.succeed(second));
-      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Effect.succeed(first));
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: { execute: run },
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile,
-      });
-
-      expect(result).toEqual({
-        ok: true,
-        report: { findings: [] },
-        attempts: 3,
-        stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
-        invocationUsage: [null, null, null],
-      });
-      expect(run).toHaveBeenCalledTimes(1);
-      expect(resumeFirst).toHaveBeenCalledTimes(1);
-      expect(resumeSecond).toHaveBeenCalledTimes(1);
-      expect(resumeFirst).toHaveBeenCalledWith(expect.stringContaining("$: Expected"));
-      expect(resumeSecond).toHaveBeenCalledWith(
-        expect.stringContaining("findings: Expected ReadonlyArray"),
-      );
-    }),
-  );
-
-  it.effect("fails after three invalid outputs without a fourth invocation", () =>
-    Effect.gen(function* () {
-      const resumeThird = vi.fn(() => Effect.succeed(processResult("must not run")));
-      const third = processResult(
-        '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
-        resumeThird,
-      );
-      const resumeSecond = vi.fn(() => Effect.succeed(third));
-      const second = processResult(
-        '<reviewer-output>{"findings":"wrong"}</reviewer-output>',
-        resumeSecond,
-      );
-      const resumeFirst = vi.fn(() => Effect.succeed(second));
-      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Effect.succeed(first));
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: { execute: run },
-        reviewer: "acceptance",
-        decodeOutput: decodeEmptyFindings,
-        prompt: "Review the Candidate.",
-        profile,
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        attempts: 3,
-        failure: {
-          _tag: "ReviewerExecutionFailed",
-          operationName: "decode_reviewer_output",
+        reviewerExecutor: {
+          execute: () => {
+            executions += 1;
+            return Effect.succeed(processResult("<reviewer-output>not json</reviewer-output>"));
+          },
         },
-        sessionUsability: "unknown",
-        stdout: '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
-      });
-      expect(run).toHaveBeenCalledTimes(1);
-      expect(resumeFirst).toHaveBeenCalledTimes(1);
-      expect(resumeSecond).toHaveBeenCalledTimes(1);
-      expect(resumeThird).not.toHaveBeenCalled();
-      expect(resumeFirst).toHaveBeenCalledWith(expect.stringContaining("$: Expected"));
-      expect(resumeSecond).toHaveBeenCalledWith(
-        expect.stringContaining("findings: Expected ReadonlyArray"),
-      );
-    }),
-  );
-
-  it.effect("stops after a failed output correction invocation", () =>
-    Effect.gen(function* () {
-      const resumeFirst = vi.fn(() =>
-        Effect.fail(
-          new ReviewerProcessExecutionFailed({
-            message: "provider failed",
-            sessionUsability: "unknown",
-          }),
-        ),
-      );
-      const first = processResult("<reviewer-output>not json</reviewer-output>", resumeFirst);
-      const run = vi.fn(() => Effect.succeed(first));
-
-      const result = yield* piReviewerAgentRuntime.review({
-        reviewerExecutor: { execute: run },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
       });
 
-      expect(result).toMatchObject({
-        ok: false,
-        attempts: 2,
-        failure: {
-          _tag: "ReviewerExecutionFailed",
-          operationName: "run_reviewer_process",
-          message: "provider failed",
-        },
-        sessionUsability: "unknown",
-        stdout: "<reviewer-output>not json</reviewer-output>",
-      });
-      expect(run).toHaveBeenCalledTimes(1);
-      expect(resumeFirst).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ ok: false, attempts: 1 });
+      expect(executions).toBe(1);
     }),
   );
 });
 
-const processResult = (
-  stdout: string,
-  resume?: ReviewerProcessResult["resume"],
-): ReviewerProcessResult => ({
-  stdout,
-  ...(resume === undefined ? {} : { resume }),
-});
+const processResult = (stdout: string): ReviewerProcessResult => ({ stdout });

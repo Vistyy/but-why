@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
@@ -134,7 +141,6 @@ describe("Pi reviewer process executor", () => {
           sessionReference: sessionId,
           sessionFilePath: sessionFile,
         });
-        expect(result.resume).toBeTypeOf("function");
         expect(readFileSync(sessionFile, "utf8")).toContain(sessionId);
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -172,6 +178,53 @@ describe("Pi reviewer process executor", () => {
             sessionFilePath: sessionFile,
           },
         });
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("restores only the resumed transcript and preserves unrelated process files", () =>
+    Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-narrow-recovery-"));
+      const sessions = join(root, "sessions");
+      mkdirSync(sessions);
+      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
+      const sessionFile = join(sessions, `review_${sessionId}.jsonl`);
+      const original = `${JSON.stringify({ type: "session", id: sessionId, cwd: "/old" })}\n`;
+      writeFileSync(sessionFile, original);
+      const unrelatedFile = join(sessions, "unrelated.txt");
+      writeFileSync(unrelatedFile, "before\n");
+      const executor = createPiReviewerProcessExecutor(() => {
+        appendFileSync(sessionFile, "partial transcript\n");
+        appendFileSync(unrelatedFile, "after\n");
+        return Effect.succeed({
+          exitCode: 1,
+          stderr: "Pi stopped after partial output.",
+          stdout: `${JSON.stringify({ type: "session", id: sessionId })}\n${messageEvent(
+            '<reviewer-output>{"findings":[]}</reviewer-output>',
+            { input: 7, output: 2, cacheRead: 3, cacheWrite: 0, totalTokens: 12 },
+          )}\n`,
+        });
+      });
+
+      try {
+        const result = yield* Effect.either(
+          executor.execute({ ...input, sessionStorageRoot: sessions, resumeSession: sessionId }),
+        );
+        expect(result).toMatchObject({
+          _tag: "Left",
+          left: {
+            invocationUsage: {
+              inputTokens: 7,
+              cachedInputTokens: 3,
+              outputTokens: 2,
+              totalTokens: 12,
+            },
+          },
+        });
+        expect(readFileSync(sessionFile, "utf8")).toBe(original);
+        expect(readFileSync(unrelatedFile, "utf8")).toBe("before\nafter\n");
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -252,8 +305,12 @@ describe("Pi reviewer process executor", () => {
           sessionStorageRoot: sessions,
           resumeSession: sessionId,
         });
-        if (first.resume === undefined) throw new Error("Expected reviewer continuation.");
-        const second = yield* first.resume("Correct the output.");
+        const second = yield* executor.execute({
+          ...input,
+          sessionStorageRoot: sessions,
+          resumeSession: sessionId,
+          prompt: "Correct the output.",
+        });
 
         expect(first.invocationUsage).toMatchObject({ inputTokens: 11, totalTokens: 13 });
         expect(second.invocationUsage).toMatchObject({

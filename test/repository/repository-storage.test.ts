@@ -2155,16 +2155,17 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        const live = yield* changes.reviewerSessions.getReviewerSession(
+        const live = yield* changes.reviewerSessions.listReviewerSessions(
           "change-transcript-retained",
-          "acceptance",
         );
-        expect(live).toEqual({
-          ownerId: "change-transcript-retained",
-          producer: "acceptance",
-          fingerprint: "fingerprint",
-          sessionReference: "session-live",
-        });
+        expect(live).toEqual([
+          {
+            ownerId: "change-transcript-retained",
+            producer: "acceptance",
+            fingerprint: "fingerprint",
+            sessionReference: "session-live",
+          },
+        ]);
         const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
           "change-transcript-retained",
         );

@@ -135,6 +135,9 @@ export type ChangeReadPort = {
 };
 
 export type ChangeReviewerSessionPort = {
+  readonly listReviewerSessions: (
+    changeId: string,
+  ) => StorageEffect<readonly ReviewerSessionRecord[]>;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
@@ -146,10 +149,6 @@ export type ChangeReviewerSessionPort = {
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
   }) => AgentSessionSqlLink;
-  readonly getReviewerSession: (
-    changeId: string,
-    producer: string,
-  ) => StorageEffect<ReviewerSessionRecord | undefined>;
 };
 
 export type ChangeReviewerTranscriptPort = {

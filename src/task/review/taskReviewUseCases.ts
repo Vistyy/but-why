@@ -236,7 +236,6 @@ const submitTaskReview = (
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
     let taskReviewEvidence: ReviewerExecutionEvidence | undefined;
-    let taskReviewSessionReference: string | null | undefined;
     const result = yield* runAfterSubmitProgressStarted({
       progress: input.progress,
       started: () => taskReviewProgress,
@@ -374,7 +373,6 @@ const submitTaskReview = (
               );
               const reviewed = execution.result;
               const sessionReference = reviewed.sessionReference ?? null;
-              taskReviewSessionReference = sessionReference;
               return reviewed.ok
                 ? ({
                     ok: true,
@@ -405,18 +403,7 @@ const submitTaskReview = (
                       message: workspace.toolingError.errorMessage,
                     },
               };
-        const executionEvidence = execution.evidence ?? taskReviewEvidence;
-        const settlement = yield* settleTaskReviewEvidence(
-          input,
-          admitted.review,
-          now,
-          executionEvidence === undefined
-            ? undefined
-            : {
-                ...executionEvidence,
-                sessionReference: execution.sessionReference ?? taskReviewSessionReference ?? null,
-              },
-        );
+        const settlement = yield* settleTaskReviewEvidence(input, admitted.review, now);
         if (!settlement.ok) {
           return {
             ok: false,

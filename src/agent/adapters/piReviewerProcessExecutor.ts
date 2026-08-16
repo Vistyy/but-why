@@ -36,33 +36,46 @@ const executePiReviewerProcess = (
   executeCommand: PiCommandExecutor,
 ): Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed> =>
   Effect.gen(function* () {
-    if (input.resumeSession !== undefined) {
-      yield* Effect.try({
-        try: () => preparePiSession(input),
-        catch: (error) => reviewerProcessExecutionFailed(error),
-      });
-    }
-
-    const invocation = yield* Effect.try({
-      try: () => commandInvocation(input),
+    const sessionSnapshot = yield* Effect.try({
+      try: () => snapshotPiContinuation(input),
       catch: (error) => reviewerProcessExecutionFailed(error),
     });
-    const commandResult = yield* executeCommand({
-      command: invocation.command,
-      args: invocation.args,
-      cwd: input.commandCwd,
-    }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
+    const commandResult = yield* Effect.gen(function* () {
+      if (input.resumeSession !== undefined) {
+        yield* Effect.try({
+          try: () => preparePiSession(input),
+          catch: (error) => reviewerProcessExecutionFailed(error),
+        });
+      }
+
+      const invocation = yield* Effect.try({
+        try: () => commandInvocation(input),
+        catch: (error) => reviewerProcessExecutionFailed(error),
+      });
+      return yield* executeCommand({
+        command: invocation.command,
+        args: invocation.args,
+        cwd: input.commandCwd,
+      }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
+    }).pipe(Effect.tapError(() => Effect.sync(() => restorePiContinuation(sessionSnapshot))));
     if (commandResult.exitCode !== 0) {
+      restorePiContinuation(sessionSnapshot);
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
         .filter((value) => value.length > 0)
         .join("\n");
       const sessionMetadata = sessionMetadataAfterFailure(input, commandResult.stdout);
+      const parsedEvidence = parsePiInvocationEvidence(commandResult.stdout);
       return yield* Effect.fail(
         reviewerProcessExecutionFailed(
           diagnostic.length > 0
             ? diagnostic
             : `Pi reviewer exited with status ${commandResult.exitCode}.`,
-          sessionMetadata,
+          {
+            ...sessionMetadata,
+            ...(parsedEvidence.usage === undefined
+              ? {}
+              : { invocationUsage: parsedEvidence.usage }),
+          },
         ),
       );
     }
@@ -84,28 +97,12 @@ const executePiReviewerProcess = (
       sessionReference === undefined || sessionStorageRoot === undefined
         ? undefined
         : findSessionFile(sessionStorageRoot, sessionReference);
-    const result: ReviewerProcessResult = {
+    return {
       stdout: parsed.stdout,
       invocationUsage: parsed.usage ?? null,
       ...(sessionReference === undefined ? {} : { sessionReference }),
       ...(sessionFilePath === undefined ? {} : { sessionFilePath }),
     };
-
-    return sessionReference === undefined
-      ? result
-      : {
-          ...result,
-          resume: (prompt) =>
-            executePiReviewerProcess(
-              {
-                ...input,
-                prompt,
-                sessionId: sessionReference,
-                resumeSession: sessionReference,
-              },
-              executeCommand,
-            ),
-        };
   });
 
 export const createPiReviewerProcessExecutor = (
@@ -194,6 +191,48 @@ const preparePiSession = (input: ReviewerProcessInput): void => {
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
   chmodSync(temporaryPath, 0o600);
   renameSync(temporaryPath, path);
+};
+
+const parsePiInvocationEvidence = (
+  output: string,
+): { readonly sessionReference?: string; readonly usage?: TokenUsage } => {
+  let sessionReference: string | undefined;
+  let usageAvailable = true;
+  let messageEnds = 0;
+  const usage = {
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
+
+  for (const line of output.split("\n")) {
+    if (line === "") continue;
+    let event: Readonly<Record<string, unknown>>;
+    try {
+      event = decodePiJsonlObject(line);
+    } catch {
+      continue;
+    }
+    sessionReference = decodePiSessionIdentity(event) ?? sessionReference;
+    const messageEnd = decodePiAssistantMessageEnd(event);
+    if (messageEnd === undefined) continue;
+    messageEnds += 1;
+    const messageUsage = decodePiMessageUsage(messageEnd.message.usage);
+    if (messageUsage === undefined) {
+      usageAvailable = false;
+      continue;
+    }
+    usage.inputTokens += messageUsage.inputTokens;
+    usage.cachedInputTokens += messageUsage.cachedInputTokens;
+    usage.outputTokens += messageUsage.outputTokens;
+    usage.totalTokens += messageUsage.totalTokens;
+  }
+
+  return {
+    ...(sessionReference === undefined ? {} : { sessionReference }),
+    ...(messageEnds > 0 && usageAvailable ? { usage } : {}),
+  };
 };
 
 const parsePiOutput = (
@@ -342,9 +381,34 @@ const sessionReferenceFromOutput = (output: string): string | undefined => {
   return undefined;
 };
 
+type PiContinuationSnapshot = {
+  readonly path: string;
+  readonly contents: string;
+  readonly mode: number;
+};
+
+const snapshotPiContinuation = (
+  input: ReviewerProcessInput,
+): PiContinuationSnapshot | undefined => {
+  if (input.resumeSession === undefined || input.sessionStorageRoot === undefined) return undefined;
+  const path = findSessionFile(input.sessionStorageRoot, input.resumeSession);
+  if (path === undefined) return undefined;
+  return { path, contents: readFileSync(path, "utf8"), mode: statSync(path).mode };
+};
+
+const restorePiContinuation = (snapshot: PiContinuationSnapshot | undefined): void => {
+  if (snapshot === undefined) return;
+  writeFileSync(snapshot.path, snapshot.contents, { mode: snapshot.mode & 0o777 });
+  chmodSync(snapshot.path, snapshot.mode & 0o777);
+};
+
 const reviewerProcessExecutionFailed = (
   error: unknown,
-  metadata: { readonly sessionReference?: string; readonly sessionFilePath?: string } = {},
+  metadata: {
+    readonly invocationUsage?: TokenUsage | null;
+    readonly sessionReference?: string;
+    readonly sessionFilePath?: string;
+  } = {},
 ): ReviewerProcessExecutionFailed => {
   const message = error instanceof Error ? error.message : String(error);
   return new ReviewerProcessExecutionFailed({

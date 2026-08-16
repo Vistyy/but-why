@@ -6,6 +6,7 @@ import type { AgentSessionPersistence } from "../../src/agent/agentSession/agent
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
@@ -127,7 +128,6 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       getReviewerAgentSession: unused,
       linkAgentInvocation: defaultAgentLink,
       settleAgentReview: () => () => Effect.void,
-      getReviewerSession: unused,
       recordActiveFailure: unused,
       proposalIsCurrent: unused,
     };
@@ -480,21 +480,24 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
                 workspacePath,
                 now: "2026-08-11T12:00:00.000Z",
               });
-              yield* reviews.recordActiveFailure(
-                reviewId,
-                {
-                  operation: "record_task_review_execution",
-                  message: "Task Review execution persistence failed twice.",
-                  pendingExecution: {
-                    continuity: "fresh",
-                    identityFingerprint: "fingerprint",
-                    durationMs: 5,
-                    reviewCalls: 1,
-                    invocationUsage: [null],
-                    sessionReference: "session-1",
-                  },
-                },
-                "2026-08-11T12:00:01.000Z",
+              const repository = yield* RepositorySql;
+              yield* repository.transactionImmediate("seed legacy Task Review evidence", (sql) =>
+                sql`
+                  UPDATE task_reviews
+                  SET tooling_failure = ${JSON.stringify({
+                    operation: "record_task_review_execution",
+                    message: "Task Review execution persistence failed twice.",
+                    pendingExecution: {
+                      continuity: "fresh",
+                      identityFingerprint: "fingerprint",
+                      durationMs: 5,
+                      reviewCalls: 1,
+                      invocationUsage: [null],
+                      sessionReference: "session-1",
+                    },
+                  })}
+                  WHERE id = ${reviewId}
+                `.pipe(Effect.asVoid),
               );
             }),
           ),
@@ -511,7 +514,11 @@ it.effect("inspects and abandons only one exact Active Task Review workspace", (
         workspace: { path: workspacePath },
         toolingFailure: {
           operation: "record_task_review_execution",
-          pendingExecution: { sessionReference: "session-1" },
+          message: "Task Review execution persistence failed twice.",
+        },
+        legacyReviewerEvidence: {
+          classification: "legacy",
+          pendingExecutions: [{ sessionReference: "session-1" }],
         },
         identity: { verified: true, workspace: { state: "matching" } },
       },
@@ -1049,7 +1056,11 @@ it.effect(
             id: expect.any(Number),
             invocations: [{ settlementKind: "returned" }],
           },
-          legacyReviewerEvidence: { sessions: [], transcripts: [] },
+          legacyReviewerEvidence: {
+            classification: "legacy",
+            sessions: [],
+            transcripts: [],
+          },
         },
       });
 

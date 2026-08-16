@@ -1,5 +1,6 @@
 import type { PiAgentProfileConfig, PiRuntimeConfig } from "../../../contracts/agentConfig.js";
 import type {
+  TaskReviewExecution,
   TaskReviewPolicySnapshot,
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
@@ -46,7 +47,13 @@ export const taskReviewView = (
   ...(identity === undefined ? {} : { identity }),
   findings: review.findings,
   findingCount: review.findings.length,
-  toolingFailure: review.toolingFailure,
+  toolingFailure:
+    review.toolingFailure === null
+      ? null
+      : {
+          operation: review.toolingFailure.operation,
+          message: review.toolingFailure.message,
+        },
   recovery: {
     workspaceCleanup: review.workspaceCleanup,
     failedOperation: review.toolingFailure?.operation ?? null,
@@ -60,8 +67,10 @@ export const taskReviewView = (
     ? {}
     : { sessions: review.sessions, transcripts: review.transcripts }),
   legacyReviewerEvidence: {
+    classification: "legacy",
     sessions: review.sessions,
     transcripts: review.transcripts,
+    ...legacyPendingExecutions(review.toolingFailure),
   },
   abandonReason: review.abandonReason,
   createdAt: review.createdAt,
@@ -70,6 +79,13 @@ export const taskReviewView = (
 
 const hasAgentEvidence = (review: TaskReviewRecord): boolean =>
   review.agentSessionId !== undefined || review.agentInvocations !== undefined;
+
+const legacyPendingExecutions = (
+  failure: TaskReviewRecord["toolingFailure"],
+): { readonly pendingExecutions?: readonly TaskReviewExecution[] } =>
+  failure !== null && "pendingExecution" in failure
+    ? { pendingExecutions: [failure.pendingExecution] }
+    : {};
 
 const taskReviewRecoveryActions = (
   review: TaskReviewRecord,

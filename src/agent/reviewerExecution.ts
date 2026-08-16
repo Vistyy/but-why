@@ -8,6 +8,7 @@ export class ReviewerProcessExecutionFailed extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly sessionUsability: "unusable" | "unknown";
+  readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
 }> {}
@@ -17,9 +18,6 @@ export type ReviewerProcessResult = {
   readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
-  readonly resume?: (
-    prompt: string,
-  ) => Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>;
 };
 
 export type ReviewerProcessInput = {

@@ -1,6 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { Data, Effect } from "effect";
 import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { AgentEnvironmentCommand } from "./agentEnvironment.js";
@@ -21,6 +19,7 @@ export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecution
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
 }> {}
@@ -36,6 +35,7 @@ export type ReviewerRuntimeFailure = {
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
   readonly sessionUsability?: ReviewerSessionUsability;
+  readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
 };
@@ -60,7 +60,8 @@ export type ReviewerAgentInput<Output> = {
   readonly sessionStorageRoot?: string;
   readonly sessionId?: string;
   readonly resumeSession?: string;
-  readonly singleInvocation?: boolean;
+  /** The exact persisted continuation file used for narrow interruption recovery. */
+  readonly continuationFilePath?: string;
 };
 
 export type ReviewerAgentResult<Output = unknown> =
@@ -89,19 +90,13 @@ const reviewWithPi = <Output>(
 ): Effect.Effect<ReviewerAgentResult<Output>> =>
   Effect.gen(function* () {
     const sessionSnapshot =
-      input.resumeSession === undefined || input.sessionStorageRoot === undefined
+      input.resumeSession === undefined || input.continuationFilePath === undefined
         ? undefined
-        : snapshotSessionRoot(input.sessionStorageRoot);
+        : snapshotContinuationFile(input.continuationFilePath);
     let sessionSnapshotSettled = false;
     const restoreSession = () => {
       if (sessionSnapshotSettled) return;
-      if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
-      cleanupSessionSnapshot(sessionSnapshot);
-      sessionSnapshotSettled = true;
-    };
-    const retainSession = () => {
-      if (sessionSnapshotSettled) return;
-      cleanupSessionSnapshot(sessionSnapshot);
+      if (sessionSnapshot !== undefined) restoreContinuationFile(sessionSnapshot);
       sessionSnapshotSettled = true;
     };
     const review = Effect.gen(function* () {
@@ -125,50 +120,18 @@ const reviewWithPi = <Output>(
       );
       if (initial._tag === "Left") {
         restoreSession();
-        return reviewerProcessFailure(initial.left, 1, "", [null]);
+        return reviewerProcessFailure(initial.left, 1, "");
       }
-      let current = initial.right;
-      const invocationUsage: (TokenUsage | null)[] = [current.invocationUsage ?? null];
-      let validation = yield* Effect.either(validateRunResult(input, current));
+      const invocationUsage: readonly (TokenUsage | null)[] = [
+        initial.right.invocationUsage ?? null,
+      ];
+      const validation = yield* Effect.either(validateRunResult(input, initial.right));
       if (validation._tag === "Right") {
-        retainSession();
-        return successfulResult(validation.right, current, 1, invocationUsage);
+        sessionSnapshotSettled = true;
+        return successfulResult(validation.right, initial.right, 1, invocationUsage);
       }
-
-      if (input.singleInvocation === true) {
-        retainSession();
-        return failedOutputResult(validation.left, current, 1, invocationUsage);
-      }
-
-      let attempts = 1;
-      while (validation._tag === "Left" && attempts < 3) {
-        const failure = validation.left;
-        if (current.resume === undefined) {
-          restoreSession();
-          return failedOutputResult(failure, current, attempts, invocationUsage);
-        }
-        attempts += 1;
-        const corrected = yield* Effect.either(
-          resumeReviewerProcess(current, failure.correctionPrompt ?? failure.message),
-        );
-        if (corrected._tag === "Left") {
-          restoreSession();
-          return reviewerProcessFailure(corrected.left, attempts, current.stdout, [
-            ...invocationUsage,
-            null,
-          ]);
-        }
-        current = corrected.right;
-        invocationUsage.push(current.invocationUsage ?? null);
-        validation = yield* Effect.either(validateRunResult(input, current));
-      }
-
-      if (validation._tag === "Right") {
-        retainSession();
-        return successfulResult(validation.right, current, attempts, invocationUsage);
-      }
-      restoreSession();
-      return failedOutputResult(validation.left, current, attempts, invocationUsage);
+      sessionSnapshotSettled = true;
+      return failedOutputResult(validation.left, initial.right, 1, invocationUsage);
     });
 
     return yield* review.pipe(Effect.ensuring(Effect.sync(restoreSession)));
@@ -218,20 +181,6 @@ const runReviewerProcess = (
 ): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
   translateProcessFailure(executor.execute(input));
 
-const resumeReviewerProcess = (
-  result: ReviewerProcessResult,
-  prompt: string,
-): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
-  translateProcessFailure(
-    result.resume?.(prompt) ??
-      Effect.fail(
-        new ReviewerProcessExecutionFailed({
-          message: "Reviewer continuation is unavailable.",
-          sessionUsability: "unknown",
-        }),
-      ),
-  );
-
 const translateProcessFailure = (
   effect: Effect.Effect<ReviewerProcessResult, ReviewerProcessExecutionFailed>,
 ): Effect.Effect<ReviewerProcessResult, ReviewerExecutionFailed> =>
@@ -243,6 +192,9 @@ const translateProcessFailure = (
           message: error.message,
           kind: "process_execution",
           sessionUsability: error.sessionUsability,
+          ...(error.invocationUsage === undefined
+            ? {}
+            : { invocationUsage: error.invocationUsage }),
           ...(error.sessionReference === undefined
             ? {}
             : { sessionReference: error.sessionReference }),
@@ -257,37 +209,35 @@ const reviewerProcessFailure = (
   failure: ReviewerExecutionFailed,
   attempts: number,
   stdout: string,
-  invocationUsage: readonly (TokenUsage | null)[],
 ): ReviewerAgentResult<never> => ({
   ok: false,
   failure,
   sessionUsability: failure.sessionUsability ?? "unknown",
   attempts,
   stdout,
-  invocationUsage,
+  invocationUsage: [failure.invocationUsage ?? null],
   ...(failure.sessionReference === undefined ? {} : { sessionReference: failure.sessionReference }),
   ...(failure.sessionFilePath === undefined ? {} : { sessionFilePath: failure.sessionFilePath }),
 });
 
-const snapshotSessionRoot = (
-  root: string,
-): { readonly root: string; readonly snapshot: string } | undefined => {
-  if (!existsSync(root)) return undefined;
-  const snapshot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-"));
-  cpSync(root, join(snapshot, "sessions"), { recursive: true });
-  return { root, snapshot };
+type ContinuationFileSnapshot = {
+  readonly path: string;
+  readonly contents: string;
+  readonly mode: number;
 };
 
-const cleanupSessionSnapshot = (
-  value: { readonly root: string; readonly snapshot: string } | undefined,
-): void => {
-  if (value !== undefined) rmSync(value.snapshot, { recursive: true, force: true });
+const snapshotContinuationFile = (path: string): ContinuationFileSnapshot | undefined => {
+  if (!existsSync(path)) return undefined;
+  return {
+    path,
+    contents: readFileSync(path, "utf8"),
+    mode: statSync(path).mode,
+  };
 };
 
-const restoreSessionRoot = (value: { readonly root: string; readonly snapshot: string }): void => {
-  const source = join(value.snapshot, "sessions");
-  rmSync(value.root, { recursive: true, force: true });
-  cpSync(source, value.root, { recursive: true });
+const restoreContinuationFile = (snapshot: ContinuationFileSnapshot): void => {
+  writeFileSync(snapshot.path, snapshot.contents, { mode: snapshot.mode & 0o777 });
+  chmodSync(snapshot.path, snapshot.mode & 0o777);
 };
 
 const processMetadata = (

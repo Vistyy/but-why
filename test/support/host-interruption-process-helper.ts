@@ -85,6 +85,7 @@ const program = Effect.scoped(
       commandCwd: dirname(sessionPath),
       sessionStorageRoot: dirname(sessionPath),
       resumeSession: "stored-session",
+      continuationFilePath: sessionPath,
     });
   }),
 );

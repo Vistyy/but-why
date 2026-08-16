@@ -30,9 +30,15 @@ const migrationPrecondition = (sql: SqlClient.SqlClient) =>
       pendingChangeCleanup: changeCleanup[0]?.count ?? 0,
     };
     if (Object.values(facts).some((count) => count !== 0)) {
+      const blocked = Object.entries(facts)
+        .filter(([, count]) => count !== 0)
+        .map(([condition, count]) => `${condition}=${count}`)
+        .join(", ");
       return yield* Effect.fail(
         new Error(
-          `Agent Session migration requires settled prerelease state: ${JSON.stringify(facts)}`,
+          `Pinned predecessor reconciliation is required before the Agent Session migration can proceed. ` +
+            `Blocked prerelease conditions: ${blocked}. ` +
+            `Run the pinned predecessor executable to reconcile these conditions; do not restore or initialize Shared Repository State.`,
         ),
       );
     }

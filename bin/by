@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const args = process.argv.slice(2);
 
@@ -147,7 +147,17 @@ function readPinnedPredecessorManifest(path) {
   }
 
   const value = parsed;
-  const executable = resolve(dirname(path), value.executable);
+  let manifestDirectory;
+  try {
+    manifestDirectory = realpathSync(dirname(path));
+  } catch {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor manifest directory could not be resolved.",
+      details: { path },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
   const sha256 = value.sha256.toLowerCase();
   if (
     value.changeId.trim().length === 0 ||
@@ -158,6 +168,44 @@ function readPinnedPredecessorManifest(path) {
       code: "pinned_predecessor_manifest_invalid",
       message: "The Pinned Predecessor manifest has invalid identity or integrity facts.",
       details: { path },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+
+  if (isAbsolute(value.executable)) {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor executable must be a relative path beneath its manifest.",
+      details: { path, executable: value.executable },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+  const resolvedExecutable = resolve(manifestDirectory, value.executable);
+  if (!isContainedPath(manifestDirectory, resolvedExecutable)) {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor executable must remain beneath its manifest directory.",
+      details: { path, executable: value.executable },
+      help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
+    });
+  }
+
+  let executable;
+  try {
+    executable = realpathSync(resolvedExecutable);
+  } catch {
+    fail({
+      code: "pinned_predecessor_unavailable",
+      message: "The recorded Pinned Predecessor Executable is unavailable.",
+      details: { path: resolvedExecutable, predecessorCommit: value.commit, predecessorSha256: sha256 },
+      help: "Restore the recorded Pinned Predecessor bundle, then retry exact Change reconciliation.",
+    });
+  }
+  if (!isContainedPath(manifestDirectory, executable)) {
+    fail({
+      code: "pinned_predecessor_manifest_invalid",
+      message: "The Pinned Predecessor executable resolves outside its manifest directory.",
+      details: { path, executable: value.executable },
       help: "Restore a valid Pinned Predecessor manifest, then retry exact Change reconciliation.",
     });
   }
@@ -195,6 +243,12 @@ function readPinnedPredecessorManifest(path) {
     sha256,
     executable,
   };
+}
+
+function isContainedPath(root, candidate) {
+  const remainder = relative(root, candidate);
+  return remainder === "" ||
+    (remainder !== ".." && !remainder.startsWith(`..${sep}`) && !isAbsolute(remainder));
 }
 
 function exactReconcileChangeId(commandArgs) {
