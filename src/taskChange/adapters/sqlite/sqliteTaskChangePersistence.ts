@@ -5,7 +5,11 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import {
+  changeIdSqlParameter,
+  RepositorySql,
+  taskIdSqlParameter,
+} from "../../../sqlite/repositorySql.js";
 import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
 import {
   completeTask,
@@ -121,7 +125,7 @@ export const readTaskChangeLinkByTaskId = (sql: SqlClient.SqlClient, taskId: str
     sql<{ readonly taskId: string; readonly changeId: string }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE task_id = ${taskId}
+      WHERE task_id = ${taskIdSqlParameter(taskId)}
     `,
     (rows) => Effect.succeed(rows[0]),
   );
@@ -131,7 +135,7 @@ const readTaskChangeLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string
     sql<{ readonly taskId: string; readonly changeId: string }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE change_id = ${changeId}
+      WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) => Effect.succeed(rows[0]),
   );

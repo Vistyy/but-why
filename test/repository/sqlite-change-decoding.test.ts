@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteChangeCancellationPort } from "../../src/sqlite/sqliteChangeCancellationPersistence.js";
@@ -428,11 +428,11 @@ describe("SQLite Change decoding", () => {
                 '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
                 base_remote_url = 'https://github.com/acme/repo.git',
                 starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
-              WHERE id = ${captured.changeId}
+              WHERE id = ${changeIdSqlParameter(captured.changeId)}
             `;
             yield* sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES (903, ${captured.changeId})
+              VALUES (903, ${changeIdSqlParameter(captured.changeId)})
             `;
           }),
         );
@@ -451,9 +451,9 @@ describe("SQLite Change decoding", () => {
         if (!firstResolution.ok) throw new Error(firstResolution.code);
         yield* repository.operation("change unrelated Change history", (sql) =>
           Effect.gen(function* () {
-            yield* sql`UPDATE implementation_decisions SET choice = 'Changed Decision' WHERE change_id = ${captured.changeId}`;
+            yield* sql`UPDATE implementation_decisions SET choice = 'Changed Decision' WHERE change_id = ${changeIdSqlParameter(captured.changeId)}`;
             yield* sql`UPDATE implementation_blockers SET content = 'Changed Blocker' WHERE id = ${raised.blocker.id}`;
-            yield* sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${captured.changeId}`;
+            yield* sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${changeIdSqlParameter(captured.changeId)}`;
           }),
         );
         expect(
@@ -462,7 +462,7 @@ describe("SQLite Change decoding", () => {
         yield* repository.operation(
           "restore Acceptance Context",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${changeIdSqlParameter(captured.changeId)}`,
         );
         expect(
           yield* changes.authority.recordImplementationDecision({
@@ -482,7 +482,7 @@ describe("SQLite Change decoding", () => {
           "restore Decision history required by publication",
           (sql) =>
             sql`UPDATE implementation_decisions SET choice = 'Restored Decision'
-                WHERE change_id = ${captured.changeId}`,
+                WHERE change_id = ${changeIdSqlParameter(captured.changeId)}`,
         );
         const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
@@ -522,13 +522,13 @@ describe("SQLite Change decoding", () => {
         yield* repository.operation(
           "corrupt selected submission data",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${changeIdSqlParameter(captured.changeId)}`,
         );
         yield* expectPersistedDataInvalid(changes.submission.getChangeById(captured.changeId));
         yield* repository.operation(
           "restore selected submission data",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history.","resolutions":["Proceed.","Proceed again."]}' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history.","resolutions":["Proceed.","Proceed again."]}' WHERE id = ${changeIdSqlParameter(captured.changeId)}`,
         );
         expect(
           yield* changes.delivery.cancelChange({
@@ -552,7 +552,7 @@ describe("SQLite Change decoding", () => {
           (sql) =>
             sql`
             INSERT INTO implementation_blockers (id, change_id, reported_at, content)
-            VALUES ('closed-active-blocker', ${captured.changeId},
+            VALUES ('closed-active-blocker', ${changeIdSqlParameter(captured.changeId)},
               '2026-08-09T20:26:00.000Z', 'Closed projection does not select this Blocker.')
           `,
         );

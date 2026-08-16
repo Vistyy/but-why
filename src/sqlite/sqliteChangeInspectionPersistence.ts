@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { ChangeRecord, ChangeState } from "../change/change.js";
 import type { ChangeListRecord, ChangeReadPort } from "../change/changePorts.js";
 import type { ListChangesInput } from "../change/changeStore.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   changeReadColumns,
   decodeChangeRow,
@@ -30,7 +30,7 @@ export const openSqliteChangeReadPort = () =>
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
-      changeId,
+      changeIdSqlParameter(changeId),
     ]),
     (rows) => mapRow(rows[0], "read Change", sql),
   );
@@ -39,7 +39,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeId}
+      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>

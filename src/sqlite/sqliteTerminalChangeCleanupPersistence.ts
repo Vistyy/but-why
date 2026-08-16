@@ -5,7 +5,7 @@ import { type ChangeCleanup, changeState } from "../change/change.js";
 import type { TerminalChangeCleanupPort } from "../change/changePorts.js";
 import type { RecordChangeCleanupInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   decodeChangeCleanup,
   decodeChangeState,
@@ -26,7 +26,7 @@ export const openSqliteTerminalChangeCleanupPort = () =>
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeId}
+      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -38,7 +38,7 @@ const readCleanupChange = (sql: SqlClient.SqlClient, changeId: string) =>
     const rows = yield* sql<StoredCleanupChangeRow>`
       SELECT id, state, cleanup_state AS cleanupState,
         cleanup_blocking_reason AS cleanupBlockingReason
-      FROM changes WHERE id = ${changeId}
+      FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -68,7 +68,7 @@ const recordCleanup = (sql: SqlClient.SqlClient, input: RecordChangeCleanupInput
       return yield* invalidData("record Change cleanup", "Change disappeared");
     const changed = cleanupChanged(change.cleanup, input.cleanup);
     if (changed) {
-      yield* sql`UPDATE changes SET cleanup_state = ${input.cleanup.state}, cleanup_blocking_reason = ${input.cleanup.blockingReason}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
+      yield* sql`UPDATE changes SET cleanup_state = ${input.cleanup.state}, cleanup_blocking_reason = ${input.cleanup.blockingReason}, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
     }
     const committed = yield* readCleanupChange(sql, input.changeId);
     if (committed === undefined)

@@ -7,9 +7,11 @@ import type { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { isIdPrefix } from "../contracts/idPrefix.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
+  type PredecessorReconciliationBlockedConditions,
   RepositoryIdentityConflict,
   RepositoryIdPrefixConflict,
   RepositoryMigrationFailed,
+  RepositoryPredecessorReconciliationRequired,
   RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
@@ -88,6 +90,10 @@ export type InitRepoError =
     }
   | {
       readonly code: "state_store_unavailable";
+    }
+  | {
+      readonly code: "predecessor_reconciliation_required";
+      readonly blocked: PredecessorReconciliationBlockedConditions;
     }
   | {
       readonly code: "restored_transient_state";
@@ -272,23 +278,31 @@ export const initializeRepositoryRuntime = (
                   requestedIdPrefix: error.configuredIdPrefix,
                 },
               })
-            : error instanceof RepositoryRestoredTransientState
+            : error instanceof RepositoryPredecessorReconciliationRequired
               ? Effect.succeed<InitRepoResult>({
                   ok: false,
                   error: {
-                    code: "restored_transient_state",
-                    tasks: error.tasks,
-                    changes: error.changes,
+                    code: "predecessor_reconciliation_required",
+                    blocked: error.blocked,
                   },
                 })
-              : error instanceof RepositoryStateUnavailable ||
-                  error instanceof RepositoryMigrationFailed ||
-                  error instanceof RepositorySqlOperationFailed
+              : error instanceof RepositoryRestoredTransientState
                 ? Effect.succeed<InitRepoResult>({
                     ok: false,
-                    error: { code: "state_store_unavailable" },
+                    error: {
+                      code: "restored_transient_state",
+                      tasks: error.tasks,
+                      changes: error.changes,
+                    },
                   })
-                : Effect.die(error),
+                : error instanceof RepositoryStateUnavailable ||
+                    error instanceof RepositoryMigrationFailed ||
+                    error instanceof RepositorySqlOperationFailed
+                  ? Effect.succeed<InitRepoResult>({
+                      ok: false,
+                      error: { code: "state_store_unavailable" },
+                    })
+                  : Effect.die(error),
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );

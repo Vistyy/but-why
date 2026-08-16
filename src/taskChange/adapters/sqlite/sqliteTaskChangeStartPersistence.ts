@@ -3,7 +3,11 @@ import { Effect } from "effect";
 
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import {
+  changeIdSqlParameter,
+  RepositorySql,
+  taskIdSqlParameter,
+} from "../../../sqlite/repositorySql.js";
 import {
   createChange,
   insertLinkedChange,
@@ -68,7 +72,7 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
       SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
       FROM task_dependencies
       LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-      WHERE task_dependencies.dependent_task_id = ${taskId}
+      WHERE task_dependencies.dependent_task_id = ${taskIdSqlParameter(taskId)}
       ORDER BY tasks.id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
@@ -103,7 +107,7 @@ const createLinked = (
     if (!inserted.ok) return inserted;
     yield* sql`
       INSERT INTO task_change_links (task_id, change_id)
-      VALUES (${input.taskId}, ${inserted.changeId})
+      VALUES (${taskIdSqlParameter(input.taskId)}, ${changeIdSqlParameter(inserted.changeId)})
     `;
     const change = yield* readTaskChangeStartById(sql, inserted.changeId);
     if (change === undefined) {
@@ -117,7 +121,7 @@ const readExistingByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
     const rows = yield* sql<{ readonly changeId: string }>`
       SELECT change_id AS changeId
       FROM task_change_links
-      WHERE task_id = ${taskId}
+      WHERE task_id = ${taskIdSqlParameter(taskId)}
     `;
     const changeId = rows[0]?.changeId;
     return changeId === undefined ? undefined : yield* readTaskChangeStartById(sql, changeId);
@@ -140,7 +144,7 @@ const readLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
     sql<{ readonly taskId: string; readonly changeId: string }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE change_id = ${changeId}
+      WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) => Effect.succeed(rows[0]),
   );
@@ -148,7 +152,7 @@ const readLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
 const readTaskContext = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow & { readonly state: unknown }>`
-      SELECT id, title, description, state FROM tasks WHERE id = ${taskId}
+      SELECT id, title, description, state FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;

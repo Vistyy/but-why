@@ -8,7 +8,7 @@ import type {
 } from "../change/changePorts.js";
 import type { CancelChangeInput } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeChangeLifecycle, decodeStoredNullableString } from "./sqliteChangeValueDecoders.js";
 import {
@@ -78,7 +78,7 @@ export const readCancellationChange = (
       `SELECT ${terminalChangeSelectionColumns},
         close_reason AS closeReason, cancel_reason AS cancelReason
        FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -115,7 +115,7 @@ export const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput)
       SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${input.reason},
           cleanup_state = 'pending', cleanup_blocking_reason = NULL,
           updated_at = ${input.now}, closed_at = ${input.now}
-      WHERE id = ${input.changeId} AND state = 'open'`;
+      WHERE id = ${changeIdSqlParameter(input.changeId)} AND state = 'open'`;
     return { ok: true as const, changed: true };
   });
 

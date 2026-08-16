@@ -1,5 +1,6 @@
 import { type StructuredErrorInput, structuredError } from "./cliError.js";
 import type {
+  PredecessorReconciliationBlockedConditions,
   RepositoryStorageError,
   RestoredTransientChangeFact,
   RestoredTransientTaskFact,
@@ -118,12 +119,30 @@ export const repositoryStorageErrorResult = (
       return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
     case "RepositoryPersistedDataInvalid":
       return persistedDataInvalid(error.operationName);
+    case "RepositoryPredecessorReconciliationRequired":
+      return predecessorReconciliationRequired(error.blocked);
     case "RepositoryRestoredTransientState":
       return restoredTransientState(error.tasks, error.changes);
     default:
       return stateStoreUnavailable(idPrefix);
   }
 };
+
+export const predecessorReconciliationRequired = (
+  blocked: PredecessorReconciliationBlockedConditions,
+): CliResult =>
+  runtimeError({
+    code: "predecessor_reconciliation_required",
+    message:
+      "Pinned predecessor reconciliation is required before Shared Repository State can be migrated.",
+    details: {
+      blocked: Object.fromEntries(Object.entries(blocked).filter(([, count]) => count !== 0)),
+    },
+    help: [
+      "Run the pinned predecessor executable to reconcile the blocked prerelease state, then retry.",
+      "Do not restore or initialize Shared Repository State.",
+    ],
+  });
 
 const persistedDataInvalid = (operation: string): CliResult =>
   runtimeError({

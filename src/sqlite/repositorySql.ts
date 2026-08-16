@@ -5,10 +5,12 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Clock, Context, Effect, Layer } from "effect";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import {
+  PredecessorReconciliationRequiredError,
   RepositoryIdentityConflict,
   RepositoryIdPrefixConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
+  RepositoryPredecessorReconciliationRequired,
   RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
@@ -75,18 +77,25 @@ const defaultSqliteBusyTimeoutMs = 5_000;
 const defaultMigrationContentionTimeoutMs = 30_000;
 const defaultMigrationContentionRetryDelayMs = 50;
 
+class TaskIdSqlParameter {
+  readonly _tag = "TaskIdSqlParameter";
+  constructor(readonly value: string) {}
+}
+
+class ChangeIdSqlParameter {
+  readonly _tag = "ChangeIdSqlParameter";
+  constructor(readonly value: string) {}
+}
+
+export const taskIdSqlParameter = (value: string): unknown => new TaskIdSqlParameter(value);
+
+export const changeIdSqlParameter = (value: string): unknown => new ChangeIdSqlParameter(value);
+
 const repositoryIdentitySql = (sql: SqlClient.SqlClient, idPrefix: string): SqlClient.SqlClient => {
   const mapValue = (value: unknown): unknown => {
-    if (typeof value !== "string") return value;
-    try {
-      return value.startsWith(`${idPrefix}-C`)
-        ? internalChangeId(value, idPrefix)
-        : value.startsWith(`${idPrefix}-`)
-          ? internalTaskId(value, idPrefix)
-          : value;
-    } catch {
-      return value;
-    }
+    if (value instanceof TaskIdSqlParameter) return internalTaskId(value.value, idPrefix);
+    if (value instanceof ChangeIdSqlParameter) return internalChangeId(value.value, idPrefix);
+    return value;
   };
   const mapRows = <A>(query: string, rows: A): A => {
     if (!Array.isArray(rows)) return rows;
@@ -340,6 +349,18 @@ const migrationFailureToStorageError = (
   cause: Cause.Cause<unknown>,
   statePath: string,
 ): RepositoryStorageError => {
+  const predecessorRequired = Array.from(Cause.defects(cause)).find(
+    (
+      defect,
+    ): defect is MigrationError & { readonly cause: PredecessorReconciliationRequiredError } =>
+      defect instanceof MigrationError &&
+      defect.cause instanceof PredecessorReconciliationRequiredError,
+  );
+  if (predecessorRequired !== undefined) {
+    return new RepositoryPredecessorReconciliationRequired({
+      blocked: predecessorRequired.cause.blocked,
+    });
+  }
   const restored = Array.from(Cause.defects(cause)).find(
     (defect): defect is MigrationError & { readonly cause: RestoredTransientStateError } =>
       defect instanceof MigrationError && defect.cause instanceof RestoredTransientStateError,

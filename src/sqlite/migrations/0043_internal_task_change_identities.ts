@@ -1,5 +1,6 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { PredecessorReconciliationRequiredError } from "../../contracts/repositoryStorageError.js";
 
 const safeIntegerMaximum = 9_007_199_254_740_991;
 
@@ -67,11 +68,7 @@ const migrationPrecondition = (sql: SqlClient.SqlClient) =>
         }>`SELECT COUNT(*) AS count FROM changes WHERE cleanup_state = 'pending'`)[0]?.count ?? 0,
     };
     if (Object.values(facts).some((count) => count !== 0)) {
-      return yield* Effect.fail(
-        new Error(
-          `Internal identity migration requires settled prerelease state: ${JSON.stringify(facts)}`,
-        ),
-      );
+      return yield* new PredecessorReconciliationRequiredError({ blocked: facts });
     }
   });
 

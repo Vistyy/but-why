@@ -5,7 +5,11 @@ import { Effect } from "effect";
 
 import type { ChangePrepareFailure } from "../../src/change/change.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import {
+  changeIdSqlParameter,
+  RepositorySql,
+  taskIdSqlParameter,
+} from "../../src/sqlite/repositorySql.js";
 import { withTestRepository } from "./repository.js";
 
 export type ChangeImplementFixtureOptions = {
@@ -31,8 +35,9 @@ export const createChangeImplementFixture = (
       root,
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        if (options.taskId !== undefined) {
-          const numericId = Number(/[0-9]+$/u.exec(options.taskId)?.[0] ?? "1");
+        const taskId = options.taskId;
+        if (taskId !== undefined) {
+          const numericId = Number(/[0-9]+$/u.exec(taskId)?.[0] ?? "1");
           yield* repository.operation(
             "create Change Implement fixture Task for a Change linked to a Task",
             (sql) => sql`
@@ -56,7 +61,7 @@ export const createChangeImplementFixture = (
               prepare_command, prepare_timeout_seconds, prepare_failure,
               state, close_reason, created_at, updated_at, closed_at, cleanup_state
             ) VALUES (
-              ${id}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
+              ${changeIdSqlParameter(id)}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
               'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
               '18fca05273fefafb6a99d64e81d2b698d60e17a4', ${worktreePath},
               ${
@@ -77,12 +82,12 @@ export const createChangeImplementFixture = (
             )
           `,
         );
-        if (options.taskId !== undefined) {
+        if (taskId !== undefined) {
           yield* repository.operation(
             "link Change Implement fixture to its Task",
             (sql) => sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES (${options.taskId}, ${id})
+              VALUES (${taskIdSqlParameter(taskId)}, ${changeIdSqlParameter(id)})
             `,
           );
         }

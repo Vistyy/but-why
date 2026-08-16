@@ -13,7 +13,7 @@ import type {
 } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,
@@ -115,7 +115,7 @@ const insertChangeRow = (
     const worktreePath = join(dirname(input.worktreePath), changeId);
     const finalConflicts = yield* sql<{ readonly id: string }>`
       SELECT id FROM changes
-      WHERE id <> ${changeId} AND (
+      WHERE id <> ${changeIdSqlParameter(changeId)} AND (
         (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${branchRef})
         OR worktree_path = ${worktreePath}
       )
@@ -126,7 +126,7 @@ const insertChangeRow = (
     }
     yield* sql`
       UPDATE changes SET branch_ref = ${branchRef}, worktree_path = ${worktreePath}
-      WHERE id = ${changeId}
+      WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     return { ok: true as const, changeId };
   });
@@ -140,7 +140,7 @@ export const recordPrepareOutcome = (
   Effect.gen(function* () {
     yield* sql`
       UPDATE changes SET prepare_failure = ${failure === null ? null : encodeSqliteChangePrepareFailure(failure)}, updated_at = ${now}
-      WHERE id = ${changeId}
+      WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const change = yield* readChangeStartById(sql, changeId);
     return change === undefined
@@ -178,7 +178,7 @@ export const readChangeStartById = (sql: SqlClient.SqlClient, changeId: string) 
   Effect.flatMap(
     sql.unsafe<StoredChangeStartRow>(
       `SELECT ${changeStartSelectionColumns} FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     ),
     (rows) => mapRow(rows[0]),
   );

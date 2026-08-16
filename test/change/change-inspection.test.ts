@@ -12,7 +12,7 @@ import {
   loadRecordImplementationDecision,
 } from "../../src/change/composition/loadChangeInspection.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
@@ -122,7 +122,7 @@ describe("Change inspection CLI", () => {
           yield* repository.operation(
             "conflict Change branch fixture",
             (sql) =>
-              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${startedView.change.id}`,
+              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${changeIdSqlParameter(startedView.change.id)}`,
           );
         }),
       );

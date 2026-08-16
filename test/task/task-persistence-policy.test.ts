@@ -14,6 +14,25 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 const terminalStates = ["done", "cancelled"] as const;
 
+it.scoped("preserves ID-shaped freeform Task Context text", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const created = yield* tasks.createTask({
+        title: "BY-C1",
+        description: "BY-1",
+        now: firstNow,
+      });
+
+      expect(created).toMatchObject({
+        ok: true,
+        task: { title: "BY-C1", description: "BY-1" },
+        context: { title: "BY-C1", description: "BY-1" },
+      });
+    }),
+  ),
+);
+
 it.scoped("preserves terminal Task policy", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

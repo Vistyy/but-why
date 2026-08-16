@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import {
   commitButWhyConfigAndRecordDefault,
   runBuiltByWithEnv,
@@ -121,7 +121,7 @@ exit 1
                 id, repository_common_directory, branch_ref, state,
                 close_reason, created_at, updated_at, closed_at
               ) VALUES
-                (${changeId}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+                (${changeIdSqlParameter(changeId)}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
             `,
             );
           }),

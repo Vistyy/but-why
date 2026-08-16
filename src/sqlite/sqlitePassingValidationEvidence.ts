@@ -7,6 +7,7 @@ import type {
   CurrentChangeEvidenceQuery,
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import {
   candidateReadColumns,
   decodeCandidate,
@@ -43,7 +44,7 @@ export const readCurrentPassingValidationEvidence = (
       `SELECT ${candidateReadColumns} FROM current_candidates AS selection
        JOIN candidates AS candidate ON candidate.id = selection.candidate_id
        WHERE selection.change_id = ?`,
-      [authority.id],
+      [changeIdSqlParameter(authority.id)],
     );
     const candidate = yield* decodeSelectedCandidate(
       candidateRows[0],
@@ -84,7 +85,7 @@ export const readCompletedCandidatePublicationEvidence = (
     const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
       `SELECT ${candidateReadColumns} FROM candidates AS candidate
        WHERE candidate.change_id = ? AND candidate.id = ?`,
-      [authority.id, candidateId],
+      [changeIdSqlParameter(authority.id), candidateId],
     );
     const candidate = yield* decodeSelectedCandidate(
       candidateRows[0],
@@ -109,7 +110,7 @@ const readOpenChangeAuthority = (
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeId}
+      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     return yield* decodePersisted(operationName, () => {
       const row = rows[0];
@@ -202,7 +203,7 @@ const readLatestResolvedBlockerIdAtValidationRun = (
       `${resolvedBlockerIdentitySelection}
        WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
        ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [changeId, validationRunCreatedAt],
+      [changeIdSqlParameter(changeId), validationRunCreatedAt],
     ),
     (rows) => decodeLatestResolvedBlockerId(rows[0], changeId, operationName),
   );

@@ -3,7 +3,11 @@ import { Effect } from "effect";
 
 import type { CancelChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import {
+  changeIdSqlParameter,
+  RepositorySql,
+  taskIdSqlParameter,
+} from "../../../sqlite/repositorySql.js";
 import {
   cancelChange as cancelChangeOnly,
   readCancellationChange,
@@ -96,7 +100,7 @@ const readTaskChangeCancellationByTaskId = (sql: SqlClient.SqlClient, taskId: st
     const link = yield* sql<{ readonly changeId: string }>`
       SELECT change_id AS changeId
       FROM task_change_links
-      WHERE task_id = ${taskId}
+      WHERE task_id = ${taskIdSqlParameter(taskId)}
     `;
     const changeId = link[0]?.changeId;
     return changeId === undefined
@@ -125,7 +129,7 @@ const readTaskForCancellation = (sql: SqlClient.SqlClient, taskId: string | null
 const linkedTask = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql<{ readonly taskId: string }>`
-      SELECT task_id AS taskId FROM task_change_links WHERE change_id = ${changeId}
+      SELECT task_id AS taskId FROM task_change_links WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) => Effect.succeed(rows[0]),
   );

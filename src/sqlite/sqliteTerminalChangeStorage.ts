@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { ChangePublication } from "../change/change.js";
 import type { ReconciliationChange } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
@@ -44,7 +45,7 @@ export const readTerminalChange = (
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredTerminalChangeRow>(
       `SELECT ${terminalChangeSelectionColumns} FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;

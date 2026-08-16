@@ -16,7 +16,7 @@ import type {
   StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql, taskIdSqlParameter } from "./repositorySql.js";
 import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
@@ -174,13 +174,13 @@ export const editTaskDependencies = (
         requestedIds,
         (prerequisiteTaskId) => sql`
           DELETE FROM task_dependencies
-          WHERE dependent_task_id = ${input.taskId}
-            AND prerequisite_task_id = ${prerequisiteTaskId}
+          WHERE dependent_task_id = ${taskIdSqlParameter(input.taskId)}
+            AND prerequisite_task_id = ${taskIdSqlParameter(prerequisiteTaskId)}
         `,
         { discard: true },
       );
     } else {
-      yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${input.taskId}`;
+      yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${taskIdSqlParameter(input.taskId)}`;
       yield* insertDependencies(sql, input.taskId, desiredIds);
     }
 
@@ -279,7 +279,7 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
       SELECT id, id AS numericId, title, description, state,
         cancel_reason AS cancelReason, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
-      WHERE id = ${taskId}
+      WHERE id = ${taskIdSqlParameter(taskId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -292,7 +292,7 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
 export const completeTask = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
   sql`
     UPDATE tasks SET state = 'done', updated_at = ${now}
-    WHERE id = ${taskId} AND state = 'todo'
+    WHERE id = ${taskIdSqlParameter(taskId)} AND state = 'todo'
   `;
 
 export const cancelTaskState = (
@@ -303,13 +303,13 @@ export const cancelTaskState = (
 ) =>
   sql`
     UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}, updated_at = ${now}
-    WHERE id = ${taskId} AND state <> 'cancelled'
+    WHERE id = ${taskIdSqlParameter(taskId)} AND state <> 'cancelled'
   `;
 
 const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix = "BY") =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow>`
-      SELECT id, title, description FROM tasks WHERE id = ${taskId}
+      SELECT id, title, description FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -336,7 +336,7 @@ const updateTaskContext = (
     }
     yield* sql`
       UPDATE tasks SET description = ${input.description}, updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${taskIdSqlParameter(input.taskId)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
     if (updated === undefined) {
@@ -367,7 +367,7 @@ export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput, idP
     }
     yield* sql`
       UPDATE tasks SET state = 'new', updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${taskIdSqlParameter(input.taskId)}
     `;
     const revised = yield* getTaskById(sql, input.taskId, idPrefix);
     if (revised === undefined) return yield* invalidData("revise Task", "Task disappeared");
@@ -386,7 +386,7 @@ const cancelTask = (
     if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
     yield* sql`
       UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${taskIdSqlParameter(input.taskId)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
     if (updated === undefined) return yield* invalidData("cancel Task", "Task disappeared");
@@ -427,7 +427,7 @@ const activeTaskReviewId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.map(
     sql<{ readonly id: string }>`
       SELECT id FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'running'
+      WHERE task_id = ${taskIdSqlParameter(taskId)} AND state = 'running'
       LIMIT 1
     `,
     (rows) => rows[0]?.id,
@@ -489,7 +489,7 @@ const validateStoredDependency = (
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly id: number }>`
-      SELECT id FROM tasks WHERE id = ${prerequisiteTaskId}
+      SELECT id FROM tasks WHERE id = ${taskIdSqlParameter(prerequisiteTaskId)}
     `;
     if (rows[0] === undefined) {
       return {
@@ -513,7 +513,7 @@ const dependencyPathExists = (
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly taskId: string | null }>`
       WITH RECURSIVE prerequisites(task_id) AS (
-        SELECT ${fromTaskId}
+        SELECT ${taskIdSqlParameter(fromTaskId)}
         UNION
         SELECT task_dependencies.prerequisite_task_id
         FROM task_dependencies
@@ -541,7 +541,7 @@ const insertDependencies = (
     prerequisiteTaskIds,
     (prerequisiteTaskId) => sql`
       INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-      VALUES (${dependentTaskId}, ${prerequisiteTaskId})
+      VALUES (${taskIdSqlParameter(dependentTaskId)}, ${taskIdSqlParameter(prerequisiteTaskId)})
     `,
     { discard: true },
   );
@@ -560,14 +560,14 @@ const dependencyFacts = (
             SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-            WHERE task_dependencies.dependent_task_id = ${taskId}
+            WHERE task_dependencies.dependent_task_id = ${taskIdSqlParameter(taskId)}
             ORDER BY tasks.id ASC
           `
         : yield* sql<StoredTaskDependencyFactRow>`
             SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
-            WHERE task_dependencies.prerequisite_task_id = ${taskId}
+            WHERE task_dependencies.prerequisite_task_id = ${taskIdSqlParameter(taskId)}
             ORDER BY tasks.id ASC
           `;
     return yield* decodePersisted(operationName, () =>

@@ -5,6 +5,7 @@ import { type ChangePublication, changeState } from "../change/change.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
@@ -43,7 +44,7 @@ export const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMe
     if (!matchesExactMergedEvidence(change, input.observed)) {
       return { ok: false as const, code: "publication_mismatch" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)} AND state = 'open'`;
     return { ok: true as const, changed: true };
   });
 
@@ -55,7 +56,7 @@ export const readChangeLifecycle = (
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeLifecycleRow>`
       SELECT id, state, close_reason AS closeReason
-      FROM changes WHERE id = ${changeId}
+      FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -70,7 +71,7 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCompleteChangeRow>(
       `SELECT ${completeChangeSelectionColumns} FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;

@@ -13,7 +13,7 @@ import {
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -309,11 +309,11 @@ describe("Candidate validation", () => {
                     description: "Run each eligible phase in its fixed order.",
                   })}, base_remote_url = 'https://github.com/acme/repo.git',
                     starting_commit = ${captured.changeBaseSha}, worktree_path = ${mainCheckout}
-                  WHERE id = ${captured.changeId}
+                  WHERE id = ${changeIdSqlParameter(captured.changeId)}
                 `;
                 yield* sql`
                   INSERT INTO task_change_links (task_id, change_id)
-                  VALUES (1, ${captured.changeId})
+                  VALUES (1, ${changeIdSqlParameter(captured.changeId)})
                 `;
               }),
             ),

@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export type StoredCandidateRow = {
@@ -61,7 +62,7 @@ export const readCurrentCandidateForChange = (
        JOIN candidates AS candidate ON candidate.id = selection.candidate_id
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
        WHERE selection.change_id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     return row === undefined
@@ -80,7 +81,7 @@ export const readCandidatesForChange = (
        FROM candidates AS candidate
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
        WHERE candidate.change_id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     return yield* decodePersisted(operationName, () =>
       rows.map((row) => decodeOwnedCandidate(row, changeId)).sort(compareCandidatesAscending),

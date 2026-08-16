@@ -8,6 +8,7 @@ import type {
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
@@ -122,7 +123,7 @@ export const readActiveValidationRunForChange = (
       LEFT JOIN candidate_validation_runs AS run ON run.id = active.validation_run_id
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      WHERE active.change_id = ${changeId}
+      WHERE active.change_id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     return row === undefined
@@ -223,7 +224,7 @@ const validateSelectedValidationRunAuthority = (
        FROM implementation_blockers
        WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
        ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [changeId, run.record.createdAt],
+      [changeIdSqlParameter(changeId), run.record.createdAt],
     );
     const latestBlockerId = yield* decodePersisted(operationName, () =>
       latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId)),

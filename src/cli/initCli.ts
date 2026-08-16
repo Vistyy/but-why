@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import type { CliEnvironment } from "../cli.js";
 import {
   type CliResult,
+  predecessorReconciliationRequired,
   restoredTransientState,
   runtimeError,
   stateStoreUnavailable,
@@ -80,6 +81,8 @@ export const runInitCommand = (
                 "Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.",
               ],
             });
+          case "predecessor_reconciliation_required":
+            return predecessorReconciliationRequired(initResult.error.blocked);
           case "restored_transient_state":
             return restoredTransientState(initResult.error.tasks, initResult.error.changes);
           case "state_store_unavailable":

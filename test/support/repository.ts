@@ -7,7 +7,11 @@ import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+  taskIdSqlParameter,
+} from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import type { PublicTaskId } from "../../src/task/taskId.js";
 
@@ -56,7 +60,7 @@ export const setTerminalTaskStateFixture = (
       (sql) => sql`
         UPDATE tasks
         SET state = ${state}, cancel_reason = ${cancelReason}, updated_at = ${updatedAt}
-        WHERE id = ${taskId}
+        WHERE id = ${taskIdSqlParameter(taskId)}
       `,
     ),
   );

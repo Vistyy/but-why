@@ -14,7 +14,7 @@ import type {
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
@@ -84,7 +84,7 @@ const getPublicationById = (
         starting_commit AS startingCommit,
         acceptance_context AS acceptanceContext
        FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -164,7 +164,7 @@ const requireReleasedCandidatePublication = (
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeId}
+      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -174,7 +174,7 @@ const readPublicationChange = (sql: SqlClient.SqlClient, changeId: string, opera
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<PublicationSelectionRow>(
       `SELECT ${publicationSelectionColumns} FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -210,7 +210,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeId}
+      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
@@ -238,7 +238,7 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
         ),
       };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
     return {
       ok: true as const,
       created: true,
@@ -274,7 +274,7 @@ const replacePendingPublication = (
     ) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
     return {
       ok: true as const,
       change: yield* requirePendingCandidatePublicationChange(
@@ -301,7 +301,7 @@ const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangeP
     if (!samePendingPublication(publication, input)) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
     return {
       ok: true as const,
       ...(yield* requireReleasedCandidatePublication(
@@ -328,7 +328,7 @@ const recordPublishedPullRequest = (
     if (!canRecordPublication(change.publication, input)) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
     return {
       ok: true as const,
       change: yield* requirePublishedCandidatePublicationChange(

@@ -161,6 +161,53 @@ describe("by init edge cases", () => {
     }),
   );
 
+  it.effect("reports predecessor recovery when an Open Change blocks identity migration", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const commonDirectory = join(root, ".git");
+      const statePath = join(commonDirectory, "but-why", "state.sqlite");
+      writeConfig(root);
+      mkdirSync(join(commonDirectory, "but-why"), { recursive: true });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* migrateTestRepositoryThrough(42);
+          yield* sql`
+            INSERT INTO shared_state_identity (id, common_directory)
+            VALUES (1, ${commonDirectory})
+          `;
+          yield* sql`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, state, created_at, updated_at,
+              cleanup_state
+            ) VALUES (
+              'open-change', ${commonDirectory}, 'refs/heads/open-change', 'open',
+              '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete'
+            )
+          `;
+        }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+      );
+
+      const result = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        error: {
+          code: "predecessor_reconciliation_required",
+          message:
+            "Pinned predecessor reconciliation is required before Shared Repository State can be migrated.",
+          blocked: { openChanges: 1 },
+        },
+        help: [
+          "Run the pinned predecessor executable to reconcile the blocked prerelease state, then retry.",
+          "Do not restore or initialize Shared Repository State.",
+        ],
+      });
+    }),
+  );
+
   it.effect("reports state_store_unavailable when Shared Repository State migration fails", () =>
     Effect.gen(function* () {
       const root = createGitRepo();

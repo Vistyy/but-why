@@ -8,7 +8,7 @@ import type {
   GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
@@ -59,7 +59,7 @@ const publicationTemplateLayer = Layer.effect(
           UPDATE changes
           SET starting_commit = ${git(candidateRepoTemplate, "rev-parse", "refs/heads/main")},
               worktree_path = ${candidateRepoTemplate}
-          WHERE id = ${captured.changeId}
+          WHERE id = ${changeIdSqlParameter(captured.changeId)}
         `,
         );
         const validation = yield* openSqliteChangeValidationTestDependencies();
@@ -321,11 +321,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
                 UPDATE changes
                 SET acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
                     base_remote_url = 'https://github.test/acme/widgets.git'
-                WHERE id = ${fixture.captured.changeId}
+                WHERE id = ${changeIdSqlParameter(fixture.captured.changeId)}
               `;
             yield* sql`
                 INSERT INTO task_change_links (task_id, change_id)
-                VALUES (1, ${fixture.captured.changeId})
+                VALUES (1, ${changeIdSqlParameter(fixture.captured.changeId)})
               `;
           }),
         );

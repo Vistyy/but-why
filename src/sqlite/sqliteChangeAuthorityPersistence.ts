@@ -8,7 +8,7 @@ import type {
   RecordImplementationDecisionInput,
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
@@ -62,7 +62,7 @@ const raiseBlocker = (
     const active = yield* readActiveBlocker(sql, input.changeId, "raise Implementation Blocker");
     if (active !== null) return { ok: false as const, code: "change_blocked" as const };
     const id = randomUUID();
-    yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
+    yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${changeIdSqlParameter(input.changeId)}, ${input.now}, ${input.content})`;
     const stored = yield* readBlockerById(sql, input.changeId, id, "raise Implementation Blocker");
     if (stored === undefined)
       return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
@@ -94,7 +94,7 @@ const resolveBlocker = (
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const exists = yield* sql<{ readonly id: string }>`
-      SELECT id FROM changes WHERE id = ${changeId}
+      SELECT id FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     if (exists.length === 0) return undefined;
     yield* decodePersisted("list Implementation Blockers", () => {
@@ -106,7 +106,7 @@ const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName:
   Effect.flatMap(
     sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     ),
     (rows) =>
       decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
@@ -114,7 +114,7 @@ const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName:
 const readActiveBlocker = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.map(
     readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND resolved_at IS NULL", [
-      changeId,
+      changeIdSqlParameter(changeId),
     ]),
     (history) => history.active,
   );
@@ -126,7 +126,7 @@ const readBlockerById = (
 ) =>
   Effect.map(
     readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND id = ?", [
-      changeId,
+      changeIdSqlParameter(changeId),
       blockerId,
     ]),
     (history) => history.blockers[0],
@@ -149,7 +149,7 @@ const readSelectedBlockers = (
 const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeId}
+      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -165,7 +165,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeId}
+      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
@@ -183,7 +183,7 @@ const readDecisionById = (
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions
-      WHERE change_id = ${changeId} AND id = ${decisionId}
+      WHERE change_id = ${changeIdSqlParameter(changeId)} AND id = ${decisionId}
     `,
     (rows) =>
       decodePersisted(operationName, () => decodeImplementationDecisions(rows, changeId)[0]),
@@ -196,7 +196,7 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     const id = randomUUID();
     yield* sql`
       INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
-      VALUES (${id}, ${input.changeId}, ${input.now}, ${input.choice}, ${input.rationale})
+      VALUES (${id}, ${changeIdSqlParameter(input.changeId)}, ${input.now}, ${input.choice}, ${input.rationale})
     `;
     const decision = yield* readDecisionById(
       sql,

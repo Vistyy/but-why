@@ -12,7 +12,7 @@ import type {
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import {
   compareCandidatesAscending,
@@ -193,7 +193,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       readonly state: "open" | "closed";
       readonly acceptanceContext: string | null;
     }>`SELECT id, state, acceptance_context AS acceptanceContext
-       FROM changes WHERE id = ${candidate.changeId}`;
+       FROM changes WHERE id = ${changeIdSqlParameter(candidate.changeId)}`;
     const changeAuthority = yield* decodePersisted("start Candidate Validation Run", () => {
       const row = changeRows[0];
       if (row === undefined || row.id !== candidate.changeId) {
@@ -213,7 +213,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const decisionRows = yield* sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${candidate.changeId}
+      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(candidate.changeId)}
     `;
     const implementationDecisions = yield* decodePersisted("start Candidate Validation Run", () =>
       decodeImplementationDecisions(decisionRows, candidate.changeId),
@@ -223,7 +223,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       `SELECT ${implementationBlockerReadColumns}
        FROM implementation_blockers
        WHERE change_id = ?`,
-      [candidate.changeId],
+      [changeIdSqlParameter(candidate.changeId)],
     );
     const blockerHistory = yield* decodePersisted("start Candidate Validation Run", () =>
       decodeImplementationBlockerHistory(blockerRows, candidate.changeId),
@@ -323,7 +323,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     `;
     yield* sql`
       INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
-      VALUES (${candidate.changeId}, ${validationRunId}, ${input.now})
+      VALUES (${changeIdSqlParameter(candidate.changeId)}, ${validationRunId}, ${input.now})
     `;
     if (input.workspaceSetup !== undefined) {
       yield* sql`
@@ -444,7 +444,7 @@ const listPreviousCandidateReviewerFindings = (
       FROM candidates AS candidate
       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
       JOIN candidate_validation_rounds AS round ON round.validation_run_id = run.id
-      WHERE candidate.change_id = ${current.changeId}
+      WHERE candidate.change_id = ${changeIdSqlParameter(current.changeId)}
         AND (candidate.created_at < ${current.createdAt}
           OR (candidate.created_at = ${current.createdAt} AND candidate.id < ${current.id}))
         AND round.phase = ${input.phase} AND round.producer = ${input.producer}

@@ -27,7 +27,7 @@ import type {
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql, taskIdSqlParameter } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
 type ReviewRow = {
@@ -161,7 +161,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         Effect.map(
           sql<{ readonly agentSessionId: number | null }>`
             SELECT reviewer_agent_session_id AS agentSessionId
-            FROM tasks WHERE id = ${taskId}
+            FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
           `,
           (rows) => rows[0]?.agentSessionId ?? undefined,
         ),
@@ -170,7 +170,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("read Task Reviewer configuration", (sql) =>
         Effect.gen(function* () {
           const rows = yield* sql<{ readonly configuration: string | null }>`
-            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${taskId}
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
           `;
           const configuration = rows[0]?.configuration;
           if (configuration === undefined || configuration === null) return undefined;
@@ -188,7 +188,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("check Task Reviewer configuration correction", (sql) =>
         Effect.gen(function* () {
           const sessions = yield* sql<{ readonly agentSessionId: number | null }>`
-            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${taskId}
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
           `;
           const sessionId = sessions[0]?.agentSessionId;
           if (sessionId === undefined || sessionId === null) return false;
@@ -238,7 +238,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           if (sessionId === undefined)
             return yield* invalid("link Task Agent Invocation", "Invocation Session is missing");
           const taskSession = yield* sql<{ readonly agentSessionId: number | null }>`
-            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${input.taskId}
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${taskIdSqlParameter(input.taskId)}
           `;
           if (
             taskSession[0]?.agentSessionId !== undefined &&
@@ -255,7 +255,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           `;
           const taskOwners = yield* sql<{ readonly taskId: string }>`
             SELECT id AS taskId FROM tasks
-            WHERE reviewer_agent_session_id = ${sessionId} AND id <> ${input.taskId}
+            WHERE reviewer_agent_session_id = ${sessionId} AND id <> ${taskIdSqlParameter(input.taskId)}
           `;
           if (changeOwners.length > 0 || taskOwners.length > 0)
             return yield* invalid(
@@ -263,7 +263,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               "Agent Session already has another owner",
             );
           const stored = yield* sql<{ readonly configuration: string | null }>`
-            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${input.taskId}
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${taskIdSqlParameter(input.taskId)}
           `;
           const latest = yield* sql<{
             readonly settlementKind: string | null;
@@ -308,7 +308,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           UPDATE tasks
           SET reviewer_configuration = ${configuration},
               reviewer_agent_session_id = COALESCE(reviewer_agent_session_id, ${sessionId})
-          WHERE id = ${input.taskId}
+          WHERE id = ${taskIdSqlParameter(input.taskId)}
         `;
           yield* sql`
           INSERT INTO task_review_agent_invocations (review_id, agent_invocation_id)
@@ -374,7 +374,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               state, outcome, workspace_cleanup AS workspaceCleanup,
               tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
               created_at AS createdAt, updated_at AS updatedAt
-            FROM task_reviews WHERE task_id = ${taskId}
+            FROM task_reviews WHERE task_id = ${taskIdSqlParameter(taskId)}
             ORDER BY sequence DESC LIMIT 1
           `;
           const row = rows[0];
@@ -397,7 +397,7 @@ export const taskReviewAdmissionRejection = (
 > =>
   Effect.gen(function* () {
     const tasks = yield* sql<{ readonly state: string }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
+      SELECT state FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
@@ -408,7 +408,7 @@ export const taskReviewAdmissionRejection = (
       return { ok: false as const, code: "task_change_linked" as const, changeId: linkedChangeId };
     }
     const active = yield* sql<{ readonly id: string }>`
-      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+      SELECT id FROM task_reviews WHERE task_id = ${taskIdSqlParameter(taskId)} AND state = 'running' LIMIT 1
     `;
     const activeReview = active[0];
     return activeReview === undefined
@@ -431,7 +431,7 @@ export const admitTaskReview = (
     const tasks = yield* sql<{
       readonly title: string;
       readonly description: string;
-    }>`SELECT title, description FROM tasks WHERE id = ${input.taskId}`;
+    }>`SELECT title, description FROM tasks WHERE id = ${taskIdSqlParameter(input.taskId)}`;
     const task = tasks[0];
     if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
     const dependencies = yield* dependencyEvidence(sql, input.taskId);
@@ -446,7 +446,7 @@ export const admitTaskReview = (
         base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
         tooling_failure, abandon_reason, created_at, updated_at
       ) VALUES (
-        ${input.reviewId}, ${input.taskId}, ${JSON.stringify(proposal)},
+        ${input.reviewId}, ${taskIdSqlParameter(input.taskId)}, ${JSON.stringify(proposal)},
         ${JSON.stringify(dependencies)}, ${JSON.stringify(input.policy)}, ${input.baseRef},
         ${input.baseCommit}, ${input.workspacePath}, 'running', NULL, 'not_created',
         NULL, NULL, ${input.now}, ${input.now}
@@ -463,12 +463,12 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
       readonly title: string;
       readonly description: string;
       readonly state: string;
-    }>`SELECT title, description, state FROM tasks WHERE id = ${taskId}`;
+    }>`SELECT title, description, state FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}`;
     const task = tasks[0];
     if (task === undefined || task.state !== "new") return undefined;
 
     const active = yield* sql<{ readonly id: string }>`
-      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+      SELECT id FROM task_reviews WHERE task_id = ${taskIdSqlParameter(taskId)} AND state = 'running' LIMIT 1
     `;
     if (active[0] !== undefined) return undefined;
 
@@ -486,7 +486,7 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete'
+      WHERE task_id = ${taskIdSqlParameter(taskId)} AND state = 'complete'
       ORDER BY sequence DESC
     `;
     for (const row of rows) {
@@ -500,7 +500,7 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
       }
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
-        WHERE id = ${taskId} AND state = 'new'
+        WHERE id = ${taskIdSqlParameter(taskId)} AND state = 'new'
       `;
       return judgment;
     }
@@ -582,14 +582,14 @@ const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewR
     state, outcome, workspace_cleanup AS workspaceCleanup,
     tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
     created_at AS createdAt, updated_at AS updatedAt
-  FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence ASC
+  FROM task_reviews WHERE task_id = ${taskIdSqlParameter(taskId)} ORDER BY sequence ASC
 `;
 
 const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.map(
     sql<{ readonly taskId: string }>`
       SELECT prerequisite_task_id AS taskId FROM task_dependencies
-      WHERE dependent_task_id = ${taskId} ORDER BY prerequisite_task_id ASC
+      WHERE dependent_task_id = ${taskIdSqlParameter(taskId)} ORDER BY prerequisite_task_id ASC
     `,
     (dependencies) => dependencies.map((dependency) => dependency.taskId),
   );
@@ -599,7 +599,7 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>
     SELECT prerequisite.id, prerequisite.title, prerequisite.description, prerequisite.state
     FROM task_dependencies
     JOIN tasks prerequisite ON prerequisite.id = task_dependencies.prerequisite_task_id
-    WHERE task_dependencies.dependent_task_id = ${taskId}
+    WHERE task_dependencies.dependent_task_id = ${taskIdSqlParameter(taskId)}
     ORDER BY prerequisite.id ASC
   `;
 
@@ -640,7 +640,7 @@ const completeReview = (
     if (outcome === "passed") {
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
-        WHERE id = ${current.taskId} AND state = 'new'
+        WHERE id = ${taskIdSqlParameter(current.taskId)} AND state = 'new'
       `;
     }
     yield* Effect.forEach(
@@ -726,7 +726,7 @@ const completedTaskReviewResult = (
 const readTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly state: TaskState }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
+      SELECT state FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
     `;
     const row = rows[0];
     return row === undefined
@@ -741,7 +741,7 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
       readonly description: string;
       readonly state: TaskState;
     }>`
-      SELECT title, description, state FROM tasks WHERE id = ${review.taskId}
+      SELECT title, description, state FROM tasks WHERE id = ${taskIdSqlParameter(review.taskId)}
     `;
     const task = rows[0];
     if (task === undefined) {
@@ -790,7 +790,7 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
 const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly title: string; readonly description: string }>`
-      SELECT title, description FROM tasks WHERE id = ${review.taskId}
+      SELECT title, description FROM tasks WHERE id = ${taskIdSqlParameter(review.taskId)}
     `;
     const task = rows[0];
     if (task === undefined) return false;
@@ -837,7 +837,7 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
     }>`
       SELECT reviewer_agent_session_id AS agentSessionId,
         reviewer_configuration AS configuration
-      FROM tasks WHERE id = ${row.taskId}
+      FROM tasks WHERE id = ${taskIdSqlParameter(row.taskId)}
     `;
     const agentSessionId = agentSession[0]?.agentSessionId ?? undefined;
     const reviewerConfiguration =
@@ -923,7 +923,7 @@ const readLegacyTaskReviewerSession = (sql: SqlClient.SqlClient, taskId: string)
   sql<LegacyTaskReviewerSessionRow>`
     SELECT fingerprint, session_reference AS sessionReference
     FROM task_reviewer_sessions
-    WHERE task_id = ${taskId}
+    WHERE task_id = ${taskIdSqlParameter(taskId)}
   `.pipe(Effect.map((rows) => rows[0]));
 
 type TaskReviewJsonObject = Record<string, unknown> & {

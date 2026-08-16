@@ -11,6 +11,7 @@ import type {
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { LegacyReviewerTranscriptReference } from "../change/legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
+import { changeIdSqlParameter } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -221,7 +222,7 @@ export const readImplementationBlockerHistory = (
   Effect.flatMap(
     sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     ),
     (rows) =>
       decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),

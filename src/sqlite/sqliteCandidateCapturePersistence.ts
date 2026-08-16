@@ -8,7 +8,7 @@ import type {
 } from "../change/candidateCapture/candidateCapturePersistence.js";
 import { changeState } from "../change/change.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   candidateReadColumns,
   decodeCandidate,
@@ -125,7 +125,7 @@ const selectExpectedChange = (
 
     yield* sql`
       UPDATE changes SET branch_ref = ${input.branchRef}, updated_at = ${input.now}
-      WHERE id = ${expected.id}
+      WHERE id = ${changeIdSqlParameter(expected.id)}
     `;
     const rebound = yield* getChangeById(sql, expected.id);
     if (rebound === undefined) return yield* invalidData("Change disappeared during capture");
@@ -147,7 +147,7 @@ const assignBase = (
   return Effect.as(
     sql`
       UPDATE changes SET base_ref = ${input.baseRef}, updated_at = ${input.now}
-      WHERE id = ${change.id}
+      WHERE id = ${changeIdSqlParameter(change.id)}
     `,
     { ok: true as const },
   );
@@ -164,7 +164,7 @@ const captureStoredCandidate = (
        FROM candidates AS candidate
        WHERE candidate.change_id = ?
          AND candidate.change_base_sha = ? AND candidate.head_sha = ?`,
-      [changeId, input.changeBaseSha, input.headSha],
+      [changeIdSqlParameter(changeId), input.changeBaseSha, input.headSha],
     );
     const row = rows[0];
     if (row !== undefined) {
@@ -189,7 +189,7 @@ const captureStoredCandidate = (
       INSERT INTO candidates (
         id, change_id, change_base_sha, head_sha, created_at
       ) VALUES (
-        ${candidateId}, ${changeId}, ${input.changeBaseSha}, ${input.headSha}, ${input.now}
+        ${candidateId}, ${changeIdSqlParameter(changeId)}, ${input.changeBaseSha}, ${input.headSha}, ${input.now}
       )
     `;
     return { ok: true, candidateId, reused: false } as const;
@@ -198,7 +198,7 @@ const captureStoredCandidate = (
 const selectCurrentCandidate = (sql: SqlClient.SqlClient, changeId: string, candidateId: string) =>
   sql`
     INSERT INTO current_candidates (change_id, candidate_id)
-    VALUES (${changeId}, ${candidateId})
+    VALUES (${changeIdSqlParameter(changeId)}, ${candidateId})
     ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
   `;
 
@@ -211,7 +211,7 @@ const readChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
       FROM changes
-      WHERE id = ${changeId}
+      WHERE id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) => rows[0],
   );

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 import type { ChangeReviewerTranscriptPort } from "../change/changePorts.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import {
   decodeReviewerTranscript,
   type StoredReviewerTranscriptRow,
@@ -19,7 +19,7 @@ export const openSqliteChangeReviewerTranscriptPort = () =>
             SELECT change_id AS changeId, producer, pi_session_id AS piSessionId,
               file_path AS filePath
             FROM reviewer_transcripts
-            WHERE change_id = ${changeId}
+            WHERE change_id = ${changeIdSqlParameter(changeId)}
           `,
             (rows) =>
               decodePersisted("list Reviewer Transcripts", () =>

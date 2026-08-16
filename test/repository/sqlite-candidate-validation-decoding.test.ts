@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
@@ -300,8 +300,8 @@ describe("SQLite Candidate and Validation read decoding", () => {
 
         yield* repository.operation("install resolved Blocker history", (sql) =>
           Effect.gen(function* () {
-            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('older-blocker', ${prior.changeId}, '2026-08-09T22:00:00.000Z', 'Older blocker.', '2026-08-09T22:01:00.000Z', 'older-resolution', '2026-08-09T22:01:00.000Z', 'Older resolution.')`;
-            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('latest-blocker', ${prior.changeId}, '2026-08-09T23:00:00.000Z', 'Latest blocker.', '2026-08-09T23:01:00.000Z', 'latest-resolution', '2026-08-09T23:01:00.000Z', 'Latest resolution.')`;
+            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('older-blocker', ${changeIdSqlParameter(prior.changeId)}, '2026-08-09T22:00:00.000Z', 'Older blocker.', '2026-08-09T22:01:00.000Z', 'older-resolution', '2026-08-09T22:01:00.000Z', 'Older resolution.')`;
+            yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content, resolved_at, resolution_id, resolution_recorded_at, resolution_content) VALUES ('latest-blocker', ${changeIdSqlParameter(prior.changeId)}, '2026-08-09T23:00:00.000Z', 'Latest blocker.', '2026-08-09T23:01:00.000Z', 'latest-resolution', '2026-08-09T23:01:00.000Z', 'Latest resolution.')`;
           }),
         );
         expect(
@@ -324,7 +324,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
         yield* repository.operation("restore absent Blocker history", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE candidate_validation_runs SET latest_resolved_blocker_id = NULL WHERE id = ${started.validationRunId}`;
-            yield* sql`DELETE FROM implementation_blockers WHERE change_id = ${prior.changeId}`;
+            yield* sql`DELETE FROM implementation_blockers WHERE change_id = ${changeIdSqlParameter(prior.changeId)}`;
           }),
         );
 

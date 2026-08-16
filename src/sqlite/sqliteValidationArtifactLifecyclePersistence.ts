@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import type { ValidationArtifactLifecyclePort } from "../change/validation/changeValidationPorts.js";
 
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -32,7 +32,7 @@ const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
         run.created_at AS createdAt
       FROM candidates AS candidate
       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
-      WHERE candidate.change_id = ${changeId}
+      WHERE candidate.change_id = ${changeIdSqlParameter(changeId)}
     `;
     return yield* decodePersisted("list Candidate Validation Run IDs", () =>
       rows

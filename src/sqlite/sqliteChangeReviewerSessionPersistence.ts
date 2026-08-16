@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { ChangeReviewerSessionPort } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import { decodeReviewerSession, type StoredReviewerSessionRow } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
@@ -18,7 +18,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
             sql<{ readonly agentSessionId: number }>`
             SELECT agent_session_id AS agentSessionId
             FROM change_agent_sessions
-            WHERE change_id = ${changeId} AND producer = ${producer}
+            WHERE change_id = ${changeIdSqlParameter(changeId)} AND producer = ${producer}
           `,
             (rows) => rows[0]?.agentSessionId ?? undefined,
           ),
@@ -42,7 +42,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
           const existingOwners = yield* sql<{ readonly agentSessionId: number }>`
             SELECT agent_session_id AS agentSessionId
             FROM change_agent_sessions
-            WHERE change_id = ${input.changeId} AND producer = ${input.producer}
+            WHERE change_id = ${changeIdSqlParameter(input.changeId)} AND producer = ${input.producer}
           `;
           if (existingOwners[0] !== undefined && existingOwners[0].agentSessionId !== sessionId)
             return yield* Effect.fail(
@@ -57,7 +57,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
               : yield* changeAgentConfigurationCanBeCorrected(sql, sessionId, invocationId);
           if (canCorrect) {
             const configurations = yield* sql<{ readonly configuration: string | null }>`
-              SELECT reviewer_configuration AS configuration FROM changes WHERE id = ${input.changeId}
+              SELECT reviewer_configuration AS configuration FROM changes WHERE id = ${changeIdSqlParameter(input.changeId)}
             `;
             const configuration = configurations[0]?.configuration;
             if (configuration !== undefined && configuration !== null) {
@@ -78,13 +78,13 @@ export const openSqliteChangeReviewerSessionPort = () =>
               });
               yield* sql`
                 UPDATE changes SET reviewer_configuration = ${JSON.stringify(replacement)}
-                WHERE id = ${input.changeId}
+                WHERE id = ${changeIdSqlParameter(input.changeId)}
               `;
             }
           }
           yield* sql`
           INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
-          VALUES (${input.changeId}, ${input.producer}, ${sessionId})
+          VALUES (${changeIdSqlParameter(input.changeId)}, ${input.producer}, ${sessionId})
           ON CONFLICT(change_id, producer) DO NOTHING
         `;
           yield* sql`
@@ -100,7 +100,7 @@ export const openSqliteChangeReviewerSessionPort = () =>
             SELECT change_id AS changeId, producer, fingerprint,
               session_reference AS sessionReference
             FROM reviewer_sessions
-            WHERE change_id = ${changeId}
+            WHERE change_id = ${changeIdSqlParameter(changeId)}
           `,
             (rows) =>
               decodePersisted("list legacy Reviewer Sessions", () =>

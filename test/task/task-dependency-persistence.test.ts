@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql, taskIdSqlParameter } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
@@ -168,7 +168,7 @@ it.scoped("continues to reject direct Task dependency edits for terminal Tasks",
           (sql) => sql`
             UPDATE tasks SET state = ${state},
               cancel_reason = ${state === "cancelled" ? "Cancelled fixture" : null},
-              updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-2")}
+              updated_at = ${secondNow} WHERE id = ${taskIdSqlParameter(publicTaskId("BY-2"))}
           `,
         );
         expect(
@@ -199,7 +199,7 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
       yield* repository.operation(
         "set done prerequisite fixture",
         (sql) => sql`
-        UPDATE tasks SET state = 'done', updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-1")}
+        UPDATE tasks SET state = 'done', updated_at = ${secondNow} WHERE id = ${taskIdSqlParameter(publicTaskId("BY-1"))}
       `,
       );
 

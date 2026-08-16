@@ -5,7 +5,7 @@ import type { ChangeRecord } from "../change/change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
@@ -69,7 +69,7 @@ const agentSessionConfigurationCanBeCorrected = (
     const sessions = yield* sql<{ readonly agentSessionId: number }>`
       SELECT agent_session_id AS agentSessionId
       FROM change_agent_sessions
-      WHERE change_id = ${changeId} AND producer = ${producer}
+      WHERE change_id = ${changeIdSqlParameter(changeId)} AND producer = ${producer}
     `;
     const sessionId = sessions[0]?.agentSessionId;
     if (sessionId === undefined) return false;
@@ -120,7 +120,7 @@ const publicationSelectionColumns = `
 const readActiveBlocker = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
   Effect.map(
     readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND resolved_at IS NULL", [
-      changeId,
+      changeIdSqlParameter(changeId),
     ]),
     (history) => history.active,
   );
@@ -148,7 +148,7 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
         acceptance_context AS acceptanceContext,
         reviewer_configuration AS reviewerConfiguration
        FROM changes WHERE id = ?`,
-      [changeId],
+      [changeIdSqlParameter(changeId)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -190,7 +190,7 @@ const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string) =
   Effect.gen(function* () {
     const operationName = "complete merged Change";
     const rows = yield* sql<{ readonly id: unknown }>`
-      SELECT id FROM changes WHERE id = ${changeId}
+      SELECT id FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
     `;
     const row = rows[0];
     if (row === undefined) return yield* invalidData(operationName, "Change disappeared");
@@ -218,7 +218,7 @@ const decodeReviewerConfiguration = (value: unknown) => {
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
-      changeId,
+      changeIdSqlParameter(changeId),
     ]),
     (rows) => mapRow(rows[0], "read Change", sql),
   );
@@ -232,7 +232,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeId}
+      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(changeId)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
