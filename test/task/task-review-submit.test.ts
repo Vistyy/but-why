@@ -6,8 +6,8 @@ import type { AgentSessionPersistence } from "../../src/agent/agentSession/agent
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { expectedDisposableWorkspacePath } from "../../src/disposableWorkspace/disposableWorkspacePath.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
   readCanonicalMainReviewBase,

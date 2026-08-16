@@ -9,6 +9,7 @@ import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type {
+  LegacyTaskReviewToolingFailure,
   TaskReviewDependencyEvidence,
   TaskReviewExecution,
   TaskReviewFinding,
@@ -16,7 +17,6 @@ import type {
   TaskReviewProposal,
   TaskReviewRecord,
   TaskReviewToolingFailure,
-  LegacyTaskReviewToolingFailure,
 } from "../task/review/taskReview.js";
 import type {
   CompleteTaskReviewSuccess,

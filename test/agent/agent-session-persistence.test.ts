@@ -2,18 +2,18 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
   AgentSessionSqlLink,
 } from "../../src/agent/agentSession/agentSession.js";
+import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
 import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import {
   openSqliteAgentSessionPersistence,
   settleUnsettledAgentInvocations,

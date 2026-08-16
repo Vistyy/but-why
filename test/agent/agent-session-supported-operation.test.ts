@@ -1,9 +1,9 @@
-import { Effect } from "effect";
-import { expect, it } from "@effect/vitest";
 import { join } from "node:path";
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import type { ResolvedPiAgentProfile } from "../../src/agent/agentProfiles.js";
 import { executeAgentSession } from "../../src/agent/agentSession/executeAgentSession.js";
-import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
 import {
   piReviewerAgentRuntime,
   ReviewerExecutionFailed,

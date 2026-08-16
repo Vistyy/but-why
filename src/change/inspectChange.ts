@@ -8,8 +8,8 @@ import type {
   CandidateValidationToolingFailure,
 } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "./change.js";
-import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
+import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type {
   ActiveValidationRunPort,
   ChangeValidationReadPort,
