@@ -180,7 +180,6 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
   readonly github: GitHubPullRequestReader;
-  readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
     worktreePath: string,
     commit: string,
@@ -189,7 +188,6 @@ export const openChangeSubmit = (dependencies: {
     acceptanceContextSupplied: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
-    validationRepoConfig?: RepoConfig,
     reviewerConfiguration?: ChangeReviewerConfiguration,
   ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
@@ -285,17 +283,6 @@ const submitChange = (
           : { details: configFailureDetails(baselineRepoConfig) }),
       } as const;
     }
-    const candidateRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
-    if (!candidateRepoConfig.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: candidateRepoConfig.message,
-        ...(configFailureDetails(candidateRepoConfig) === undefined
-          ? {}
-          : { details: configFailureDetails(candidateRepoConfig) }),
-      } as const;
-    }
     if (change.reviewerConfiguration === null || change.reviewerConfiguration === undefined) {
       return {
         ok: false,
@@ -315,9 +302,8 @@ const submitChange = (
     }
     const policy = dependencies.resolvePolicy(
       change.acceptanceContext !== null,
-      candidateRepoConfig.config,
-      change.worktreePath,
       baselineRepoConfig.config,
+      change.worktreePath,
       change.reviewerConfiguration,
     );
     if (!policy.ok) {
@@ -335,9 +321,8 @@ const submitChange = (
       () =>
         dependencies.resolvePolicy(
           change.acceptanceContext !== null,
-          candidateRepoConfig.config,
-          change.worktreePath,
           baselineRepoConfig.config,
+          change.worktreePath,
         ),
     );
     if (!fixedPolicy.ok) return fixedPolicy;

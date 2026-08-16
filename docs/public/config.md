@@ -15,8 +15,9 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 Both files are validated when But Why reads them.
 
 Task Submit reads Repo Config from the exact captured Review Base.
-Change Submit reads non-review policy from the exact fetched Change Base and reviewer policy and Repo Agent Profiles from the Candidate.
-The caller checkout's Repo Config does not supply submission policy.
+Change Start stores reviewer policy and Repo Agent Profiles for the Change.
+Change Submit reads current validation policy from the exact fetched Change Base and retains the stored Change reviewer configuration.
+The caller checkout's and Candidate's Repo Config do not supply submission policy.
 Global Config resolves from the configured user path.
 
 ## Repo Config
@@ -272,7 +273,7 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Acceptance Review and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Change Start resolves Acceptance Review and Specialist profile selections from its Change Base Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists for user-configured resources.

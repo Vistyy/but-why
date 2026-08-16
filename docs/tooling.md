@@ -30,6 +30,14 @@ Before npm publication, `just by ...` uses the Trusted But Why Executable from t
 It does not load CLI or migration code from a Candidate worktree.
 Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
 
+Change Submit treats the Candidate Repo Config as opaque to the Trusted But Why Executable.
+It resolves Repository Preparation, Checks, copied local files, and current reviewer policy from the exact fetched Change Base, while Change Start facts retain reviewer authority for the Change.
+The source repository's Change Base config includes the `candidate-repo-config` Check.
+After trusted Repository Preparation, that Check runs `just validate-candidate-repo-config` in the Snapshot Workspace so the Candidate source decoder validates the actual Candidate Repo Config.
+A nonzero result creates normal Check evidence and prevents reviewer execution and publication.
+The validator reads only `.but-why/config.json` and does not open Shared Repository State.
+Do not invoke the Candidate CLI for this validation.
+
 While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
 The command must resolve the executable from the canonical main checkout before it reads or mutates Shared Repository State.
 A Candidate worktree must not invoke its own CLI for repository state operations.

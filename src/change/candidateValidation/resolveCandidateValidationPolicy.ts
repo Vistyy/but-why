@@ -39,7 +39,6 @@ type CandidateValidationPolicyInput = {
   readonly globalConfigPath: string;
   readonly acceptanceContextSupplied: boolean;
   readonly repoConfig?: RepoConfig;
-  readonly validationRepoConfig?: RepoConfig;
   readonly repoRoot?: string;
 } & (
   | { readonly globalConfig: GlobalConfig; readonly reviewerConfiguration?: undefined }
@@ -64,8 +63,7 @@ export const resolveCandidateValidationPolicy = (
       }),
     };
   }
-  const validationRepoConfig = input.validationRepoConfig ?? repoConfig;
-  const submit = submitRepoConfig(validationRepoConfig);
+  const submit = submitRepoConfig(repoConfig);
   if (!submit.ok) return submit;
   const specialistReviews =
     input.reviewerConfiguration === undefined
@@ -83,12 +81,12 @@ export const resolveCandidateValidationPolicy = (
     if (!resources.ok) return resources;
   }
 
-  const agentEnvironment = repoAgentEnvironment(validationRepoConfig);
+  const agentEnvironment = repoAgentEnvironment(repoConfig);
   const policy: CandidateValidationPolicy = {
     ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
-    copyFiles: validationRepoConfig.snapshotWorkspace?.copyFiles ?? [],
+    copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
     specialistReviews: specialistReviews.policies,
   };
   if (!input.acceptanceContextSupplied)

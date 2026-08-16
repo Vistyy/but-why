@@ -93,30 +93,25 @@ describe("Candidate validation policy configuration", () => {
     });
   });
 
-  it("resolves Repository Preparation from the Change Base Repo Config", () => {
+  it("resolves the complete Validation Policy from the Change Base Repo Config", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global-config.json");
     writeFileSync(globalConfigPath, "{}");
-    const candidate = decodeRepoConfig({
-      taskPrefix: "BY",
-      prepare: { command: "candidate-prepare" },
-      validation: { checks: [{ id: "candidate", command: "true" }] },
-    });
     const changeBase = decodeRepoConfig({
       taskPrefix: "BY",
+      agentEnvironment: { command: ["trusted-environment"] },
       prepare: { command: "base-prepare" },
       validation: { checks: [{ id: "base", command: "true" }] },
+      snapshotWorkspace: { copyFiles: ["trusted-file"] },
     });
-    if (Either.isLeft(candidate) || Either.isLeft(changeBase))
-      throw new Error("Repo Config fixture is invalid.");
+    if (Either.isLeft(changeBase)) throw new Error("Repo Config fixture is invalid.");
 
     const result = resolveCandidateValidationPolicy({
-      context: { root, config: candidate.right },
+      context: { root, config: changeBase.right },
       globalConfigPath,
       globalConfig: globalConfigAt(globalConfigPath),
       acceptanceContextSupplied: false,
-      repoConfig: candidate.right,
-      validationRepoConfig: changeBase.right,
+      repoConfig: changeBase.right,
     });
 
     expect(result).toMatchObject({
@@ -124,8 +119,10 @@ describe("Candidate validation policy configuration", () => {
       resolved: {
         acceptanceContextSupplied: false,
         policy: {
+          agentEnvironment: ["trusted-environment"],
           prepare: { command: "base-prepare" },
           checks: [{ id: "base", command: "true" }],
+          copyFiles: ["trusted-file"],
         },
       },
     });
