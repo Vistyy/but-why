@@ -2,11 +2,9 @@ import { dirname, join } from "node:path";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
+import type { ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { publicChangeId } from "../change/changeId.js";
-
-import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
