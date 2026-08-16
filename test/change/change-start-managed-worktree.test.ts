@@ -166,6 +166,41 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("recovers a linked Change without rereading current reviewer configuration", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const taskId = yield* createTask(
+        root,
+        "Recover without current policy",
+        "Keep the recorded policy.\n",
+      );
+      yield* passTaskReviewFixture(root, taskId, now);
+      const globalConfigPath = join(root, ".test-global-config.json");
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId],
+        now,
+        { globalConfigPath },
+      );
+      expect(started.status).toBe(0);
+      const startedOutput = JSON.parse(started.stdout) as ChangeOutput;
+
+      writeFileSync(globalConfigPath, "malformed");
+      const recovered = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId],
+        now,
+        { globalConfigPath },
+      );
+
+      expect(recovered.status).toBe(0);
+      expect(JSON.parse(recovered.stdout)).toMatchObject({
+        change: { id: startedOutput.change.id, taskId },
+      });
+    }),
+  );
+
   it.effect("rejects a local-only remote as a publication remote", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

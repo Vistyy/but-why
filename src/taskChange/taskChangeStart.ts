@@ -74,9 +74,12 @@ export type TaskChangeStartPersistence = {
 export type TaskChangeStartInput = {
   readonly taskId: string;
   readonly baseBranch?: string;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
   readonly now: string;
 };
+
+export type TaskChangeReviewerConfigurationResolution =
+  | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+  | { readonly ok: false; readonly message: string };
 
 export type TaskChangeStartResult =
   | ChangeStartResult
@@ -93,6 +96,7 @@ export const startTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: TaskChangeStartInput,
+  resolveReviewerConfiguration: () => TaskChangeReviewerConfigurationResolution,
 ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const prepared = yield* store.prepareTask(input.taskId);
@@ -112,6 +116,15 @@ export const startTaskChange = (
       return yield* prepareExistingChange(store, executor, prepared.existing, input.now);
     }
 
+    const reviewerConfiguration = resolveReviewerConfiguration();
+    if (!reviewerConfiguration.ok) {
+      return {
+        ok: false as const,
+        code: "reviewer_configuration_invalid" as const,
+        message: reviewerConfiguration.message,
+      };
+    }
+
     const ownerStore: ChangeStartPersistence<TaskChangeStartEligibilityError> = {
       create: (createInput) =>
         store.createLinked({
@@ -123,9 +136,7 @@ export const startTaskChange = (
     };
     return yield* startChange(ownerStore, git, executor, {
       ...(input.baseBranch === undefined ? {} : { baseBranch: input.baseBranch }),
-      ...(input.reviewerConfiguration === undefined
-        ? {}
-        : { reviewerConfiguration: input.reviewerConfiguration }),
+      reviewerConfiguration: reviewerConfiguration.configuration,
       now: input.now,
     });
   });

@@ -27,19 +27,6 @@ export const openTaskChangeStartOperation = (input: {
           command: TaskChangeStartInput,
         ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
           Effect.gen(function* () {
-            const reviewerConfiguration = resolveChangeReviewerConfiguration(
-              input.context.config,
-              input.globalConfigPath,
-              input.context.root,
-              true,
-            );
-            if (!reviewerConfiguration.ok) {
-              return {
-                ok: false as const,
-                code: "reviewer_configuration_invalid" as const,
-                message: reviewerConfiguration.message,
-              };
-            }
             const git = {
               resolveIntent: (slug: string, requestedBaseBranch: string | undefined) =>
                 resolveChangeStartGitIntent(input.context, slug, requestedBaseBranch),
@@ -48,10 +35,19 @@ export const openTaskChangeStartOperation = (input: {
                 recovering: boolean,
               ) => provisionChangeWorktree(input.context.root, change, recovering),
             };
-            return yield* startTaskChange(store, git, executeLocalRepositoryPreparation, {
-              ...command,
-              reviewerConfiguration: reviewerConfiguration.configuration,
-            });
+            return yield* startTaskChange(
+              store,
+              git,
+              executeLocalRepositoryPreparation,
+              command,
+              () =>
+                resolveChangeReviewerConfiguration(
+                  input.context.config,
+                  input.globalConfigPath,
+                  input.context.root,
+                  true,
+                ),
+            );
           }),
     ),
   );
