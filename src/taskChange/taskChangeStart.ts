@@ -6,7 +6,10 @@ import {
   startChange,
 } from "../change/changeLifecycle.js";
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
-import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
+import type {
+  ChangeStartPersistence,
+  ChangeStartProvisioner,
+} from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
   ChangeStartRecord,
@@ -50,23 +53,15 @@ export type TaskChangeStartCreateInput = CreateChangeStartInput & {
 export type TaskChangeStartPersistence = {
   readonly create: (
     input: TaskChangeStartCreateInput,
-  ) => Effect.Effect<
-    | { readonly ok: true; readonly change: ChangeStartRecord }
-    | { readonly ok: false; readonly code: "change_start_conflict" }
-    | TaskChangeStartEligibilityError,
-    RepositoryStorageError
-  >;
+    provision?: ChangeStartProvisioner,
+  ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly prepareTask: (
     taskId: string,
   ) => Effect.Effect<TaskChangeStartPreparation, RepositoryStorageError>;
   readonly createLinked: (
     input: TaskChangeStartCreationInput,
-  ) => Effect.Effect<
-    | { readonly ok: true; readonly change: ChangeStartRecord }
-    | { readonly ok: false; readonly code: "change_start_conflict" }
-    | TaskChangeStartEligibilityError,
-    RepositoryStorageError
-  >;
+    provision?: ChangeStartProvisioner,
+  ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly getById: ChangeStartPersistence["getById"];
   readonly recordPrepareOutcome: ChangeStartPersistence["recordPrepareOutcome"];
 };
@@ -130,11 +125,14 @@ export const startTaskChange = (
     }
 
     const ownerStore: ChangeStartPersistence<TaskChangeStartEligibilityError> = {
-      create: (createInput) =>
-        store.createLinked({
-          ...createInput,
-          taskId: input.taskId,
-        }),
+      create: (createInput, provision) =>
+        store.createLinked(
+          {
+            ...createInput,
+            taskId: input.taskId,
+          },
+          provision,
+        ),
       getById: store.getById,
       recordPrepareOutcome: store.recordPrepareOutcome,
     };

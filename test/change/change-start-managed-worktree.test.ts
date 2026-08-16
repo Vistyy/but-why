@@ -125,6 +125,59 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("preserves an existing allocated branch and records no Change", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const branch = "refs/heads/but-why/BY-C1";
+      const branchName = branch.slice("refs/heads/".length);
+      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
+      const worktreePath = join(dirname(root), `${basename(root)}-worktrees`, "but-why", "BY-C1");
+      git(root, "branch", branchName, startingCommit);
+      mkdirSync(worktreePath, { recursive: true });
+      writeFileSync(join(worktreePath, "keep.txt"), "external content\n");
+
+      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "change_start_conflict", changeId: "BY-C1" },
+      });
+      expect(git(root, "rev-parse", `${branch}^{commit}`)).toBe(startingCommit);
+      expect(existsSync(join(worktreePath, "keep.txt"))).toBe(true);
+      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+
+      rmSync(worktreePath, { recursive: true });
+      git(root, "branch", "-D", branchName);
+      const retried = yield* runByInProcessEffect(root, ["change", "start"], now);
+      expect(retried.status).toBe(0);
+      expect(JSON.parse(retried.stdout)).toMatchObject({ change: { id: "BY-C1" }, branch });
+    }),
+  );
+
+  it.effect("records no Task-linked Change when its allocated branch already exists", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const taskId = yield* createTask(root, "Conflicting branch", "Preserve external state.\n");
+      yield* passTaskReviewFixture(root, taskId, now);
+      const branch = "refs/heads/but-why/BY-C1";
+      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
+      git(root, "branch", branch.slice("refs/heads/".length), startingCommit);
+
+      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "change_start_conflict", changeId: "BY-C1" },
+      });
+      expect(git(root, "rev-parse", `${branch}^{commit}`)).toBe(startingCommit);
+      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+      const task = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
+      expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
+    }),
+  );
+
   it.effect("does not start a Task when the publication remote is missing", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

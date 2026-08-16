@@ -11,6 +11,7 @@ import {
 import {
   createChange,
   insertLinkedChange,
+  provisionCreatedChange,
   readChangeStartById,
   recordPrepareOutcome as recordChangePrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
@@ -35,19 +36,19 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    create: (input: TaskChangeStartCreateInput) =>
+    create: (input: TaskChangeStartCreateInput, provision) =>
       repository.transactionImmediate("create Change Start", (sql) =>
         input.taskId === undefined
-          ? createChange(sql, input, repository.idPrefix)
-          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix),
+          ? createChange(sql, input, repository.idPrefix, provision)
+          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix, provision),
       ),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
         prepareTask(sql, taskId),
       ),
-    createLinked: (input) =>
+    createLinked: (input, provision) =>
       repository.transactionImmediate("create linked Change Start", (sql) =>
-        createLinked(sql, input, repository.idPrefix),
+        createLinked(sql, input, repository.idPrefix, provision),
       ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => readTaskChangeStartById(sql, changeId)),
@@ -87,6 +88,7 @@ const createLinked = (
   sql: SqlClient.SqlClient,
   input: TaskChangeStartCreationInput,
   idPrefix = "BY",
+  provision?: Parameters<TaskChangeStartPersistence["createLinked"]>[1],
 ) =>
   Effect.gen(function* () {
     const prepared = yield* prepareTask(sql, input.taskId);
@@ -113,7 +115,7 @@ const createLinked = (
     if (change === undefined) {
       return yield* invalidData("create linked Change Start", "Change disappeared");
     }
-    return { ok: true as const, change };
+    return yield* provisionCreatedChange(sql, change, provision);
   });
 
 const readExistingByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>

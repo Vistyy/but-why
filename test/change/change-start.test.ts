@@ -48,13 +48,19 @@ const fixture = (options: FixtureOptions = {}) => {
   const events: string[] = [];
   let current = options.existing;
   const store: ChangeStartPersistence = {
-    create: (input) => {
+    create: (input, provision) => {
       events.push("create");
-      current = recordFrom({
+      const change = recordFrom({
         ...input,
         ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
       });
-      return Effect.succeed({ ok: true as const, change: current });
+      const provisioned = provision?.(change) ?? { ok: true as const };
+      if (!provisioned.ok) {
+        if (provisioned.code !== "change_start_conflict") current = change;
+        return Effect.succeed({ ...provisioned, change });
+      }
+      current = change;
+      return Effect.succeed({ ok: true as const, change });
     },
     getById: (id) => Effect.succeed(current?.id === id ? current : undefined),
     recordPrepareOutcome: (id, failure) => {
@@ -132,6 +138,23 @@ describe("Change Start orchestration", () => {
       });
       if (!("change" in result)) return;
       expect(result.change).toBe(captured.current());
+      expect(captured.events).toEqual([
+        "resolveIntent:pending-change-start:default",
+        "create",
+        "provisionWorktree:create",
+      ]);
+    }),
+  );
+
+  it.effect("does not retain a prospective Change when its exact branch conflicts", () =>
+    Effect.gen(function* () {
+      const captured = fixture({ provision: { ok: false, code: "change_start_conflict" } });
+      expect(yield* captured.operations.start({ now })).toMatchObject({
+        ok: false,
+        code: "change_start_conflict",
+        change: { id: expect.any(String) },
+      });
+      expect(captured.current()).toBeUndefined();
       expect(captured.events).toEqual([
         "resolveIntent:pending-change-start:default",
         "create",

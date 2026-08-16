@@ -66,6 +66,9 @@ export const provisionChangeWorktree = (
   start: ChangeStartRecord,
   recovering: boolean,
 ): ProvisionChangeWorktreeResult => {
+  if (!recovering && resolveLocalBranch(cwd, start.branchRef) !== undefined) {
+    return { ok: false, code: "change_start_conflict" };
+  }
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 

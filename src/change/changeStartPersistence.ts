@@ -2,15 +2,23 @@ import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangePrepareFailure } from "./change.js";
+import type {
+  ProvisionChangeWorktreeFailure,
+  ProvisionChangeWorktreeResult,
+} from "./changeStartGitOperations.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "./changeStartStore.js";
 
 export type ChangeStartCreationResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
-  | { readonly ok: false; readonly code: "change_start_conflict" };
+  | { readonly ok: false; readonly code: "change_start_conflict" }
+  | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
+
+export type ChangeStartProvisioner = (change: ChangeStartRecord) => ProvisionChangeWorktreeResult;
 
 export type ChangeStartPersistence<CreationFailure = never> = {
   readonly create: (
     input: CreateChangeStartInput,
+    provision?: ChangeStartProvisioner,
   ) => Effect.Effect<ChangeStartCreationResult | CreationFailure, RepositoryStorageError>;
   readonly getById: (
     changeId: string,

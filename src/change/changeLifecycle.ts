@@ -56,17 +56,18 @@ export const startChange = <CreationFailure extends object = never>(
 
     const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
-    const created = yield* store.create({
-      id: "pending-change-start",
-      ...gitIntent.intent,
-      reviewerConfiguration: input.reviewerConfiguration,
-      now: input.now,
-    });
+    const created = yield* store.create(
+      {
+        id: "pending-change-start",
+        ...gitIntent.intent,
+        reviewerConfiguration: input.reviewerConfiguration,
+        now: input.now,
+      },
+      (change) => git.provisionWorktree(change, false),
+    );
     if (!("ok" in created)) return created;
     if (!created.ok) return created;
 
-    const provisioned = git.provisionWorktree(created.change, false);
-    if (!provisioned.ok) return { ...provisioned, change: created.change };
     return yield* prepareExistingChange(store, executor, created.change, input.now);
   });
 
