@@ -51,6 +51,7 @@ export type ReviewerAgentInput<Output> = {
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly reviewer: string;
   readonly decodeOutput: ReviewerOutputDecoder<Output>;
+  readonly systemPrompt: string;
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd?: string;
@@ -89,6 +90,7 @@ const reviewWithPi = <Output>(
   Effect.gen(function* () {
     const processInput: ReviewerProcessInput = {
       reviewer: input.reviewer,
+      systemPrompt: input.systemPrompt,
       prompt: input.prompt,
       profile: input.profile,
       commandCwd: input.commandCwd ?? input.resourceRoot ?? ".",

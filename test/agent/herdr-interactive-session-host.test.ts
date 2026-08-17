@@ -86,7 +86,7 @@ describe("Herdr Interactive Session Host", () => {
         "--timeout",
         "120000",
         "--",
-        "--system-prompt",
+        "--append-system-prompt",
         systemPromptPaths[0],
         "--append-system-prompt",
         systemPromptPaths[1],

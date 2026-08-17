@@ -401,7 +401,7 @@ const piArguments = (
   const runtimeConfig = profile?.runtimeConfig;
   const [systemPrompt, implementationInstructions] = input.systemPromptPaths;
   return [
-    "--system-prompt",
+    "--append-system-prompt",
     systemPrompt,
     "--append-system-prompt",
     implementationInstructions,

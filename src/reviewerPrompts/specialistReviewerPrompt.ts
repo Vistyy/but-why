@@ -1,6 +1,7 @@
-import { encodeReviewerWireValue, reviewerOutputTag } from "../agent/reviewerOutputWire.js";
+import { encodeReviewerWireValue } from "../agent/reviewerOutputWire.js";
 import {
-  currentCandidateReReviewInstructions,
+  candidateReviewerOutputInstructions,
+  completeCandidateReviewInstructions,
   previousFindingsPrompt,
   reviewerExecutionInstructions,
 } from "./reviewerPromptSupport.js";
@@ -18,20 +19,33 @@ const universalSpecialistInstructions = [
   "Treat configured Specialist instructions as the definition of concern-specific scope, subordinate to these common constraints.",
 ].join("\n");
 
-const acceptanceContextConstraint = (context: unknown): string =>
+const specialistAcceptanceContextInstructions = [
+  "When Acceptance Context is supplied, use it only to constrain Findings and required corrections.",
+  "Do not expand or contradict approved intent.",
+  "Do not require behavior that the Acceptance Context excludes.",
+  "Respect explicit verification constraints in the Acceptance Context.",
+  "Do not invent required verification mechanisms or demand evidence beyond what is necessary to judge approved intent.",
+].join("\n");
+
+const acceptanceContextEvidence = (context: unknown): string =>
+  ["Acceptance Context:", encodeReviewerWireValue(context)].join("\n");
+
+export const buildSpecialistReviewerSystemPrompt = (input: {
+  readonly specialist: string;
+  readonly instructions: string;
+}): string =>
   [
-    "Immutable Acceptance Context (authoritative scope constraint):",
-    encodeReviewerWireValue(context),
-    "Use this context only to constrain Findings and required corrections.",
-    "Do not expand or contradict approved intent.",
-    "Do not require behavior that the context excludes.",
-    "Respect explicit verification constraints in the context.",
-    "Do not invent required verification mechanisms or demand evidence beyond what is necessary to judge approved intent.",
-  ].join("\n");
+    reviewerExecutionInstructions,
+    completeCandidateReviewInstructions,
+    `Configured concern: ${input.specialist}`,
+    input.instructions,
+    universalSpecialistInstructions,
+    specialistAcceptanceContextInstructions,
+    candidateReviewerOutputInstructions,
+  ].join("\n\n");
 
 export const buildSpecialistReviewerPrompt = (input: {
   readonly specialist: string;
-  readonly instructions: string;
   readonly validationRunId: string;
   readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
@@ -42,15 +56,10 @@ export const buildSpecialistReviewerPrompt = (input: {
   readonly acceptanceContext?: unknown;
 }): string =>
   [
-    input.instructions,
-    universalSpecialistInstructions,
-    reviewerExecutionInstructions,
-    "",
     `Configured concern: ${input.specialist}`,
-    "Inspect the repository and Candidate diff before deciding.",
     ...(input.acceptanceContext === undefined
       ? []
-      : ["", acceptanceContextConstraint(input.acceptanceContext)]),
+      : ["", acceptanceContextEvidence(input.acceptanceContext)]),
     "",
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
@@ -63,15 +72,10 @@ export const buildSpecialistReviewerPrompt = (input: {
     ...(input.previousFindings === undefined || input.previousFindings.length === 0
       ? []
       : [previousFindingsPrompt(input.previousFindings)]),
-    "",
-    "Return exactly one JSON object inside this XML tag:",
-    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
 export const buildSpecialistContinuationPrompt = (input: {
   readonly specialist: string;
-  readonly instructions: string;
   readonly validationRunId: string;
   readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
@@ -83,16 +87,10 @@ export const buildSpecialistContinuationPrompt = (input: {
   readonly acceptanceContext?: unknown;
 }): string =>
   [
-    input.instructions,
-    universalSpecialistInstructions,
-    reviewerExecutionInstructions,
-    "",
-    `Configured concern: ${input.specialist}`,
-    "Continue this Specialist Reviewer Session for the configured concern.",
-    currentCandidateReReviewInstructions,
+    `Continue this Specialist Reviewer Session for the configured concern: ${input.specialist}.`,
     ...(input.acceptanceContext === undefined
       ? []
-      : ["", acceptanceContextConstraint(input.acceptanceContext)]),
+      : ["", acceptanceContextEvidence(input.acceptanceContext)]),
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
       validationRunId: input.validationRunId,
@@ -101,7 +99,4 @@ export const buildSpecialistContinuationPrompt = (input: {
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
     previousFindingsPrompt(input.previousFindings),
-    "Return exactly one JSON object inside this XML tag:",
-    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");

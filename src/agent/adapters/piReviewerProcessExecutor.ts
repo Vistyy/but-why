@@ -151,6 +151,8 @@ const commandInvocation = (
           ? ["--session-id", input.sessionId]
           : ["--session", input.sessionId]
       : ["--session", requiredResumeSessionFilePath(input)]),
+    "--append-system-prompt",
+    input.systemPrompt,
     "--name",
     `${input.reviewer} Review`,
     input.prompt,

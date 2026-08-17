@@ -21,6 +21,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import {
   buildAcceptanceContinuationPrompt,
   buildAcceptanceReviewerPrompt,
+  buildAcceptanceReviewerSystemPrompt,
 } from "../../reviewerPrompts/acceptanceReviewerPrompt.js";
 import {
   buildReviewerOutputCorrectionPrompt,
@@ -129,8 +130,8 @@ export const runAcceptanceReviewPhase = (
           producer: "acceptance",
         }),
       );
+      const systemPrompt = buildAcceptanceReviewerSystemPrompt(input.policy.instructions);
       const prompt = buildAcceptanceReviewerPrompt({
-        instructions: input.policy.instructions,
         validationRunId: input.validationRunId,
         availableArtifactRefs,
         previousFindings: earlierFindings,
@@ -192,6 +193,7 @@ export const runAcceptanceReviewPhase = (
                 }),
             ),
           ),
+        systemPrompt,
         prompt,
         continuationPrompt,
         commandCwd: input.commandCwd,

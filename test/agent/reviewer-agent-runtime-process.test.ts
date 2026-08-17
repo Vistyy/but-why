@@ -175,6 +175,7 @@ describe("Pi reviewer agent runtime process boundary", () => {
             reviewerExecutor,
             reviewer: "acceptance",
             decodeOutput: decodeEmptyFindings,
+            systemPrompt: "Act as the Acceptance Reviewer.",
             prompt: "Review the Candidate.",
             profile,
           });
@@ -201,6 +202,7 @@ describe("Pi reviewer agent runtime process boundary", () => {
           expect(probe.prompt).toContain("PARENT_CLAUDE_MARKER");
           expect(probe.prompt).toContain("CANDIDATE_AGENTS_MARKER");
           expect(probe.prompt).toContain("codebase-design");
+          expect(probe.prompt).toContain("Act as the Acceptance Reviewer.");
           expect(probe.prompt).not.toContain("USER_NORMAL_CONTEXT_MARKER");
           expect(probe.prompt).not.toContain("CANDIDATE_CONTEXT_MARKER");
           expect(probe.tools).toEqual([

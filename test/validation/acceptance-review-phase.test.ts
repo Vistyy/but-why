@@ -141,6 +141,13 @@ describe("Acceptance Review phase", () => {
       expect(call?.prompt).toContain(blockerHistory.resolutions[0]?.content);
       expect(call?.prompt).toContain("Earlier Acceptance Finding");
       expect(call?.prompt).toContain("artifact:validation-1/checks/quality/stdout.txt");
+      expect(call?.prompt).not.toContain("reviewer-output");
+      expect(call?.systemPrompt).toContain(
+        "The supplied Acceptance Context is the authoritative implementation intent",
+      );
+      expect(call?.systemPrompt).toContain(
+        "Each Finding must include title, description, evidence, files, and artifactRefs",
+      );
       expect(fixture.rounds).toEqual([
         expect.objectContaining({
           validationRunId: "validation-1",

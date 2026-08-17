@@ -126,21 +126,7 @@ Those forms are evidence only when a specific boundary gives them harmful meanin
 Reinspect the final owner interfaces after BY-274.
 Adopt only rules whose violation corresponds to a stable architectural fact and whose diagnostic can identify a concrete correction.
 
-## 3. Improve complete-Candidate review
-
-### Reviewer principle
-
-A future reviewer instruction should express the general reasoning requirement rather than list one Change's defects:
-
-> Review how authority and knowledge are distributed across the complete Candidate.
-> For each changed concept or relationship, identify its owner, find its material representations and consumers, and trace a representative normal and recovery path.
-> Reject knowledge or coordination outside the owner unless accepted intent explicitly places it there.
-> After a correction, reassess the complete Candidate and search for sibling instances.
-
-This wording is a candidate, not an accepted instruction change.
-It must be evaluated against reviewer behavior before adoption.
-
-### Boundary-changing Task authoring
+## 3. Improve boundary-changing Task authoring
 
 When a Task changes an ownership boundary, investigate whether the accepted intent should state:
 
@@ -154,27 +140,6 @@ When a Task changes an ownership boundary, investigate whether the accepted inte
 
 These facts should be included only when the required outcome or a material recovery path depends on them.
 The authoring guidance must not turn every Task into a speculative architecture inventory.
-
-### Reviewer benchmark
-
-Preserve BY-270 as a possible benchmark because the review history contains materially different Candidate states:
-
-- `f529986a` was the initial Candidate revision.
-- `6b5bed7f` formally passed review while retained ownership and boundary concerns remained.
-- The corrected final Candidate can provide the comparison state after acceptance.
-
-A benchmark record must also preserve the exact accepted intent, reviewer configuration, validation evidence, and human adjudication.
-Commit hashes alone are insufficient because reviewer behavior depends on the instruction and execution context.
-
-Evaluate at least:
-
-- recall of adjudicated material defects;
-- unsupported or speculative findings;
-- evidence quality and source precision;
-- whether the reviewer correctly passes the corrected Candidate;
-- whether correction of one finding causes a complete-Candidate reassessment.
-
-Do not tune reviewer instructions solely to reproduce the wording of the known BY-270 findings.
 
 ## 4. Simplify persisted-value decoding
 

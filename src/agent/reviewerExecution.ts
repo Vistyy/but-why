@@ -22,6 +22,7 @@ export type ReviewerProcessResult = {
 
 export type ReviewerProcessInput = {
   readonly reviewer: string;
+  readonly systemPrompt: string;
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd: string;
