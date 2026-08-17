@@ -63,6 +63,28 @@ describe("Change Start Managed Worktree boundaries", () => {
       }),
   );
 
+  it.effect("ignores the retired Change Start placeholder branch", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      git(root, "branch", "but-why/pending-change-start", "main");
+      const placeholderCommit = git(
+        root,
+        "rev-parse",
+        "refs/heads/but-why/pending-change-start^{commit}",
+      );
+
+      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
+
+      expect(started.status).toBe(0);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        branch: expect.stringMatching(/^refs\/heads\/but-why\/BY-C[1-9][0-9]*$/u),
+      });
+      expect(git(root, "rev-parse", "refs/heads/but-why/pending-change-start^{commit}")).toBe(
+        placeholderCommit,
+      );
+    }),
+  );
+
   it.effect("ignores an ahead local branch and preserves it unchanged", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

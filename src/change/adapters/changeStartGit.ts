@@ -5,7 +5,6 @@ import { basename, dirname, join } from "node:path";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
-import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
 import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
@@ -32,9 +31,6 @@ export const resolveChangeStartGitIntent = (
   }
 
   const branchRef = changeBranchRefForSlug(slug);
-  if (resolveLocalBranch(context.root, branchRef) !== undefined) {
-    return { ok: false, code: "change_start_conflict" };
-  }
   return {
     ok: true,
     intent: {
