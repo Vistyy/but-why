@@ -248,6 +248,10 @@ Task Review also depends on infrastructure currently shared with Change Delivery
 - Structured CLI output.
 
 The completed BY-269, BY-271, and BY-275 work supplies the ownership, identity, and Agent Session direction for the final `0001_baseline`.
+BY-274 acceptance is limited to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
+The remaining live operator cutover is separately authorized after acceptance and does not create a second Task or product feature.
+Merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization, so live post-reconcile verification is not a Task completion condition.
+The live pause, reconciliation, archive, fresh-init, and recovery sequence must complete successfully before post-baseline sequencing resumes.
 The remaining BY-274 cutover does not import or convert old data and does not require intermediate persistence migrations or dual runtime compatibility.
 Working internal code remains in place unless the final schema, retired representation removal, or supported behavior requires a change.
 The cutover removes the retired prerelease representation from the released product and preserves its historical evidence only in the operational archive.
@@ -461,7 +465,7 @@ The boundary is sufficient only when all of these paths are practical through on
 4. **Complete:** Define and review coordinated Task and Change completion.
 5. **Complete:** Inventory shared infrastructure and define the module dependency rules.
 6. **Complete (BY-275):** BY-275 completed the Agent Session and Agent Invocation design prerequisite for the first-release database baseline.
-7. **Remaining (BY-274):** Complete the direct first-release baseline and operational cutover.
+7. **Remaining (BY-274):** Complete the exact first-release baseline implementation, verified old bundle, and successful disposable rehearsal, then separately authorize the live operator cutover.
    Do not import or convert old data, add intermediate persistence migrations, or move working internal code unless the final schema, retired representation removal, or supported behavior requires it.
    Candidate Publication presentation remains deferred and adds any later storage through a normal post-baseline migration.
 8. Reassess the release and Global Watcher plans against the accepted boundary.

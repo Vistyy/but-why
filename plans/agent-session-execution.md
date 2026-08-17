@@ -10,6 +10,9 @@ It is not implementation authority.
 ## Outcome
 
 BY-269 and BY-271 are completed planning and implementation predecessors, and BY-275 is the completed Agent Session prerequisite, for the direct BY-274 baseline cutover.
+BY-274 acceptance is limited to exact baseline implementation, verified old-bundle evidence, and successful disposable rehearsal.
+The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
+Live post-reconcile verification is not a Task completion condition, and post-baseline sequencing resumes only after successful live operation.
 Task Review and Change reviewers use shared Agent Session and Agent Invocation capabilities for mechanics they currently share.
 Candidate Publication may adopt these capabilities later but is not part of the initial Agent Session work.
 Tasks and Changes retain role policy, prompts, structured results, Findings, lifecycle effects, and recovery decisions.
@@ -189,6 +192,7 @@ Working internal Agent Session code remains in place unless the final schema, re
 Adapter relocation and general cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
+BY-274 acceptance verifies the old Pinned Predecessor Executable and a successful disposable rehearsal before the separately authorized live operator cutover.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
 

@@ -413,13 +413,14 @@ Shared Agent infrastructure owns:
 No other product-owned baseline table is planned.
 Effect SQL retains its dependency-owned migration ledger.
 
-## Direct baseline implementation
+## BY-274 acceptance
 
 BY-269 completed the Task and Change coordination boundary, and BY-271 completed the internal numeric identity and operational naming direction described above.
 BY-274 is the one remaining direct Change that establishes the final `0001_baseline` and retires the prerelease representation at the release boundary.
+BY-274 acceptance is bounded to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
 The BY-274 Change must use the approved final physical model without introducing intermediate persistence migrations or splitting implementation into intermediate Tasks.
 
-The BY-274 Change must:
+The BY-274 acceptance must:
 
 - Build one reviewed `0001_baseline` from the accepted final domain model instead of importing or converting old Shared Repository State.
 - Retain working internal code, including current Adapter placement and composition, unless the final schema, removal of a retired representation, or supported behavior requires a change.
@@ -431,27 +432,30 @@ The BY-274 Change must:
 - Preserve the read-only legacy Reviewer boundary until the old state is archived, then leave legacy records in that archive rather than importing or converting them.
 - Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for historical legacy records and the fixed configuration required for new Change reviewers.
 - Defer Adapter relocation, SQL ownership enforcement, and general cleanup to `post-baseline-hardening.md`.
+- Build and verify the exact old Pinned Predecessor Executable, record its Git commit and SHA-256, and complete the predecessor rehearsal successfully on a disposable repository.
 
-Every BY-274 Task Context must enumerate the required final-schema changes, retired representations, supported behavior changes, and operational cutover evidence.
+Every BY-274 Task Context must enumerate the required final-schema changes, retired representations, supported behavior changes, and BY-274 acceptance evidence.
 If implementation discovers necessary work outside that scope, the Implementer must raise an Implementation Blocker before performing or deferring it.
-The Operator decides whether to amend BY-274 or create another bounded Task after the baseline.
+The Operator decides whether to amend BY-274 or create another bounded Task before acceptance.
 
-The BY-274 Change does not require intermediate predecessor bundles, intermediate migration reconciliation, or predecessor-specific quiescence checks.
-Its one final predecessor, reconciliation, archive, and fresh-initialization procedure is defined below.
+BY-274 acceptance does not include the live operator cutover.
+After the merged Change is reconciled in the old state, that reconciliation closes the Change and marks the BY-274 Task Done before archive or fresh initialization.
+The immediately following live operator cutover is separately authorized, is not a second Task or product feature, and is not a condition of BY-274 Task completion.
 
 ## Verification allocation
 
 The BY-274 Change runs the repository's complete required check suite through the owning workflow.
-Focused verification must establish the final schema inventory, exact ordered baseline ledger behavior, numeric ID and ordering contracts, retained supported behavior, and removal of retired prerelease representations from the released executable.
-Focused verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy read-only evidence before archive, reviewer configuration snapshots, and operational naming and cutover behavior.
-The final predecessor and fresh-initialization procedure must verify archive integrity, old-state readability, repository identity, the new baseline migration, and basic Trusted But Why Executable access.
+Acceptance verification must establish the final schema inventory, exact ordered baseline ledger behavior, numeric ID and ordering contracts, retained supported behavior, and removal of retired prerelease representations from the released executable.
+Acceptance verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy read-only evidence, reviewer configuration snapshots, and operational naming behavior.
+Acceptance verification must verify the exact old Pinned Predecessor Executable and successful disposable rehearsal.
+Live archive, fresh-initialization, and post-reconcile verification are separate operator-cutover evidence and cannot determine BY-274 Task completion.
 Do not add verification for importing, converting, or upgrading the retired prerelease database.
 Adapter relocation, SQL ownership enforcement, and general cleanup are post-baseline hardening concerns rather than BY-274 acceptance gates.
 
 Real SQLite integration tests verify coordination behavior.
 Do not add custom source-scanning tests that duplicate existing architecture checks.
 
-The operator archive and active-state cutover remain part of the one direct BY-274 release action.
+The live operator cutover follows BY-274 acceptance as a separately authorized operation.
 
 ## Prerelease archive
 
@@ -465,11 +469,13 @@ The released `by` CLI does not read or import the prerelease archive.
 Keep the existing loose SQLite backups until the final prerelease archive is verified.
 After verification, remove those loose copies and retain only the new active `state.sqlite` and the single final prerelease archive.
 
-## Cutover sequence
+## Separately authorized live operator cutover
 
+This live operation may begin only after BY-274 acceptance, including the verified old bundle and successful disposable rehearsal, is complete.
+It is separately authorized after acceptance, is not a second Task or product feature, and does not change the BY-274 completion condition.
 Only implementation work required for the direct BY-274 cutover should be recorded in the prerelease database.
 Do not record intermediate persistence work or later release work in the old state.
-Record Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-cutover work only after the new baseline state is active.
+Record Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-baseline work only after the live operator cutover succeeds and the new baseline state is active.
 
 ### Deferred Candidate Publication presentation Task
 
@@ -496,12 +502,16 @@ Then:
 3. Verify while paused that the merged `main` commit contains the exact approved `idPrefix` Repo Config, record its value, and reject any change to that value through reconciliation, archive, and fresh initialization.
 4. Verify while paused that no BY-271 `taskPrefix`-compatible Repo Config overlay is installed.
 5. Use the pinned predecessor once to reconcile the exact merged BY-274 Change against the old database while the pause remains in force.
+The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
 6. Keep all But Why opens and writes paused while archiving the old operational state, including the Git Common Directory state and repository reviewer files.
 7. Keep the pause in force through fresh initialization of the new Shared Repository State from merged `main` with the BY-274 executable and fresh `0001_baseline` state.
 8. Verify the new Trusted But Why Executable and state, then end the pause and resume development in the new state.
+Live post-reconcile, archive, and fresh-state verification cannot determine BY-274 Task completion because the merged Change was already reconciled and marked Done in old state.
+Post-baseline Task recording and plan-removal sequencing may resume only after this live operation succeeds.
 
 Verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
-If verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
+If predecessor reconciliation fails, keep the pause in force, do not archive or initialize, and recover the old state before proceeding.
+If later live verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
 After new work is recorded, fix the new state forward and do not merge old and new databases.
 Do not add released rollback or database-conversion commands for this one-time cutover.
 
