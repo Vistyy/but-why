@@ -13,6 +13,7 @@ import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
 import type { TaskReviewerOutput } from "../../src/task/review/taskReviewerOutput.js";
 import type { TaskReviewPersistence } from "../../src/task/review/taskReviewPersistence.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
+import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -726,9 +727,15 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
     ]);
     expect(created.status).toBe(0);
 
+    let reviewerCommandCwd: string | undefined;
     const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
       globalConfigPath,
-      taskReviewerAgentRuntime: passingReviewer,
+      taskReviewerAgentRuntime: {
+        review: (input) => {
+          reviewerCommandCwd = input.commandCwd;
+          return passingReviewer.review(input);
+        },
+      },
       writeStderr: () => {
         throw new Error("stderr unavailable");
       },
@@ -747,11 +754,20 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
       String(output.review.id),
     ]);
     const shownOutput = JSON.parse(shown.stdout) as {
-      review: { proposalCurrent: boolean; workspace: { path: string; cleanup: string } };
+      review: {
+        proposalCurrent: boolean;
+        workspace: { path: string; cleanup: string; blockingReason: string | null };
+      };
     };
+    const expectedWorkspacePath = expectedTaskReviewWorkspacePath(root, output.review.id);
+    expect(reviewerCommandCwd).toBe(expectedWorkspacePath);
     expect(shownOutput.review.proposalCurrent).toBe(true);
-    expect(shownOutput.review.workspace.cleanup).toBe("removed");
-    expect(existsSync(shownOutput.review.workspace.path)).toBe(false);
+    expect(shownOutput.review.workspace).toEqual({
+      path: expectedWorkspacePath,
+      cleanup: "removed",
+      blockingReason: null,
+    });
+    expect(existsSync(expectedWorkspacePath)).toBe(false);
     const task = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
     expect(JSON.parse(task.stdout)).toMatchObject({ task: { state: "todo" } });
   }),

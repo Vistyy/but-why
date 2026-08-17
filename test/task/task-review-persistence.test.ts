@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import {
-  cleanupExactDisposableWorkspace,
   createDetachedDisposableWorktree,
   prepareDisposableWorkspaceParent,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
@@ -10,8 +9,7 @@ import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskRev
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
-import { verifyRecordedTaskReviewBase } from "../../src/task/review/adapters/taskReviewGit.js";
-import { abandonTaskReview } from "../../src/task/review/taskReviewUseCases.js";
+import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { createGitRepo } from "../support/by-cli.js";
@@ -86,6 +84,8 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
   runTestProcessOrThrow("git", ["commit", "-m", "Create recovery fixture"], { cwd: root });
   const baseCommit = runTestProcessOrThrow("git", ["rev-parse", "HEAD"], { cwd: root });
   mkdirSync(`${root}/.git/but-why`);
+  mkdirSync(`${root}/.but-why`);
+  writeFileSync(`${root}/.but-why/config.json`, JSON.stringify({ idPrefix: "BY" }));
 
   return withTestRepository(
     root,
@@ -127,17 +127,12 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
       });
       if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
 
-      const abandoned = yield* abandonTaskReview(
-        {
-          mainCheckoutRoot: root,
-          persistence: reviews,
-          verifyReviewBase: verifyRecordedTaskReviewBase,
-          cleanupWorkspace: cleanupExactDisposableWorkspace,
-        },
-        admitted.review.id,
-        "Reviewer process stopped",
-        later,
+      const recovered = yield* withTaskReviewRecoveryUseCases({ cwd: root }, (recovery) =>
+        recovery.abandon(admitted.review.id, "Reviewer process stopped", later),
       );
+      expect(recovered.ok).toBe(true);
+      if (!recovered.ok) throw new Error(`Could not load recovery: ${recovered.error.code}`);
+      const abandoned = recovered.value;
 
       expect(abandoned).toMatchObject({
         ok: true,

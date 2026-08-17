@@ -255,6 +255,20 @@ const expectedIndexes = {
   },
 } as const;
 
+const expectedImplicitUniqueIndexes = {
+  change_agent_sessions: ["pk:change_id,producer", "u:agent_session_id"],
+  changes: ["u:branch_ref", "u:worktree_path"],
+  task_change_links: ["u:change_id"],
+  task_dependencies: ["pk:dependent_task_id,prerequisite_task_id"],
+  task_review_agent_invocations: ["pk:task_review_id,agent_invocation_id", "u:agent_invocation_id"],
+  tasks: ["u:reviewer_agent_session_id"],
+  validation_phase_agent_invocations: [
+    "pk:validation_run_id,phase,producer,agent_invocation_id",
+    "u:agent_invocation_id",
+  ],
+  validation_phase_results: ["pk:validation_run_id,phase,producer"],
+} as const;
+
 const expectStatementRejected = (
   repository: Context.Tag.Service<typeof RepositorySql>,
   operationName: string,
@@ -384,6 +398,33 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         }
       }
 
+      for (const table of Object.keys(expectedColumns)) {
+        const listed = yield* repository.operation(`inspect ${table} implicit indexes`, (sql) =>
+          sql.unsafe<{
+            readonly name: string;
+            readonly unique: number;
+            readonly origin: string;
+            readonly partial: number;
+          }>(`PRAGMA index_list(${table})`),
+        );
+        const implicit: string[] = [];
+        for (const index of listed.filter((index) => index.origin !== "c")) {
+          expect(index.unique, index.name).toBe(1);
+          expect(index.partial, index.name).toBe(0);
+          const keys = yield* repository.operation(`inspect ${index.name} implicit keys`, (sql) =>
+            sql.unsafe<{ readonly name: string }>(`PRAGMA index_info(${index.name})`),
+          );
+          implicit.push(`${index.origin}:${keys.map((key) => key.name).join(",")}`);
+        }
+        expect(implicit.sort(), table).toEqual(
+          [
+            ...(expectedImplicitUniqueIndexes[
+              table as keyof typeof expectedImplicitUniqueIndexes
+            ] ?? []),
+          ].sort(),
+        );
+      }
+
       expect(tables.every((table) => !table.sql?.includes("AUTOINCREMENT"))).toBe(true);
       expect(
         tables
@@ -420,9 +461,69 @@ it.scoped("installs the exact first-release product schema from one baseline mig
 
       yield* expectStatementRejected(
         repository,
-        "reject unsafe integer",
-        "INSERT INTO agent_sessions (id) VALUES (9007199254740992)",
+        "reject non-singleton Shared State identity",
+        "UPDATE shared_state_identity SET id = 2 WHERE id = 1",
       );
+      const identityInsertions = [
+        {
+          name: "Agent Session",
+          statement: (id: number) => `INSERT INTO agent_sessions (id) VALUES (${id})`,
+        },
+        {
+          name: "Agent Continuation",
+          statement: (id: number) =>
+            `INSERT INTO agent_continuations (id, agent_session_id, harness, model) VALUES (${id}, 1, 'pi', 'test')`,
+        },
+        {
+          name: "Agent Invocation",
+          statement: (id: number) =>
+            `INSERT INTO agent_invocations (id, continuation_id, created_at) VALUES (${id}, 1, 'now')`,
+        },
+        {
+          name: "Task",
+          statement: (id: number) =>
+            `INSERT INTO tasks (id, title, description, state) VALUES (${id}, 'Task', 'Intent', 'new')`,
+        },
+        {
+          name: "Task Review",
+          statement: (id: number) =>
+            `INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, findings, cleanup_pending) VALUES (${id}, 1, '{}', '[]', 'main', 'head', '[]', 0)`,
+        },
+        {
+          name: "Change",
+          statement: (id: number) =>
+            `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (${id}, 'refs/heads/change-${id}', 'main', 'url', '/tmp/change-${id}', '{}', 0)`,
+        },
+        {
+          name: "Implementation Decision",
+          statement: (id: number) =>
+            `INSERT INTO implementation_decisions (id, change_id, choice, rationale) VALUES (${id}, 1, 'choice', 'rationale')`,
+        },
+        {
+          name: "Implementation Blocker",
+          statement: (id: number) =>
+            `INSERT INTO implementation_blockers (id, change_id, content) VALUES (${id}, 1, 'content')`,
+        },
+        {
+          name: "Candidate",
+          statement: (id: number) =>
+            `INSERT INTO candidates (id, change_id, base_commit, head_commit) VALUES (${id}, 1, 'other-base', 'other-head')`,
+        },
+        {
+          name: "Validation Run",
+          statement: (id: number) =>
+            `INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (${id}, 1, '{}', 0)`,
+        },
+      ];
+      for (const identity of identityInsertions) {
+        for (const invalidId of [0, 9_007_199_254_740_992]) {
+          yield* expectStatementRejected(
+            repository,
+            `reject ${identity.name} identity ${invalidId}`,
+            identity.statement(invalidId),
+          );
+        }
+      }
       yield* expectStatementRejected(
         repository,
         "reject missing foreign key parent",
@@ -440,8 +541,18 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       yield* expectStatementRejected(
         repository,
+        "reject cancelled Task without cancellation reason",
+        "INSERT INTO tasks (id, title, description, state) VALUES (2, 'Task', 'Intent', 'cancelled')",
+      );
+      yield* expectStatementRejected(
+        repository,
         "reject incomplete Task reviewer configuration",
         "INSERT INTO tasks (id, title, description, state, reviewer_configuration) VALUES (2, 'Task', 'Intent', 'new', '{}')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject Task reviewer Agent Session without configuration",
+        "INSERT INTO tasks (id, title, description, state, reviewer_agent_session_id) VALUES (2, 'Task', 'Intent', 'new', 1)",
       );
       yield* expectStatementRejected(
         repository,
@@ -460,6 +571,11 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       yield* expectStatementRejected(
         repository,
+        "reject cancelled Change without cancellation reason",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, close_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'cancelled', 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
         "reject invalid Change cleanup flag",
         "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 2)",
       );
@@ -470,14 +586,43 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       yield* expectStatementRejected(
         repository,
+        "reject settled invocation without settlement kind",
+        "INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at) VALUES (1, 1, 'now', 'later')",
+      );
+      yield* expectStatementRejected(
+        repository,
         "reject partial Agent token usage",
         "INSERT INTO agent_invocations (id, continuation_id, created_at, input_tokens) VALUES (1, 1, 'now', 1)",
       );
       yield* expectStatementRejected(
         repository,
-        "reject negative Agent token usage",
-        "INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, total_tokens) VALUES (1, 1, 'now', 'later', 'returned', -1, 0, 0, 0, 0)",
+        "reject Agent token usage missing one value",
+        "INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens) VALUES (1, 1, 'now', 'later', 'returned', 0, 0, 0, 0)",
       );
+      const tokenColumns = [
+        "input_tokens",
+        "cached_input_tokens",
+        "cache_write_tokens",
+        "output_tokens",
+        "total_tokens",
+      ] as const;
+      for (const tokenColumn of tokenColumns) {
+        for (const invalidToken of [-1, 9_007_199_254_740_992]) {
+          const values = {
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            cache_write_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+          };
+          values[tokenColumn] = invalidToken;
+          yield* expectStatementRejected(
+            repository,
+            `reject ${tokenColumn} value ${invalidToken}`,
+            `INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, total_tokens) VALUES (1, 1, 'now', 'later', 'returned', ${values.input_tokens}, ${values.cached_input_tokens}, ${values.cache_write_tokens}, ${values.output_tokens}, ${values.total_tokens})`,
+          );
+        }
+      }
       yield* expectStatementRejected(
         repository,
         "reject invalid Validation Run outcome",
@@ -497,6 +642,11 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         repository,
         "reject nonpositive pull request number",
         "INSERT INTO github_publications (change_id, candidate_id, validation_run_id, pull_request_number) VALUES (1, 1, 1, 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject unsafe pull request number",
+        "INSERT INTO github_publications (change_id, candidate_id, validation_run_id, pull_request_number) VALUES (1, 1, 1, 9007199254740992)",
       );
 
       const migrations = yield* repository.operation(
