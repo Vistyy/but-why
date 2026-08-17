@@ -285,6 +285,11 @@ const migrationFailureToStorageError = (
   cause: Cause.Cause<unknown>,
   statePath: string,
 ): RepositoryStorageError => {
+  const prefixConflict = Array.from(Cause.defects(cause)).find(
+    (defect): defect is MigrationError & { readonly cause: RepositoryIdPrefixConflict } =>
+      defect instanceof MigrationError && defect.cause instanceof RepositoryIdPrefixConflict,
+  );
+  if (prefixConflict !== undefined) return prefixConflict.cause;
   const predecessorRequired = Array.from(Cause.defects(cause)).find(
     (
       defect,

@@ -1,6 +1,9 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { PredecessorReconciliationRequiredError } from "../../contracts/repositoryStorageError.js";
+import {
+  PredecessorReconciliationRequiredError,
+  RepositoryIdPrefixConflict,
+} from "../../contracts/repositoryStorageError.js";
 
 const safeIntegerMaximum = 9_007_199_254_740_991;
 
@@ -117,12 +120,16 @@ export const internalTaskChangeIdentitiesMigration = (idPrefix: string) =>
       WHERE id <> ${idPrefix} || '-' || numeric_id
       LIMIT 1
     `;
-    if (conflictingTasks.length > 0) {
+    const conflictingTask = conflictingTasks[0];
+    if (conflictingTask !== undefined) {
+      const separator = conflictingTask.id.lastIndexOf("-");
+      const storedIdPrefix =
+        separator < 1 ? conflictingTask.id : conflictingTask.id.slice(0, separator);
       return yield* Effect.fail(
-        new Error(
-          `Configured ID Prefix conflicts with prerelease Task identity: expected ${idPrefix}. ` +
-            `Correct .but-why/config.json with the predecessor executable before retrying.`,
-        ),
+        new RepositoryIdPrefixConflict({
+          configuredIdPrefix: idPrefix,
+          storedIdPrefix,
+        }),
       );
     }
 
