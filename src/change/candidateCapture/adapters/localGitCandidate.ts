@@ -75,7 +75,7 @@ export const readRepositoryBranchHead = (
   return head.ok ? { ok: true, headSha: head.stdout } : { ok: false, code: "unborn_branch" };
 };
 
-export const resolveLocalBranch = (cwd: string, ref: string): string | undefined => {
+const resolveLocalBranch = (cwd: string, ref: string): string | undefined => {
   const result = git(cwd, "rev-parse", "--verify", `${ref}^{commit}`);
   return result.ok ? result.stdout : undefined;
 };
