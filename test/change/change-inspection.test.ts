@@ -109,7 +109,7 @@ describe("Change inspection CLI", () => {
       commitButWhyConfigAndRecordDefault(root);
 
       const results = yield* Effect.all(
-        ["change-1", "ZZ-C1"]
+        ["change-1", "ZZ-C1", "BY-C9007199254740992"]
           .flatMap((changeId) => [
             ["change", "show", changeId],
             ["change", "decision", "list", changeId],

@@ -28,11 +28,15 @@ export type PublicTaskIdParseResult =
 const maxTaskIdLength = 256;
 const maxTaskSlugReadableLength = 48;
 const taskSlugHashLength = 12;
-const publicTaskIdShapePattern = /^[A-Z][A-Z0-9]*-[1-9][0-9]*$/;
+const publicTaskIdShapePattern = /^[A-Z][A-Z0-9]*-([1-9][0-9]*)$/;
 const unsafeSlugCharacterPattern = /[^a-z0-9]+/g;
 
-export const hasPublicTaskIdShape = (value: string): boolean =>
-  publicTaskIdShapePattern.test(value);
+export const hasPublicTaskIdShape = (value: string): boolean => {
+  const match = publicTaskIdShapePattern.exec(value);
+  if (match?.[1] === undefined) return false;
+  const internalId = Number(match[1]);
+  return Number.isSafeInteger(internalId) && internalId >= 1;
+};
 
 export const parsePublicTaskId = (value: string): PublicTaskIdParseResult => {
   if (value.trim().length === 0) {

@@ -9,6 +9,10 @@ describe("Task identity seam", () => {
       ok: false,
       code: "task_id_invalid_shape",
     });
+    expect(parsePublicTaskId("BY-9007199254740992")).toEqual({
+      ok: false,
+      code: "task_id_invalid_shape",
+    });
 
     expect(parsePublicTaskId("")).toEqual({ ok: false, code: "empty_task_id" });
     expect(parsePublicTaskId(" BY-1")).toEqual({ ok: false, code: "task_id_has_whitespace" });
