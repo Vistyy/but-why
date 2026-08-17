@@ -303,7 +303,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -328,7 +328,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -364,7 +364,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
