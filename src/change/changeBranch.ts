@@ -10,13 +10,6 @@ export const changeBranchNameForRef = (branchRef: string): string | undefined =>
   return branchName.length > changeBranchPrefix.length ? branchName : undefined;
 };
 
-export const changeBranchOwnershipRef = (branchRef: string): string | undefined => {
-  const branchName = changeBranchNameForRef(branchRef);
-  return branchName === undefined
-    ? undefined
-    : `refs/but-why/change-ownership/${branchName.slice(changeBranchPrefix.length)}`;
-};
-
 export const branchNameForRef = (branchRef: string): string | undefined =>
   branchRef.startsWith(headsPrefix) && branchRef.length > headsPrefix.length
     ? branchRef.slice(headsPrefix.length)

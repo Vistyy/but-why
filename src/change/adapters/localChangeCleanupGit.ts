@@ -3,11 +3,7 @@ import { existsSync, lstatSync, rmdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "../change.js";
-import {
-  branchNameForRef,
-  changeBranchNameForRef,
-  changeBranchOwnershipRef,
-} from "../changeBranch.js";
+import { branchNameForRef, changeBranchNameForRef } from "../changeBranch.js";
 import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "../changeCleanupRemote.js";
 
 export type { ChangeCleanupRemote } from "../changeCleanupRemote.js";
@@ -153,10 +149,9 @@ const cleanupLocalBranch: CleanupStage = (input) => {
       "--quiet",
       input.branchRef,
     ]);
-    if (branchRef.ok || branchRef.status !== 1) {
-      return { state: "pending", blockingReason: "branch_reachability_unavailable" };
-    }
-    return deleteBranchOwnershipRef(input.repositoryCommonDirectory, input.branchRef);
+    return branchRef.ok || branchRef.status !== 1
+      ? { state: "pending", blockingReason: "branch_reachability_unavailable" }
+      : undefined;
   }
 
   const containingRefs = git(input.repositoryCommonDirectory, [
@@ -168,32 +163,19 @@ const cleanupLocalBranch: CleanupStage = (input) => {
   if (!containingRefs.ok) {
     return { state: "pending", blockingReason: "branch_reachability_unavailable" };
   }
-  const ownershipRef = changeBranchOwnershipRef(input.branchRef);
   const reachableElsewhere = containingRefs.stdout
     .split("\n")
-    .some((ref) => ref.length > 0 && ref !== input.branchRef && ref !== ownershipRef);
+    .some((ref) => ref.length > 0 && ref !== input.branchRef);
   if (!reachableElsewhere && input.discardWork !== true) {
     return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
   }
-  const deleted = git(input.repositoryCommonDirectory, [
+  return git(input.repositoryCommonDirectory, [
     "update-ref",
     "--no-deref",
     "-d",
     input.branchRef,
     branchHead.stdout.trim(),
-  ]);
-  return deleted.ok
-    ? deleteBranchOwnershipRef(input.repositoryCommonDirectory, input.branchRef)
-    : { state: "pending", blockingReason: "branch_deletion_failed" };
-};
-
-const deleteBranchOwnershipRef = (
-  repositoryCommonDirectory: string,
-  branchRef: string,
-): ChangeCleanupResult | undefined => {
-  const ownershipRef = changeBranchOwnershipRef(branchRef);
-  if (ownershipRef === undefined) return undefined;
-  return git(repositoryCommonDirectory, ["update-ref", "--no-deref", "-d", ownershipRef]).ok
+  ]).ok
     ? undefined
     : { state: "pending", blockingReason: "branch_deletion_failed" };
 };

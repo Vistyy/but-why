@@ -207,64 +207,6 @@ const internalIdentityMigrationPreconditionCases = [
   },
 ] as const;
 
-const identityPreservationTables = [
-  "tasks",
-  "changes",
-  "active_validation_runs",
-  "candidate_snapshot_workspaces",
-  "candidate_validation_artifacts",
-  "candidate_validation_findings",
-  "candidate_validation_rounds",
-  "candidate_validation_runs",
-  "candidate_validation_tooling_failures",
-  "candidates",
-  "change_agent_sessions",
-  "current_candidates",
-  "implementation_blockers",
-  "implementation_decisions",
-  "reviewer_sessions",
-  "reviewer_transcripts",
-  "task_change_links",
-  "task_dependencies",
-  "task_review_agent_invocations",
-  "task_review_executions",
-  "task_review_findings",
-  "task_review_transcript_observations",
-  "task_reviewer_sessions",
-  "task_reviewer_transcripts",
-  "task_reviews",
-  "validation_phase_agent_invocations",
-] as const;
-
-const snapshotIdentityPreservationRows = (
-  sql: SqlClient.SqlClient,
-  taskIds: Readonly<Record<string, number>>,
-  changeIds: Readonly<Record<string, number>>,
-) =>
-  Effect.gen(function* () {
-    const snapshot: Array<readonly [string, readonly string[]]> = [];
-    for (const table of identityPreservationTables) {
-      const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM "${table}"`);
-      const normalized = rows.map((storedRow) => {
-        const row = { ...storedRow };
-        if (table === "tasks") {
-          delete row.numeric_id;
-          if (typeof row.id === "string") row.id = taskIds[row.id];
-        }
-        if (table === "changes" && typeof row.id === "string") {
-          row.id = changeIds[row.id];
-        }
-        for (const key of ["task_id", "dependent_task_id", "prerequisite_task_id"]) {
-          if (typeof row[key] === "string") row[key] = taskIds[row[key]];
-        }
-        if (typeof row.change_id === "string") row.change_id = changeIds[row.change_id];
-        return JSON.stringify(row);
-      });
-      snapshot.push([table, normalized.sort()]);
-    }
-    return snapshot;
-  });
-
 const snapshotRepositoryState = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
     const schemas = yield* sql<{ readonly name: string; readonly sql: string | null }>`
@@ -2161,23 +2103,19 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
-  it.effect(
-    "migrates prerelease Task and Change identities while preserving retained history",
-    () =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-internal-identities-"))),
-        (directory) =>
-          Effect.gen(function* () {
-            const statePath = join(directory, "state.sqlite");
-            const taskIds = { "BY-7": 7, "BY-8": 8 } as const;
-            const changeIds = { "first-change": 1, "later-change": 2 } as const;
-            const before = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const sql = yield* SqlClient.SqlClient;
-                yield* migrateTestRepositoryThrough(42);
-                yield* sql`INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ${directory})`;
-                yield* sql`INSERT INTO agent_sessions (id) VALUES (1)`;
-                yield* sql`
+  it.effect("migrates prerelease Task and Change identities deterministically", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-internal-identities-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateTestRepositoryThrough(42);
+              yield* sql`INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ${directory})`;
+              yield* sql`INSERT INTO agent_sessions (id) VALUES (1)`;
+              yield* sql`
                 INSERT INTO tasks (
                   id, numeric_id, title, description, state, created_at, updated_at,
                   reviewer_configuration, reviewer_agent_session_id
@@ -2187,156 +2125,127 @@ describe("Shared Repository State migrations", () => {
                   ('BY-8', 8, 'Prerequisite', 'Dependency intent', 'done',
                    '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', NULL, NULL)
               `;
-                yield* sql`
+              yield* sql`
                 INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
                 VALUES ('BY-7', 'BY-8')
               `;
-                for (const changeId of ["later-change", "first-change"] as const) {
-                  yield* sql`
+              for (const changeId of ["later-change", "first-change"] as const) {
+                yield* sql`
                   INSERT INTO changes (
                     id, repository_common_directory, branch_ref, state, close_reason,
-                    created_at, updated_at, closed_at, cleanup_state, acceptance_context
+                    created_at, updated_at, closed_at, cleanup_state
                   ) VALUES (
                     ${changeId}, ${directory}, ${`refs/heads/${changeId}`}, 'closed', 'completed',
                     '2026-01-02T00:00:00.000Z', '2026-01-02T00:00:00.000Z',
-                    '2026-01-02T00:00:00.000Z', 'complete',
-                    ${changeId === "later-change" ? '{"version":1,"title":"Task","description":"Intent"}' : null}
+                    '2026-01-02T00:00:00.000Z', 'complete'
                   )
                 `;
-                }
-                yield* sql`INSERT INTO task_change_links (task_id, change_id) VALUES ('BY-7', 'later-change')`;
-                yield* sql`
-                INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-                VALUES ('candidate-history', 'later-change', 'base', 'head', '2026-01-04T00:00:00.000Z')
+              }
+              yield* sql`
+                INSERT INTO task_change_links (task_id, change_id)
+                VALUES ('BY-7', 'later-change')
               `;
-                yield* sql`
-                INSERT INTO candidate_validation_runs (
-                  id, candidate_id, policy_snapshot, implementation_decisions,
-                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
-                ) VALUES (
-                  'run-history', 'candidate-history',
-                  '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
-                  'complete', 'passed', '2026-01-04T00:00:00.000Z', '2026-01-04T00:00:00.000Z'
-                )
-              `;
-                yield* sql`
-                UPDATE changes SET
-                  publication_candidate_id = 'candidate-history',
-                  publication_validation_run_id = 'run-history',
-                  publication_owner = 'acme', publication_repo = 'repo',
-                  publication_base_branch = 'main', publication_remote_name = 'origin',
-                  publication_head_branch = 'history', publication_expected_head_sha = 'head',
-                  publication_pr_number = 7, publication_pr_url = 'https://example.test/pull/7'
-                WHERE id = 'later-change'
-              `;
-                yield* sql`
-                INSERT INTO implementation_decisions (
-                  id, change_id, recorded_at, choice, rationale
-                ) VALUES ('decision-history', 'later-change', '2026-01-03', 'Keep history', 'Required')
-              `;
-                yield* sql`
-                INSERT INTO implementation_blockers (
-                  id, change_id, reported_at, content, resolved_at, resolution_id,
-                  resolution_recorded_at, resolution_content
-                ) VALUES (
-                  'blocker-history', 'later-change', '2026-01-03', 'Blocked', '2026-01-03',
-                  'resolution-history', '2026-01-03', 'Resolved'
-                )
-              `;
-                yield* sql`
-                INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
-                VALUES ('later-change', 'acceptance', 'fingerprint', 'session-reference')
-              `;
-                yield* sql`
-                INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
-                VALUES ('later-change', 'acceptance', 'pi-session', '/transcripts/change.jsonl')
-              `;
-                yield* sql`
-                INSERT INTO task_reviews (
-                  id, task_id, proposal_snapshot, dependency_evidence, policy_snapshot,
-                  base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
-                  created_at, updated_at
-                ) VALUES (
-                  'review-history', 'BY-7', '{"title":"Task","description":"Intent"}', '[]',
-                  '{"profile":{"agentProfile":"reviewer","scope":"repo"}}', 'refs/heads/main',
-                  'base', ${join(directory, "review-workspace")}, 'complete', 'passed', 'removed',
-                  '2026-01-03', '2026-01-03'
-                )
-              `;
-                yield* sql`
-                INSERT INTO task_reviewer_sessions (task_id, fingerprint, session_reference)
-                VALUES ('BY-7', 'task-fingerprint', 'task-session')
-              `;
-                yield* sql`
-                INSERT INTO task_reviewer_transcripts (
-                  task_id, producer, pi_session_id, file_path
-                ) VALUES ('BY-7', 'task-review', 'task-pi-session', '/transcripts/task.jsonl')
-              `;
-                return yield* snapshotIdentityPreservationRows(sql, taskIds, changeIds);
-              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-            );
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
 
-            yield* Effect.scoped(
-              RepositorySql.pipe(
-                Effect.provide(
-                  productionRepositorySqlLayer({
-                    commonDirectory: directory,
-                    statePath,
-                    idPrefix: "BY",
-                  }),
-                ),
+          yield* Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                productionRepositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  idPrefix: "BY",
+                }),
               ),
-            );
+            ),
+          );
 
-            const after = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const sql = yield* SqlClient.SqlClient;
-                return yield* snapshotIdentityPreservationRows(sql, taskIds, changeIds);
-              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-            );
-            expect(after).toEqual(before);
+          const facts = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const identity = yield* sql<{
+                readonly id_prefix: string;
+              }>`SELECT id_prefix FROM shared_state_identity`;
+              const tasks = yield* sql<{
+                readonly id: number;
+                readonly reviewer_agent_session_id: number | null;
+              }>`SELECT id, reviewer_agent_session_id FROM tasks ORDER BY id`;
+              const changes = yield* sql<{
+                readonly id: number;
+                readonly branch_ref: string;
+              }>`SELECT id, branch_ref FROM changes ORDER BY id`;
+              const dependencies = yield* sql<{
+                readonly dependent_task_id: number;
+                readonly prerequisite_task_id: number;
+              }>`SELECT dependent_task_id, prerequisite_task_id FROM task_dependencies`;
+              const links = yield* sql<{
+                readonly task_id: number;
+                readonly change_id: number;
+              }>`SELECT task_id, change_id FROM task_change_links`;
+              const foreignKeyFailures = yield* sql`PRAGMA foreign_key_check`;
+              const reviewerSessionIndex = yield* sql<{
+                readonly sql: string;
+              }>`
+                SELECT sql FROM sqlite_schema
+                WHERE type = 'index' AND name = 'tasks_reviewer_agent_session_idx'
+              `;
+              return {
+                identity,
+                tasks,
+                changes,
+                dependencies,
+                links,
+                foreignKeyFailures,
+                reviewerSessionIndex,
+              };
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+          expect(facts).toMatchObject({
+            identity: [{ id_prefix: "BY" }],
+            tasks: [
+              { id: 7, reviewer_agent_session_id: 1 },
+              { id: 8, reviewer_agent_session_id: null },
+            ],
+            changes: [
+              { id: 1, branch_ref: "refs/heads/first-change" },
+              { id: 2, branch_ref: "refs/heads/later-change" },
+            ],
+            dependencies: [{ dependent_task_id: 7, prerequisite_task_id: 8 }],
+            links: [{ task_id: 7, change_id: 2 }],
+            foreignKeyFailures: [],
+          });
+          expect(facts.reviewerSessionIndex[0]?.sql.replace(/\s+/gu, " ").trim()).toBe(
+            "CREATE UNIQUE INDEX tasks_reviewer_agent_session_idx ON tasks (reviewer_agent_session_id) WHERE reviewer_agent_session_id IS NOT NULL",
+          );
 
-            const supported = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const tasks = yield* openSqliteTaskPersistence();
-                const changes = yield* openSqliteChangeReadPort();
-                return {
-                  task: yield* tasks.getTaskById(publicTaskId("BY-7")),
-                  change: yield* changes.getChangeById("BY-C1"),
-                };
-              }).pipe(
-                Effect.provide(
-                  productionRepositorySqlLayer({
-                    commonDirectory: directory,
-                    statePath,
-                    idPrefix: "BY",
-                  }),
-                ),
+          const supported = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const tasks = yield* openSqliteTaskPersistence();
+              const changes = yield* openSqliteChangeReadPort();
+              return {
+                task: yield* tasks.getTaskById(publicTaskId("BY-7")),
+                change: yield* changes.getChangeById("BY-C1"),
+              };
+            }).pipe(
+              Effect.provide(
+                productionRepositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  idPrefix: "BY",
+                }),
               ),
-            );
-            expect(supported.task).toMatchObject({ id: "BY-7", prerequisites: [{ id: "BY-8" }] });
-            expect(supported.change).toMatchObject({
-              id: "BY-C1",
-              branchRef: "refs/heads/first-change",
-            });
+            ),
+          );
+          expect(supported.task).toMatchObject({ id: "BY-7", prerequisites: [{ id: "BY-8" }] });
+          expect(supported.change).toMatchObject({
+            id: "BY-C1",
+            branchRef: "refs/heads/first-change",
+          });
 
-            const reviewerSessionIndex = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const sql = yield* SqlClient.SqlClient;
-                return yield* sql<{ readonly sql: string }>`
-                  SELECT sql FROM sqlite_schema
-                  WHERE type = 'index' AND name = 'tasks_reviewer_agent_session_idx'
-                `;
-              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-            );
-            expect(reviewerSessionIndex[0]?.sql.replace(/\s+/gu, " ").trim()).toBe(
-              "CREATE UNIQUE INDEX tasks_reviewer_agent_session_idx ON tasks (reviewer_agent_session_id) WHERE reviewer_agent_session_id IS NOT NULL",
-            );
-
-            const duplicateSession = yield* Effect.scoped(
-              Effect.gen(function* () {
-                const sql = yield* SqlClient.SqlClient;
-                yield* sql`
+          const duplicateSession = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* sql`
                 INSERT INTO tasks (
                   id, title, description, state, created_at, updated_at,
                   reviewer_configuration, reviewer_agent_session_id
@@ -2345,12 +2254,12 @@ describe("Shared Repository State migrations", () => {
                   '{"acceptanceReview":null,"specialistReviews":[]}', 1
                 )
               `;
-              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-            ).pipe(Effect.exit);
-            expect(duplicateSession._tag).toBe("Failure");
-          }),
-        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-      ),
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          ).pipe(Effect.exit);
+          expect(duplicateSession._tag).toBe("Failure");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
   );
 
   it.effect("leaves prerelease state unchanged when the configured ID Prefix conflicts", () =>

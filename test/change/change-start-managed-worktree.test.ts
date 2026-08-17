@@ -294,42 +294,59 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("recovers after an actionable sibling-path failure", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-      yield* passTaskReviewFixture(root, taskId, now);
-      const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
-      writeFileSync(siblingRoot, "occupied\n");
+  it.effect(
+    "reports an actionable sibling-path failure and then stops recovery while the branch is missing",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* repositoryCopy();
+        const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
+        yield* passTaskReviewFixture(root, taskId, now);
+        const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
+        writeFileSync(siblingRoot, "occupied\n");
 
-      const failed = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
+        const failed = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--task", taskId],
+          now,
+        );
 
-      expect(failed.status).toBe(1);
-      const failure = JSON.parse(failed.stdout);
-      expect(failure).toMatchObject({
-        error: {
-          code: "managed_worktree_path_unavailable",
-          changeId: expect.any(String),
-          worktreePath: expect.stringMatching(
-            new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "BY-C"))}[1-9][0-9]*$`, "u"),
-          ),
-        },
-        help: [
-          expect.stringContaining("Make the parent directory writable"),
-          expect.stringContaining("suitable ownership"),
-          expect.stringContaining("Move the repository to a writable parent"),
-        ],
-      });
+        expect(failed.status).toBe(1);
+        const failure = JSON.parse(failed.stdout);
+        expect(failure).toMatchObject({
+          error: {
+            code: "managed_worktree_path_unavailable",
+            changeId: expect.any(String),
+            worktreePath: expect.stringMatching(
+              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "BY-C"))}[1-9][0-9]*$`, "u"),
+            ),
+          },
+          help: [
+            expect.stringContaining("Make the parent directory writable"),
+            expect.stringContaining("suitable ownership"),
+            expect.stringContaining("Move the repository to a writable parent"),
+          ],
+        });
 
-      rmSync(siblingRoot);
-      const retried = yield* runByInProcessEffect(
-        root,
-        ["change", "prepare", failure.error.changeId],
-        now,
-      );
-      expect(retried.status).toBe(0);
-      expect(existsSync(failure.error.worktreePath)).toBe(true);
-    }),
+        rmSync(siblingRoot);
+        const retried = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--task", taskId],
+          now,
+        );
+        expect(retried.status).toBe(1);
+        expect(JSON.parse(retried.stdout)).toMatchObject({
+          error: {
+            code: "managed_branch_missing",
+            changeId: failure.error.changeId,
+            worktreePath: failure.error.worktreePath,
+          },
+          help: [
+            expect.stringContaining("Recover the recorded branch externally"),
+            expect.stringContaining(`by task cancel ${taskId}`),
+          ],
+        });
+        expect(existsSync(failure.error.worktreePath)).toBe(false);
+      }),
   );
 
   it.effect("recovers the Managed Worktree at the recorded branch's advanced commit", () =>
@@ -345,7 +362,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(advancedCommit).not.toBe(output.startingCommit);
 
       git(root, "worktree", "remove", output.worktreePath);
-      git(root, "reflog", "expire", "--expire=now", "--all");
 
       const recovered = yield* runByInProcessEffect(
         root,
@@ -402,13 +418,20 @@ describe("Change Start Managed Worktree boundaries", () => {
         ["change", "prepare", output.change.id],
         now,
       );
-      expect(recovered.status).toBe(0);
+      expect(recovered.status).toBe(1);
       expect(JSON.parse(recovered.stdout)).toMatchObject({
-        change: { id: output.change.id },
-        worktreePath: output.worktreePath,
+        error: {
+          code: "managed_branch_missing",
+          changeId: output.change.id,
+          branch: output.branch,
+          worktreePath: output.worktreePath,
+        },
+        help: [
+          expect.stringContaining("Recover the recorded branch externally"),
+          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
+        ],
       });
-      expect(git(root, "rev-parse", output.branch)).toBe(output.startingCommit);
-      expect(existsSync(output.worktreePath)).toBe(true);
+      expect(existsSync(output.worktreePath)).toBe(false);
     }),
   );
 
@@ -547,7 +570,8 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       expect(provisionChangeWorktree(root, start, true)).toEqual({
         ok: false,
-        code: "change_start_conflict",
+        code: "managed_worktree_path_unavailable",
+        path: start.worktreePath,
       });
       expect(existsSync(actualWorktree)).toBe(true);
     }),
@@ -572,45 +596,18 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("rejects an unrelated branch during Managed Worktree recovery", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const start = changeStartRecord(root);
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
-      git(root, "worktree", "remove", start.worktreePath);
-      git(root, "update-ref", "-d", start.branchRef);
-      const emptyTree = git(root, "mktree");
-      const foreignCommit = git(root, "commit-tree", emptyTree, "-m", "Foreign history");
-      git(root, "update-ref", start.branchRef, foreignCommit);
-
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
-        ok: false,
-        code: "change_start_conflict",
-      });
-      expect(existsSync(start.worktreePath)).toBe(false);
-    }),
-  );
-
-  it.effect("removes a recovered Managed Worktree when its branch moves during attachment", () =>
+  it.effect("reattaches the recorded branch at its unrelated current commit", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
       expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
       git(root, "worktree", "remove", start.worktreePath);
       const emptyTree = git(root, "mktree");
-      const movedCommit = git(root, "commit-tree", emptyTree, "-m", "Moved during attachment");
-      const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
-      const hookPath = join(commonDirectory, "hooks", "post-checkout");
-      writeFileSync(hookPath, `#!/bin/sh\ngit update-ref ${start.branchRef} ${movedCommit}\n`);
-      chmodSync(hookPath, 0o755);
+      const currentCommit = git(root, "commit-tree", emptyTree, "-m", "Current branch commit");
+      git(root, "update-ref", start.branchRef, currentCommit);
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
-        ok: false,
-        code: "change_start_conflict",
-      });
-      expect(git(root, "rev-parse", start.branchRef)).toBe(movedCommit);
-      expect(existsSync(start.worktreePath)).toBe(false);
-      expect(git(root, "worktree", "list", "--porcelain")).not.toContain(start.worktreePath);
+      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(git(start.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(currentCommit);
     }),
   );
 
@@ -637,7 +634,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(existsSync(join(start.worktreePath, "keep.txt"))).toBe(true);
 
       rmSync(start.worktreePath, { recursive: true });
-      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
       expect(git(start.worktreePath, "symbolic-ref", "HEAD")).toBe(start.branchRef);
     }),
   );

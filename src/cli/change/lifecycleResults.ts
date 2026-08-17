@@ -162,6 +162,17 @@ const operationalError = (
       ],
     });
   }
+  if (code === "managed_branch_missing") {
+    return runtimeError({
+      code,
+      message: "The recorded Repository Branch is missing.",
+      details: identityDetails,
+      help: [
+        `Recover the recorded branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+        cancelChangeHelp(change, taskId, context),
+      ],
+    });
+  }
   if (code === "managed_worktree_path_conflict") {
     return runtimeError({
       code,

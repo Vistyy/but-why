@@ -6,9 +6,8 @@ import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
 import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
-import { changeBranchOwnershipRef, changeBranchRefForSlug } from "../changeBranch.js";
+import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
-  ProvisionChangeWorktreeFailure,
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
 } from "../changeStartGitOperations.js";
@@ -67,22 +66,19 @@ export const provisionChangeWorktree = (
   start: ChangeStartRecord,
   recovering: boolean,
 ): ProvisionChangeWorktreeResult => {
-  if (!recovering && resolveLocalBranch(cwd, start.branchRef) !== undefined) {
-    return { ok: false, code: "change_start_conflict" };
-  }
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
-  const branch = ensureRecordedBranch(cwd, start, recovering);
-  if (!branch.ok) return branch;
-
   const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
   if (worktree !== "missing" && worktree !== "stale") return worktree;
+
+  const branch = ensureRecordedBranch(cwd, start, recovering);
+  if (!branch.ok) return branch;
   if (worktree === "stale") {
     const removed = removeStaleWorktreeRegistration(cwd, start);
     if (!removed.ok) return removed;
   }
-  return addRecordedWorktree(cwd, start, branch.observedCommit);
+  return addRecordedWorktree(cwd, start);
 };
 
 const inspectRecordedWorktree = (
@@ -140,67 +136,27 @@ const inspectRecordedWorktree = (
     : { ok: false, code: "change_start_conflict" };
 };
 
-type EnsureRecordedBranchResult =
-  | { readonly ok: true; readonly observedCommit: string }
-  | ProvisionChangeWorktreeFailure;
-
 const ensureRecordedBranch = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
-): EnsureRecordedBranchResult => {
+): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    if (!recovering) return { ok: false, code: "change_start_conflict" };
-    const ownership = recordedBranchOwnership(cwd, start, branchCommit);
-    return ownership === "owned"
-      ? { ok: true, observedCommit: branchCommit }
-      : {
-          ok: false,
-          code: ownership === "foreign" ? "change_start_conflict" : "git_tooling_error",
-        };
+    return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
   }
-  const markerRef = branchOwnershipRef(start);
-  const markerCommit = resolveLocalBranch(cwd, markerRef);
-  const create =
-    recovering && markerCommit === start.startingCommit
-      ? git(
-          cwd,
-          "update-ref",
-          start.branchRef,
-          start.startingCommit,
-          "0000000000000000000000000000000000000000",
-        )
-      : gitWithInput(
-          cwd,
-          `create ${start.branchRef} ${start.startingCommit}\ncreate ${markerRef} ${start.startingCommit}\n`,
-          "update-ref",
-          "--stdin",
-        );
-  return create.ok
-    ? { ok: true, observedCommit: start.startingCommit }
-    : { ok: false, code: "git_tooling_error" };
-};
-
-const branchOwnershipRef = (start: ChangeStartRecord): string => {
-  const ownershipRef = changeBranchOwnershipRef(start.branchRef);
-  if (ownershipRef === undefined) throw new Error("Invalid Change branch ref");
-  return ownershipRef;
-};
-
-const recordedBranchOwnership = (
-  cwd: string,
-  start: ChangeStartRecord,
-  branchCommit: string,
-): "owned" | "foreign" | "tooling_error" => {
-  const ownershipRef = branchOwnershipRef(start);
-  const markerExists = git(cwd, "show-ref", "--verify", "--quiet", ownershipRef);
-  if (!markerExists.ok) return markerExists.status === 1 ? "foreign" : "tooling_error";
-  const marker = git(cwd, "rev-parse", "--verify", `${ownershipRef}^{commit}`);
-  if (!marker.ok) return "tooling_error";
-  if (marker.stdout !== start.startingCommit) return "foreign";
-  const lineage = git(cwd, "merge-base", "--is-ancestor", start.startingCommit, branchCommit);
-  return lineage.ok ? "owned" : lineage.status === 1 ? "foreign" : "tooling_error";
+  if (recovering) {
+    return {
+      ok: false,
+      code: "managed_branch_missing",
+      branch: start.branchRef,
+      path: start.worktreePath,
+      startingCommit: start.startingCommit,
+    };
+  }
+  const branchName = start.branchRef.slice("refs/heads/".length);
+  const create = git(cwd, "branch", branchName, start.startingCommit);
+  return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 
 const removeStaleWorktreeRegistration = (
@@ -222,7 +178,6 @@ const removeStaleWorktreeRegistration = (
 const addRecordedWorktree = (
   cwd: string,
   start: ChangeStartRecord,
-  observedCommit: string,
 ): ProvisionChangeWorktreeResult => {
   if (!ensureManagedWorktreeParent(start.worktreePath)) {
     return {
@@ -242,13 +197,7 @@ const addRecordedWorktree = (
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const add = git(cwd, "worktree", "add", start.worktreePath, branchName);
-  if (!add.ok) return { ok: false, code: "git_tooling_error" };
-  const head = git(start.worktreePath, "rev-parse", "HEAD^{commit}");
-  if (head.ok && head.stdout === observedCommit) return { ok: true };
-  const removed = git(cwd, "worktree", "remove", "--force", "--", start.worktreePath);
-  return removed.ok
-    ? { ok: false, code: "change_start_conflict" }
-    : { ok: false, code: "git_tooling_error" };
+  return add.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 
 const managedWorktreeContainers = (worktreePath: string): readonly [string, string] => {
@@ -319,22 +268,15 @@ const pathEntryExists = (path: string): boolean => {
 
 type GitResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly status: number | null; readonly stderr: string };
+  | { readonly ok: false; readonly stderr: string };
 
-const git = (cwd: string, ...args: readonly string[]): GitResult =>
-  gitWithInput(cwd, undefined, ...args);
-
-const gitWithInput = (
-  cwd: string,
-  input: string | undefined,
-  ...args: readonly string[]
-): GitResult => {
+const git = (cwd: string, ...args: readonly string[]): GitResult => {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
-    ...(input === undefined ? { stdio: ["ignore", "pipe", "pipe"] } : { input }),
+    stdio: ["ignore", "pipe", "pipe"],
   });
   return result.status === 0
     ? { ok: true, stdout: result.stdout.trim() }
-    : { ok: false, status: result.status, stderr: result.stderr.trim() };
+    : { ok: false, stderr: result.stderr.trim() };
 };
