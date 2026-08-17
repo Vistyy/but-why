@@ -108,13 +108,22 @@ describe("Change inspection CLI", () => {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);
 
-      const shown = yield* runByInProcessEffect(root, ["change", "show", "change-1"]);
+      const results = yield* Effect.all(
+        [
+          ["change", "show", "change-1"],
+          ["change", "decision", "list", "change-1"],
+          ["change", "blocker", "list", "change-1"],
+          ["change", "reconcile", "change-1"],
+        ].map((args) => runByInProcessEffect(root, args)),
+      );
 
-      expect(shown.status).toBe(1);
-      expect(JSON.parse(shown.stdout)).toEqual({
-        error: { code: "change_not_found", message: "Change was not found." },
-        help: ["Use a Change ID returned by `by change list --all`."],
-      });
+      for (const result of results) {
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: { code: "change_not_found", message: "Change was not found." },
+          help: ["Use a Change ID returned by `by change list --all`."],
+        });
+      }
     }),
   );
 

@@ -13,6 +13,15 @@ type ChangeTargetResolution =
   | { readonly ok: true; readonly changeId: string }
   | { readonly ok: false; readonly result: CliResult };
 
+export const rejectedExplicitChangeId = (changeId: string): CliResult | undefined =>
+  hasPublicChangeIdShape(changeId)
+    ? undefined
+    : runtimeError({
+        code: "change_not_found",
+        message: "Change was not found.",
+        help: ["Use a Change ID returned by `by change list --all`."],
+      });
+
 export const resolveChangeId = (
   changeId: string | undefined,
   cwd: string,
@@ -20,17 +29,9 @@ export const resolveChangeId = (
   operationalRepoRoot?: string,
 ): Effect.Effect<ChangeTargetResolution> => {
   if (changeId !== undefined) {
+    const rejected = rejectedExplicitChangeId(changeId);
     return Effect.succeed(
-      hasPublicChangeIdShape(changeId)
-        ? { ok: true, changeId }
-        : {
-            ok: false,
-            result: runtimeError({
-              code: "change_not_found",
-              message: "Change was not found.",
-              help: ["Use a Change ID returned by `by change list --all`."],
-            }),
-          },
+      rejected === undefined ? { ok: true, changeId } : { ok: false, result: rejected },
     );
   }
 

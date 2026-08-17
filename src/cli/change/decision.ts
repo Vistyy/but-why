@@ -38,6 +38,8 @@ export const runDecision = (
   command: ChangeDecisionCommand,
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
+  const rejected = support.rejectedExplicitChangeId(command.changeId);
+  if (rejected !== undefined) return Effect.succeed(rejected);
   if (command.action === "list") {
     const loaded = loadImplementationDecisions(support.changeOperationInput(environment));
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));

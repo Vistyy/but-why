@@ -13,7 +13,10 @@ import {
   stateStoreUnavailable,
 } from "../../cliResults.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveChangeId } from "./changeTarget.js";
+import { rejectedExplicitChangeId, resolveChangeId } from "./changeTarget.js";
+
+export { rejectedExplicitChangeId };
+
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { prepareFailureView } from "./sharedResults.js";
 
