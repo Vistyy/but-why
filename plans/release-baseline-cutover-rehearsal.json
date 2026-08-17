@@ -1,33 +1,70 @@
 {
   "version": 3,
   "rehearsal": {
-    "repository": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y",
-    "evidenceDirectory": "/tmp/by-cutover-ordered-evidence.YiSRON",
-    "completedAtUtc": "2026-08-17T22:14:30Z",
+    "repository": "/tmp/by-cutover-coherent-rehearsal.KoHOOt",
+    "evidenceDirectory": "/tmp/by-cutover-coherent-evidence.pnQn7r",
+    "completedAtUtc": "2026-08-17T22:24:41Z",
     "orderedSequence": [
-      ["2026-08-17T22:14:28Z", "old_runtime_verified"],
-      ["2026-08-17T22:14:28Z", "old_runtime_reconciliation_completed"],
-      ["2026-08-17T22:14:28Z", "complete_archive_verified"],
-      ["2026-08-17T22:14:29Z", "fresh_baseline_initialized_and_verified"],
-      ["2026-08-17T22:14:29Z", "before_new_work_failure_observed"],
-      ["2026-08-17T22:14:29Z", "complete_old_state_restored_with_archived_runtime"],
-      ["2026-08-17T22:14:29Z", "fresh_baseline_reinitialized"],
-      ["2026-08-17T22:14:29Z", "post_cutover_new_work_recorded"],
-      ["2026-08-17T22:14:30Z", "after_new_work_failure_observed"],
-      ["2026-08-17T22:14:30Z", "new_state_repaired_forward_and_verified"],
-      ["2026-08-17T22:14:30Z", "final_archive_verified"]
+      [
+        "2026-08-17T22:24:39Z",
+        "old_runtime_verified"
+      ],
+      [
+        "2026-08-17T22:24:39Z",
+        "old_runtime_reconciliation_and_fixture_cleanup_completed"
+      ],
+      [
+        "2026-08-17T22:24:39Z",
+        "complete_archive_verified"
+      ],
+      [
+        "2026-08-17T22:24:39Z",
+        "external_temporary_old_bundle_removed"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "fresh_baseline_initialized_and_verified"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "before_new_work_failure_observed"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "complete_old_state_restored_with_archived_runtime"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "fresh_baseline_reinitialized"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "post_cutover_new_work_recorded"
+      ],
+      [
+        "2026-08-17T22:24:40Z",
+        "after_new_work_failure_observed"
+      ],
+      [
+        "2026-08-17T22:24:41Z",
+        "new_state_repaired_forward_and_verified"
+      ],
+      [
+        "2026-08-17T22:24:41Z",
+        "final_archive_verified"
+      ]
     ],
     "oldExecutable": {
       "sourceCommit": "10bdce30c94c1d3510b061c7d75f0206328a2494",
-      "entrypoint": "/tmp/by-old-bundle.4saLDf/dist/main.js",
-      "invocation": "node /tmp/by-old-bundle.4saLDf/dist/main.js",
+      "entrypoint": "/tmp/by-cutover-coherent-old-bundle.0Nnm3u/dist/main.js",
+      "invocation": "node /tmp/by-cutover-coherent-old-bundle.0Nnm3u/dist/main.js",
       "entrypointSha256": "33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc",
-      "runtimeManifest": "/tmp/by-old-bundle.4saLDf/runtime-SHA256SUMS",
+      "runtimeManifest": "/tmp/by-cutover-coherent-old-bundle.0Nnm3u/runtime-SHA256SUMS",
       "runtimeManifestSha256": "448a9f75d0ee261a1d192fafd2eea993c70bb5fc056617150ebf59968db9e93e",
       "runtimeManifestFileCount": 130,
       "runtimeManifestContents": "The complete dist tree, package.json required by the runtime, and source-commit.txt.",
       "verification": {
-        "command": "cd /tmp/by-old-bundle.4saLDf && sha256sum -c runtime-SHA256SUMS",
+        "command": "cd /tmp/by-cutover-coherent-old-bundle.0Nnm3u && sha256sum -c runtime-SHA256SUMS",
         "exitCode": 0,
         "completedBeforeReconciliation": true,
         "result": "All 130 runtime manifest entries verified OK before the old runtime was invoked."
@@ -40,39 +77,99 @@
       "entrypointSha256": "0279c5a2f6e6f97f6c55d9527a503413db71cb84e6abfa69804bf4f0c92dda99"
     },
     "fixturePreparation": {
-      "description": "A disposable copy of verified prerelease Shared Repository State was prepared as a representative pre-reconciliation fixture. BY-C1 retained exact Candidate, passing Validation, GitHub Publication, and cleanup facts. Task 1 was set to Todo and linked one-to-one to the reopened BY-C1. The disposable gh executable returned the exact merged pull request facts for that publication. Representative standards.md and verification.md reviewer files were installed before the measured sequence.",
+      "description": "A disposable copy of verified prerelease Shared Repository State was prepared as a representative pre-reconciliation fixture. BY-C1 retained exact Candidate, passing Validation, GitHub Publication, and cleanup facts. Task 1 was set to Todo and linked one-to-one to the reopened BY-C1. The disposable gh executable returned the exact merged pull request facts for that publication. Representative standards.md and verification.md reviewer files were installed before the measured sequence. The Change repository identity and real Managed Worktree both belonged to this same disposable repository.",
       "persistedBefore": {
-        "tasks": [[1, "todo"]],
-        "taskChangeLinks": [[1, 1]],
-        "changes": [[1, "open", null, "complete", null]]
+        "repositoryIdentity": [
+          "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+          "BY"
+        ],
+        "tasks": [
+          [
+            1,
+            "todo"
+          ]
+        ],
+        "taskChangeLinks": [
+          [
+            1,
+            1
+          ]
+        ],
+        "changes": [
+          [
+            1,
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt-worktrees/but-why/BY-C1",
+            "open",
+            null,
+            "complete",
+            null
+          ]
+        ]
       },
       "reviewerFiles": [
-        ["standards.md", "258c0077b59adad1c5e36ccd526f82782b25efeb901fe43c0ae6210dfba627f6"],
-        ["verification.md", "85d61921b3b070e34db1adebf33d395368a36550e6d4cf95e5f8d2a775f5d939"]
+        [
+          "standards.md",
+          "258c0077b59adad1c5e36ccd526f82782b25efeb901fe43c0ae6210dfba627f6"
+        ],
+        [
+          "verification.md",
+          "85d61921b3b070e34db1adebf33d395368a36550e6d4cf95e5f8d2a775f5d939"
+        ]
       ]
     },
     "steps": [
       {
         "name": "verified direct old-runtime reconciliation",
-        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && PATH=/tmp/by-cutover-ordered-fakebin.lI6Dsz:$PATH BUT_WHY_EXECUTABLE_PATH=/tmp/by-old-bundle.4saLDf/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /tmp/by-old-bundle.4saLDf/dist/main.js change reconcile BY-C1",
+        "command": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && PATH=/tmp/by-cutover-coherent-fakebin.TD3edU:$PATH BUT_WHY_EXECUTABLE_PATH=/tmp/by-cutover-coherent-old-bundle.0Nnm3u/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /tmp/by-cutover-coherent-old-bundle.0Nnm3u/dist/main.js change reconcile BY-C1",
         "exitCode": 0,
         "stdout": "{\"changes\":[{\"changeId\":\"BY-C1\",\"status\":\"completed\",\"cleanup\":{\"state\":\"complete\",\"blockingReason\":null},\"pullRequest\":{\"number\":1,\"url\":\"https://github.com/acme/by-cutover-rehearsal/pull/1\"}}]}",
         "persistedAfter": {
-          "tasks": [[1, "done"]],
-          "taskChangeLinks": [[1, 1]],
-          "changes": [[1, "closed", "completed", "complete", null]]
+          "repositoryIdentity": [
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+            "BY"
+          ],
+          "tasks": [
+            [
+              1,
+              "done"
+            ]
+          ],
+          "taskChangeLinks": [
+            [
+              1,
+              1
+            ]
+          ],
+          "changes": [
+            [
+              1,
+              "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+              "/tmp/by-cutover-coherent-rehearsal.KoHOOt-worktrees/but-why/BY-C1",
+              "closed",
+              "completed",
+              "complete",
+              null
+            ]
+          ]
         },
-        "result": "The actual manifest-covered old runtime completed linked BY-C1, retained complete cleanup, and changed its linked Task from Todo to Done."
+        "result": "The manifest-covered old runtime completed linked BY-C1, changed its linked Task from Todo to Done, and removed only the fixture-owned Managed Worktree and Repository Branch before reporting complete cleanup.",
+        "cleanupVerification": {
+          "managedWorktreeRemoved": "/tmp/by-cutover-coherent-rehearsal.KoHOOt-worktrees/but-why/BY-C1",
+          "managedWorktreeRegistrationRemoved": true,
+          "repositoryBranchRemoved": "refs/heads/but-why/BY-C1",
+          "remainingWorktree": "/tmp/by-cutover-coherent-rehearsal.KoHOOt"
+        }
       },
       {
         "name": "complete self-contained prerelease archive",
-        "archive": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive",
-        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
+        "archive": "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git/but-why-prerelease-archive",
+        "command": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
         "exitCode": 0,
-        "archiveTimeUtc": "2026-08-17T22:14:28Z",
+        "archiveTimeUtc": "2026-08-17T22:24:39Z",
         "archiveManifestFileCount": 139,
-        "archiveManifestSha256": "e5b177b84fccaa008ad1f9cb79007ecacff973db55f9b583440b23a82ffa768a",
-        "stateSha256": "3dd0a9da48a91f9f6d5890e407dfe2bb34b9f9ba6ba5dab8c54d2e0beb059dde",
+        "archiveManifestSha256": "beeb52bff0e3edd6ebfc6e7572225b9f4f8a48224fa566c26b774e07bc0a280b",
+        "stateSha256": "1d828349ef04c1bc8f660dc93019a2977d62cbdd55119cf47d7fbd6522da98c3",
         "contents": {
           "oldOperationalState": "Complete Git Common Directory but-why directory, including its Change Execution Lock.",
           "repositoryPolicy": "config.json plus representative standards.md and verification.md reviewer files.",
@@ -81,26 +178,47 @@
           "reconciliation": "The exact structured reconciliation output."
         },
         "persistedVerification": {
-          "repositoryCommonDirectory": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git",
+          "repositoryCommonDirectory": "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
           "migrationIds": {
             "minimum": 1,
             "maximum": 43,
             "count": 43
           },
-          "task": [1, "done"],
-          "taskChangeLink": [1, 1],
-          "change": [1, "closed", "completed", "complete", null]
+          "task": [
+            1,
+            "done"
+          ],
+          "taskChangeLink": [
+            1,
+            1
+          ],
+          "change": [
+            1,
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt-worktrees/but-why/BY-C1",
+            "closed",
+            "completed",
+            "complete",
+            null
+          ]
+        },
+        "externalBundleCleanup": {
+          "path": "/tmp/by-cutover-coherent-old-bundle.0Nnm3u",
+          "removedImmediatelyAfterArchiveVerification": true,
+          "existsAfterRemoval": false
         }
       },
       {
         "name": "fresh release initialization",
-        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js init --id-prefix BY",
+        "command": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js init --id-prefix BY",
         "exitCode": 0,
         "committedResult": {
           "status": "repaired",
-          "root": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y",
+          "root": "/tmp/by-cutover-coherent-rehearsal.KoHOOt",
           "idPrefix": "BY",
-          "created": ["<git-common-dir>/but-why/state.sqlite"]
+          "created": [
+            "<git-common-dir>/but-why/state.sqlite"
+          ]
         },
         "readVerification": {
           "command": "task list",
@@ -109,8 +227,13 @@
         },
         "persistedVerification": {
           "productTableCount": 18,
-          "migrationIds": [1],
-          "repositoryIdentity": ["/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git", "BY"],
+          "migrationIds": [
+            1
+          ],
+          "repositoryIdentity": [
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+            "BY"
+          ],
           "taskCount": 0,
           "changeCount": 0
         }
@@ -118,28 +241,49 @@
       {
         "name": "failure before new work and old-state restoration",
         "failureSetup": "Migration ID 99 named unknown_forward_migration was inserted into the otherwise empty fresh state.",
-        "failureCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
+        "failureCommand": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
         "failureExitCode": 1,
         "failureStdout": "{\"error\":{\"code\":\"state_store_unavailable\",\"message\":\"Shared But Why? state is unavailable.\"},\"help\":[\"Restore <git-common-dir>/but-why/state.sqlite, then run `by init --id-prefix BY`.\"]}",
         "persistedAfterFailure": {
-          "migrationIds": [1, 99],
+          "migrationIds": [
+            1,
+            99
+          ],
           "taskCount": 0,
           "changeCount": 0
         },
-        "restorationVerificationCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive/old-runtime/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive/old-runtime/dist/main.js change show BY-C1",
+        "restorationVerificationCommand": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git/but-why-prerelease-archive/old-runtime/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /tmp/by-cutover-coherent-rehearsal.KoHOOt/.git/but-why-prerelease-archive/old-runtime/dist/main.js change show BY-C1",
         "restorationVerificationExitCode": 0,
         "archivedRuntimeManifestVerificationExitCode": 0,
         "restoredPersistedState": {
-          "tasks": [[1, "done"]],
-          "taskChangeLinks": [[1, 1]],
-          "changes": [[1, "closed", "completed", "complete", null]]
+          "tasks": [
+            [
+              1,
+              "done"
+            ]
+          ],
+          "taskChangeLinks": [
+            [
+              1,
+              1
+            ]
+          ],
+          "changes": [
+            [
+              1,
+              "closed",
+              "completed",
+              "complete",
+              null
+            ]
+          ]
         },
-        "result": "The failed new-runtime read left the unsupported state unchanged. Restoring the complete archive made the linked completed Change and Done Task readable through the archive-contained runtime without the external temporary bundle."
+        "result": "The failed new-runtime read left the unsupported state unchanged. After the dedicated external bundle had been removed, restoring the complete archive made the linked completed Change and Done Task readable through only the archive-contained runtime."
       },
       {
         "name": "failure after new work and forward repair",
         "precondition": "Fresh baseline initialization succeeded again after the old-state restoration exercise.",
-        "newWorkCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task create --title 'Post-cutover recovery task' --file /tmp/by-cutover-ordered-evidence.YiSRON/post-cutover-task.txt",
+        "newWorkCommand": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task create --title 'Post-cutover recovery task' --file /tmp/by-cutover-coherent-evidence.pnQn7r/post-cutover-task.txt",
         "newWorkExitCode": 0,
         "newWorkCommittedResult": {
           "id": "BY-1",
@@ -148,37 +292,67 @@
           "description": "Exercise forward repair after release-baseline initialization.\n"
         },
         "failureSetup": "The disposable new state's common-directory identity was changed from the exact repository Git Common Directory to /incorrect/common-directory.",
-        "failureCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
+        "failureCommand": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
         "failureExitCode": 1,
         "failureStdout": "{\"error\":{\"code\":\"shared_state_identity_conflict\",\"message\":\"Shared But Why? state belongs to a different Git repository.\"},\"help\":[\"Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.\"]}",
         "persistedAfterFailure": {
-          "repositoryIdentity": ["/incorrect/common-directory", "BY"],
-          "migrationIds": [1],
-          "task": [1, "Post-cutover recovery task", "new"],
+          "repositoryIdentity": [
+            "/incorrect/common-directory",
+            "BY"
+          ],
+          "migrationIds": [
+            1
+          ],
+          "task": [
+            1,
+            "Post-cutover recovery task",
+            "new"
+          ],
           "changeCount": 0
         },
         "repair": "The disposable new state's identity was repaired forward to the exact derived Git Common Directory. No old state was restored or merged.",
-        "repairVerificationCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task show BY-1",
+        "repairVerificationCommand": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-coherent-rehearsal.KoHOOt node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task show BY-1",
         "repairVerificationExitCode": 0,
         "persistedVerification": {
-          "repositoryIdentity": ["/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git", "BY"],
-          "task": [1, "Post-cutover recovery task", "new"],
+          "repositoryIdentity": [
+            "/tmp/by-cutover-coherent-rehearsal.KoHOOt/.git",
+            "BY"
+          ],
+          "task": [
+            1,
+            "Post-cutover recovery task",
+            "new"
+          ],
           "productTableCount": 18,
-          "migrationIds": [1],
+          "migrationIds": [
+            1
+          ],
           "oldChangeCount": 0
         }
       }
     ],
     "finalState": {
       "activeState": "Fresh release baseline repaired forward after new work.",
-      "activeMigrationIds": [1],
-      "activeTask": [1, "Post-cutover recovery task", "new"],
+      "activeMigrationIds": [
+        1
+      ],
+      "activeTask": [
+        1,
+        "Post-cutover recovery task",
+        "new"
+      ],
       "activeChangeCount": 0,
-      "archiveDirectories": ["but-why-prerelease-archive"],
-      "archiveCount": 1
+      "archiveDirectories": [
+        "but-why-prerelease-archive"
+      ],
+      "archiveCount": 1,
+      "externalTemporaryBundle": {
+        "path": "/tmp/by-cutover-coherent-old-bundle.0Nnm3u",
+        "exists": false
+      }
     },
     "finalArchiveIntegrity": {
-      "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
+      "command": "cd /tmp/by-cutover-coherent-rehearsal.KoHOOt/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
       "exitCode": 0,
       "verifiedFileCount": 139,
       "result": "Every file in the single final archive verified after both recovery outcomes. The archive contains its directly invokable old runtime and representative repository reviewer files."

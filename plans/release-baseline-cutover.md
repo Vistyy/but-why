@@ -465,11 +465,13 @@ The directly invoked `dist/main.js` entrypoint SHA-256 was `33a6634c750ebc323404
 The manifest included the complete `dist` tree, the runtime-required `package.json`, and the source commit record.
 The Source Checkout Guard in `bin/by` was not invoked because it can dispatch to a different checkout executable.
 The rehearsal reconciled the exact merged disposable Change `BY-C1` by invoking the manifest-covered old runtime directly.
-The reconciliation completed the Change, retained complete cleanup, and changed its linked Task from Todo to Done.
+The fixture's Shared Repository State identity, Change repository identity, and real Managed Worktree all belonged to the same disposable repository.
+The reconciliation completed the Change, changed its linked Task from Todo to Done, and removed that fixture-owned Managed Worktree and Repository Branch before reporting complete cleanup.
 
 The rehearsal archive contained the complete old Git Common Directory But Why state, representative `standards.md` and `verification.md` repository reviewer files, repository and executable identity metadata, inspection instructions, the exact reconciliation output, and SHA-256 manifests.
 It also contained the complete manifest-covered old runtime, so its inspection procedure remained usable without the external temporary bundle.
 All 139 archived files verified.
+The dedicated external temporary bundle was then removed before fresh initialization and remained absent for the rest of the sequence.
 The archived SQLite database remained readable with migration ledger entries 1 through 43 and showed the linked Task as Done and the reconciled Change as closed, completed, and fully cleaned up.
 
 Fresh initialization with the release executable produced exactly the 18 approved product tables and migration ledger `[1]` without old Task or Change records.
