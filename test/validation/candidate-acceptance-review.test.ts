@@ -381,9 +381,6 @@ const runReviewPhases = (
         reused: false as const,
         validationRunId: started.validationRunId,
         outcome: "passed" as const,
-        ...(acceptance.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: acceptance.reviewerEvidence }),
       };
     }),
   );

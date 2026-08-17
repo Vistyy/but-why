@@ -245,10 +245,7 @@ describe("Candidate Specialist Review phase", () => {
             expect(input.prompt).not.toContain(`${other} concern instructions`);
           }
         }
-        expect(result).toMatchObject({
-          findings: 1,
-          reviewerEvidence: [{ producer: "zeta" }, { producer: "broken" }, { producer: "alpha" }],
-        });
+        expect(result).toMatchObject({ findings: 1 });
         expect(result.toolingFailures).toHaveLength(1);
         expect(
           harness.results.map(({ producer, outcome, findings }) => ({
@@ -310,20 +307,7 @@ describe("Candidate Specialist Review phase", () => {
         reviewerExecutor: createPiReviewerProcessExecutor(),
       });
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: [
-          {
-            producer: "standards",
-            invocations: [
-              {
-                settlementKind: "returned",
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ],
-          },
-        ],
-      });
+      expect(result).toEqual({ findings: 0, toolingFailures: [] });
     }),
   );
 
@@ -343,11 +327,7 @@ describe("Candidate Specialist Review phase", () => {
         },
       );
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailures: [],
-        reviewerEvidence: [{ producer: "standards" }],
-      });
+      expect(result).toEqual({ findings: 0, toolingFailures: [] });
       expect(review).toHaveBeenCalledOnce();
       expect(review.mock.calls[0]?.[0].prompt).toContain(earlier.title);
       expect(review.mock.calls[0]?.[0].resumeSession).toBeUndefined();

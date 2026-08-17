@@ -12,10 +12,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
-import {
-  runSpecialistReviewPhase,
-  type SpecialistReviewerContinuityEvidence,
-} from "../specialistReview/runSpecialistReviewPhase.js";
+import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
@@ -29,7 +26,6 @@ import {
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type {
   CandidateValidationAuthority,
   CandidateValidationOutcome,
@@ -76,8 +72,6 @@ type ValidateCandidateResult =
       readonly reused: boolean;
       readonly validationRunId: number;
       readonly outcome: CandidateValidationOutcome;
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
@@ -89,8 +83,6 @@ type ValidateCandidateResult =
       readonly ok: false;
       readonly validationRunId: number;
       readonly outcome: "tooling_failed";
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     };
 
 type CandidateValidationPathsValue = {
@@ -299,24 +291,12 @@ const makeCandidateValidation = (dependencies: {
           ok: false,
           validationRunId: started.validationRunId,
           outcome,
-          ...(activeResult?.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: activeResult.reviewerEvidence }),
-          ...(activeResult?.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const)
       : ({
           ok: true,
           reused: false,
           validationRunId: started.validationRunId,
           outcome,
-          ...(activeResult?.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: activeResult.reviewerEvidence }),
-          ...(activeResult?.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const);
   });
 
@@ -351,8 +331,6 @@ const runCandidatePhases = (
   {
     readonly outcome: CandidateValidationOutcome;
     readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-    readonly reviewerEvidence?: ReviewerExecutionEvidence;
-    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     readonly toolingFailures: readonly ValidationToolingFailure[];
   },
   ValidationToolingFailure | RepositoryStorageError

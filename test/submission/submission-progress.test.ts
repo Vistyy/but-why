@@ -8,7 +8,7 @@ import {
 } from "../../src/submission/submissionProgress.js";
 
 describe("Submission progress", () => {
-  it("writes reviewer facts and concise completion durations to stderr", () => {
+  it("writes reviewer profiles and concise completion durations to stderr", () => {
     const output: string[] = [];
     const progress = stderrSubmitProgress((message) => output.push(message));
 
@@ -31,12 +31,11 @@ describe("Submission progress", () => {
       },
       "passed",
       6 * 60_000 + 49_000,
-      { continuity: "resumed", reviewCalls: 1 },
     );
 
     expect(output).toEqual([
       "Acceptance Review started: profile=reviewer model=openai-codex/gpt-5.6-luna thinking=high\n",
-      "Acceptance Review passed in 6m49s continuity=resumed reviewCalls=1\n",
+      "Acceptance Review passed in 6m49s\n",
     ]);
   });
 
@@ -55,12 +54,12 @@ describe("Submission progress", () => {
       },
       "failed",
       1_000,
-      { continuity: "fresh", reviewCalls: 2 },
+      { reason: "findings" },
     );
 
     expect(output).toEqual([
       "Task Review started: profile=task-review model=provider/model thinking=high\n",
-      "Task Review failed in 1s continuity=fresh reviewCalls=2\n",
+      "Task Review failed in 1s reason=findings\n",
     ]);
     const failingProgress = stderrSubmitProgress(() => {
       throw new Error("stderr unavailable");

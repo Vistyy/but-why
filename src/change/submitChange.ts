@@ -44,9 +44,7 @@ import type {
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
 import type { ReconciledChange } from "./reconcileChange.js";
-import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
-import type { ReviewerExecutionEvidence } from "./validationRun/reviewerArtifacts.js";
 
 export type ChangeSubmitResult =
   | {
@@ -62,8 +60,6 @@ export type ChangeSubmitResult =
       readonly validationRunId: number;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: true;
@@ -77,8 +73,6 @@ export type ChangeSubmitResult =
       readonly candidateId: number;
       readonly validationRunId: number;
       readonly findings: readonly CandidateValidationFinding[];
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
@@ -87,8 +81,6 @@ export type ChangeSubmitResult =
       readonly candidateId: number;
       readonly validationRunId: number;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
@@ -359,10 +351,10 @@ const applyChangeReviewerConfiguration = (
     };
     const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
       Effect.gen(function* () {
-        const canCorrect =
-          persistence.agentSessionConfigurationCanBeCorrected !== undefined
-            ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, stored.id)
-            : false;
+        const canCorrect = yield* persistence.agentSessionConfigurationCanBeCorrected(
+          changeId,
+          stored.id,
+        );
         const replacement = canCorrect
           ? current()?.policy.specialistReviews.find((candidate) => candidate.id === stored.id)
           : undefined;
@@ -379,10 +371,10 @@ const applyChangeReviewerConfiguration = (
         message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
       };
     }
-    const canCorrectAcceptance =
-      persistence.agentSessionConfigurationCanBeCorrected !== undefined
-        ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, "acceptance")
-        : false;
+    const canCorrectAcceptance = yield* persistence.agentSessionConfigurationCanBeCorrected(
+      changeId,
+      "acceptance",
+    );
     const currentResolved = canCorrectAcceptance ? current() : undefined;
     const currentAcceptanceReview =
       currentResolved?.acceptanceContextSupplied === true
@@ -615,12 +607,6 @@ const validateAndPublish = (
       return yield* blockedValidationResult(validation, change, candidate, {
         validationRunId: validationResult.validationRunId,
         outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
-        ...(validationResult.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: validationResult.reviewerEvidence }),
-        ...(validationResult.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
       });
     }
 
@@ -643,12 +629,6 @@ const validateAndPublish = (
       validationRunId: validationResult.validationRunId,
       created: publication.created,
       pullRequest: publication.pullRequest,
-      ...(validationResult.reviewerEvidence === undefined
-        ? {}
-        : { reviewerEvidence: validationResult.reviewerEvidence }),
-      ...(validationResult.specialistReviewerEvidence === undefined
-        ? {}
-        : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
     } as const;
   });
 
@@ -659,8 +639,6 @@ const blockedValidationResult = (
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: number;
-    readonly reviewerEvidence?: ReviewerExecutionEvidence;
-    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -672,12 +650,6 @@ const blockedValidationResult = (
           candidateId: candidate.candidateId,
           validationRunId: validation.validationRunId,
           findings: yield* candidateValidation.listFindings(validation.validationRunId),
-          ...(validation.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validation.reviewerEvidence }),
-          ...(validation.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         }
       : {
           ok: false,
@@ -688,12 +660,6 @@ const blockedValidationResult = (
           toolingFailures: yield* candidateValidation.listToolingFailures(
             validation.validationRunId,
           ),
-          ...(validation.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validation.reviewerEvidence }),
-          ...(validation.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         };
   });
 

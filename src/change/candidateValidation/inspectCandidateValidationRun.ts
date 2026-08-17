@@ -101,10 +101,7 @@ const inspectRun = (
     const findings = yield* dependencies.persistence.listFindings(validationRunId);
     const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
     const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
-    const agentInvocations =
-      dependencies.persistence.listAgentInvocations === undefined
-        ? []
-        : yield* dependencies.persistence.listAgentInvocations(validationRunId);
+    const agentInvocations = yield* dependencies.persistence.listAgentInvocations(validationRunId);
 
     const findingArtifactRefs = new Set(findings.flatMap((finding) => finding.artifactRefs));
     const includeAllAvailablePreviews = toolingFailures.length > 0;

@@ -168,7 +168,7 @@ export type ChangeCancellationMutationFailure = {
 
 export type ChangeSubmissionPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<SubmissionChange | undefined>;
-  readonly agentSessionConfigurationCanBeCorrected?: (
+  readonly agentSessionConfigurationCanBeCorrected: (
     changeId: string,
     producer: string,
   ) => StorageEffect<boolean>;

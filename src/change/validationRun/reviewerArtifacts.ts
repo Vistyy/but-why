@@ -28,13 +28,11 @@ export const writeReviewerArtifacts = (input: {
     | {
         readonly ok: true;
         readonly report: unknown;
-        readonly attempts: number;
         readonly stdout: string;
       }
     | {
         readonly ok: false;
         readonly failure: ValidationToolingFailure;
-        readonly attempts: number;
         readonly stdout: string;
       };
   readonly artifactsRoot: string;
@@ -56,7 +54,7 @@ export const writeReviewerArtifacts = (input: {
       },
       {
         fileName: "execution.json",
-        content: `${encodeReviewerWireValue(executionArtifact(input.executionEvidence, input.result.attempts))}\n`,
+        content: `${encodeReviewerWireValue(input.executionEvidence)}\n`,
       },
     ] as const;
 
@@ -89,15 +87,6 @@ export const writeReviewerArtifacts = (input: {
         }),
     ),
   );
-
-const executionArtifact = (evidence: ReviewerExecutionEvidence, attempts: number): unknown =>
-  evidence.invocations === undefined
-    ? { ...evidence, attempts }
-    : {
-        agentSessionId: evidence.agentSessionId,
-        invocations: evidence.invocations,
-        attempts,
-      };
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

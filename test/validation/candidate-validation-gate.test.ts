@@ -9,7 +9,6 @@ const passed = { findings: 0 as const };
 const blocked = { findings: 1 as const };
 const specialistsPassed = {
   findings: 0 as const,
-  reviewerEvidence: [],
   toolingFailures: [],
 };
 const record = <A>(calls: string[], phase: string, result: A) =>
@@ -104,7 +103,6 @@ describe("Candidate Validation Gate", () => {
           | typeof specialistsPassed
           | {
               readonly findings: 1;
-              readonly reviewerEvidence: readonly [];
               readonly toolingFailures: readonly [] | readonly [ReviewerProcessToolingFailed];
             },
       ) =>
@@ -117,13 +115,11 @@ describe("Candidate Validation Gate", () => {
       expect(
         (yield* run({
           findings: 1,
-          reviewerEvidence: [],
           toolingFailures: [],
         })).outcome,
       ).toBe("blocked");
       const toolingResult = yield* run({
         findings: 1,
-        reviewerEvidence: [],
         toolingFailures: [failure],
       });
       expect(toolingResult).toMatchObject({

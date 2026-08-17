@@ -75,12 +75,8 @@ export const openSqliteChangeTestDependencies = () =>
       }) => {
         const submission: ChangeSubmissionPort = {
           getChangeById: submissionOwner.getChangeById,
-          ...(submissionOwner.agentSessionConfigurationCanBeCorrected === undefined
-            ? {}
-            : {
-                agentSessionConfigurationCanBeCorrected:
-                  submissionOwner.agentSessionConfigurationCanBeCorrected,
-              }),
+          agentSessionConfigurationCanBeCorrected:
+            submissionOwner.agentSessionConfigurationCanBeCorrected,
           getChangeForOutputById: submissionOwner.getChangeForOutputById,
           getCompletedPublicationEvidence: submissionOwner.getCompletedPublicationEvidence,
           completeMergedChange: submissionCompletion,

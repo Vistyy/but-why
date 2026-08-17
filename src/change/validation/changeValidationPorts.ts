@@ -99,7 +99,7 @@ export type ChangeValidationReadPort = {
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
   readonly listArtifacts: CandidateValidationExecutionPort["listArtifacts"];
-  readonly listAgentInvocations?: (
+  readonly listAgentInvocations: (
     validationRunId: number,
   ) => StorageEffect<readonly CandidateValidationAgentInvocation[]>;
 };

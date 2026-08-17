@@ -1547,6 +1547,7 @@ const dependencies = (input: {
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      agentSessionConfigurationCanBeCorrected: () => Effect.succeed(false),
       getChangeForOutputById: () => Effect.succeed(input.change),
       getCompletedPublicationEvidence: () =>
         Effect.sync(() => {

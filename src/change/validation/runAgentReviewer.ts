@@ -7,10 +7,7 @@ import type {
   AgentSessionPersistence,
   AgentSessionSqlLink,
 } from "../../agent/agentSession/agentSession.js";
-import {
-  type AgentExecutionEvidence,
-  executeAgentSession,
-} from "../../agent/agentSession/executeAgentSession.js";
+import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
@@ -81,8 +78,6 @@ export type RunAgentReviewerInput = {
 
 export type RunAgentReviewerResult = {
   readonly result: TranslatedReviewerResult<ReviewerOutput>;
-  readonly evidence: AgentExecutionEvidence;
-  readonly reviewerEvidence: ReturnType<typeof reviewerEvidenceFromAgentSession>;
   readonly toolingFailure?: ValidationToolingFailure;
 };
 
@@ -188,8 +183,6 @@ export const runAgentReviewer = (
     const result = translateRuntimeResult(execution.result, input.reviewer);
     return {
       result,
-      evidence: execution.evidence,
-      reviewerEvidence: reviewerEvidenceFromAgentSession(execution.evidence),
       ...(persistedToolingFailure === undefined ? {} : { toolingFailure: persistedToolingFailure }),
     };
   });

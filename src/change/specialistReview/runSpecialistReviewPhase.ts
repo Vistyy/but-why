@@ -37,7 +37,6 @@ import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 
@@ -97,15 +96,10 @@ export type RunSpecialistReviewPhaseInput = {
   >;
 };
 
-export type SpecialistReviewerContinuityEvidence = ReviewerExecutionEvidence & {
-  readonly producer: string;
-};
-
 export type RunSpecialistReviewPhaseResult = {
   readonly findings: 0 | 1;
   readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
 };
 
 export const runSpecialistReviewPhase = (
@@ -119,7 +113,6 @@ export const runSpecialistReviewPhase = (
     let hasFindings = false;
     const persistedToolingFailures: ValidationToolingFailure[] = [];
     const toolingFailures: ValidationToolingFailure[] = [];
-    const reviewerEvidence: SpecialistReviewerContinuityEvidence[] = [];
 
     for (const policy of input.policies) {
       const result = yield* runWithSubmitProgress({
@@ -132,34 +125,24 @@ export const runSpecialistReviewPhase = (
         run: runSpecialist(input, policy),
         outcome: (review) =>
           review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
-        details: (review) => ({
-          ...(review.toolingFailure !== undefined
+        details: (review) =>
+          review.toolingFailure !== undefined
             ? { reason: "tooling" as const }
             : review.hasFindings
               ? { reason: "findings" as const }
-              : {}),
-          ...(review.reviewerEvidence?.continuity === undefined ||
-          review.reviewerEvidence.reviewCalls === undefined
-            ? {}
-            : {
-                continuity: review.reviewerEvidence.continuity,
-                reviewCalls: review.reviewerEvidence.reviewCalls,
-              }),
-        }),
+              : undefined,
       });
       if (result.hasFindings) hasFindings = true;
       if (result.toolingFailure !== undefined) {
         toolingFailures.push(result.toolingFailure);
         if (result.toolingFailurePersisted) persistedToolingFailures.push(result.toolingFailure);
       }
-      if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
     }
 
     return {
       findings: hasFindings ? 1 : 0,
       ...(persistedToolingFailures.length === 0 ? {} : { persistedToolingFailures }),
       toolingFailures,
-      reviewerEvidence,
     };
   });
 
@@ -171,7 +154,6 @@ const runSpecialist = (
     readonly hasFindings: boolean;
     readonly toolingFailure?: ValidationToolingFailure;
     readonly toolingFailurePersisted?: boolean;
-    readonly reviewerEvidence?: SpecialistReviewerContinuityEvidence;
   },
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
@@ -285,29 +267,20 @@ const runSpecialist = (
           : [],
       settleAgentInvocationResult: input.settleAgentInvocationResult,
     });
-    const specialistEvidence: SpecialistReviewerContinuityEvidence = {
-      producer: policy.id,
-      ...execution.reviewerEvidence,
-    };
     if (execution.toolingFailure !== undefined) {
       return {
         hasFindings: false,
         toolingFailure: execution.toolingFailure,
         toolingFailurePersisted: true,
-        reviewerEvidence: specialistEvidence,
       };
     }
     if (!execution.result.ok) {
       return {
         hasFindings: false,
         toolingFailure: execution.result.failure,
-        reviewerEvidence: specialistEvidence,
       };
     }
-    return {
-      hasFindings: execution.result.report.findings.length > 0,
-      reviewerEvidence: specialistEvidence,
-    };
+    return { hasFindings: execution.result.report.findings.length > 0 };
   });
 
 const agentConfiguration = (

@@ -39,7 +39,6 @@ import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 
@@ -104,7 +103,6 @@ export type RunAcceptanceReviewPhaseInput = {
 export type RunAcceptanceReviewPhaseResult = {
   readonly findings: 0 | 1;
   readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
 
@@ -227,38 +225,25 @@ export const runAcceptanceReviewPhase = (
         return {
           findings: 0,
           persistedToolingFailures: [execution.toolingFailure],
-          reviewerEvidence: execution.reviewerEvidence,
           toolingFailure: execution.toolingFailure,
         };
       }
       if (!execution.result.ok) {
         return {
           findings: 0,
-          reviewerEvidence: execution.reviewerEvidence,
           toolingFailure: execution.result.failure,
         };
       }
-      return {
-        findings: findings.length === 0 ? 0 : 1,
-        reviewerEvidence: execution.reviewerEvidence,
-      };
+      return { findings: findings.length === 0 ? 0 : 1 };
     }),
     outcome: (result) =>
       result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
-    details: (result) => ({
-      ...(result.toolingFailure !== undefined
+    details: (result) =>
+      result.toolingFailure !== undefined
         ? { reason: "tooling" as const }
         : result.findings === 1
           ? { reason: "findings" as const }
-          : {}),
-      ...(result.reviewerEvidence?.continuity === undefined ||
-      result.reviewerEvidence.reviewCalls === undefined
-        ? {}
-        : {
-            continuity: result.reviewerEvidence.continuity,
-            reviewCalls: result.reviewerEvidence.reviewCalls,
-          }),
-    }),
+          : undefined,
   });
 
 const agentConfiguration = (

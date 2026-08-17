@@ -8,20 +8,6 @@ import type { StructuredObject } from "../../src/output/structured.js";
 import { structuredValue } from "../../src/output/structuredValue.js";
 
 const changeId = "change-1";
-const reviewerEvidence = {
-  continuity: "fresh",
-  identityFingerprint: "acceptance-fingerprint",
-  durationMs: 10,
-  reviewCalls: 1,
-  invocationUsage: [null],
-} as const;
-const specialistReviewerEvidence = [
-  {
-    ...reviewerEvidence,
-    producer: "specialist:security",
-    identityFingerprint: "specialist-fingerprint",
-  },
-] as const;
 
 const change: ChangeRecord = {
   id: changeId,
@@ -119,8 +105,6 @@ const cases = {
       validationRunId: 1,
       created: true,
       pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: {
       exitCode: 0,
@@ -131,8 +115,6 @@ const cases = {
         status: "published",
         created: true,
         pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        reviewerEvidence,
-        specialistReviewerEvidence,
       },
     },
   },
@@ -148,8 +130,6 @@ const cases = {
       candidateId: 1,
       validationRunId: 1,
       findings: [],
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: errorResult(
       "validation_findings",
@@ -160,8 +140,6 @@ const cases = {
         candidateId: 1,
         validationRunId: 1,
         findings: [],
-        reviewerEvidence,
-        specialistReviewerEvidence,
         recovery: {
           authority: "change_submit",
           changeId,
@@ -181,8 +159,6 @@ const cases = {
       candidateId: 1,
       validationRunId: 1,
       toolingFailures: [],
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: errorResult(
       "validation_tooling_failed",
@@ -193,8 +169,6 @@ const cases = {
         candidateId: 1,
         validationRunId: 1,
         toolingFailures: [],
-        reviewerEvidence,
-        specialistReviewerEvidence,
       },
     ),
   },

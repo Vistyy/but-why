@@ -429,8 +429,6 @@ const submitTaskReview = (
         return completed;
       }),
       outcome: (result) => (result.ok && result.outcome === "passed" ? "passed" : "failed"),
-      details: () => taskReviewProgressDetails(taskReviewEvidence),
-      failureDetails: () => taskReviewProgressDetails(taskReviewEvidence),
     });
     return result;
   });
@@ -465,11 +463,6 @@ const reviewerEvidenceFromAgent = (
   agentSessionId: evidence.agentSessionId,
   invocations: evidence.invocations,
 });
-
-const taskReviewProgressDetails = (evidence: ReviewerExecutionEvidence | undefined) =>
-  evidence?.continuity === undefined || evidence.reviewCalls === undefined
-    ? undefined
-    : { continuity: evidence.continuity, reviewCalls: evidence.reviewCalls };
 
 const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
   name: profile.agentProfile,

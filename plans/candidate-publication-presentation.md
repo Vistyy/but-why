@@ -5,8 +5,9 @@ The prior provisional approval is not current planning direction because publica
 Do not use this plan as implementation authority.
 
 **Scheduling:** Reassess this plan after the first-release baseline.
-It may consume the approved Agent Session and Agent Invocation direction, but it is not part of the initial Agent Session work and supplies no requirements to the first-release baseline.
-Any later accepted persistence change uses a normal post-baseline migration.
+BY-275 completed the Agent Session and Agent Invocation prerequisite that this work consumes.
+This plan supplies no requirements to the first-release baseline.
+Any later accepted publication persistence change uses a normal post-baseline migration.
 
 **Removal condition:** Remove this file after the Operator approves the plan and every accepted requirement and qualifying decision is recorded in its applicable SQLite Task, current domain context, accepted ADR, or current documentation source.
 
@@ -22,10 +23,8 @@ But Why alone applies the exact persisted presentation to GitHub.
 
 ## Task boundary
 
-The work is split into independently reviewable deliverables.
-
-1. A separate prerequisite generalizes the current Reviewer Session infrastructure into a shared Agent Session capability while preserving existing review behavior.
-2. This Candidate Publication presentation work consumes the shared Agent Session capability.
+BY-275 completed the shared Agent Session and Agent Invocation prerequisite.
+This Candidate Publication presentation work consumes that completed capability.
 
 `agent-session-execution.md` owns shared Agent Session and Agent Invocation behavior.
 `release-baseline-cutover.md` owns the first-release physical schema without this deferred presentation behavior.
@@ -277,17 +276,17 @@ Those inputs govern generation and Agent Session compatibility, not whether comp
 Version 1 extends current Change-owned Candidate Publication state rather than adding presentation history.
 The logical state distinguishes:
 
-- Active generation, which identifies the Change, Candidate, Validation Run, presentation source digest, and unsettled Agent Execution before complete presentation content exists.
+- Active generation, which identifies the Change, Candidate, Validation Run, presentation source digest, and unsettled Agent Invocation before complete presentation content exists.
 - A complete pending proposal awaiting publication mutation or reconciliation.
 - The last confirmed publication and presentation.
 
-Successful Agent Execution settlement replaces active-generation state with the complete pending proposal rather than retaining generation history.
-The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, presentation source digest, and successful Agent Execution ID.
+Successful Agent Invocation settlement replaces active-generation state with the complete pending proposal rather than retaining generation history.
+The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, presentation source digest, and successful Agent Invocation ID.
 Exact head and Change Base are derived from the immutable Candidate rather than duplicated.
 Confirmed state requires pull request number and URL.
 Pending state omits those fields and uses confirmed state when updating an existing pull request.
-Confirmed state retains the successful Agent Execution ID as generation evidence.
-The release-baseline review selects the physical table count and placement.
+Confirmed state retains the successful Agent Invocation ID as generation evidence.
+The later publication implementation selects its physical storage through a normal post-baseline migration.
 
 The update flow is:
 
@@ -347,7 +346,7 @@ Each active Submission Workspace requires durable recovery facts:
 - Selected Validation Run reference when applicable.
 
 Change Delivery's Submission operation owns Submission Workspace lifecycle and recovery across Validation and publication synthesis.
-The release-baseline plan selects its physical persistence representation.
+The later publication implementation selects its physical persistence representation through a normal post-baseline migration.
 The durable recovery state exists only while setup, use, or cleanup remains active and is removed after successful cleanup.
 Validation and Publication retain their own evidence rather than permanent workspace history.
 The required behavior is that But Why records recovery facts before worktree creation and verifies exact identity, path, commit, and cleanliness before reuse or cleanup.
@@ -393,7 +392,7 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 ## Resolved decisions
 
 - Use two Tasks rather than one oversized Task.
-- Agent Session generalization is the prerequisite Task.
+- BY-275 completed the Agent Session and Agent Invocation prerequisite.
 - But Why owns the complete PR title and body.
 - Presentation generation failure blocks Candidate Publication but does not fail Validation.
 - Publication has its own optional presentation Agent Profile selection and guidance file, with fallback to the Global default and early configuration failure before Validation.
@@ -423,10 +422,10 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 
 ## Unresolved decisions
 
-- Author the exact dependent Task only after the Agent Session and release-baseline plans establish the applicable execution and persistence direction, the prerequisite Agent Session Task is available, and Task Recording is authorized.
+- Author the exact dependent Task only after the first-release baseline is complete, this plan is reassessed against the completed Agent Session boundary, and Task Recording is authorized.
 - Evaluate implemented architectural decisions against the ADR gate after implementation.
 - Keep the accepted `Submission Workspace`, `Risk`, and `Publication Agent` definitions in this plan until the functionality is implemented, then record them in Change Delivery Context only with separate Operator authorization.
-- Integrate the parallel schema design's physical representation without changing this plan's required behavior.
+- Select publication-specific physical storage through a normal post-baseline migration without changing this plan's required behavior.
 
 ## Approval and authorization status
 

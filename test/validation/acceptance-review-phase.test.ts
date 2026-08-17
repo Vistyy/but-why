@@ -110,13 +110,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: {
-          agentSessionId: 1,
-          invocations: [{ settlementKind: "returned", usage: null }],
-        },
-      });
+      expect(result).toEqual({ findings: 0 });
       expect(review).toHaveBeenCalledOnce();
       const call = review.mock.calls[0]?.[0];
       expect(call).toMatchObject({
@@ -223,26 +217,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: {
-          agentSessionId: 1,
-          invocations: [
-            {
-              id: 1,
-              continuationId: 1,
-              settlementKind: "returned",
-              usage: {
-                inputTokens: 1,
-                outputTokens: 1,
-                totalTokens: 2,
-              },
-            },
-          ],
-        },
-      });
-      expect(result.reviewerEvidence).not.toHaveProperty("continuity");
-      expect(result.reviewerEvidence).not.toHaveProperty("reviewCalls");
+      expect(result).toEqual({ findings: 0 });
     }),
   );
 
@@ -312,9 +287,6 @@ describe("Acceptance Review phase", () => {
 
       expect(result).toMatchObject({
         findings: 0,
-        reviewerEvidence: {
-          invocations: [{ settlementKind: "returned" }],
-        },
         toolingFailure: { _tag: "InfrastructureToolingFailed" },
       });
       expect(settledInvocationIds).toEqual([1]);

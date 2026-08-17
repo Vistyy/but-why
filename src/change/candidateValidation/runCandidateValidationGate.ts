@@ -1,9 +1,7 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { SpecialistReviewerContinuityEvidence } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
 
 type FindingResult = {
@@ -12,13 +10,11 @@ type FindingResult = {
 
 type AcceptanceReviewResult = FindingResult & {
   readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly toolingFailure?: ValidationToolingFailure;
 };
 
 type SpecialistReviewResult = FindingResult & {
   readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
@@ -44,8 +40,6 @@ type CandidateValidationGatePhases = {
 type CandidateValidationGateResult = {
   readonly outcome: CandidateValidationOutcome;
   readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence?: ReviewerExecutionEvidence;
-  readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
@@ -60,27 +54,18 @@ export const runCandidateValidationGate = Effect.fn("CandidateValidation.runGate
   const checks = yield* phases.checks();
   if (checks.findings === 1) return blocked;
 
-  let reviewerEvidence: ReviewerExecutionEvidence | undefined;
   if (phases.acceptanceReview !== undefined) {
     const acceptance = yield* phases.acceptanceReview();
-    reviewerEvidence = acceptance.reviewerEvidence;
     if (acceptance.toolingFailure !== undefined) {
       return {
         outcome: "tooling_failed",
         ...(acceptance.persistedToolingFailures === undefined
           ? {}
           : { persistedToolingFailures: acceptance.persistedToolingFailures }),
-        ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
         toolingFailures: [acceptance.toolingFailure],
       } satisfies CandidateValidationGateResult;
     }
-    if (acceptance.findings === 1) {
-      return {
-        outcome: "blocked",
-        ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
-        toolingFailures: [],
-      } satisfies CandidateValidationGateResult;
-    }
+    if (acceptance.findings === 1) return blocked;
   }
 
   const specialists = yield* phases.specialistReviews();
@@ -95,10 +80,6 @@ export const runCandidateValidationGate = Effect.fn("CandidateValidation.runGate
     ...(specialists.persistedToolingFailures === undefined
       ? {}
       : { persistedToolingFailures: specialists.persistedToolingFailures }),
-    ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
-    ...(specialists.reviewerEvidence.length === 0
-      ? {}
-      : { specialistReviewerEvidence: specialists.reviewerEvidence }),
     toolingFailures: specialists.toolingFailures,
   } satisfies CandidateValidationGateResult;
 });
