@@ -103,6 +103,21 @@ describe("Change inspection CLI", () => {
     }),
   );
 
+  it.effect("rejects a retired Change ID without reporting a state outage", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      commitButWhyConfigAndRecordDefault(root);
+
+      const shown = yield* runByInProcessEffect(root, ["change", "show", "change-1"]);
+
+      expect(shown.status).toBe(1);
+      expect(JSON.parse(shown.stdout)).toEqual({
+        error: { code: "change_not_found", message: "Change was not found." },
+        help: ["Use a Change ID returned by `by change list --all`."],
+      });
+    }),
+  );
+
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();

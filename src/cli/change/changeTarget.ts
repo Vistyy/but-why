@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { hasPublicChangeIdShape } from "../../change/changeId.js";
 import { loadChangeList } from "../../change/composition/loadChangeInspection.js";
 import {
   type CliResult,
@@ -18,7 +19,20 @@ export const resolveChangeId = (
   commandName: string,
   operationalRepoRoot?: string,
 ): Effect.Effect<ChangeTargetResolution> => {
-  if (changeId !== undefined) return Effect.succeed({ ok: true, changeId });
+  if (changeId !== undefined) {
+    return Effect.succeed(
+      hasPublicChangeIdShape(changeId)
+        ? { ok: true, changeId }
+        : {
+            ok: false,
+            result: runtimeError({
+              code: "change_not_found",
+              message: "Change was not found.",
+              help: ["Use a Change ID returned by `by change list --all`."],
+            }),
+          },
+    );
+  }
 
   const loaded = loadChangeList({
     cwd,
