@@ -25,6 +25,7 @@ import {
 import {
   buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
+  buildSpecialistReviewerSystemPrompt,
 } from "../../reviewerPrompts/specialistReviewerPrompt.js";
 import {
   runWithSubmitProgress,
@@ -188,9 +189,12 @@ const runSpecialist = (
         producer: policy.id,
       }),
     );
-    const prompt = buildSpecialistReviewerPrompt({
+    const systemPrompt = buildSpecialistReviewerSystemPrompt({
       specialist: policy.id,
       instructions: policy.instructions,
+    });
+    const prompt = buildSpecialistReviewerPrompt({
+      specialist: policy.id,
       validationRunId: input.validationRunId,
       availableArtifactRefs,
       candidate: {
@@ -204,7 +208,6 @@ const runSpecialist = (
     });
     const continuationPrompt = buildSpecialistContinuationPrompt({
       specialist: policy.id,
-      instructions: policy.instructions,
       validationRunId: input.validationRunId,
       availableArtifactRefs,
       candidate: input.candidate,
@@ -258,6 +261,7 @@ const runSpecialist = (
               }),
           ),
         ),
+      systemPrompt,
       prompt,
       continuationPrompt,
       commandCwd: input.commandCwd,

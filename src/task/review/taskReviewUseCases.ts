@@ -26,7 +26,10 @@ import type {
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
-import { buildTaskReviewerPrompt } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import {
+  buildTaskReviewerPrompt,
+  buildTaskReviewerSystemPrompt,
+} from "../../reviewerPrompts/taskReviewerPrompt.js";
 import {
   runAfterSubmitProgressStarted,
   runWithSubmitProgress,
@@ -293,8 +296,8 @@ const submitTaskReview = (
               const agentEnvironment = repoAgentEnvironment(repoConfig);
               const history = yield* input.persistence.listForTask(taskId);
               const previous = history.length < 2 ? undefined : history.at(-2);
+              const systemPrompt = buildTaskReviewerSystemPrompt(resolvedPolicy.policy.snapshot);
               const prompt = buildTaskReviewerPrompt({
-                policy: resolvedPolicy.policy.snapshot,
                 proposal: admitted.proposal,
                 dependencyEvidence: admitted.dependencyEvidence,
               });
@@ -328,6 +331,7 @@ const submitTaskReview = (
                 reviewerRuntime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
                 decodeOutput,
+                systemPrompt,
                 prompt,
                 continuationPrompt: buildTaskReviewContinuationPrompt({
                   previousProposal: previous?.proposal,
@@ -567,7 +571,6 @@ const buildTaskReviewContinuationPrompt = (input: {
 }): string =>
   [
     "Continue the compatible Task Reviewer Session with the complete current proposal below.",
-    "Re-evaluate the current proposal. Do not reuse an earlier judgment.",
     "Deterministic proposal diff from the most recent prior Review:",
     JSON.stringify({
       previous: input.previousProposal ?? null,

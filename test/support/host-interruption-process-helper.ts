@@ -76,6 +76,7 @@ const program = Effect.scoped(
       reviewerExecutor,
       reviewer: "acceptance",
       decodeOutput: (output) => Effect.succeed(output),
+      systemPrompt: "Act as the Acceptance Reviewer.",
       prompt: "Review the Candidate.",
       profile: {
         agentProfile: "review",

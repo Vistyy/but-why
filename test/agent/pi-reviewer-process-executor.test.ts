@@ -31,6 +31,7 @@ const profile = {
 
 const input = {
   reviewer: "acceptance",
+  systemPrompt: "Act as the Acceptance Reviewer.",
   prompt: "Review the Candidate.",
   profile,
   commandCwd: "/validation/workspace",
@@ -81,6 +82,8 @@ describe("Pi reviewer process executor", () => {
           "--tools",
           "read,grep",
           "--no-session",
+          "--append-system-prompt",
+          "Act as the Acceptance Reviewer.",
           "--name",
           "acceptance Review",
           "Review the Candidate.",
@@ -374,6 +377,8 @@ describe("Pi reviewer process executor", () => {
         expect(persistedSession.endsWith('{"type":"message"')).toBe(true);
         expect(command.args).toContain("--session");
         expect(command.args).toContain(sessionFile);
+        expect(command.args).toContain("--append-system-prompt");
+        expect(command.args).toContain("Act as the Acceptance Reviewer.");
         return Effect.succeed({
           exitCode: 0,
           stderr: "",

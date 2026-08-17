@@ -58,6 +58,7 @@ export type RunAgentReviewerInput = {
     output: unknown,
     invocation: number,
   ) => ReturnType<Parameters<ReviewerAgentRuntime<ReviewerOutput>["review"]>[0]["decodeOutput"]>;
+  readonly systemPrompt: string;
   readonly prompt: string;
   readonly continuationPrompt: string;
   readonly commandCwd: string;
@@ -103,6 +104,7 @@ export const runAgentReviewer = (
       reviewerRuntime: input.reviewerRuntime,
       reviewerExecutor: input.reviewerExecutor,
       decodeOutput: input.decodeOutput,
+      systemPrompt: input.systemPrompt,
       prompt: input.prompt,
       continuationPrompt: input.continuationPrompt,
       commandCwd: input.commandCwd,

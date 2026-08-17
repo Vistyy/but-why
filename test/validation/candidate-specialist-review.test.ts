@@ -227,8 +227,17 @@ describe("Candidate Specialist Review phase", () => {
           expect(input.sessionStorageRoot).toContain("sessions");
           expect(input.prompt).toContain(candidate.changeBaseSha);
           expect(input.prompt).toContain(candidate.headSha);
-          expect(input.prompt).toContain(`${input.reviewer} concern instructions`);
+          expect(input.systemPrompt).toContain(`${input.reviewer} concern instructions`);
+          expect(input.systemPrompt).toContain("hostile last line of defense");
+          expect(input.systemPrompt).toContain("Review the complete exact current Candidate");
+          expect(input.systemPrompt).toContain(
+            "When Acceptance Context is supplied, use it only to constrain Findings",
+          );
+          expect(input.systemPrompt).toContain(
+            "Each Finding must include title, description, evidence, files, and artifactRefs",
+          );
           expect(input.prompt).toContain(acceptanceContext.description);
+          expect(input.prompt).not.toContain("reviewer-output");
           expect(input.prompt).not.toContain(candidate.candidateId);
           for (const other of ["zeta", "broken", "alpha"].filter(
             (producer) => producer !== input.reviewer,

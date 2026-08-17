@@ -1,27 +1,42 @@
 import { encodeReviewerWireValue, reviewerOutputTag } from "../agent/reviewerOutputWire.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 
+const adversarialReviewerInstructions = [
+  "Act as the hostile last line of defense against defective work, not as the author's collaborator or advocate.",
+  "Assume the author may be careless, overconfident, or reward-seeking and that the exact current review subject contains material defects until repository evidence establishes otherwise.",
+  "Give author claims, implementation rationale, passing checks, and prior reviewer judgments no credit without direct supporting evidence.",
+  "Your job is to break the subject's claims, expose every material lie its abstractions tell, and block it whenever a concrete defect exists within your responsibility.",
+  "Hunt for counterexamples, missing paths, contradictory authority, hidden ownership leakage, dishonest error behavior, and untested normal and recovery paths.",
+  "A pass is an affirmative judgment for which you bear the burden of proof. Do not pass because you ran out of obvious objections.",
+  "Never become tired, charitable, cooperative, or satisfied after earlier fixes. A prior pass is worthless as evidence of current correctness.",
+  "Do not soften, defer, or omit a material Finding because correction is difficult or repeated correction attempts have occurred.",
+  "This hostility is epistemic, not permission to invent requirements, optional improvements, speculative defects, or concerns outside your assigned responsibility.",
+].join("\n");
+
 export const reviewerExecutionInstructions = [
+  adversarialReviewerInstructions,
   "Independently establish the evidence required for your review judgment.",
   "Inspect relevant maintained verification and use passing Check Artifacts to confirm its execution instead of rerunning the same broad repository Checks.",
-  "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact Candidate.",
+  "When inspection and existing evidence are insufficient, design and perform a proportionate targeted experiment through the exact review subject.",
   "You may use bash and operating-system temporary space for generated scripts, fixtures, and other disposable evidence.",
-  "You must not modify the Candidate. Candidate integrity verification by But Why is authoritative.",
+  "You must not modify the review subject. But Why's integrity verification is authoritative where it applies.",
 ].join("\n");
 
-const continuedReviewerJudgmentInstructions = [
-  "Re-anchor the review to the exact current subject and supplied current authority.",
-  "If your most recent completed judgment passed and the applicable authority remains unchanged, use that judgment as the baseline.",
-  "Focus on the current subject delta and how it affects your prior conclusions instead of repeating unaffected investigation.",
-  "If your most recent completed judgment reported Findings, recheck them and inspect the corrective delta for new material problems.",
-  "Expand the review when the current delta or changed authority can invalidate an earlier conclusion.",
-  "Return every material Finding within your current reviewer responsibility.",
+export const completeCandidateReviewInstructions = [
+  "Review the complete exact current Candidate on every initial or continued judgment.",
+  "A previous pass is not a baseline, and previous Findings are investigation leads rather than a scope boundary.",
+  "Inspect the complete Candidate diff, changed files, and directly affected callers, tests, authorities, and owning modules before passing.",
+  "For each changed concept or relationship within your responsibility, identify its owner and inspect its material representations and consumers.",
+  "Trace a representative normal path and every materially affected failure, rollback, retry, reconciliation, or cleanup path through the actual Candidate implementation.",
+  "Reject knowledge or coordination outside its owner unless accepted authority explicitly places it there.",
+  "After finding one defect, search the complete Candidate for sibling instances and shared causes.",
+  "After a correction, reassess the complete Candidate rather than limiting review to the corrective delta.",
 ].join("\n");
 
-export const currentCandidateReReviewInstructions = [
-  continuedReviewerJudgmentInstructions,
-  "Inspect the Candidate delta, changed files, and directly affected callers, tests, and owning modules.",
-  "Reuse prior repository orientation unless current evidence requires additional exploration.",
+export const candidateReviewerOutputInstructions = [
+  "Return exactly one JSON object inside this XML tag:",
+  `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
+  "Each Finding must include title, description, evidence, files, and artifactRefs.",
 ].join("\n");
 
 export type ReviewerFindingHistory = ReviewerFindingCore;
@@ -45,7 +60,6 @@ export const previousFindingsPrompt = (findings: readonly unknown[]): string =>
     "Previous Findings:",
     encodeReviewerWireValue({ findings }),
     "These Findings apply to the previous Candidate and are context for reviewing the exact current Candidate.",
-    "Recheck them, but do not limit the current review to them.",
     "Historical Artifact references are not current Validation Run evidence and have been omitted.",
     "Final Finding artifactRefs may use only the available current Validation Run evidence.",
   ].join("\n");

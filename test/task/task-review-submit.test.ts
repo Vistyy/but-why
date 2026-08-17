@@ -692,12 +692,15 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
         profile: { runtimeConfig: { model: "provider/repo-model", skills: ["skills/task"] } },
       },
     });
-    expect(observed?.prompt).toContain("Repository guidance");
-    expect(observed?.prompt).toContain("remain controlling if the guidance conflicts");
-    expect(observed?.prompt).toContain(
+    expect(observed?.systemPrompt).toContain("Repository guidance");
+    expect(observed?.systemPrompt).toContain("remain controlling if the guidance conflicts");
+    expect(observed?.systemPrompt).toContain("hostile last line of defense");
+    expect(observed?.systemPrompt).toContain(
       "Each Finding must include exactly title, description, evidence, and files.",
     );
-    expect(observed?.prompt).not.toContain("artifactRefs");
+    expect(observed?.systemPrompt).toContain("Do not reuse an earlier judgment");
+    expect(observed?.systemPrompt).not.toContain("artifactRefs");
+    expect(observed?.prompt).not.toContain("reviewer-output");
     const submittedOutput = JSON.parse(submitted.stdout) as { review: { id: string } };
     expect(submittedOutput).toMatchObject({
       review: { outcome: "passed" },

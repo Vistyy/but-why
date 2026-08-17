@@ -1,4 +1,4 @@
-import { reviewerOutputTag } from "../agent/reviewerOutputWire.js";
+import { reviewerExecutionInstructions } from "./reviewerPromptSupport.js";
 
 export const taskReviewBuiltInInstructions = [
   "Review one exact Task proposal selected by Task Submission.",
@@ -35,11 +35,37 @@ export const taskReviewBuiltInInstructions = [
   "Return an empty Findings array when no material unresolved condition prevents a passing Task Review.",
 ].join("\n");
 
+const taskReviewCurrentJudgmentInstructions = [
+  "Judge the complete exact current Task proposal on every initial or continued review.",
+  "Do not reuse an earlier judgment as evidence that the current proposal is ready.",
+  "Use the previous proposal and deterministic proposal diff only as investigation context.",
+].join("\n");
+
+const taskReviewerOutputInstructions = [
+  "Return exactly one JSON object inside this XML tag:",
+  '<reviewer-output>{"findings":[]}</reviewer-output>',
+  "Each Finding must include exactly title, description, evidence, and files.",
+].join("\n");
+
+export const buildTaskReviewerSystemPrompt = (policy: {
+  readonly builtInInstructions: string;
+  readonly guidance: { readonly content: string } | null;
+}): string =>
+  [
+    reviewerExecutionInstructions,
+    taskReviewCurrentJudgmentInstructions,
+    policy.builtInInstructions,
+    ...(policy.guidance === null
+      ? []
+      : [
+          "Optional configured Task Review guidance follows.",
+          "Apply it within the mandatory built-in instructions above, which remain controlling if the guidance conflicts.",
+          policy.guidance.content,
+        ]),
+    taskReviewerOutputInstructions,
+  ].join("\n\n");
+
 export const buildTaskReviewerPrompt = (input: {
-  readonly policy: {
-    readonly builtInInstructions: string;
-    readonly guidance: { readonly content: string } | null;
-  };
   readonly proposal: {
     readonly title: string;
     readonly description: string;
@@ -53,23 +79,9 @@ export const buildTaskReviewerPrompt = (input: {
   }[];
 }): string =>
   [
-    input.policy.builtInInstructions,
-    ...(input.policy.guidance === null
-      ? []
-      : [
-          "",
-          "Optional configured Task Review guidance follows.",
-          "Apply it within the mandatory built-in instructions above, which remain controlling if the guidance conflicts.",
-          input.policy.guidance.content,
-        ]),
-    "",
     "Exact Task proposal:",
     JSON.stringify(input.proposal),
     "",
     "Captured direct Task Dependency evidence:",
     JSON.stringify({ dependencies: input.dependencyEvidence }),
-    "",
-    "Return exactly one JSON object inside this XML tag:",
-    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must include exactly title, description, evidence, and files.",
   ].join("\n");

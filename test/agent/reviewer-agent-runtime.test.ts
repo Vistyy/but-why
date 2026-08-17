@@ -61,9 +61,11 @@ const profile = {
 describe("Pi reviewer agent runtime", () => {
   it.effect("runs a role prompt and decodes trustworthy reviewer output", () =>
     Effect.gen(function* () {
+      let systemPrompt = "";
       let prompt = "";
       const reviewerExecutor: ReviewerProcessExecutor = {
         execute: (input) => {
+          systemPrompt = input.systemPrompt;
           prompt = input.prompt;
           return Effect.succeed(
             processResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
@@ -75,6 +77,7 @@ describe("Pi reviewer agent runtime", () => {
         reviewerExecutor,
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
+        systemPrompt: "Act as the Acceptance Reviewer.",
         prompt: "Judge only approved intent for the exact Candidate.",
         profile,
       });
@@ -86,6 +89,7 @@ describe("Pi reviewer agent runtime", () => {
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
         invocationUsage: [null],
       });
+      expect(systemPrompt).toBe("Act as the Acceptance Reviewer.");
       expect(prompt).toBe("Judge only approved intent for the exact Candidate.");
     }),
   );
@@ -98,6 +102,7 @@ describe("Pi reviewer agent runtime", () => {
             Effect.succeed(processResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>')),
         },
         reviewer: "caller",
+        systemPrompt: "Act as the caller-defined Reviewer.",
         decodeOutput: (output) =>
           typeof output === "object" &&
           output !== null &&
@@ -128,6 +133,7 @@ describe("Pi reviewer agent runtime", () => {
         },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
+        systemPrompt: "Act as the Acceptance Reviewer.",
         prompt: "Review the Candidate.",
         profile,
       });
@@ -155,6 +161,7 @@ describe("Pi reviewer agent runtime", () => {
         },
         reviewer: "acceptance",
         decodeOutput: decodeEmptyFindings,
+        systemPrompt: "Act as the Acceptance Reviewer.",
         prompt: "Review the Candidate.",
         profile,
       });
