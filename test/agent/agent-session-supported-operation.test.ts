@@ -138,7 +138,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
           invocations: [
             {
               settlementKind: "returned",
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1, total: 2 },
             },
           ],
         },

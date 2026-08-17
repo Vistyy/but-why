@@ -1,4 +1,5 @@
 import type { PiAgentProfileConfig, PiRuntimeConfig } from "../../../contracts/agentConfig.js";
+import { agentInvocationView } from "../../agentInvocationView.js";
 import type {
   TaskReviewPolicySnapshot,
   TaskReviewRecord,
@@ -59,7 +60,7 @@ export const taskReviewView = (
   },
   agentSession: {
     id: review.agentSessionId ?? null,
-    invocations: review.agentInvocations ?? [],
+    invocations: (review.agentInvocations ?? []).map(agentInvocationView),
   },
 });
 

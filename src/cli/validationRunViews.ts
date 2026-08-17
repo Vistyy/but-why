@@ -12,6 +12,7 @@ import {
 } from "../change/validationRun/validationRun.js";
 import type { StructuredObject } from "../output/structured.js";
 import { structuredValue } from "../output/structuredValue.js";
+import { agentInvocationView } from "./agentInvocationView.js";
 
 const validationRunFindingView = (finding: ValidationRunFindingRecord): StructuredObject => ({
   validationRunId: finding.validationRunId,
@@ -46,7 +47,7 @@ export const candidateValidationRunInspectionView = (
   ],
   findings: inspection.findings.map(validationRunFindingView),
   toolingFailures: inspection.toolingFailures,
-  agentInvocations: structuredValue(inspection.agentInvocations),
+  agentInvocations: structuredValue(inspection.agentInvocations.map(agentInvocationView)),
   artifacts: inspection.artifacts.map(candidateValidationArtifactView),
 });
 

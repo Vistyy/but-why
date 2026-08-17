@@ -133,6 +133,68 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("projects measured Agent Invocation usage with public token names", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* withTestRepository(
+        fixture.root,
+        Effect.gen(function* () {
+          const agents = yield* openSqliteAgentSessionPersistence();
+          const agentSessions = yield* openSqliteChangeAgentSessionPort();
+          const linkAgentInvocation = agentSessions.linkAgentInvocation;
+          if (linkAgentInvocation === undefined)
+            throw new Error("Change Agent linking is unavailable");
+          const started = yield* agents.beginInvocation({
+            configuration: { harness: "pi", model: "test-model", thinking: "off" },
+            createdAt: now,
+            linkInvocation: linkAgentInvocation({
+              changeId: fixture.changeId,
+              producer: "acceptance",
+              validationRunId: fixture.validationRunId,
+              phase: "acceptance_review",
+              configurationSnapshot: {},
+            }),
+          });
+          if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
+          yield* agents.settleInvocation({
+            invocationId: started.dispatch.invocation.id,
+            continuationId: started.dispatch.continuation.id,
+            settlement: {
+              settledAt: later,
+              kind: "returned",
+              usage: {
+                inputTokens: 10,
+                cachedInputTokens: 2,
+                cacheWriteTokens: 3,
+                outputTokens: 4,
+                totalTokens: 19,
+              },
+            },
+          });
+        }),
+      );
+      yield* fixture.runStore.completeAfterCleanup({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now: later,
+      });
+
+      const shown = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "show",
+        String(fixture.validationRunId),
+      ]);
+
+      expect(shown.status, shown.stdout).toBe(0);
+      expect(JSON.parse(shown.stdout).agentInvocations).toMatchObject([
+        {
+          settlementKind: "returned",
+          usage: { input: 10, cacheRead: 2, cacheWrite: 3, output: 4, total: 19 },
+        },
+      ]);
+    }),
+  );
+
   it.effect("keeps failed cleanup recoverable until abandonment succeeds", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
