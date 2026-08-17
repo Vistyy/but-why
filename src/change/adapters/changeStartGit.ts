@@ -146,9 +146,14 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    return recovering && recordedBranchIsOwned(cwd, start)
+    if (!recovering) return { ok: false, code: "change_start_conflict" };
+    const ownership = recordedBranchOwnership(cwd, start);
+    return ownership === "owned"
       ? { ok: true }
-      : { ok: false, code: "change_start_conflict" };
+      : {
+          ok: false,
+          code: ownership === "foreign" ? "change_start_conflict" : "git_tooling_error",
+        };
   }
   const markerRef = branchOwnershipRef(start);
   const markerCommit = resolveLocalBranch(cwd, markerRef);
@@ -176,13 +181,15 @@ const branchOwnershipRef = (start: ChangeStartRecord): string => {
   return ownershipRef;
 };
 
-const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean => {
-  if (resolveLocalBranch(cwd, branchOwnershipRef(start)) !== start.startingCommit) return false;
+const recordedBranchOwnership = (
+  cwd: string,
+  start: ChangeStartRecord,
+): "owned" | "foreign" | "tooling_error" => {
+  if (resolveLocalBranch(cwd, branchOwnershipRef(start)) !== start.startingCommit) return "foreign";
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
-  return (
-    branchCommit !== undefined &&
-    git(cwd, "merge-base", "--is-ancestor", start.startingCommit, branchCommit).ok
-  );
+  if (branchCommit === undefined) return "foreign";
+  const lineage = git(cwd, "merge-base", "--is-ancestor", start.startingCommit, branchCommit);
+  return lineage.ok ? "owned" : lineage.status === 1 ? "foreign" : "tooling_error";
 };
 
 const removeStaleWorktreeRegistration = (
@@ -294,7 +301,7 @@ const pathEntryExists = (path: string): boolean => {
 
 type GitResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly stderr: string };
+  | { readonly ok: false; readonly status: number | null; readonly stderr: string };
 
 const git = (cwd: string, ...args: readonly string[]): GitResult =>
   gitWithInput(cwd, undefined, ...args);
@@ -311,5 +318,5 @@ const gitWithInput = (
   });
   return result.status === 0
     ? { ok: true, stdout: result.stdout.trim() }
-    : { ok: false, stderr: result.stderr.trim() };
+    : { ok: false, status: result.status, stderr: result.stderr.trim() };
 };
