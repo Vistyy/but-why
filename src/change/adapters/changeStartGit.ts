@@ -6,7 +6,7 @@ import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
 import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
-import { changeBranchRefForSlug } from "../changeBranch.js";
+import { changeBranchOwnershipRef, changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
@@ -170,8 +170,11 @@ const ensureRecordedBranch = (
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 
-const branchOwnershipRef = (start: ChangeStartRecord): string =>
-  `refs/but-why/change-ownership/${start.id}`;
+const branchOwnershipRef = (start: ChangeStartRecord): string => {
+  const ownershipRef = changeBranchOwnershipRef(start.branchRef);
+  if (ownershipRef === undefined) throw new Error("Invalid Change branch ref");
+  return ownershipRef;
+};
 
 const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean =>
   resolveLocalBranch(cwd, branchOwnershipRef(start)) === start.startingCommit;
