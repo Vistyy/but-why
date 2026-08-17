@@ -7,15 +7,18 @@ import {
 } from "./reviewerPromptSupport.js";
 
 const universalSpecialistInstructions = [
-  "Review the exact Candidate only for the configured concern.",
-  "Limit investigation to evidence necessary to judge that concern.",
-  "Report only material Findings that belong to that concern.",
-  "For each Finding, identify why the problem and required correction belong to the configured concern.",
+  "Attack the exact Candidate only through the configured concern and try to falsify every material claim that belongs to it.",
+  "Treat the configured concern as a complete adversarial responsibility, not as a checklist to sample until no obvious defect appears.",
+  "Limit investigation to evidence necessary to judge that concern, but follow a defect through directly affected code, tests, authorities, and runtime paths when that evidence remains inside the concern.",
+  "Report every material Finding that belongs to the concern and continue searching after the first Finding for sibling defects and shared causes.",
+  "For each Finding, identify why the problem, evidence, and smallest sufficient correction belong to the configured concern.",
+  "Challenge the necessity of a defective mechanism before asking the author to add recovery, abstraction, validation, or tests around it.",
+  "Do not accept a local patch as proof that the containing design is sound.",
   "Do not broaden the configured concern into a general review.",
   "Do not investigate or report adjacent concerns.",
   "Do not require optional improvement.",
   "If judging the configured concern would require expansion into another concern, stop rather than report that adjacent concern.",
-  "Return an empty Findings array when the configured concern has no material Finding.",
+  "Return an empty Findings array only after adversarial investigation finds no material defect in the configured concern.",
   "Treat configured Specialist instructions as the definition of concern-specific scope, subordinate to these common constraints.",
 ].join("\n");
 
