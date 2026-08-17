@@ -24,31 +24,51 @@ export const openSqliteChangeValidationReadPort = () =>
     (repository): ChangeValidationReadPort => ({
       getCandidateById: (candidateId) =>
         repository.transaction("read Candidate for validation history", (sql) =>
-          readCandidateById(sql, candidateId, "read Candidate for validation history"),
+          readCandidateById(
+            sql,
+            candidateId,
+            "read Candidate for validation history",
+            repository.idPrefix,
+          ),
         ),
       getCurrentCandidateForChange: (changeId) =>
         repository.transaction("read current Candidate", (sql) =>
-          readCurrentCandidateForChange(sql, changeId, "read current Candidate"),
+          readCurrentCandidateForChange(
+            sql,
+            changeId,
+            "read current Candidate",
+            repository.idPrefix,
+          ),
         ),
       listCandidatesForChange: (changeId) =>
         repository.transaction("list Candidates for validation history", (sql) =>
-          readCandidatesForChange(sql, changeId, "list Candidates for validation history"),
+          readCandidatesForChange(
+            sql,
+            changeId,
+            "list Candidates for validation history",
+            repository.idPrefix,
+          ),
         ),
       getRunById: (validationRunId) =>
         repository.transaction("read Candidate Validation Run", (sql) =>
-          readValidationRunById(sql, validationRunId, "decode Candidate Validation Run"),
+          readValidationRunById(
+            sql,
+            validationRunId,
+            "decode Candidate Validation Run",
+            repository.idPrefix,
+          ),
         ),
       listRunsForCandidate: (candidateId) =>
         repository.transaction("list Candidate Validation Runs", (sql) =>
-          listRunsForCandidate(sql, candidateId),
+          listRunsForCandidate(sql, candidateId, repository.idPrefix),
         ),
       listRounds: (validationRunId) =>
         repository.transaction("list Candidate validation rounds", (sql) =>
-          listValidationRounds(sql, validationRunId),
+          listValidationRounds(sql, validationRunId, repository.idPrefix),
         ),
       listFindings: (validationRunId) =>
         repository.transaction("list Candidate validation Findings", (sql) =>
-          listValidationFindings(sql, validationRunId),
+          listValidationFindings(sql, validationRunId, repository.idPrefix),
         ),
       listToolingFailures: (validationRunId) =>
         repository.transaction("list Candidate validation Tooling Failures", (sql) =>
@@ -56,7 +76,7 @@ export const openSqliteChangeValidationReadPort = () =>
         ),
       listArtifacts: (validationRunId) =>
         repository.transaction("list Candidate validation Artifacts", (sql) =>
-          listValidationArtifacts(sql, validationRunId),
+          listValidationArtifacts(sql, validationRunId, repository.idPrefix),
         ),
       listAgentInvocations: (validationRunId) =>
         repository.transaction("list Candidate Agent Invocations", (sql) =>
@@ -65,13 +85,13 @@ export const openSqliteChangeValidationReadPort = () =>
     }),
   );
 
-const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
+const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const selected = yield* sql<{ readonly id: string }>`
       SELECT id FROM candidate_validation_runs WHERE candidate_id = ${candidateId}
     `;
     const runs = yield* Effect.forEach(selected, ({ id }) =>
-      readValidationRunById(sql, id, "decode Candidate Validation Run").pipe(
+      readValidationRunById(sql, id, "decode Candidate Validation Run", idPrefix).pipe(
         Effect.flatMap((run) => {
           if (run === undefined) {
             return invalidData(

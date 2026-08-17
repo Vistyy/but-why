@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { Effect } from "effect";
-
+import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import {
-  changeIdSqlParameter,
-  RepositorySql,
-  taskIdSqlParameter,
-} from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
 import { createTestWorkspace } from "./testWorkspace.js";
@@ -128,7 +124,7 @@ export const createChangeFixture = (
           (sql) => sql<{ readonly title: string; readonly description: string }>`
             SELECT title, description
             FROM tasks
-            WHERE id = ${taskIdSqlParameter(taskId)}
+            WHERE id = ${internalTaskId(taskId, "BY")}
           `,
         );
         const task = tasks[0];
@@ -146,7 +142,7 @@ export const createChangeFixture = (
       const taskBacked = taskId !== undefined;
       const inserted = yield* repository.operation(
         "create Change inspection fixture",
-        (sql) => sql<{ readonly id: string }>`
+        (sql) => sql<{ readonly id: number }>`
           INSERT INTO changes (
             repository_common_directory, branch_ref, acceptance_context, state,
             close_reason, created_at, updated_at, closed_at, base_ref, base_remote_url,
@@ -162,14 +158,16 @@ export const createChangeFixture = (
           RETURNING id
         `,
       );
-      const id = inserted[0]?.id;
-      if (id === undefined) return yield* Effect.dieMessage("Change identity was not allocated.");
+      const allocatedId = inserted[0]?.id;
+      if (typeof allocatedId !== "number")
+        return yield* Effect.dieMessage("Change identity was not allocated.");
+      const id = publicChangeId("BY", allocatedId);
       if (taskId !== undefined) {
         yield* repository.operation(
           "link Change inspection fixture to its Task",
           (sql) => sql`
             INSERT INTO task_change_links (task_id, change_id)
-            VALUES (${taskIdSqlParameter(taskId)}, ${changeIdSqlParameter(id)})
+            VALUES (${internalTaskId(taskId, "BY")}, ${internalChangeId(id, "BY")})
           `,
         );
       }
@@ -196,7 +194,7 @@ export const closeChangeFixture = (
               closed_at = ${closedAt},
               updated_at = ${closedAt},
               cleanup_state = 'pending'
-          WHERE id = ${changeIdSqlParameter(changeId)}
+          WHERE id = ${internalChangeId(changeId, "BY")}
         `,
       );
       if (reason === "completed") {
@@ -206,7 +204,7 @@ export const closeChangeFixture = (
             UPDATE tasks
             SET state = 'done', updated_at = ${closedAt}
             WHERE id = (
-              SELECT task_id FROM task_change_links WHERE change_id = ${changeIdSqlParameter(changeId)}
+              SELECT task_id FROM task_change_links WHERE change_id = ${internalChangeId(changeId, "BY")}
             )
           `,
         );
@@ -229,11 +227,11 @@ export const captureCandidateFixture = (
         Effect.gen(function* () {
           yield* sql`
             INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-            VALUES (${id}, ${changeIdSqlParameter(changeId)}, 'target-sha', ${headSha}, ${capturedAt})
+            VALUES (${id}, ${internalChangeId(changeId, "BY")}, 'target-sha', ${headSha}, ${capturedAt})
           `;
           yield* sql`
             INSERT INTO current_candidates (change_id, candidate_id)
-            VALUES (${changeIdSqlParameter(changeId)}, ${id})
+            VALUES (${internalChangeId(changeId, "BY")}, ${id})
             ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
           `;
         }),
@@ -264,7 +262,7 @@ export const createValidationRunFixture = (
       const authority = yield* repository.operation(
         "read Validation Run authority fixture",
         (sql) => sql<{ readonly acceptance_context: string | null }>`
-          SELECT acceptance_context FROM changes WHERE id = ${changeIdSqlParameter(input.changeId)}
+          SELECT acceptance_context FROM changes WHERE id = ${internalChangeId(input.changeId, "BY")}
         `,
       );
       const acceptanceContext = authority[0]?.acceptance_context;
@@ -285,7 +283,7 @@ export const createValidationRunFixture = (
               ${id}, ${input.candidateId}, ${JSON.stringify(policy)}, '[]',
               (
                 SELECT id FROM implementation_blockers
-                WHERE change_id = ${changeIdSqlParameter(input.changeId)} AND resolved_at <= ${input.createdAt}
+                WHERE change_id = ${internalChangeId(input.changeId, "BY")} AND resolved_at <= ${input.createdAt}
                 ORDER BY resolved_at DESC, sequence DESC LIMIT 1
               ),
               ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
@@ -298,7 +296,7 @@ export const createValidationRunFixture = (
           "create active Validation Run inspection fixture",
           (sql) => sql`
             INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
-            VALUES (${changeIdSqlParameter(input.changeId)}, ${id}, ${input.createdAt})
+            VALUES (${internalChangeId(input.changeId, "BY")}, ${id}, ${input.createdAt})
           `,
         );
       }
@@ -406,7 +404,7 @@ export const recordImplementationDecisionFixture = (
         "create Implementation Decision inspection fixture",
         (sql) => sql`
           INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
-          VALUES (${id}, ${changeIdSqlParameter(changeId)}, ${input.now}, ${input.choice}, ${input.rationale})
+          VALUES (${id}, ${internalChangeId(changeId, "BY")}, ${input.now}, ${input.choice}, ${input.rationale})
         `,
       );
       return { id };
@@ -435,7 +433,7 @@ export const createImplementationBlockerFixture = (
             id, change_id, reported_at, content, resolved_at,
             resolution_id, resolution_recorded_at, resolution_content
           ) VALUES (
-            ${id}, ${changeIdSqlParameter(changeId)}, ${input.reportedAt}, 'Wait for an external decision.',
+            ${id}, ${internalChangeId(changeId, "BY")}, ${input.reportedAt}, 'Wait for an external decision.',
             ${input.resolvedAt ?? null}, ${resolutionId}, ${input.resolvedAt ?? null},
             ${input.resolutionContent ?? null}
           )

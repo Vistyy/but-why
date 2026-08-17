@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import { type ChangePublication, type ChangeState, changeState } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type {
   CandidatePublicationChange,
   CandidatePublicationPort,
@@ -14,7 +14,7 @@ import type {
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { changeIdSqlParameter, RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
@@ -37,27 +37,27 @@ export const openSqliteCandidatePublicationPort = () =>
     (repository): CandidatePublicationPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for publication", (sql) =>
-          getPublicationById(sql, changeId),
+          getPublicationById(sql, changeId, "read Change for publication", repository.idPrefix),
         ),
       getCurrentPassingEvidence: (changeId, query) =>
         repository.transaction("read current passing Change evidence", (sql) =>
-          readCurrentPassingValidationEvidence(sql, changeId, query),
+          readCurrentPassingValidationEvidence(sql, changeId, query, repository.idPrefix),
         ),
       beginPublication: (input) =>
         repository.transactionImmediate("begin Change publication", (sql) =>
-          beginPublication(sql, input),
+          beginPublication(sql, input, repository.idPrefix),
         ),
       replacePendingPublication: (input) =>
         repository.transactionImmediate("replace pending Change publication", (sql) =>
-          replacePendingPublication(sql, input),
+          replacePendingPublication(sql, input, repository.idPrefix),
         ),
       releasePendingPublication: (input) =>
         repository.transactionImmediate("release Change publication", (sql) =>
-          releasePendingPublication(sql, input),
+          releasePendingPublication(sql, input, repository.idPrefix),
         ),
       recordPublishedPullRequest: (input) =>
         repository.transactionImmediate("record Change publication", (sql) =>
-          recordPublishedPullRequest(sql, input),
+          recordPublishedPullRequest(sql, input, repository.idPrefix),
         ),
     }),
   );
@@ -77,6 +77,7 @@ const getPublicationById = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName = "read Change for publication",
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCandidatePublicationChangeRow>(
@@ -84,12 +85,12 @@ const getPublicationById = (
         starting_commit AS startingCommit,
         acceptance_context AS acceptanceContext
        FROM changes WHERE id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => {
-      const state = decodeSelectedChangeState(row, changeId);
+      const state = decodeSelectedChangeState(row, changeId, idPrefix);
       return {
         ...state,
         branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
@@ -108,17 +109,19 @@ const getPublicationById = (
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
     const implementationDecisions =
-      selected.state === changeState.open ? yield* listDecisions(sql, selected.id) : [];
+      selected.state === changeState.open ? yield* listDecisions(sql, selected.id, idPrefix) : [];
     return { ...selected, implementationDecisions } satisfies CandidatePublicationChange;
   });
 const requireCandidatePublicationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(getPublicationById(sql, changeId, operationName), (change) =>
+  Effect.flatMap(getPublicationById(sql, changeId, operationName, idPrefix), (change) =>
     change === undefined
       ? invalidData(operationName, "Change disappeared")
       : Effect.succeed(change),
@@ -127,59 +130,82 @@ const requirePendingCandidatePublicationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) => {
-    const publication = change.publication;
-    return publication === null || publication.pullRequest !== null
-      ? invalidData(operationName, "Pending Change publication was not stored")
-      : Effect.succeed({
-          ...change,
-          publication: { ...publication, pullRequest: null },
-        } satisfies PendingCandidatePublicationChange);
-  });
+  Effect.flatMap(
+    requireCandidatePublicationChange(sql, changeId, operationName, idPrefix),
+    (change) => {
+      const publication = change.publication;
+      return publication === null || publication.pullRequest !== null
+        ? invalidData(operationName, "Pending Change publication was not stored")
+        : Effect.succeed({
+            ...change,
+            publication: { ...publication, pullRequest: null },
+          } satisfies PendingCandidatePublicationChange);
+    },
+  );
 const requirePublishedCandidatePublicationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) => {
-    const publication = change.publication;
-    return publication === null || publication.pullRequest === null
-      ? invalidData(operationName, "Published Change pull request was not stored")
-      : Effect.succeed({
-          ...change,
-          publication: { ...publication, pullRequest: publication.pullRequest },
-        } satisfies PublishedCandidatePublicationChange);
-  });
+  Effect.flatMap(
+    requireCandidatePublicationChange(sql, changeId, operationName, idPrefix),
+    (change) => {
+      const publication = change.publication;
+      return publication === null || publication.pullRequest === null
+        ? invalidData(operationName, "Published Change pull request was not stored")
+        : Effect.succeed({
+            ...change,
+            publication: { ...publication, pullRequest: publication.pullRequest },
+          } satisfies PublishedCandidatePublicationChange);
+    },
+  );
 const requireReleasedCandidatePublication = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(requireCandidatePublicationChange(sql, changeId, operationName), (change) =>
-    change.publication === null
-      ? Effect.succeed({ publication: null })
-      : invalidData(operationName, "Change publication was not released"),
+  Effect.flatMap(
+    requireCandidatePublicationChange(sql, changeId, operationName, idPrefix),
+    (change) =>
+      change.publication === null
+        ? Effect.succeed({ publication: null })
+        : invalidData(operationName, "Change publication was not released"),
   );
-const readChangeState = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+const readChangeState = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
+      SELECT id, state FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    return yield* decodePersisted(operationName, () => decodeSelectedChangeState(row, changeId));
+    return yield* decodePersisted(operationName, () =>
+      decodeSelectedChangeState(row, changeId, idPrefix),
+    );
   });
-const readPublicationChange = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+const readPublicationChange = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<PublicationSelectionRow>(
       `SELECT ${publicationSelectionColumns} FROM changes WHERE id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => ({
-      ...decodeSelectedChangeState(row, changeId),
+      ...decodeSelectedChangeState(row, changeId, idPrefix),
       publication: decodeChangePublication(row),
     }));
     yield* validateChangePublicationRelationships(
@@ -187,6 +213,7 @@ const readPublicationChange = (sql: SqlClient.SqlClient, changeId: string, opera
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
     return selected;
   });
@@ -194,36 +221,50 @@ const requirePublicationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(readPublicationChange(sql, changeId, operationName), (change) =>
+  Effect.flatMap(readPublicationChange(sql, changeId, operationName, idPrefix), (change) =>
     change === undefined
       ? invalidData(operationName, "Change disappeared")
       : Effect.succeed(change),
   );
-const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
-  const id = decodeStoredString(row.id, "Change id");
+const decodeSelectedChangeState = (
+  row: StoredChangeStateRow,
+  changeId: string,
+  idPrefix: string,
+) => {
+  const id = publicChangeId(idPrefix, row.id);
   if (id !== changeId) throw new Error("Change identity does not match lookup");
   return { id, state: decodeChangeState(row.state) };
 };
-const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
+const listDecisions = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeIdSqlParameter(changeId)}
+      FROM implementation_decisions WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
-        decodeImplementationDecisions(rows, changeId),
+        decodeImplementationDecisions(rows, changeId, idPrefix),
       ),
   );
-const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
+const beginPublication = (
+  sql: SqlClient.SqlClient,
+  input: BeginChangePublicationInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const selected = selectOpenChange(
-      yield* readChangeState(sql, input.changeId, "begin Change publication"),
+      yield* readChangeState(sql, input.changeId, "begin Change publication", idPrefix),
     );
     if (!selected.ok) return selected;
-    const change = yield* requirePublicationChange(sql, input.changeId, "begin Change publication");
+    const change = yield* requirePublicationChange(
+      sql,
+      input.changeId,
+      "begin Change publication",
+      idPrefix,
+    );
     if (change.publication !== null) {
       if (!samePendingPublication(change.publication, input)) {
         return { ok: false as const, code: "publication_already_owned" as const };
@@ -235,10 +276,11 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
           sql,
           input.changeId,
           "begin Change publication",
+          idPrefix,
         ),
       };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)}`;
     return {
       ok: true as const,
       created: true,
@@ -246,22 +288,25 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
         sql,
         input.changeId,
         "begin Change publication",
+        idPrefix,
       ),
     };
   });
 const replacePendingPublication = (
   sql: SqlClient.SqlClient,
   input: ReplacePendingChangePublicationInput,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const selected = selectOpenChange(
-      yield* readChangeState(sql, input.changeId, "replace pending Change publication"),
+      yield* readChangeState(sql, input.changeId, "replace pending Change publication", idPrefix),
     );
     if (!selected.ok) return selected;
     const publication = (yield* requirePublicationChange(
       sql,
       input.changeId,
       "replace pending Change publication",
+      idPrefix,
     )).publication;
     if (
       publication === null ||
@@ -274,26 +319,32 @@ const replacePendingPublication = (
     ) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
     return {
       ok: true as const,
       change: yield* requirePendingCandidatePublicationChange(
         sql,
         input.changeId,
         "replace pending Change publication",
+        idPrefix,
       ),
     };
   });
-const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
+const releasePendingPublication = (
+  sql: SqlClient.SqlClient,
+  input: BeginChangePublicationInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const selected = selectOpenChange(
-      yield* readChangeState(sql, input.changeId, "release Change publication"),
+      yield* readChangeState(sql, input.changeId, "release Change publication", idPrefix),
     );
     if (!selected.ok) return selected;
     const publication = (yield* requirePublicationChange(
       sql,
       input.changeId,
       "release Change publication",
+      idPrefix,
     )).publication;
     if (publication === null) {
       return { ok: false as const, code: "publication_state_conflict" as const };
@@ -301,40 +352,44 @@ const releasePendingPublication = (sql: SqlClient.SqlClient, input: BeginChangeP
     if (!samePendingPublication(publication, input)) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = NULL, publication_validation_run_id = NULL, publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL, publication_remote_name = NULL, publication_head_branch = NULL, publication_expected_head_sha = NULL, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)}`;
     return {
       ok: true as const,
       ...(yield* requireReleasedCandidatePublication(
         sql,
         input.changeId,
         "release Change publication",
+        idPrefix,
       )),
     };
   });
 const recordPublishedPullRequest = (
   sql: SqlClient.SqlClient,
   input: RecordPublishedPullRequestInput,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const selected = selectOpenChange(
-      yield* readChangeState(sql, input.changeId, "record Change publication"),
+      yield* readChangeState(sql, input.changeId, "record Change publication", idPrefix),
     );
     if (!selected.ok) return selected;
     const change = yield* requirePublicationChange(
       sql,
       input.changeId,
       "record Change publication",
+      idPrefix,
     );
     if (!canRecordPublication(change.publication, input)) {
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
-    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${changeIdSqlParameter(input.changeId)}`;
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)}`;
     return {
       ok: true as const,
       change: yield* requirePublishedCandidatePublicationChange(
         sql,
         input.changeId,
         "record Change publication",
+        idPrefix,
       ),
     };
   });
@@ -412,7 +467,7 @@ const sameTarget = (
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 type StoredChangeStateRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly state: unknown;
 };
 type PublicationSelectionRow = StoredChangeStateRow & SqliteChangePublicationRow;

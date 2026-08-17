@@ -68,6 +68,12 @@ The source launcher verifies the manifest, the executable permission, and the re
 The manifest is accepted only for `change reconcile <exact-merged-change-id>` and its `--discard-work` form.
 The launcher rejects every other command while this manifest is selected.
 The bundle receives the target Local Repository as its current working directory and runs only the exact reconciliation command.
+
+For the internal identity cutover only, pause all But Why operations after merge and before the new executable opens Shared Repository State.
+Preserve the exact merged `idPrefix` Repo Config, then temporarily install the pinned predecessor's `taskPrefix`-compatible Repo Config with the same prefix in canonical `main`.
+Run only the exact reconciliation command through the pinned-predecessor launcher, which sets `BUT_WHY_SOURCE_TRUSTED_ROOT` to canonical `main`.
+Restore the exact merged Repo Config immediately after the command, including on failure, and verify it against the merged commit before running the new executable.
+
 After reconciliation succeeds, remove the temporary bundle and manifest unless the release archive requires the Task 7 predecessor.
 
 ## Check ownership

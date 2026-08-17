@@ -1,15 +1,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { Effect } from "effect";
-
 import type { ChangePrepareFailure } from "../../src/change/change.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import {
-  changeIdSqlParameter,
-  RepositorySql,
-  taskIdSqlParameter,
-} from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { internalTaskId } from "../../src/task/taskId.js";
 import { withTestRepository } from "./repository.js";
 
 export type ChangeImplementFixtureOptions = {
@@ -61,7 +57,7 @@ export const createChangeImplementFixture = (
               prepare_command, prepare_timeout_seconds, prepare_failure,
               state, close_reason, created_at, updated_at, closed_at, cleanup_state
             ) VALUES (
-              ${changeIdSqlParameter(id)}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
+              ${internalChangeId(id, "BY")}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
               'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
               '18fca05273fefafb6a99d64e81d2b698d60e17a4', ${worktreePath},
               ${
@@ -87,7 +83,7 @@ export const createChangeImplementFixture = (
             "link Change Implement fixture to its Task",
             (sql) => sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES (${taskIdSqlParameter(taskId)}, ${changeIdSqlParameter(id)})
+              VALUES (${internalTaskId(taskId, "BY")}, ${internalChangeId(id, "BY")})
             `,
           );
         }

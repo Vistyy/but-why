@@ -19,7 +19,7 @@ export type DecodedStoredTaskRecordRow = DecodedTaskSummaryRow & {
 };
 
 export type StoredTaskSummaryRow = {
-  readonly id: string;
+  readonly id: number;
   readonly numericId: number;
   readonly title: string;
   readonly state: unknown;
@@ -33,13 +33,13 @@ export type StoredTaskRecordRow = StoredTaskSummaryRow & {
 };
 
 export type StoredTaskContextRow = {
-  readonly id: string;
+  readonly id: number;
   readonly title: string;
   readonly description: string;
 };
 
 export type StoredTaskDependencyFactRow = {
-  readonly id: string;
+  readonly id: number;
   readonly numericId: number;
   readonly title: string;
   readonly state: unknown;
@@ -54,7 +54,7 @@ export const decodeTaskState = (value: unknown): TaskState => {
 
 export const decodeTaskSummaryRow = (
   row: StoredTaskSummaryRow,
-  idPrefix = "BY",
+  idPrefix: string,
 ): DecodedTaskSummaryRow => ({
   ...row,
   id: storedPublicTaskId(row.id, idPrefix),
@@ -63,14 +63,14 @@ export const decodeTaskSummaryRow = (
 
 export const decodeStoredTaskRecordRow = (
   row: StoredTaskRecordRow,
-  idPrefix = "BY",
+  idPrefix: string,
 ): DecodedStoredTaskRecordRow => ({
   ...row,
   id: storedPublicTaskId(row.id, idPrefix),
   state: decodeTaskState(row.state),
 });
 
-export const decodeTaskContextRow = (row: StoredTaskContextRow, idPrefix = "BY") => ({
+export const decodeTaskContextRow = (row: StoredTaskContextRow, idPrefix: string) => ({
   ...row,
   id: storedPublicTaskId(row.id, idPrefix),
 });
@@ -78,7 +78,7 @@ export const decodeTaskContextRow = (row: StoredTaskContextRow, idPrefix = "BY")
 export const decodeTaskDependencyFacts = (
   rows: readonly StoredTaskDependencyFactRow[],
   ownerTaskId: PublicTaskId,
-  idPrefix = "BY",
+  idPrefix: string,
 ): readonly TaskDependencyFact[] =>
   rows.map((row) => {
     const id = storedPublicTaskId(row.id, idPrefix);

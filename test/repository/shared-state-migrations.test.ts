@@ -183,6 +183,45 @@ const migrationPreconditionCases = [
   },
 ] as const;
 
+const internalIdentityMigrationPreconditionCases = [
+  ...migrationPreconditionCases,
+  {
+    condition: "unsettledAgentInvocations",
+    seed: (sql: SqlClient.SqlClient) =>
+      Effect.gen(function* () {
+        yield* sql`INSERT INTO agent_sessions (id) VALUES (1)`;
+        yield* sql`
+          INSERT INTO agent_continuations (
+            id, agent_session_id, harness, provider, model, thinking,
+            transcript_path, unusable_reason
+          ) VALUES (1, 1, 'pi', 'provider', 'model', NULL, NULL, NULL)
+        `;
+        yield* sql`
+          INSERT INTO agent_invocations (id, continuation_id, created_at)
+          VALUES (1, 1, '2026-08-14T12:00:00.000Z')
+        `;
+      }).pipe(Effect.asVoid),
+  },
+] as const;
+
+const snapshotRepositoryState = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    const schemas = yield* sql<{ readonly name: string; readonly sql: string | null }>`
+      SELECT name, sql FROM sqlite_schema
+      WHERE type IN ('table', 'index', 'trigger', 'view')
+      ORDER BY type, name
+    `;
+    const tables = schemas.filter(
+      ({ sql: definition }) => definition?.startsWith("CREATE TABLE") ?? false,
+    );
+    const data: Array<readonly [string, readonly string[]]> = [];
+    for (const table of tables) {
+      const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM "${table.name}"`);
+      data.push([table.name, rows.map((row) => JSON.stringify(row)).sort()]);
+    }
+    return { schemas, data };
+  });
+
 describe("Shared Repository State migrations", () => {
   it.effect("moves linked Change relationships into the coordination table", () =>
     Effect.acquireUseRelease(
@@ -228,11 +267,11 @@ describe("Shared Repository State migrations", () => {
               const links = yield* repository.operation(
                 "read migrated Task Change links",
                 (sql) =>
-                  sql<{ readonly taskId: string; readonly changeId: string }>`
+                  sql<{ readonly taskId: number; readonly changeId: number }>`
                   SELECT task_id AS taskId, change_id AS changeId FROM task_change_links
                 `,
               );
-              expect(links).toEqual([{ taskId: "BW-1", changeId: "BW-C1" }]);
+              expect(links).toEqual([{ taskId: 1, changeId: 1 }]);
             }).pipe(
               Effect.provide(
                 productionRepositorySqlLayer({
@@ -2209,64 +2248,47 @@ describe("Shared Repository State migrations", () => {
     ),
   );
 
-  it.effect("leaves prerelease state unchanged when internal identity preconditions fail", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-internal-identity-rejection-"))),
-      (directory) =>
-        Effect.gen(function* () {
-          const statePath = join(directory, "state.sqlite");
-          yield* Effect.scoped(
-            Effect.gen(function* () {
-              const sql = yield* SqlClient.SqlClient;
-              yield* migrateTestRepositoryThrough(42);
-              yield* sql`INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ${directory})`;
-              yield* sql`
-                INSERT INTO changes (
-                  id, repository_common_directory, branch_ref, state, created_at, updated_at, cleanup_state
-                ) VALUES ('open-change', ${directory}, 'refs/heads/open', 'open',
-                  '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'complete')
-              `;
-            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-          );
+  it.effect.each(internalIdentityMigrationPreconditionCases)(
+    "leaves all prerelease state unchanged when internal identity installation is blocked by $condition",
+    ({ seed }) =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-internal-identity-rejection-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            const before = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                yield* migrateTestRepositoryThrough(42);
+                yield* sql`INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ${directory})`;
+                yield* seed(sql, directory);
+                return yield* snapshotRepositoryState(sql);
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
 
-          const result = yield* Effect.scoped(
-            RepositorySql.pipe(
-              Effect.provide(
-                productionRepositorySqlLayer({
-                  commonDirectory: directory,
-                  statePath,
-                  idPrefix: "BY",
-                }),
+            const result = yield* Effect.scoped(
+              RepositorySql.pipe(
+                Effect.provide(
+                  productionRepositorySqlLayer({
+                    commonDirectory: directory,
+                    statePath,
+                    idPrefix: "BY",
+                  }),
+                ),
               ),
-            ),
-          ).pipe(Effect.exit);
-          expect(result._tag).toBe("Failure");
+            ).pipe(Effect.exit);
+            expect(result._tag).toBe("Failure");
 
-          const unchanged = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const sql = yield* SqlClient.SqlClient;
-              const migrations = yield* sql<{
-                readonly count: number;
-              }>`SELECT COUNT(*) AS count FROM effect_sql_migrations`;
-              const changes = yield* sql<{ readonly id: string }>`SELECT id FROM changes`;
-              const columns = yield* sql<{
-                readonly name: string;
-              }>`SELECT name FROM pragma_table_info('shared_state_identity') ORDER BY cid`;
-              return {
-                migrations: migrations[0]?.count,
-                changes,
-                columns: columns.map((column) => column.name),
-              };
-            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
-          );
-          expect(unchanged).toEqual({
-            migrations: 42,
-            changes: [{ id: "open-change" }],
-            columns: ["id", "common_directory"],
-          });
-        }),
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
+            const after = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const sql = yield* SqlClient.SqlClient;
+                return yield* snapshotRepositoryState(sql);
+              }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+            );
+            expect(after).toEqual(before);
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
   );
 
   it.effect("reports migration failures through the typed error channel", () =>

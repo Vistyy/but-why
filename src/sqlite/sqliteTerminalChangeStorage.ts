@@ -1,10 +1,9 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import type { ChangePublication } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ReconciliationChange } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { changeIdSqlParameter } from "./repositorySql.js";
 import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
@@ -41,22 +40,24 @@ export const readTerminalChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredTerminalChangeRow>(
       `SELECT ${terminalChangeSelectionColumns} FROM changes WHERE id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () =>
-      decodeTerminalChange(row, changeId),
+      decodeTerminalChange(row, changeId, idPrefix),
     );
     yield* validateChangePublicationRelationships(
       sql,
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
     return selected;
   });
@@ -65,8 +66,9 @@ export const requireTerminalChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(readTerminalChange(sql, changeId, operationName), (change) =>
+  Effect.flatMap(readTerminalChange(sql, changeId, operationName, idPrefix), (change) =>
     change === undefined
       ? Effect.fail(
           new RepositoryPersistedDataInvalid({
@@ -80,10 +82,11 @@ export const requireTerminalChange = (
 export const decodeTerminalChange = (
   row: StoredTerminalChangeRow,
   changeId: string,
+  idPrefix: string,
 ): ReconciliationChange => {
   const publication = decodeChangePublication(row);
   const base = {
-    id: decodeSelectedChangeId(row, changeId),
+    id: decodeSelectedChangeId(row, changeId, idPrefix),
     state: decodeChangeState(row.state),
     repositoryCommonDirectory: decodeStoredString(
       row.repositoryCommonDirectory,
@@ -110,8 +113,8 @@ export const decodeTerminalChange = (
   };
 };
 
-const decodeSelectedChangeId = (row: StoredChangeStateRow, changeId: string) => {
-  const id = decodeStoredString(row.id, "Change id");
+const decodeSelectedChangeId = (row: StoredChangeStateRow, changeId: string, idPrefix: string) => {
+  const id = publicChangeId(idPrefix, row.id);
   if (id !== changeId) throw new Error("Change identity does not match lookup");
   return id;
 };
@@ -135,7 +138,7 @@ const remoteChangeBranchForPublication = (
 };
 
 type StoredChangeStateRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly state: unknown;
 };
 export type StoredTerminalChangeRow = StoredChangeStateRow &

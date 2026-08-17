@@ -1,18 +1,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
-
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
 } from "../../src/change/composition/loadChangeInspection.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
-import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
@@ -122,7 +121,7 @@ describe("Change inspection CLI", () => {
           yield* repository.operation(
             "conflict Change branch fixture",
             (sql) =>
-              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${changeIdSqlParameter(startedView.change.id)}`,
+              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${internalChangeId(startedView.change.id, "BY")}`,
           );
         }),
       );

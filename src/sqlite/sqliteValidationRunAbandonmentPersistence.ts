@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
+import { publicChangeId } from "../change/changeId.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
@@ -14,11 +14,16 @@ export const openSqliteValidationRunAbandonmentPort = () =>
     (repository): ValidationRunAbandonmentPort => ({
       getAbandonmentContext: (validationRunId) =>
         repository.transaction("read Candidate Validation Run abandonment context", (sql) =>
-          getAbandonmentContext(sql, validationRunId),
+          getAbandonmentContext(sql, validationRunId, repository.idPrefix),
         ),
       getRunById: (validationRunId) =>
         repository.transaction("read Candidate Validation Run", (sql) =>
-          readValidationRunById(sql, validationRunId, "decode Candidate Validation Run"),
+          readValidationRunById(
+            sql,
+            validationRunId,
+            "decode Candidate Validation Run",
+            repository.idPrefix,
+          ),
         ),
       recordToolingFailure: (input) =>
         repository.operation("record Candidate validation Tooling Failure", (sql) =>
@@ -41,8 +46,8 @@ export const openSqliteValidationRunAbandonmentPort = () =>
 type StoredAbandonmentContextRow = {
   readonly validationRunId: string;
   readonly runCandidateId: string;
-  readonly changeId: string;
-  readonly storedChangeId: string;
+  readonly changeId: number;
+  readonly storedChangeId: number;
   readonly candidateId: string;
   readonly submittedSha: string;
   readonly setupValidationRunId: string | null;
@@ -51,7 +56,11 @@ type StoredAbandonmentContextRow = {
   readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
 };
 
-const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string) =>
+const getAbandonmentContext = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredAbandonmentContextRow>`
       SELECT run.id AS validationRunId, run.candidate_id AS runCandidateId,
@@ -70,7 +79,7 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
     return row === undefined
       ? undefined
       : yield* decodePersisted("read Candidate Validation Run abandonment context", () =>
-          decodeAbandonmentContext(row, validationRunId),
+          decodeAbandonmentContext(row, validationRunId, idPrefix),
         );
   });
 
@@ -132,6 +141,7 @@ const complete = (
 const decodeAbandonmentContext = (
   row: StoredAbandonmentContextRow,
   expectedValidationRunId: string,
+  idPrefix: string,
 ): CandidateValidationRunAbandonmentContext => {
   if (row.validationRunId !== expectedValidationRunId || row.runCandidateId !== row.candidateId) {
     throw new Error("Validation Run abandonment relationship is inconsistent");
@@ -157,7 +167,7 @@ const decodeAbandonmentContext = (
   }
   return {
     validationRunId: row.validationRunId,
-    changeId: row.changeId,
+    changeId: publicChangeId(idPrefix, row.changeId),
     candidateId: row.candidateId,
     submittedSha: row.submittedSha,
     ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),

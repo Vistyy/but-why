@@ -1,20 +1,19 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import { changeState } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type {
   ChangePublicationEvidence,
   CurrentChangeEvidenceQuery,
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { changeIdSqlParameter } from "./repositorySql.js";
 import {
   candidateReadColumns,
   decodeCandidate,
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
 import type { StoredImplementationBlockerRow } from "./sqliteChangeReadModel.js";
-import { decodeChangeState, decodeStoredString } from "./sqliteChangeValueDecoders.js";
+import { decodeChangeState } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeValidationRun,
@@ -30,13 +29,15 @@ const completedPublicationEvidenceOperation = "read completed Candidate Publicat
 export const readCurrentPassingValidationEvidence = (
   sql: SqlClient.SqlClient,
   changeId: string,
-  query?: CurrentChangeEvidenceQuery,
+  query: CurrentChangeEvidenceQuery | undefined,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const authority = yield* readOpenChangeAuthority(
       sql,
       changeId,
       currentPassingEvidenceOperation,
+      idPrefix,
     );
     if (authority === undefined) return undefined;
 
@@ -44,12 +45,13 @@ export const readCurrentPassingValidationEvidence = (
       `SELECT ${candidateReadColumns} FROM current_candidates AS selection
        JOIN candidates AS candidate ON candidate.id = selection.candidate_id
        WHERE selection.change_id = ?`,
-      [changeIdSqlParameter(authority.id)],
+      [internalChangeId(authority.id, idPrefix)],
     );
     const candidate = yield* decodeSelectedCandidate(
       candidateRows[0],
       authority.id,
       currentPassingEvidenceOperation,
+      idPrefix,
     );
     if (
       candidate === undefined ||
@@ -65,6 +67,7 @@ export const readCurrentPassingValidationEvidence = (
       candidate,
       query,
       currentPassingEvidenceOperation,
+      idPrefix,
     );
   });
 
@@ -73,24 +76,27 @@ export const readCompletedCandidatePublicationEvidence = (
   changeId: string,
   candidateId: string,
   validationRunId: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const authority = yield* readOpenChangeAuthority(
       sql,
       changeId,
       completedPublicationEvidenceOperation,
+      idPrefix,
     );
     if (authority === undefined) return undefined;
 
     const candidateRows = yield* sql.unsafe<StoredCandidateRow>(
       `SELECT ${candidateReadColumns} FROM candidates AS candidate
        WHERE candidate.change_id = ? AND candidate.id = ?`,
-      [changeIdSqlParameter(authority.id), candidateId],
+      [internalChangeId(authority.id, idPrefix), candidateId],
     );
     const candidate = yield* decodeSelectedCandidate(
       candidateRows[0],
       authority.id,
       completedPublicationEvidenceOperation,
+      idPrefix,
     );
     if (candidate === undefined) return undefined;
 
@@ -100,6 +106,7 @@ export const readCompletedCandidatePublicationEvidence = (
       candidate,
       { validationRunId },
       completedPublicationEvidenceOperation,
+      idPrefix,
     );
   });
 
@@ -107,15 +114,16 @@ const readOpenChangeAuthority = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeStateRow>`
-      SELECT id, state FROM changes WHERE id = ${changeIdSqlParameter(changeId)}
+      SELECT id, state FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     return yield* decodePersisted(operationName, () => {
       const row = rows[0];
       if (row === undefined) return undefined;
-      const id = decodeStoredString(row.id, "Change id");
+      const id = publicChangeId(idPrefix, row.id);
       if (id !== changeId) throw new Error("Change identity does not match lookup");
       return decodeChangeState(row.state) === changeState.open ? { id } : undefined;
     });
@@ -125,10 +133,11 @@ const decodeSelectedCandidate = (
   row: StoredCandidateRow | undefined,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   decodePersisted(operationName, () => {
     if (row === undefined) return undefined;
-    const candidate = decodeCandidate(row);
+    const candidate = decodeCandidate(row, idPrefix);
     if (candidate.changeId !== changeId) {
       throw new Error("Evidence Candidate belongs to another Change");
     }
@@ -141,6 +150,7 @@ const readPassingEvidenceForCandidate = (
   candidate: ReturnType<typeof decodeCandidate>,
   query: CurrentChangeEvidenceQuery | undefined,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const requestedRunPredicate = query?.validationRunId === undefined ? "" : "AND id = ?";
@@ -178,6 +188,7 @@ const readPassingEvidenceForCandidate = (
         changeId,
         run.record.createdAt,
         operationName,
+        idPrefix,
       );
       yield* decodePersisted(operationName, () =>
         validateValidationRunLatestResolvedBlockerRelationship(run, latestResolvedBlockerIdAtRun),
@@ -197,15 +208,16 @@ const readLatestResolvedBlockerIdAtValidationRun = (
   changeId: string,
   validationRunCreatedAt: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.flatMap(
     sql.unsafe<StoredResolvedBlockerIdentityRow>(
       `${resolvedBlockerIdentitySelection}
        WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
        ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [changeIdSqlParameter(changeId), validationRunCreatedAt],
+      [internalChangeId(changeId, idPrefix), validationRunCreatedAt],
     ),
-    (rows) => decodeLatestResolvedBlockerId(rows[0], changeId, operationName),
+    (rows) => decodeLatestResolvedBlockerId(rows[0], changeId, operationName, idPrefix),
   );
 
 const resolvedBlockerIdentitySelection = `
@@ -219,10 +231,11 @@ const decodeLatestResolvedBlockerId = (
   row: StoredResolvedBlockerIdentityRow | undefined,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   decodePersisted(operationName, () => {
     if (row === undefined) return null;
-    if (row.changeId !== changeId) {
+    if (publicChangeId(idPrefix, row.changeId) !== changeId) {
       throw new Error("Implementation Blocker belongs to another Change");
     }
     return row.id;
@@ -243,6 +256,6 @@ type StoredResolvedBlockerIdentityRow = Pick<
 >;
 
 type StoredChangeStateRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly state: unknown;
 };

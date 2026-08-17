@@ -22,7 +22,7 @@ export const openSqliteTaskChangeSubmissionCompletion = (): Effect.Effect<
     (repository) => (input: CompleteMergedChangeInput) =>
       repository.transactionImmediate("complete linked Change", (sql) =>
         Effect.gen(function* () {
-          const result = yield* completeLinkedChange(sql, input);
+          const result = yield* completeLinkedChange(sql, input, repository.idPrefix);
           if (!result.ok) return result;
           return { ...result, changeId: input.changeId };
         }),
@@ -39,12 +39,13 @@ export const openSqliteTaskChangeReconciliationCompletion = (): Effect.Effect<
     (repository) => (input: CompleteMergedChangeInput) =>
       repository.transactionImmediate("complete linked Change", (sql) =>
         Effect.gen(function* () {
-          const result = yield* completeLinkedChange(sql, input);
+          const result = yield* completeLinkedChange(sql, input, repository.idPrefix);
           if (!result.ok) return result;
           const change = yield* requireTerminalChange(
             sql,
             input.changeId,
             "complete linked Change",
+            repository.idPrefix,
           );
           return { ...result, change };
         }),

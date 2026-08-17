@@ -3,7 +3,6 @@ import { MigrationError } from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Clock, Context, Effect, Layer } from "effect";
-import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import {
   PredecessorReconciliationRequiredError,
   RepositoryIdentityConflict,
@@ -17,7 +16,6 @@ import {
   type RepositoryStorageError,
   RestoredTransientStateError,
 } from "../contracts/repositoryStorageError.js";
-import { internalTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import {
   migrateRepositoryState,
@@ -76,68 +74,6 @@ export type RepositorySqlConfig = {
 const defaultSqliteBusyTimeoutMs = 5_000;
 const defaultMigrationContentionTimeoutMs = 30_000;
 const defaultMigrationContentionRetryDelayMs = 50;
-
-class TaskIdSqlParameter {
-  readonly _tag = "TaskIdSqlParameter";
-  constructor(readonly value: string) {}
-}
-
-class ChangeIdSqlParameter {
-  readonly _tag = "ChangeIdSqlParameter";
-  constructor(readonly value: string) {}
-}
-
-export const taskIdSqlParameter = (value: string): unknown => new TaskIdSqlParameter(value);
-
-export const changeIdSqlParameter = (value: string): unknown => new ChangeIdSqlParameter(value);
-
-const repositoryIdentitySql = (sql: SqlClient.SqlClient, idPrefix: string): SqlClient.SqlClient => {
-  const mapValue = (value: unknown): unknown => {
-    if (value instanceof TaskIdSqlParameter) return internalTaskId(value.value, idPrefix);
-    if (value instanceof ChangeIdSqlParameter) return internalChangeId(value.value, idPrefix);
-    return value;
-  };
-  const mapRows = <A>(query: string, rows: A): A => {
-    if (!Array.isArray(rows)) return rows;
-    const selectedTaskId = /(?:tasks|task)\.id\s+(?:AS\s+)?id\b/iu.test(query);
-    const selectedChangeId = /(?:changes|change)\.id\s+(?:AS\s+)?id\b/iu.test(query);
-    const taskPrimary =
-      selectedTaskId ||
-      (/(?:FROM|INTO|UPDATE|JOIN)\s+tasks\b/iu.test(query) &&
-        !/(?:FROM|INTO|UPDATE|JOIN)\s+changes\b/iu.test(query));
-    const changePrimary =
-      selectedChangeId ||
-      (/(?:FROM|INTO|UPDATE|JOIN)\s+changes\b/iu.test(query) &&
-        !/(?:FROM|INTO|UPDATE|JOIN)\s+tasks\b/iu.test(query));
-    return rows.map((row: unknown) => {
-      if (typeof row !== "object" || row === null || Array.isArray(row)) return row;
-      const mapped: Record<string, unknown> = { ...(row as Record<string, unknown>) };
-      for (const [key, value] of Object.entries(mapped)) {
-        if (typeof value !== "number") continue;
-        if (/taskId$/iu.test(key)) mapped[key] = storedPublicTaskId(value, idPrefix);
-        else if (/changeId$/iu.test(key)) mapped[key] = publicChangeId(idPrefix, value);
-        else if (key === "id" && taskPrimary) mapped[key] = storedPublicTaskId(value, idPrefix);
-        else if (key === "id" && changePrimary) mapped[key] = publicChangeId(idPrefix, value);
-      }
-      return mapped;
-    }) as A;
-  };
-  const wrapped = ((strings: TemplateStringsArray, ...values: readonly unknown[]) => {
-    const query = strings.join("?");
-    return sql(strings, ...values.map(mapValue)).pipe(Effect.map((rows) => mapRows(query, rows)));
-  }) as SqlClient.SqlClient;
-  return new Proxy(wrapped, {
-    get: (_target, property) => {
-      if (property === "unsafe") {
-        return (query: string, params?: readonly unknown[]) =>
-          sql.unsafe(query, params?.map(mapValue)).pipe(Effect.map((rows) => mapRows(query, rows)));
-      }
-      if (property === "in") return (values: readonly unknown[]) => sql.in(values.map(mapValue));
-      const value = Reflect.get(sql, property);
-      return typeof value === "function" ? value.bind(sql) : value;
-    },
-  });
-};
 
 const ensureRepositoryIdentity = (
   sql: SqlClient.SqlClient,
@@ -498,13 +434,12 @@ export const repositorySqlLayer = (
         ),
       );
 
-      const identitySql = repositoryIdentitySql(sql, idPrefix);
       return {
         statePath: config.statePath,
         commonDirectory: config.commonDirectory,
         idPrefix,
         operation: (operationName, use) =>
-          use(identitySql).pipe(
+          use(sql).pipe(
             Effect.mapError(
               (cause) =>
                 new RepositorySqlOperationFailed({
@@ -514,7 +449,7 @@ export const repositorySqlLayer = (
             ),
           ),
         transaction: (operationName, use) =>
-          sql.withTransaction(use(identitySql)).pipe(
+          sql.withTransaction(use(sql)).pipe(
             Effect.catchTag("SqlError", (cause) =>
               Effect.fail(
                 new RepositorySqlOperationFailed({
@@ -533,7 +468,7 @@ export const repositorySqlLayer = (
                   SET common_directory = common_directory
                   WHERE id = 1
                 `,
-                use(identitySql),
+                use(sql),
               ),
             )
             .pipe(

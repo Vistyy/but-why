@@ -20,14 +20,14 @@ export const openSqliteTaskChangeReviewAdmissionPersistence = (): Effect.Effect<
   Effect.map(RepositorySql, (repository) => ({
     checkAdmission: (taskId) =>
       repository.transaction("check Task Review admission", (sql) =>
-        Effect.flatMap(readTaskChangeLinkByTaskId(sql, taskId), (link) =>
-          taskReviewAdmissionRejection(sql, taskId, link?.changeId),
+        Effect.flatMap(readTaskChangeLinkByTaskId(sql, taskId, repository.idPrefix), (link) =>
+          taskReviewAdmissionRejection(sql, taskId, repository.idPrefix, link?.changeId),
         ),
       ),
     admit: (input: AdmitTaskReviewInput) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
-        Effect.flatMap(readTaskChangeLinkByTaskId(sql, input.taskId), (link) =>
-          admitTaskReview(sql, input, link?.changeId),
+        Effect.flatMap(readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix), (link) =>
+          admitTaskReview(sql, input, repository.idPrefix, link?.changeId),
         ),
       ),
   }));

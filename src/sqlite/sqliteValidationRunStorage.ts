@@ -5,10 +5,10 @@ import type {
   ActiveCandidateValidationRun,
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { changeIdSqlParameter } from "./repositorySql.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
@@ -72,6 +72,7 @@ export const readValidationRunById = (
   sql: SqlClient.SqlClient,
   validationRunId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredValidationRunRow>(
@@ -87,30 +88,42 @@ export const readValidationRunById = (
         throw new Error("Validation Run identity does not match lookup");
       return run;
     });
-    const candidate = yield* readCandidateById(sql, decoded.record.candidateId, operationName);
+    const candidate = yield* readCandidateById(
+      sql,
+      decoded.record.candidateId,
+      operationName,
+      idPrefix,
+    );
     if (candidate === undefined) {
       return yield* invalidData(operationName, "Validation Run belongs to an unknown Candidate");
     }
-    yield* validateSelectedValidationRunAuthority(sql, decoded, candidate.changeId, operationName);
+    yield* validateSelectedValidationRunAuthority(
+      sql,
+      decoded,
+      candidate.changeId,
+      operationName,
+      idPrefix,
+    );
     return decoded.record;
   });
 
 type StoredActiveValidationRunRow = {
   readonly validationRunId: string;
-  readonly changeId: string;
+  readonly changeId: number;
   readonly runId: string;
   readonly runCandidateId: string;
   readonly runState: CandidateValidationRunRecord["state"];
   readonly runOutcome: string | null;
   readonly candidateId: string;
-  readonly candidateChangeId: string;
-  readonly storedChangeId: string;
+  readonly candidateChangeId: number;
+  readonly storedChangeId: number;
 };
 
 export const readActiveValidationRunForChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredActiveValidationRunRow>`
@@ -123,12 +136,14 @@ export const readActiveValidationRunForChange = (
       LEFT JOIN candidate_validation_runs AS run ON run.id = active.validation_run_id
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      WHERE active.change_id = ${changeIdSqlParameter(changeId)}
+      WHERE active.change_id = ${internalChangeId(changeId, idPrefix)}
     `;
     const row = rows[0];
     return row === undefined
       ? undefined
-      : yield* decodePersisted(operationName, () => decodeActiveValidationRun(row, changeId));
+      : yield* decodePersisted(operationName, () =>
+          decodeActiveValidationRun(row, changeId, idPrefix),
+        );
   });
 
 export const validateValidationRunAuthorityRelationships = (
@@ -193,9 +208,10 @@ export const validateValidationRunImplementationDecisionRelationships = (
 const decodeActiveValidationRun = (
   row: StoredActiveValidationRunRow,
   expectedChangeId: string,
+  idPrefix: string,
 ): ActiveCandidateValidationRun => {
   if (
-    row.changeId !== expectedChangeId ||
+    publicChangeId(idPrefix, row.changeId) !== expectedChangeId ||
     row.candidateChangeId !== row.changeId ||
     row.storedChangeId !== row.changeId
   ) {
@@ -209,7 +225,7 @@ const decodeActiveValidationRun = (
   ) {
     throw new Error("Active Validation Run relationship is inconsistent");
   }
-  return { validationRunId: row.validationRunId, changeId: row.changeId };
+  return { validationRunId: row.validationRunId, changeId: publicChangeId(idPrefix, row.changeId) };
 };
 
 const validateSelectedValidationRunAuthority = (
@@ -217,6 +233,7 @@ const validateSelectedValidationRunAuthority = (
   run: DecodedValidationRun,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const latestRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
@@ -224,10 +241,10 @@ const validateSelectedValidationRunAuthority = (
        FROM implementation_blockers
        WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
        ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [changeIdSqlParameter(changeId), run.record.createdAt],
+      [internalChangeId(changeId, idPrefix), run.record.createdAt],
     );
     const latestBlockerId = yield* decodePersisted(operationName, () =>
-      latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId)),
+      latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId, idPrefix)),
     );
     yield* decodePersisted(operationName, () => {
       validateValidationRunImplementationDecisionRelationships(run, changeId);

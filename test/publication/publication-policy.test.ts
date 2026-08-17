@@ -3,12 +3,13 @@ import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
-import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
@@ -59,7 +60,7 @@ const publicationTemplateLayer = Layer.effect(
           UPDATE changes
           SET starting_commit = ${git(candidateRepoTemplate, "rev-parse", "refs/heads/main")},
               worktree_path = ${candidateRepoTemplate}
-          WHERE id = ${changeIdSqlParameter(captured.changeId)}
+          WHERE id = ${internalChangeId(captured.changeId, "BY")}
         `,
         );
         const validation = yield* openSqliteChangeValidationTestDependencies();
@@ -321,11 +322,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
                 UPDATE changes
                 SET acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
                     base_remote_url = 'https://github.test/acme/widgets.git'
-                WHERE id = ${changeIdSqlParameter(fixture.captured.changeId)}
+                WHERE id = ${internalChangeId(fixture.captured.changeId, "BY")}
               `;
             yield* sql`
                 INSERT INTO task_change_links (task_id, change_id)
-                VALUES (1, ${changeIdSqlParameter(fixture.captured.changeId)})
+                VALUES (1, ${internalChangeId(fixture.captured.changeId, "BY")})
               `;
           }),
         );

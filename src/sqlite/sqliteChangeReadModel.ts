@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { CandidateCaptureChange } from "../change/candidateCapture/candidateCapturePersistence.js";
 import type { ChangeRecord } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type {
   ImplementationBlocker,
@@ -11,7 +12,6 @@ import type {
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { LegacyReviewerTranscriptReference } from "../change/legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { changeIdSqlParameter } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -62,7 +62,7 @@ export const changeReadColumns = [
 ].join(", ");
 
 export type StoredChangeRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly repositoryCommonDirectory: unknown;
   readonly branchRef: unknown;
   readonly baseRef: unknown;
@@ -89,7 +89,10 @@ export type ChangeWithoutAuthorityHistory = Omit<
   "implementationDecisions" | "activeBlocker"
 >;
 
-export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHistory => {
+export const decodeChangeRow = (
+  row: StoredChangeRow,
+  idPrefix: string,
+): ChangeWithoutAuthorityHistory => {
   const encodedAcceptanceContext = decodeStoredNullableString(
     row.acceptanceContext,
     "Change Acceptance Context",
@@ -130,7 +133,7 @@ export const decodeChangeRow = (row: StoredChangeRow): ChangeWithoutAuthorityHis
     "Change Reviewer Configuration",
   );
   return {
-    id: decodeStoredString(row.id, "Change id"),
+    id: publicChangeId(idPrefix, row.id),
     repositoryCommonDirectory: decodeStoredString(
       row.repositoryCommonDirectory,
       "Change repository common directory",
@@ -187,7 +190,7 @@ const decodeChangeReviewerConfiguration = (source: string): ChangeReviewerConfig
 
 export type StoredImplementationDecisionRow = {
   readonly id: string;
-  readonly changeId: string;
+  readonly changeId: number;
   readonly sequence: number;
   readonly recordedAt: string;
   readonly choice: string;
@@ -197,13 +200,15 @@ export type StoredImplementationDecisionRow = {
 export const decodeImplementationDecisions = (
   rows: readonly StoredImplementationDecisionRow[],
   changeId: string,
+  idPrefix: string,
 ): readonly ImplementationDecision[] =>
   rows
     .map((row): ImplementationDecision => {
-      if (row.changeId !== changeId) {
+      const storedChangeId = publicChangeId(idPrefix, row.changeId);
+      if (storedChangeId !== changeId) {
         throw new Error("Implementation Decision belongs to another Change");
       }
-      return row;
+      return { ...row, changeId: storedChangeId };
     })
     .sort((left, right) => left.sequence - right.sequence);
 
@@ -218,14 +223,17 @@ export const readImplementationBlockerHistory = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.flatMap(
     sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     ),
     (rows) =>
-      decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
+      decodePersisted(operationName, () =>
+        decodeImplementationBlockerHistory(rows, changeId, idPrefix),
+      ),
   );
 
 export const deriveAcceptanceContext = (
@@ -249,7 +257,7 @@ export const deriveAcceptanceContext = (
 export type StoredImplementationBlockerRow = {
   readonly sequence: number;
   readonly id: string;
-  readonly changeId: string;
+  readonly changeId: number;
   readonly reportedAt: string;
   readonly content: string;
   readonly resolvedAt: string | null;
@@ -261,15 +269,17 @@ export type StoredImplementationBlockerRow = {
 export const decodeImplementationBlockerHistory = (
   rows: readonly StoredImplementationBlockerRow[],
   changeId: string,
+  idPrefix: string,
 ): ImplementationBlockerHistory => {
   const blockers = rows
     .map((row): ImplementationBlocker => {
-      if (row.changeId !== changeId) {
+      const storedChangeId = publicChangeId(idPrefix, row.changeId);
+      if (storedChangeId !== changeId) {
         throw new Error("Implementation Blocker belongs to another Change");
       }
       return {
         id: row.id,
-        changeId: row.changeId,
+        changeId: storedChangeId,
         sequence: row.sequence,
         reportedAt: row.reportedAt,
         content: row.content,
@@ -310,7 +320,7 @@ export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): 
     )[0]?.id ?? null;
 
 export type StoredReviewerSessionRow = {
-  readonly changeId: string;
+  readonly changeId: number;
   readonly producer: string;
   readonly fingerprint: string;
   readonly sessionReference: string;
@@ -319,10 +329,12 @@ export type StoredReviewerSessionRow = {
 export const decodeReviewerSession = (
   row: StoredReviewerSessionRow,
   changeId: string,
+  idPrefix: string,
 ): ReviewerSessionRecord => {
-  if (row.changeId !== changeId) throw new Error("Reviewer Session belongs to another Change");
+  const storedChangeId = publicChangeId(idPrefix, row.changeId);
+  if (storedChangeId !== changeId) throw new Error("Reviewer Session belongs to another Change");
   return {
-    ownerId: row.changeId,
+    ownerId: storedChangeId,
     producer: row.producer,
     fingerprint: row.fingerprint,
     sessionReference: row.sessionReference,
@@ -330,7 +342,7 @@ export const decodeReviewerSession = (
 };
 
 export type StoredReviewerTranscriptRow = {
-  readonly changeId: string;
+  readonly changeId: number;
   readonly producer: string;
   readonly piSessionId: string;
   readonly filePath: string;
@@ -339,9 +351,11 @@ export type StoredReviewerTranscriptRow = {
 export const decodeReviewerTranscript = (
   row: StoredReviewerTranscriptRow,
   changeId: string,
+  idPrefix: string,
 ): LegacyReviewerTranscriptReference => {
-  if (row.changeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
-  return row;
+  const storedChangeId = publicChangeId(idPrefix, row.changeId);
+  if (storedChangeId !== changeId) throw new Error("Reviewer Transcript belongs to another Change");
+  return { ...row, changeId: storedChangeId };
 };
 
 export const validateChangePublicationRelationships = (
@@ -349,12 +363,13 @@ export const validateChangePublicationRelationships = (
   changeId: string,
   publication: ChangeRecord["publication"],
   operationName: string,
+  idPrefix: string,
 ) =>
   publication === null
     ? Effect.void
     : Effect.flatMap(
         sql<{
-          readonly candidateChangeId: string;
+          readonly candidateChangeId: number;
           readonly candidateHeadSha: string;
           readonly validationRunCandidateId: string | null;
         }>`
@@ -370,7 +385,7 @@ export const validateChangePublicationRelationships = (
             const row = rows[0];
             if (row === undefined) throw new Error("Publication Candidate was not selected");
             const { candidateChangeId, candidateHeadSha, validationRunCandidateId } = row;
-            if (candidateChangeId !== changeId) {
+            if (publicChangeId(idPrefix, candidateChangeId) !== changeId) {
               throw new Error("Publication Candidate belongs to another Change");
             }
             if (validationRunCandidateId !== publication.candidateId) {
@@ -383,7 +398,7 @@ export const validateChangePublicationRelationships = (
       );
 
 export type StoredCandidateCaptureChangeRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly repositoryCommonDirectory: unknown;
   readonly branchRef: unknown;
   readonly baseRef: unknown;
@@ -392,8 +407,9 @@ export type StoredCandidateCaptureChangeRow = {
 
 export const decodeCandidateCaptureChange = (
   row: StoredCandidateCaptureChangeRow,
+  idPrefix: string,
 ): CandidateCaptureChange => ({
-  id: decodeStoredString(row.id, "Change id"),
+  id: publicChangeId(idPrefix, row.id),
   repositoryCommonDirectory: decodeStoredString(
     row.repositoryCommonDirectory,
     "Change repository common directory",

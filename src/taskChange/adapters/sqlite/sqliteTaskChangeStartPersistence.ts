@@ -1,14 +1,11 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import { recoverProvisionedChangeCreation } from "../../../change/changeStartPersistence.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import {
-  changeIdSqlParameter,
-  RepositorySql,
-  taskIdSqlParameter,
-} from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../sqlite/repositorySql.js";
 import {
   createChange,
   insertLinkedChange,
@@ -24,7 +21,7 @@ import {
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
 } from "../../../sqlite/sqliteTaskReadModel.js";
-import { storedPublicTaskId } from "../../../task/taskId.js";
+import { internalTaskId, storedPublicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,
   TaskChangeStartCreationInput,
@@ -52,14 +49,14 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
           ),
         getById: (changeId) =>
           repository.transaction("reconcile Change Start creation", (sql) =>
-            readTaskChangeStartById(sql, changeId),
+            readTaskChangeStartById(sql, changeId, repository.idPrefix),
           ),
         ...(provision === undefined ? {} : { provision }),
         ...(rollback === undefined ? {} : { rollback }),
       }),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
-        prepareTask(sql, taskId),
+        prepareTask(sql, taskId, repository.idPrefix),
       ),
     createLinked: (input, provision, rollback) =>
       recoverProvisionedChangeCreation({
@@ -69,39 +66,42 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
           ),
         getById: (changeId) =>
           repository.transaction("reconcile linked Change Start creation", (sql) =>
-            readTaskChangeStartById(sql, changeId),
+            readTaskChangeStartById(sql, changeId, repository.idPrefix),
           ),
         ...(provision === undefined ? {} : { provision }),
         ...(rollback === undefined ? {} : { rollback }),
       }),
     getById: (changeId) =>
-      repository.transaction("read Change Start", (sql) => readTaskChangeStartById(sql, changeId)),
+      repository.transaction("read Change Start", (sql) =>
+        readTaskChangeStartById(sql, changeId, repository.idPrefix),
+      ),
     recordPrepareOutcome: (changeId, failure, now) =>
       repository.transactionImmediate("record Change preparation outcome", (sql) =>
-        Effect.flatMap(recordChangePrepareOutcome(sql, changeId, failure, now), (change) =>
-          validateTaskChangeStart(sql, change),
+        Effect.flatMap(
+          recordChangePrepareOutcome(sql, changeId, failure, now, repository.idPrefix),
+          (change) => validateTaskChangeStart(sql, change, repository.idPrefix),
         ),
       ),
   }));
 
-const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
+const prepareTask = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
   Effect.gen(function* () {
-    const task = yield* readTaskContext(sql, taskId);
+    const task = yield* readTaskContext(sql, taskId, idPrefix);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (task.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
-    const existing = yield* readExistingByTaskId(sql, taskId);
+    const existing = yield* readExistingByTaskId(sql, taskId, idPrefix);
     if (existing !== undefined) return { ok: true as const, existing, task };
     const dependencyRows = yield* sql<StoredTaskDependencyFactRow>`
       SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
       FROM task_dependencies
       LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-      WHERE task_dependencies.dependent_task_id = ${taskIdSqlParameter(taskId)}
+      WHERE task_dependencies.dependent_task_id = ${internalTaskId(taskId, idPrefix)}
       ORDER BY tasks.id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
-      decodeTaskDependencyFacts(dependencyRows, storedPublicTaskId(taskId)),
+      decodeTaskDependencyFacts(dependencyRows, storedPublicTaskId(taskId), idPrefix),
     )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
       ? { ok: true as const, existing: undefined, task }
@@ -111,11 +111,11 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string) =>
 const createLinked = (
   sql: SqlClient.SqlClient,
   input: TaskChangeStartCreationInput,
-  idPrefix = "BY",
+  idPrefix: string,
   provision?: Parameters<TaskChangeStartPersistence["createLinked"]>[1],
 ) =>
   Effect.gen(function* () {
-    const prepared = yield* prepareTask(sql, input.taskId);
+    const prepared = yield* prepareTask(sql, input.taskId, idPrefix);
     if (!prepared.ok) return prepared;
     if (prepared.existing !== undefined) {
       return { ok: false as const, code: "change_start_conflict" as const };
@@ -133,57 +133,65 @@ const createLinked = (
     if (!inserted.ok) return inserted;
     yield* sql`
       INSERT INTO task_change_links (task_id, change_id)
-      VALUES (${taskIdSqlParameter(input.taskId)}, ${changeIdSqlParameter(inserted.changeId)})
+      VALUES (${internalTaskId(input.taskId, idPrefix)}, ${internalChangeId(inserted.changeId, idPrefix)})
     `;
-    const change = yield* readTaskChangeStartById(sql, inserted.changeId);
+    const change = yield* readTaskChangeStartById(sql, inserted.changeId, idPrefix);
     if (change === undefined) {
       return yield* invalidData("create linked Change Start", "Change disappeared");
     }
-    return yield* provisionCreatedChange(sql, change, provision);
+    return yield* provisionCreatedChange(sql, change, idPrefix, provision);
   });
 
-const readExistingByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
+const readExistingByTaskId = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly changeId: string }>`
+    const rows = yield* sql<{ readonly changeId: number }>`
       SELECT change_id AS changeId
       FROM task_change_links
-      WHERE task_id = ${taskIdSqlParameter(taskId)}
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)}
     `;
     const changeId = rows[0]?.changeId;
-    return changeId === undefined ? undefined : yield* readTaskChangeStartById(sql, changeId);
+    return changeId === undefined
+      ? undefined
+      : yield* readTaskChangeStartById(sql, publicChangeId(idPrefix, changeId), idPrefix);
   });
 
-const readTaskChangeStartById = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.flatMap(readChangeStartById(sql, changeId), (change) =>
-    change === undefined ? Effect.succeed(undefined) : validateTaskChangeStart(sql, change),
+const readTaskChangeStartById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
+  Effect.flatMap(readChangeStartById(sql, changeId, idPrefix), (change) =>
+    change === undefined
+      ? Effect.succeed(undefined)
+      : validateTaskChangeStart(sql, change, idPrefix),
   );
 
-const validateTaskChangeStart = (sql: SqlClient.SqlClient, change: ChangeStartRecord) =>
-  Effect.flatMap(readLinkByChangeId(sql, change.id), (link) =>
+const validateTaskChangeStart = (
+  sql: SqlClient.SqlClient,
+  change: ChangeStartRecord,
+  idPrefix: string,
+) =>
+  Effect.flatMap(readLinkByChangeId(sql, change.id, idPrefix), (link) =>
     (link === undefined) !== (change.acceptanceContext === null)
       ? invalidData("read Change Start", "Stored Change Task relationship is incomplete")
       : Effect.succeed(change),
   );
 
-const readLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
+const readLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
-    sql<{ readonly taskId: string; readonly changeId: string }>`
+    sql<{ readonly taskId: number; readonly changeId: number }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE change_id = ${changeIdSqlParameter(changeId)}
+      WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
     (rows) => Effect.succeed(rows[0]),
   );
 
-const readTaskContext = (sql: SqlClient.SqlClient, taskId: string) =>
+const readTaskContext = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow & { readonly state: unknown }>`
-      SELECT id, title, description, state FROM tasks WHERE id = ${taskIdSqlParameter(taskId)}
+      SELECT id, title, description, state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted("prepare Change Start linked to a Task", () => ({
-      ...decodeTaskContextRow(row),
+      ...decodeTaskContextRow(row, idPrefix),
       state: decodeTaskState(row.state),
     }));
   });

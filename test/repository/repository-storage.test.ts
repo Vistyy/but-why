@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { CurrentChangeEvidenceQuery } from "../../src/change/changePorts.js";
 import {
   RepositoryIdentityConflict,
@@ -12,11 +13,7 @@ import {
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
 } from "../../src/contracts/repositoryStorageError.js";
-import {
-  changeIdSqlParameter,
-  RepositorySql,
-  repositorySqlLayer,
-} from "../../src/sqlite/repositorySql.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
@@ -47,12 +44,12 @@ const installPublicationIdentity = (
           INSERT OR IGNORE INTO candidates (
             id, change_id, change_base_sha, head_sha, created_at
           ) VALUES (
-            ${candidateId}, ${changeIdSqlParameter(changeId)}, ${`${candidateId}-base`}, ${expectedHeadSha}, ${now}
+            ${candidateId}, ${internalChangeId(changeId, "BY")}, ${`${candidateId}-base`}, ${expectedHeadSha}, ${now}
           )
         `;
         yield* sql`
           INSERT INTO current_candidates (change_id, candidate_id)
-          VALUES (${changeIdSqlParameter(changeId)}, ${candidateId})
+          VALUES (${internalChangeId(changeId, "BY")}, ${candidateId})
           ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
         `;
         yield* sql`
@@ -352,7 +349,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-              VALUES ('candidate-published', ${changeIdSqlParameter(started.change.id)}, 'base-sha', 'head-sha', '2026-07-17T22:56:00.000Z')
+              VALUES ('candidate-published', ${internalChangeId(started.change.id, "BY")}, 'base-sha', 'head-sha', '2026-07-17T22:56:00.000Z')
             `;
             yield* sql`
               INSERT INTO candidate_validation_runs (
@@ -371,7 +368,7 @@ describe("repository SQL storage", () => {
                 publication_head_branch = 'published-blocker',
                 publication_expected_head_sha = 'head-sha',
                 publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
-              WHERE id = ${changeIdSqlParameter(started.change.id)}
+              WHERE id = ${internalChangeId(started.change.id, "BY")}
             `;
           }),
         );
@@ -460,7 +457,7 @@ describe("repository SQL storage", () => {
             sql<{ readonly acceptanceContext: string | null }>`
             SELECT acceptance_context AS acceptanceContext
             FROM changes
-            WHERE id = ${changeIdSqlParameter(started.change.id)}
+            WHERE id = ${internalChangeId(started.change.id, "BY")}
           `,
         );
         expect(storedContext).toEqual([
@@ -1142,7 +1139,7 @@ describe("repository SQL storage", () => {
                 publication_base_branch = 'main', publication_remote_name = 'origin',
                 publication_head_branch = 'feature', publication_expected_head_sha = 'head-sha',
                 publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
-              WHERE id = ${changeIdSqlParameter(captured.changeId)}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );
@@ -1173,7 +1170,7 @@ describe("repository SQL storage", () => {
             yield* sql`
               UPDATE changes SET
                 publication_validation_run_id = 'run-repaired-publication'
-              WHERE id = ${changeIdSqlParameter(captured.changeId)}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );
@@ -1194,7 +1191,7 @@ describe("repository SQL storage", () => {
           (sql) =>
             sql`
               UPDATE changes SET publication_validation_run_id = 'run-1'
-              WHERE id = ${changeIdSqlParameter(captured.changeId)}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `,
         );
 
@@ -1251,7 +1248,7 @@ describe("repository SQL storage", () => {
               yield* sql`
                 UPDATE changes SET
                   publication_validation_run_id = 'run-duplicate-representation'
-                WHERE id = ${changeIdSqlParameter(captured.changeId)}
+                WHERE id = ${internalChangeId(captured.changeId, "BY")}
               `;
             }),
         );
@@ -1264,7 +1261,7 @@ describe("repository SQL storage", () => {
         yield* repository.operation(
           "restore publication evidence reference",
           (sql) =>
-            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${changeIdSqlParameter(captured.changeId)}`,
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         expect(
           yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
@@ -1327,7 +1324,7 @@ describe("repository SQL storage", () => {
               UPDATE changes SET
                 publication_candidate_id = ${other.candidateId},
                 publication_validation_run_id = 'run-2'
-              WHERE id = ${changeIdSqlParameter(captured.changeId)}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );

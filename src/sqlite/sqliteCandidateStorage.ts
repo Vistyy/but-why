@@ -1,28 +1,27 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import type { CandidateRecord } from "../change/candidate/candidate.js";
-import { changeIdSqlParameter } from "./repositorySql.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export type StoredCandidateRow = {
   readonly id: string;
-  readonly changeId: string;
+  readonly changeId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
   readonly createdAt: string;
 };
 
-type CandidateOwnerRow = StoredCandidateRow & { readonly storedChangeId: string | null };
+type CandidateOwnerRow = StoredCandidateRow & { readonly storedChangeId: number | null };
 
 export const candidateReadColumns = `
   candidate.id, candidate.change_id AS changeId, candidate.change_base_sha AS changeBaseSha,
   candidate.head_sha AS headSha, candidate.created_at AS createdAt
 `;
 
-export const decodeCandidate = (row: StoredCandidateRow): CandidateRecord => ({
+export const decodeCandidate = (row: StoredCandidateRow, idPrefix: string): CandidateRecord => ({
   id: row.id,
-  changeId: row.changeId,
+  changeId: publicChangeId(idPrefix, row.changeId),
   changeBaseSha: row.changeBaseSha,
   headSha: row.headSha,
   createdAt: row.createdAt,
@@ -32,6 +31,7 @@ export const readCandidateById = (
   sql: SqlClient.SqlClient,
   candidateId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<CandidateOwnerRow>(
@@ -44,7 +44,7 @@ export const readCandidateById = (
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(operationName, () => {
-      const candidate = decodeOwnedCandidate(row);
+      const candidate = decodeOwnedCandidate(row, idPrefix);
       if (candidate.id !== candidateId) throw new Error("Candidate identity does not match lookup");
       return candidate;
     });
@@ -54,6 +54,7 @@ export const readCurrentCandidateForChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<CandidateOwnerRow>(
@@ -62,18 +63,19 @@ export const readCurrentCandidateForChange = (
        JOIN candidates AS candidate ON candidate.id = selection.candidate_id
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
        WHERE selection.change_id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     return row === undefined
       ? undefined
-      : yield* decodePersisted(operationName, () => decodeOwnedCandidate(row, changeId));
+      : yield* decodePersisted(operationName, () => decodeOwnedCandidate(row, idPrefix, changeId));
   });
 
 export const readCandidatesForChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<CandidateOwnerRow>(
@@ -81,10 +83,12 @@ export const readCandidatesForChange = (
        FROM candidates AS candidate
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
        WHERE candidate.change_id = ?`,
-      [changeIdSqlParameter(changeId)],
+      [internalChangeId(changeId, idPrefix)],
     );
     return yield* decodePersisted(operationName, () =>
-      rows.map((row) => decodeOwnedCandidate(row, changeId)).sort(compareCandidatesAscending),
+      rows
+        .map((row) => decodeOwnedCandidate(row, idPrefix, changeId))
+        .sort(compareCandidatesAscending),
     );
   });
 
@@ -93,12 +97,13 @@ export const compareCandidatesAscending = (left: CandidateRecord, right: Candida
 
 const decodeOwnedCandidate = (
   row: CandidateOwnerRow,
+  idPrefix: string,
   expectedChangeId?: string,
 ): CandidateRecord => {
-  const candidate = decodeCandidate(row);
-  const storedChangeId = row.storedChangeId;
+  const candidate = decodeCandidate(row, idPrefix);
   if (
-    candidate.changeId !== storedChangeId ||
+    row.storedChangeId === null ||
+    candidate.changeId !== publicChangeId(idPrefix, row.storedChangeId) ||
     (expectedChangeId !== undefined && candidate.changeId !== expectedChangeId)
   ) {
     throw new Error("Candidate belongs to another or unknown Change");

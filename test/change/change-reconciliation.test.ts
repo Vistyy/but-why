@@ -2,11 +2,12 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
-import { changeIdSqlParameter, RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
@@ -28,7 +29,7 @@ const installPublicationIdentity = (changeId: string) =>
       Effect.gen(function* () {
         yield* sql`
           INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-          VALUES ('candidate-1', ${changeIdSqlParameter(changeId)}, 'base', 'head', ${now})
+          VALUES ('candidate-1', ${internalChangeId(changeId, "BY")}, 'base', 'head', ${now})
         `;
         yield* sql`
           INSERT INTO candidate_validation_runs (
