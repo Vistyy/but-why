@@ -591,6 +591,29 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("removes a recovered Managed Worktree when its branch moves during attachment", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const start = changeStartRecord(root);
+      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      git(root, "worktree", "remove", start.worktreePath);
+      const emptyTree = git(root, "mktree");
+      const movedCommit = git(root, "commit-tree", emptyTree, "-m", "Moved during attachment");
+      const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
+      const hookPath = join(commonDirectory, "hooks", "post-checkout");
+      writeFileSync(hookPath, `#!/bin/sh\ngit update-ref ${start.branchRef} ${movedCommit}\n`);
+      chmodSync(hookPath, 0o755);
+
+      expect(provisionChangeWorktree(root, start, true)).toEqual({
+        ok: false,
+        code: "change_start_conflict",
+      });
+      expect(git(root, "rev-parse", start.branchRef)).toBe(movedCommit);
+      expect(existsSync(start.worktreePath)).toBe(false);
+      expect(git(root, "worktree", "list", "--porcelain")).not.toContain(start.worktreePath);
+    }),
+  );
+
   it.effect("preserves unexpected branches and occupied Managed Worktree paths", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();

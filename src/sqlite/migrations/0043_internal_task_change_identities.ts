@@ -288,6 +288,11 @@ export const internalTaskChangeIdentitiesMigration = (idPrefix: string) =>
     }
     yield* sql.unsafe("DROP TABLE changes_before_internal_identities");
     yield* sql.unsafe("DROP TABLE tasks_before_internal_identities");
+    yield* sql.unsafe(`
+      CREATE UNIQUE INDEX tasks_reviewer_agent_session_idx
+      ON tasks (reviewer_agent_session_id)
+      WHERE reviewer_agent_session_id IS NOT NULL
+    `);
     for (const index of indexSchemas) yield* sql.unsafe(index.sql);
 
     yield* sql.unsafe(

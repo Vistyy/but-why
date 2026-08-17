@@ -8,6 +8,7 @@ import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remo
 import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
 import { changeBranchOwnershipRef, changeBranchRefForSlug } from "../changeBranch.js";
 import type {
+  ProvisionChangeWorktreeFailure,
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
 } from "../changeStartGitOperations.js";
@@ -81,7 +82,7 @@ export const provisionChangeWorktree = (
     const removed = removeStaleWorktreeRegistration(cwd, start);
     if (!removed.ok) return removed;
   }
-  return addRecordedWorktree(cwd, start);
+  return addRecordedWorktree(cwd, start, branch.observedCommit);
 };
 
 const inspectRecordedWorktree = (
@@ -139,17 +140,21 @@ const inspectRecordedWorktree = (
     : { ok: false, code: "change_start_conflict" };
 };
 
+type EnsureRecordedBranchResult =
+  | { readonly ok: true; readonly observedCommit: string }
+  | ProvisionChangeWorktreeFailure;
+
 const ensureRecordedBranch = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
-): ProvisionChangeWorktreeResult => {
+): EnsureRecordedBranchResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
     if (!recovering) return { ok: false, code: "change_start_conflict" };
     const ownership = recordedBranchOwnership(cwd, start, branchCommit);
     return ownership === "owned"
-      ? { ok: true }
+      ? { ok: true, observedCommit: branchCommit }
       : {
           ok: false,
           code: ownership === "foreign" ? "change_start_conflict" : "git_tooling_error",
@@ -172,7 +177,9 @@ const ensureRecordedBranch = (
           "update-ref",
           "--stdin",
         );
-  return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+  return create.ok
+    ? { ok: true, observedCommit: start.startingCommit }
+    : { ok: false, code: "git_tooling_error" };
 };
 
 const branchOwnershipRef = (start: ChangeStartRecord): string => {
@@ -215,6 +222,7 @@ const removeStaleWorktreeRegistration = (
 const addRecordedWorktree = (
   cwd: string,
   start: ChangeStartRecord,
+  observedCommit: string,
 ): ProvisionChangeWorktreeResult => {
   if (!ensureManagedWorktreeParent(start.worktreePath)) {
     return {
@@ -234,7 +242,13 @@ const addRecordedWorktree = (
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const add = git(cwd, "worktree", "add", start.worktreePath, branchName);
-  return add.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+  if (!add.ok) return { ok: false, code: "git_tooling_error" };
+  const head = git(start.worktreePath, "rev-parse", "HEAD^{commit}");
+  if (head.ok && head.stdout === observedCommit) return { ok: true };
+  const removed = git(cwd, "worktree", "remove", "--force", "--", start.worktreePath);
+  return removed.ok
+    ? { ok: false, code: "change_start_conflict" }
+    : { ok: false, code: "git_tooling_error" };
 };
 
 const managedWorktreeContainers = (worktreePath: string): readonly [string, string] => {
