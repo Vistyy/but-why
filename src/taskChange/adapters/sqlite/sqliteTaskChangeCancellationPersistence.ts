@@ -10,11 +10,7 @@ import {
   readCancellationChange,
 } from "../../../sqlite/sqliteChangeCancellationPersistence.js";
 import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
-import {
-  internalTaskId,
-  type PublicTaskId,
-  publicTaskIdFromInternal,
-} from "../../../task/taskId.js";
+import { internalTaskId, publicTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {
   TaskChangeCancellationChange,
@@ -165,7 +161,7 @@ const readTaskForCancellation = (
 ) =>
   taskId === null
     ? Effect.succeed(null)
-    : Effect.flatMap(getTaskById(sql, taskId as PublicTaskId, idPrefix), (task) =>
+    : Effect.flatMap(getTaskById(sql, publicTaskId(taskId), idPrefix), (task) =>
         task === undefined
           ? invalidData("read committed cancellation", "Linked Task was not found")
           : Effect.succeed(task),

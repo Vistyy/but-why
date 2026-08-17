@@ -76,7 +76,7 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string)
       ORDER BY tasks.id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
-      decodeTaskDependencyFacts(dependencyRows, taskId as PublicTaskId, idPrefix),
+      decodeTaskDependencyFacts(dependencyRows, publicTaskId(taskId), idPrefix),
     )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
       ? { ok: true as const, existing: undefined, task }

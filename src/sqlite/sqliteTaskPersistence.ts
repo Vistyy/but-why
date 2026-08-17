@@ -4,7 +4,12 @@ import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
-import { internalTaskId, type PublicTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
+import {
+  internalTaskId,
+  publicTaskId,
+  type PublicTaskId,
+  publicTaskIdFromInternal,
+} from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   CancelTaskInput,
@@ -115,7 +120,7 @@ export const editTaskDependencies = (
       target.task.prerequisites,
       (dependency) =>
         Effect.try({
-          try: () => dependency.id as PublicTaskId,
+          try: () => publicTaskId(dependency.id),
           catch: (cause) =>
             new RepositoryPersistedDataInvalid({
               operationName: "edit Task dependencies",

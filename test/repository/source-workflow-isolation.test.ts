@@ -168,7 +168,7 @@ test("source Change operations ignore a future Managed Worktree Repo Config", ()
     herdr,
     `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
-  printf '{"result":{"type":"agent_list","agents":[{"name":"${changeId}","cwd":"${candidate}","pane_id":"pane","agent_status":"working"}]}}\\n'
+  printf '{"result":{"type":"agent_list","agents":[{"name":"${changeId.toLowerCase()}","cwd":"${candidate}","pane_id":"pane","agent_status":"working"}]}}\\n'
   exit 0
 fi
 exit 1
