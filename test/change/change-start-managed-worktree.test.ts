@@ -332,6 +332,37 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("recovers the Managed Worktree at the recorded branch's advanced commit", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
+      expect(started.status).toBe(0);
+      const output = JSON.parse(started.stdout) as ChangeOutput;
+      writeFileSync(join(output.worktreePath, "advanced.txt"), "preserve this commit\n");
+      git(output.worktreePath, "add", "advanced.txt");
+      git(output.worktreePath, "commit", "-m", "Advanced commit");
+      const advancedCommit = git(output.worktreePath, "rev-parse", "HEAD^{commit}");
+      expect(advancedCommit).not.toBe(output.startingCommit);
+
+      git(root, "worktree", "remove", output.worktreePath);
+
+      const recovered = yield* runByInProcessEffect(
+        root,
+        ["change", "prepare", output.change.id],
+        now,
+      );
+      expect(recovered.status).toBe(0);
+      expect(JSON.parse(recovered.stdout)).toMatchObject({
+        change: { id: output.change.id },
+        worktreePath: output.worktreePath,
+      });
+      expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
+      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(advancedCommit);
+      expect(existsSync(join(output.worktreePath, "advanced.txt"))).toBe(true);
+      expect(git(root, "rev-parse", output.branch)).toBe(advancedCommit);
+    }),
+  );
+
   it.effect("recovers a stale Managed Worktree registration", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
@@ -564,7 +595,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(existsSync(join(start.worktreePath, "keep.txt"))).toBe(true);
 
       rmSync(start.worktreePath, { recursive: true });
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
       expect(git(start.worktreePath, "symbolic-ref", "HEAD")).toBe(start.branchRef);
     }),
   );
