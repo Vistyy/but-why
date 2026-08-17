@@ -69,11 +69,11 @@ export const provisionChangeWorktree = (
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
-  const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
-  if (worktree !== "missing" && worktree !== "stale") return worktree;
-
   const branch = ensureRecordedBranch(cwd, start, recovering);
   if (!branch.ok) return branch;
+
+  const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
+  if (worktree !== "missing" && worktree !== "stale") return worktree;
   if (worktree === "stale") {
     const removed = removeStaleWorktreeRegistration(cwd, start);
     if (!removed.ok) return removed;
