@@ -29,7 +29,7 @@ type CurrentValidationRun = JsonObject & {
 };
 
 type BlockerResolution = JsonObject & {
-  readonly id: string;
+  readonly blockerId: number;
   readonly content: string;
 };
 
@@ -72,8 +72,8 @@ export type RetryState = {
 type PersistedContinuationState = RetryState & {
   readonly changeId: string;
   readonly paused: boolean;
-  readonly resolutionId?: string | null;
-  readonly pendingResolutionId?: string | null;
+  readonly resolutionBlockerId?: number | null;
+  readonly pendingResolutionBlockerId?: number | null;
   readonly initialSubmissionHandled?: boolean;
 };
 
@@ -822,7 +822,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       fingerprint: "inspection-unavailable",
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: null,
+      resolutionBlockerId: null,
     };
     saveState({ ...previous, initialSubmissionHandled: true });
   };
@@ -870,8 +870,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     return latest !== undefined && isResolution(latest) ? latest : null;
   };
 
-  const resolutionId = (resolution: BlockerResolution | null): string | null =>
-    resolution?.id ?? null;
+  const resolutionBlockerId = (resolution: BlockerResolution | null): number | null =>
+    resolution?.blockerId ?? null;
 
   const resolutionMessage = (
     id: string,
@@ -933,20 +933,20 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     const latest = latestResolution(observed.blockerHistory);
-    const latestId = resolutionId(latest);
+    const latestBlockerId = resolutionBlockerId(latest);
     const previous = persisted;
-    const handledResolutionId = previous?.resolutionId ?? null;
-    const resolutionChanged = latestId !== null && latestId !== handledResolutionId;
-    const pendingResolutionId = resolutionChanged
-      ? latestId
-      : (previous?.pendingResolutionId ?? null);
+    const handledBlockerId = previous?.resolutionBlockerId ?? null;
+    const resolutionChanged = latestBlockerId !== null && latestBlockerId !== handledBlockerId;
+    const pendingBlockerId = resolutionChanged
+      ? latestBlockerId
+      : (previous?.pendingResolutionBlockerId ?? null);
     const initializedState: PersistedContinuationState = {
       changeId,
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: handledResolutionId,
-      pendingResolutionId,
+      resolutionBlockerId: handledBlockerId,
+      pendingResolutionBlockerId: pendingBlockerId,
       ...(previous?.initialSubmissionHandled === undefined
         ? {}
         : { initialSubmissionHandled: previous.initialSubmissionHandled }),
@@ -959,16 +959,16 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     clearBlockedPolling();
     if (
-      pendingResolutionId !== null &&
+      pendingBlockerId !== null &&
       latest !== null &&
-      latest.id === pendingResolutionId &&
+      latest.blockerId === pendingBlockerId &&
       observed.snapshot.change.state === "open" &&
       ctx.isIdle()
     ) {
       saveState({
         ...initializedState,
-        resolutionId: latest.id,
-        pendingResolutionId: null,
+        resolutionBlockerId: latest.blockerId,
+        pendingResolutionBlockerId: null,
       });
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
       pi.sendUserMessage(
@@ -998,7 +998,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       fingerprint: "inspection-unavailable",
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: null,
+      resolutionBlockerId: null,
     };
     saveState({ ...state, paused: true });
     showWatcher(ctx, { kind: "paused" });
@@ -1041,7 +1041,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           fingerprint: "inspection-unavailable",
           unchangedRestarts: 0,
           paused: false,
-          resolutionId: null,
+          resolutionBlockerId: null,
         };
         if (!observed.transient) {
           saveState({ ...previous, paused: true });
@@ -1089,16 +1089,17 @@ export default function continueChange(pi: ExtensionAPI): void {
         fingerprint: observed.fingerprint,
         unchangedRestarts: 0,
         paused: false,
-        resolutionId: null,
+        resolutionBlockerId: null,
       };
       const currentResolution = latestResolution(observed.blockerHistory);
-      const currentResolutionId = resolutionId(currentResolution);
+      const currentResolutionBlockerId = resolutionBlockerId(currentResolution);
       const resolutionChanged =
-        previous.resolutionId !== undefined &&
-        currentResolutionId !== null &&
-        currentResolutionId !== previous.resolutionId;
+        previous.resolutionBlockerId !== undefined &&
+        currentResolutionBlockerId !== null &&
+        currentResolutionBlockerId !== previous.resolutionBlockerId;
       const pendingResolution =
-        currentResolutionId !== null && previous.pendingResolutionId === currentResolutionId;
+        currentResolutionBlockerId !== null &&
+        previous.pendingResolutionBlockerId === currentResolutionBlockerId;
       const retry = explicit
         ? { fingerprint: observed.fingerprint, unchangedRestarts: 0 }
         : nextRetryState(previous, observed.fingerprint);
@@ -1106,10 +1107,10 @@ export default function continueChange(pi: ExtensionAPI): void {
         ...previous,
         ...retry,
         paused: false,
-        resolutionId: previous.resolutionId ?? currentResolutionId,
-        pendingResolutionId: resolutionChanged
-          ? currentResolutionId
-          : (previous.pendingResolutionId ?? null),
+        resolutionBlockerId: previous.resolutionBlockerId ?? currentResolutionBlockerId,
+        pendingResolutionBlockerId: resolutionChanged
+          ? currentResolutionBlockerId
+          : (previous.pendingResolutionBlockerId ?? null),
       });
 
       if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
@@ -1124,8 +1125,8 @@ export default function continueChange(pi: ExtensionAPI): void {
             ...previous,
             ...retry,
             paused: false,
-            resolutionId: currentResolutionId,
-            pendingResolutionId: null,
+            resolutionBlockerId: currentResolutionBlockerId,
+            pendingResolutionBlockerId: null,
           });
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
           pi.sendUserMessage(
@@ -1267,8 +1268,8 @@ const isNonNegativeInteger = (value: unknown): value is number =>
 const isPositiveInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
-  value === undefined || value === null || typeof value === "string";
+const isOptionalNullablePositiveInteger = (value: unknown): value is number | null | undefined =>
+  value === undefined || value === null || isPositiveInteger(value);
 
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
@@ -1276,8 +1277,8 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
   typeof recordValue(value, "fingerprint") === "string" &&
   isNonNegativeInteger(recordValue(value, "unchangedRestarts")) &&
   typeof recordValue(value, "paused") === "boolean" &&
-  isOptionalNullableString(recordValue(value, "resolutionId")) &&
-  isOptionalNullableString(recordValue(value, "pendingResolutionId")) &&
+  isOptionalNullablePositiveInteger(recordValue(value, "resolutionBlockerId")) &&
+  isOptionalNullablePositiveInteger(recordValue(value, "pendingResolutionBlockerId")) &&
   (recordValue(value, "initialSubmissionHandled") === undefined ||
     typeof recordValue(value, "initialSubmissionHandled") === "boolean");
 
@@ -1340,7 +1341,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
 
 const isResolution = (value: unknown): value is BlockerResolution =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "blockerId")) &&
   typeof recordValue(value, "content") === "string";
 
 const isBlockerHistory = (value: unknown): value is BlockerHistory => {

@@ -432,7 +432,7 @@ The BY-274 acceptance must:
 - Preserve the read-only legacy Reviewer boundary until the old state is archived, then leave legacy records in that archive rather than importing or converting them.
 - Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for historical legacy records and the fixed configuration required for new Change reviewers.
 - Defer Adapter relocation, SQL ownership enforcement, and general cleanup to `post-baseline-hardening.md`.
-- Build and verify the exact old Pinned Predecessor Executable, record its Git commit and SHA-256, and complete the predecessor rehearsal successfully on a disposable repository.
+- Build and verify the exact old executable bundle, record its Git commit and SHA-256, and complete the cutover rehearsal successfully on a disposable repository.
 
 Every BY-274 Task Context must enumerate the required final-schema changes, retired representations, supported behavior changes, and BY-274 acceptance evidence.
 If implementation discovers necessary work outside that scope, the Implementer must raise an Implementation Blocker before performing or deferring it.
@@ -447,7 +447,7 @@ The immediately following live operator cutover is separately authorized, is not
 The BY-274 Change runs the repository's complete required check suite through the owning workflow.
 Acceptance verification must establish the final schema inventory, exact ordered baseline ledger behavior, numeric ID and ordering contracts, retained supported behavior, and removal of retired prerelease representations from the released executable.
 Acceptance verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy read-only evidence, reviewer configuration snapshots, and operational naming behavior.
-Acceptance verification must verify the exact old Pinned Predecessor Executable and successful disposable rehearsal.
+Acceptance verification must verify the exact old executable bundle and successful disposable rehearsal.
 Live archive, fresh-initialization, and post-reconcile verification are separate operator-cutover evidence and cannot determine BY-274 Task completion.
 Do not add verification for importing, converting, or upgrading the retired prerelease database.
 Adapter relocation, SQL ownership enforcement, and general cleanup are post-baseline hardening concerns rather than BY-274 acceptance gates.
@@ -456,6 +456,25 @@ Real SQLite integration tests verify coordination behavior.
 Do not add custom source-scanning tests that duplicate existing architecture checks.
 
 The live operator cutover follows BY-274 acceptance as a separately authorized operation.
+
+## Disposable cutover rehearsal observations
+
+The completed disposable rehearsal used an exact old executable bundle built from canonical source commit `10bdce30c94c1d3510b061c7d75f0206328a2494`.
+The bundle executable SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`.
+The rehearsal created representative old Task and Change state and reconciled the exact merged disposable Change `BY-C1` with that bundle.
+The first reconciliation completed the Change and its Task, and the cleanup retry cleared the retained cleanup obligation.
+
+The rehearsal archive contained the complete old Git Common Directory But Why state, repository reviewer files, repository and executable identity metadata, inspection instructions, and a SHA-256 manifest.
+Every archived checksum verified.
+The archived SQLite database remained readable with migration ledger entries 1 through 43 and showed the reconciled Change as closed and completed.
+
+Fresh initialization with the release executable produced exactly the 18 approved product tables and migration ledger `[1]` without old Task or Change records.
+The before-new-work recovery rehearsal inserted an unknown migration ID, observed initialization rejection, restored the complete old operational state from the archive copy, and verified `BY-C1` through the exact old bundle.
+Fresh initialization then succeeded again.
+
+The after-new-work recovery rehearsal recorded new Task `BY-1`, induced repository identity verification failure, and repaired the new state forward without restoring or merging old state.
+The repair preserved `BY-1`, retained exactly the 18 approved product tables and migration ledger `[1]`, and retained no old Change records.
+The archive checksums still verified after both recovery paths.
 
 ## Prerelease archive
 
@@ -485,15 +504,13 @@ The behavior must use the configured publication remote, support initial, revise
 It must not write VS Code GitHub Pull Requests extension metadata or depend on that extension's private state.
 Verification must use standard Git upstream inspection and confirm that the remote commit is unchanged.
 
-## BY-271 authority retired by BY-274
+## Retired BY-271 authority
 
-Current `docs/tooling.md` contains the BY-271-specific `taskPrefix`-compatible Repo Config overlay and Task 7 predecessor language for prerelease reconciliation.
-That guidance is current BY-271 authority, not a new BY-274 contract.
-BY-274 must retire the overlay and Task 7 language after the final predecessor procedure, preserve and verify the unchanged merged `idPrefix` Repo Config, and must not install a `taskPrefix` overlay.
-This documentation edit does not change `docs/tooling.md`.
+The BY-271-specific `taskPrefix`-compatible Repo Config overlay and Task 7 predecessor language are retired.
+The cutover preserves and verifies the unchanged merged `idPrefix` Repo Config and does not install a `taskPrefix` overlay.
 
 The archive preserves old Task and Change history, but the new database does not import or convert it.
-Before merging BY-274, build the final Pinned Predecessor Executable from canonical `main` as a pinned production bundle outside the checkout, record its Git commit and SHA-256, and verify that exact bundle on a disposable repository.
+Immediately before merging BY-274, build the exact old executable bundle from canonical `main` outside the checkout, record its Git commit and SHA-256 in the bundle manifest, and verify that exact bundle on a disposable repository.
 The coding agent performs the approved commands on the Operator's behalf and does not add product maintenance mode or distributed locking for this cutover.
 Then:
 
@@ -501,7 +518,7 @@ Then:
 2. Pause all But Why opens and writes, including ordinary Shared Repository State reads and writes, before exact predecessor reconciliation.
 3. Verify while paused that the merged `main` commit contains the exact approved `idPrefix` Repo Config, record its value, and reject any change to that value through reconciliation, archive, and fresh initialization.
 4. Verify while paused that no BY-271 `taskPrefix`-compatible Repo Config overlay is installed.
-5. Use the pinned predecessor once to reconcile the exact merged BY-274 Change against the old database while the pause remains in force.
+5. Run the exact old bundle directly from canonical `main`, as its trusted root, once to reconcile only the exact merged BY-274 Change against the old database while the pause remains in force.
 The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
 6. Keep all But Why opens and writes paused while archiving the old operational state, including the Git Common Directory state and repository reviewer files.
 7. Keep the pause in force through fresh initialization of the new Shared Repository State from merged `main` with the BY-274 executable and fresh `0001_baseline` state.
@@ -547,7 +564,7 @@ Do not change current architecture or ADR authority before implementation.
 
 ## Implementation-time procedure
 
-Define and test the exact manual trusted-executable cutover commands during baseline implementation, when the implemented baseline CLI and archive layout are available.
+Use the exact manual trusted-executable cutover procedure verified during baseline implementation.
 Keep the procedure direct: verify the commands on a disposable repository, present the exact destructive step for one confirmation, and then execute the approved procedure on the Operator's behalf.
 Store the old-state inspection instructions in the archive.
 Do not add product cutover, rollback, or prerelease conversion commands.

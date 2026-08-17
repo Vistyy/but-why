@@ -52,19 +52,19 @@ export const listValidationPhaseResults = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* readPhaseResults(sql, validationRunId);
-    if (rows.length === 0) return [];
-    const run = yield* requireRun(sql, validationRunId, "list Validation Phase Results", idPrefix);
+    const rows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Validation Phase Results",
+      idPrefix,
+    );
     return yield* decodePersisted("list Validation Phase Results", () =>
-      rows.map((row) => {
-        configuredPosition(row.phase, row.producer, run);
-        return {
-          validationRunId: assertRunId(row.validationRunId, validationRunId),
-          phase: decodePhase(row.phase),
-          producer: row.producer,
-          outcome: decodeOutcome(row.outcome),
-        };
-      }),
+      rows.map((row) => ({
+        validationRunId: assertRunId(row.validationRunId, validationRunId),
+        phase: decodePhase(row.phase),
+        producer: row.producer,
+        outcome: decodeOutcome(row.outcome),
+      })),
     );
   });
 
@@ -102,10 +102,16 @@ export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validat
 export const listValidationFindings = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
-  _idPrefix: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(readPhaseResults(sql, validationRunId), (rows) =>
-    decodePersisted("list Candidate validation Findings", () =>
+  Effect.gen(function* () {
+    const rows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Candidate validation Findings",
+      idPrefix,
+    );
+    return yield* decodePersisted("list Candidate validation Findings", () =>
       rows.flatMap((row) =>
         parseFindings(row.findings).map((finding) => ({
           ...finding,
@@ -114,12 +120,21 @@ export const listValidationFindings = (
           producer: row.producer,
         })),
       ),
-    ),
-  );
+    );
+  });
 
-export const listValidationToolingFailures = (sql: SqlClient.SqlClient, validationRunId: number) =>
+export const listValidationToolingFailures = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const phaseRows = yield* readPhaseResults(sql, validationRunId);
+    const phaseRows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Candidate validation Tooling Failures",
+      idPrefix,
+    );
     const runRows = yield* sql<{ readonly toolingFailure: string | null }>`
       SELECT run_tooling_failure AS toolingFailure
       FROM validation_runs WHERE id = ${validationRunId}
@@ -142,10 +157,16 @@ export const listValidationToolingFailures = (sql: SqlClient.SqlClient, validati
 export const listValidationArtifacts = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
-  _idPrefix: string,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(readPhaseResults(sql, validationRunId), (rows) =>
-    decodePersisted("list Candidate validation Artifacts", () =>
+  Effect.gen(function* () {
+    const rows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Candidate validation Artifacts",
+      idPrefix,
+    );
+    return yield* decodePersisted("list Candidate validation Artifacts", () =>
       rows.flatMap((row) =>
         parseArtifacts(row.artifacts).map((artifact) => ({
           ...artifact,
@@ -156,19 +177,39 @@ export const listValidationArtifacts = (
           producer: row.producer,
         })),
       ),
-    ),
-  );
+    );
+  });
 
-const readPhaseResults = (sql: SqlClient.SqlClient, validationRunId: number) =>
-  sql<StoredPhaseResultRow>`
-    SELECT validation_run_id AS validationRunId, phase, producer, outcome,
-      findings, artifacts, tooling_failure AS toolingFailure
-    FROM validation_phase_results
-    WHERE validation_run_id = ${validationRunId}
-    ORDER BY CASE phase
-      WHEN 'prepare' THEN 0 WHEN 'checks' THEN 1
-      WHEN 'acceptance_review' THEN 2 ELSE 3 END, producer
-  `;
+const readOrderedPhaseResults = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<StoredPhaseResultRow>`
+      SELECT validation_run_id AS validationRunId, phase, producer, outcome,
+        findings, artifacts, tooling_failure AS toolingFailure
+      FROM validation_phase_results
+      WHERE validation_run_id = ${validationRunId}
+    `;
+    if (rows.length === 0) return rows;
+    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
+    return yield* decodePersisted(operationName, () =>
+      rows
+        .map((row) => ({
+          row,
+          phasePosition: phasePosition(row.phase),
+          producerPosition: configuredPosition(row.phase, row.producer, run),
+        }))
+        .sort(
+          (left, right) =>
+            left.phasePosition - right.phasePosition ||
+            left.producerPosition - right.producerPosition,
+        )
+        .map(({ row }) => row),
+    );
+  });
 
 const parseFindings = (
   source: string,
@@ -261,6 +302,19 @@ const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentIn
       unusableReason: row.unusableReason,
     },
   };
+};
+
+const phasePosition = (phase: string): number => {
+  switch (decodePhase(phase)) {
+    case validationPhase.prepare:
+      return 0;
+    case validationPhase.checks:
+      return 1;
+    case validationPhase.acceptanceReview:
+      return 2;
+    case validationPhase.specialistReview:
+      return 3;
+  }
 };
 
 const configuredPosition = (

@@ -110,7 +110,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       listToolingFailures: (validationRunId) =>
         repository.transaction("list Candidate validation Tooling Failures", (sql) =>
-          listValidationToolingFailures(sql, validationRunId),
+          listValidationToolingFailures(sql, validationRunId, repository.idPrefix),
         ),
       listArtifacts: (validationRunId) =>
         repository.transaction("list Candidate validation Artifacts", (sql) =>

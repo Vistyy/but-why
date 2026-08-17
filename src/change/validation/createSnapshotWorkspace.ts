@@ -16,6 +16,7 @@ import type {
   SnapshotWorkspaceOperationName,
   SnapshotWorkspaceToolingError,
 } from "./snapshotWorkspace.js";
+import { snapshotWorkspaceId } from "./snapshotWorkspacePath.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type CreateSnapshotWorkspaceInput = {
@@ -91,7 +92,7 @@ const createSnapshotWorkspaceAdapter = (
       ValidationToolingFailure | RepositoryStorageError
     > = {
       repoRoot: input.repoRoot,
-      workspaceId: String(input.validationRunId),
+      workspaceId: snapshotWorkspaceId(input.validationRunId),
       commitSha: input.submittedSha,
       copyFiles: input.copyFiles,
       recordWorkspaceCleanup: (cleanupResult) =>
@@ -101,7 +102,11 @@ const createSnapshotWorkspaceAdapter = (
       ...(input.runInWorkspace === undefined ? {} : { runInWorkspace: input.runInWorkspace }),
     };
     const result = yield* runDisposableExactCommitWorkspace(workspaceInput);
-    if (!result.ok) return { ok: false, toolingError: validationError(result.toolingError) };
+    if (!result.ok)
+      return {
+        ok: false,
+        toolingError: validationError(result.toolingError, input.validationRunId),
+      };
     return {
       ok: true,
       ...(result.workspaceResult === undefined
@@ -110,9 +115,12 @@ const createSnapshotWorkspaceAdapter = (
     };
   });
 
-const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
+const validationError = (
+  error: DisposableWorkspaceError,
+  validationRunId: number,
+): SnapshotWorkspaceToolingError => ({
   operationName: snapshotWorkspaceOperation(error.operationName),
-  validationRunId: Number(error.workspaceId),
+  validationRunId,
   expectedCommitSha: error.commitSha,
   worktreePath: error.worktreePath,
   errorMessage: error.errorMessage,

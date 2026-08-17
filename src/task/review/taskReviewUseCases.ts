@@ -51,6 +51,7 @@ import type {
   TaskReviewAdmissionPersistence,
   TaskReviewPersistence,
 } from "./taskReviewPersistence.js";
+import { taskReviewWorkspaceId } from "./taskReviewWorkspace.js";
 
 export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
@@ -246,7 +247,7 @@ const submitTaskReview = (
       run: Effect.gen(function* () {
         const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
           repoRoot: input.mainCheckoutRoot,
-          workspaceId: String(reviewId),
+          workspaceId: taskReviewWorkspaceId(reviewId),
           commitSha: base.base.commit,
           copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
           runInWorkspace: (active) =>
@@ -509,7 +510,7 @@ export const inspectTaskReviewIdentity = (
     if (!base.ok) return { verified: false, message: base.message } as const;
     const workspace = yield* input.inspectWorkspace(
       input.mainCheckoutRoot,
-      String(review.id),
+      taskReviewWorkspaceId(review.id),
       review.baseCommit,
       review.workspacePath,
     );

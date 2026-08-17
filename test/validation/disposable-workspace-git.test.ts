@@ -7,10 +7,21 @@ import { describe } from "vitest";
 
 import { snapshotWorkspaceCleanupGit } from "../../src/change/validation/adapters/snapshotWorkspaceCleanupGit.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Snapshot Workspace Git cleanup verification", () => {
+  it("namespaces independent Task Review and Validation Run identities", () => {
+    const repository = "/tmp/repository";
+
+    expect(expectedTaskReviewWorkspacePath(repository, 1)).not.toBe(
+      expectedSnapshotWorkspacePath(repository, 1),
+    );
+    expect(expectedTaskReviewWorkspacePath(repository, 1)).toContain("task-review-1");
+    expect(expectedSnapshotWorkspacePath(repository, 1)).toContain("validation-run-1");
+  });
+
   it.effect("removes one exact detached worktree idempotently", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();

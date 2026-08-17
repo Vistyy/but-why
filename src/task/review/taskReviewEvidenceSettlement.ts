@@ -6,6 +6,7 @@ import type {
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
+import { taskReviewWorkspaceId } from "./taskReviewWorkspace.js";
 
 type TaskReviewEvidencePersistence = Pick<
   TaskReviewPersistence,
@@ -54,7 +55,7 @@ export const settleTaskReviewEvidence = (
     }
 
     const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: String(review.id),
+      workspaceId: taskReviewWorkspaceId(review.id),
       expectedCommitSha: review.baseCommit,
       recordedWorktreePath: review.workspacePath,
     });

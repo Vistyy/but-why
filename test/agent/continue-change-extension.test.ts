@@ -526,7 +526,7 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
       active: null,
     });
 
@@ -534,7 +534,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
     expect(harness.entries.at(-1)).toMatchObject({
-      data: { resolutionId: "resolution-1", pendingResolutionId: null },
+      data: { resolutionBlockerId: 1, pendingResolutionBlockerId: null },
     });
   });
 
@@ -555,7 +555,7 @@ describe("packaged Change Implement continuation extension", () => {
 
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+        resolutions: [{ blockerId: 1, content: "Use the approved design." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(1);
@@ -589,7 +589,7 @@ describe("packaged Change Implement continuation extension", () => {
       harness.setInspectionFails(false);
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        resolutions: [{ blockerId: 1, content: "Continue safely." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(30_000);
@@ -614,7 +614,7 @@ describe("packaged Change Implement continuation extension", () => {
 
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        resolutions: [{ blockerId: 1, content: "Continue safely." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(60_000);
@@ -683,7 +683,7 @@ describe("packaged Change Implement continuation extension", () => {
       await vi.advanceTimersByTimeAsync(30_000);
       inFlight.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Do not deliver after shutdown." }],
+        resolutions: [{ blockerId: 1, content: "Do not deliver after shutdown." }],
         active: null,
       });
       await inFlight.emit("session_shutdown");
@@ -711,7 +711,7 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(snapshot({ findingCount: 1 }));
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
       active: null,
     });
     await harness.emit("agent_settled");
@@ -956,7 +956,7 @@ describe("packaged Change Implement continuation extension", () => {
       undefined,
       {
         blockers: [{ body: { opaque: true } }],
-        resolutions: [{ id: "resolution-1" }],
+        resolutions: [{ blockerId: 1 }],
         active: null,
       },
     ],
@@ -1044,7 +1044,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.entries.at(-1)).toMatchObject({
       type: "custom",
       customType: "but-why-change-continuation",
-      data: { changeId, unchangedRestarts: 0, paused: false, resolutionId: null },
+      data: { changeId, unchangedRestarts: 0, paused: false, resolutionBlockerId: null },
     });
   });
 });

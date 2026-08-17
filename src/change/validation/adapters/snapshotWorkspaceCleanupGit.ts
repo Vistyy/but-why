@@ -1,16 +1,16 @@
 import { cleanupExactDisposableWorkspace } from "../../../disposableWorkspace/adapters/disposableWorkspaceGit.js";
-import { expectedDisposableWorkspacePath } from "../../../disposableWorkspace/disposableWorkspacePath.js";
 import type { SnapshotWorkspaceCleanup } from "../snapshotWorkspaceCleanup.js";
+import { expectedSnapshotWorkspacePath, snapshotWorkspaceId } from "../snapshotWorkspacePath.js";
 
 export const snapshotWorkspaceCleanupGit = (
   mainCheckoutRoot: string,
 ): SnapshotWorkspaceCleanup => ({
   cleanup: (input) =>
     cleanupExactDisposableWorkspace(mainCheckoutRoot, {
-      workspaceId: String(input.validationRunId),
+      workspaceId: snapshotWorkspaceId(input.validationRunId),
       expectedCommitSha: input.submittedSha,
       recordedWorktreePath:
         input.recordedWorktreePath ??
-        expectedDisposableWorkspacePath(mainCheckoutRoot, String(input.validationRunId)),
+        expectedSnapshotWorkspacePath(mainCheckoutRoot, input.validationRunId),
     }),
 });

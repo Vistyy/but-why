@@ -281,13 +281,35 @@ describe("Candidate-owned Validation Run inspection", () => {
           files: ["src/main.ts"],
           artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
         },
+        toolingFailure: {
+          validationRunId: fixture.validationRunId,
+          errorKind: "check_command_execution_tooling_failed",
+          operationName: "run_types",
+          errorMessage: "Types process failed.",
+        },
         now,
       });
       yield* fixture.runStore.recordCheckResult({
         validationRunId: fixture.validationRunId,
         producer: "tests",
-        outcome: "passed",
+        outcome: "failed",
         artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
+        finding: {
+          validationRunId: fixture.validationRunId,
+          phase: "checks",
+          producer: "tests",
+          title: "Check failed: tests",
+          description: "Configured check tests exited with code 1.",
+          evidence: "command: pnpm test\nexitCode: 1",
+          files: ["test/main.test.ts"],
+          artifactRefs: [],
+        },
+        toolingFailure: {
+          validationRunId: fixture.validationRunId,
+          errorKind: "check_command_execution_tooling_failed",
+          operationName: "run_tests",
+          errorMessage: "Tests process failed.",
+        },
         now,
       });
       yield* fixture.runStore.recordToolingFailure({
@@ -336,15 +358,22 @@ describe("Candidate-owned Validation Run inspection", () => {
           {
             phase: "checks",
             results: [
-              { producer: "tests", outcome: "passed" },
               { producer: "types", outcome: "failed" },
+              { producer: "tests", outcome: "failed" },
             ],
           },
           { phase: "acceptance_review", results: [] },
           { phase: "specialist_review", results: [] },
         ],
-        findings: [{ title: "Check failed: types", source: "checks/types" }],
-        toolingFailures: [{ operationName: "cleanup_snapshot_workspace" }],
+        findings: [
+          { title: "Check failed: types", source: "checks/types" },
+          { title: "Check failed: tests", source: "checks/tests" },
+        ],
+        toolingFailures: [
+          { operationName: "run_types" },
+          { operationName: "run_tests" },
+          { operationName: "cleanup_snapshot_workspace" },
+        ],
         agentInvocations: [],
       });
       expect(shown.artifacts).toEqual(
@@ -358,6 +387,12 @@ describe("Candidate-owned Validation Run inspection", () => {
           }),
         ]),
       );
+      expect(
+        shown.artifacts.map(
+          (artifact: { phase: string; producer: string }) =>
+            `${artifact.phase}/${artifact.producer}`,
+        ),
+      ).toEqual(["prepare/prepare", "checks/types", "checks/types", "checks/tests"]);
 
       const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
       const detail = yield* runByInProcessEffect(fixture.root, [

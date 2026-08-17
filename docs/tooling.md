@@ -47,17 +47,27 @@ After publication, packaged commands use the published But Why Executable and th
 ### Prerelease release-baseline cutover
 
 The release-ready runtime supports only `0001_baseline` and does not open prerelease Shared Repository State.
-Before merging a baseline cutover, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
-Pause But Why operations during the cutover.
-Use the old bundle directly to inspect and reconcile every supported open or merged Change while it still owns the old state schema.
-Do not use the new executable or a Candidate executable for this reconciliation.
+Immediately before the baseline Change is merged, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
+Record the source commit and executable SHA-256 in the bundle manifest.
+Pause all But Why opens and writes during the cutover.
 
-After reconciliation, archive the complete `.git/but-why` directory under an operator-selected unique path.
-Do not overwrite or delete that archive.
-Initialize fresh Shared Repository State with the merged executable and the merged `idPrefix` Repo Config.
-If interruption leaves the old directory in place, continue with the old bundle or finish the archive move before initialization.
-If interruption occurs after the archive move, rerun fresh initialization with the new executable.
-Verify the initialized state with a normal read-only command before resuming operations.
+Run the old bundle directly from canonical `main`, as its trusted root, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
+Use the unchanged merged `idPrefix` Repo Config.
+Do not use the merged executable, a Candidate executable, or a source-checkout dispatcher for old-state reconciliation.
+
+After reconciliation, archive the complete Git Common Directory But Why state and repository reviewer files under an operator-selected unique path.
+Include repository and executable identity, the old bundle manifest, archive integrity metadata, and instructions for inspecting a copy with the old bundle.
+Verify archive checksums and old-state SQLite readability before initializing new state.
+Do not overwrite or delete the archive.
+
+Initialize fresh Shared Repository State with the merged executable and the unchanged merged `idPrefix` Repo Config.
+Verify the baseline ledger, the supported product table inventory, repository identity, and a normal read-only command before resuming operations.
+If interruption leaves the old operational state in place, continue with the old bundle or finish the archive move before initialization.
+If interruption occurs after the archive move, rerun fresh initialization with the merged executable.
+
+If verification fails before new work is recorded, restore the complete old operational state and use only the old bundle.
+If verification fails after new work is recorded, preserve the new state and repair it forward.
+Do not merge old and new Shared Repository State.
 
 ## Check ownership
 

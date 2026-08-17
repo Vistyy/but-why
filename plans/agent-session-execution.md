@@ -192,7 +192,7 @@ Working internal Agent Session code remains in place unless the final schema, re
 Adapter relocation and general cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
-BY-274 acceptance verifies the old Pinned Predecessor Executable and a successful disposable rehearsal before the separately authorized live operator cutover.
+BY-274 acceptance verifies the exact old executable bundle and a successful disposable rehearsal before the separately authorized live operator cutover.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
 

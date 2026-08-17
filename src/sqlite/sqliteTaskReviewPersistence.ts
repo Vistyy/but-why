@@ -8,7 +8,6 @@ import type {
 } from "../agent/agentSession/agentSession.js";
 import { agentProfileSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { expectedDisposableWorkspacePath } from "../disposableWorkspace/disposableWorkspacePath.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type {
   TaskReviewDependencyEvidence,
@@ -25,6 +24,7 @@ import type {
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
+import { expectedTaskReviewWorkspacePath } from "../task/review/taskReviewWorkspace.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
@@ -522,7 +522,7 @@ const decodeReview = (
           ...(policy === undefined ? {} : { policy }),
           baseRef: row.baseRef,
           baseCommit: row.baseCommit,
-          workspacePath: expectedDisposableWorkspacePath(dirname(commonDirectory), String(row.id)),
+          workspacePath: expectedTaskReviewWorkspacePath(dirname(commonDirectory), row.id),
           state: row.outcome === null ? "running" : "complete",
           outcome: parseReviewOutcome(row.outcome),
           workspaceCleanup: cleanupPending
