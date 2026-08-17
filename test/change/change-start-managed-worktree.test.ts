@@ -572,6 +572,22 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("rejects an unrelated branch during Managed Worktree recovery", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const start = changeStartRecord(root);
+      const emptyTree = git(root, "mktree");
+      const foreignCommit = git(root, "commit-tree", emptyTree, "-m", "Foreign history");
+      git(root, "update-ref", start.branchRef, foreignCommit);
+
+      expect(provisionChangeWorktree(root, start, true)).toEqual({
+        ok: false,
+        code: "change_start_conflict",
+      });
+      expect(existsSync(start.worktreePath)).toBe(false);
+    }),
+  );
+
   it.effect("preserves unexpected branches and occupied Managed Worktree paths", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
