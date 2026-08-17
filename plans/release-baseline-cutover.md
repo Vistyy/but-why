@@ -510,30 +510,15 @@ The BY-271-specific `taskPrefix`-compatible Repo Config overlay and Task 7 prede
 The cutover preserves and verifies the unchanged merged `idPrefix` Repo Config and does not install a `taskPrefix` overlay.
 
 The archive preserves old Task and Change history, but the new database does not import or convert it.
-Immediately before merging BY-274, build the exact old executable bundle from canonical `main` outside the checkout, record its Git commit and SHA-256 in the bundle manifest, and verify that exact bundle on a disposable repository.
-The coding agent performs the approved commands on the Operator's behalf and does not add product maintenance mode or distributed locking for this cutover.
-Then:
-
-1. Submit and merge BY-274 while the canonical main checkout still selects the final predecessor for prerelease state operations.
-2. Pause all But Why opens and writes, including ordinary Shared Repository State reads and writes, before exact predecessor reconciliation.
-3. Verify while paused that the merged `main` commit contains the exact approved `idPrefix` Repo Config, record its value, and reject any change to that value through reconciliation, archive, and fresh initialization.
-4. Verify while paused that no BY-271 `taskPrefix`-compatible Repo Config overlay is installed.
-5. Run the exact old bundle directly from canonical `main`, as its trusted root, once to reconcile only the exact merged BY-274 Change against the old database while the pause remains in force.
+The exact ordered live procedure is [Prerelease release-baseline cutover](../docs/tooling.md#prerelease-release-baseline-cutover).
+That operator-facing authority governs old-bundle and manifest verification, exact reconciliation, failed and uncertain reconciliation recovery, archive verification, temporary bundle cleanup, fresh initialization, and the before-new-work recovery boundary.
 The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
-6. Keep all But Why opens and writes paused while archiving the old operational state, including the Git Common Directory state and repository reviewer files.
-7. Keep the pause in force through fresh initialization of the new Shared Repository State from merged `main` with the BY-274 executable and fresh `0001_baseline` state.
-8. Verify the new Trusted But Why Executable and state, then end the pause and resume development in the new state.
 Live post-reconcile, archive, and fresh-state verification cannot determine BY-274 Task completion because the merged Change was already reconciled and marked Done in old state.
-Post-baseline Task recording and plan-removal sequencing may resume only after this live operation succeeds.
+Post-baseline Task recording and plan-removal sequencing may resume only after the complete live procedure succeeds.
 
-Verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
-If predecessor reconciliation fails, keep the pause in force, do not archive or initialize, and recover the old state before proceeding.
-If later live verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
-After new work is recorded, fix the new state forward and do not merge old and new databases.
-Do not add released rollback or database-conversion commands for this one-time cutover.
-
+Live verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
 A fresh clone may be used for initialization as an operational safety convenience, but it is not required.
-The exact manual operational procedure remains unresolved.
+Do not add product maintenance mode, distributed locking, released rollback, or database conversion for this one-time cutover.
 
 ## Verification direction
 
@@ -562,10 +547,9 @@ After implementation, amend ADR 0009 rather than superseding it.
 The amendment records that the prerelease chain was explicitly retired at the first-release boundary, the new `0001_baseline` became the immutable migration root, and normal forward-only migration continues from there.
 Do not change current architecture or ADR authority before implementation.
 
-## Implementation-time procedure
+## Live procedure authority
 
-Use the exact manual trusted-executable cutover procedure verified during baseline implementation.
-Keep the procedure direct: verify the commands on a disposable repository, present the exact destructive step for one confirmation, and then execute the approved procedure on the Operator's behalf.
+Use [Prerelease release-baseline cutover](../docs/tooling.md#prerelease-release-baseline-cutover) for the exact manual trusted-executable cutover procedure verified during baseline implementation.
 Store the old-state inspection instructions in the archive.
 Do not add product cutover, rollback, or prerelease conversion commands.
 
