@@ -48,7 +48,7 @@ describe("Implementation Blocker recording input", () => {
           "change",
           "blocker",
           action,
-          "change-id",
+          "BY-C1",
           "--file",
           file,
         ]);
