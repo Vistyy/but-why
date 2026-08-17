@@ -1,4 +1,3 @@
-import { dirname } from "node:path";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
@@ -70,15 +69,13 @@ type AgentInvocationRow = {
   readonly unusableReason: string | null;
 };
 
-export const openSqliteTaskReviewPersistence = (): Effect.Effect<
-  TaskReviewPersistence,
-  never,
-  RepositorySql
-> =>
+export const openSqliteTaskReviewPersistence = (
+  mainCheckoutRoot: string,
+): Effect.Effect<TaskReviewPersistence, never, RepositorySql> =>
   Effect.map(RepositorySql, (repository) => ({
     reuseJudgment: (taskId, now) =>
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
-        reuseTaskReviewJudgment(sql, taskId, now, repository.idPrefix, repository.commonDirectory),
+        reuseTaskReviewJudgment(sql, taskId, now, repository.idPrefix, mainCheckoutRoot),
       ),
     checkAdmission: (taskId) =>
       repository.transaction("check Task Review admission", (sql) =>
@@ -86,7 +83,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       ),
     admit: (input) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
-        admitTaskReview(sql, input, repository.idPrefix, undefined, repository.commonDirectory),
+        admitTaskReview(sql, input, repository.idPrefix, mainCheckoutRoot),
       ),
     recordCleanup: (reviewId, cleanup) =>
       repository.transactionImmediate("record Task Review cleanup", (sql) =>
@@ -105,7 +102,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           input.findings,
           input.toolingFailure,
           repository.idPrefix,
-          repository.commonDirectory,
+          mainCheckoutRoot,
           input.agentSettlement === true,
         ),
       ),
@@ -129,20 +126,20 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             [],
             { operation: "task_review_abandoned", message: reason },
             repository.idPrefix,
-            repository.commonDirectory,
+            mainCheckoutRoot,
           );
         }),
       ),
     getById: (reviewId) =>
       repository.transaction("read Task Review", (sql) =>
-        getReview(sql, reviewId, repository.idPrefix, repository.commonDirectory),
+        getReview(sql, reviewId, repository.idPrefix, mainCheckoutRoot),
       ),
     listForTask: (taskId) =>
       repository.transaction("list Task Reviews", (sql) =>
         Effect.gen(function* () {
           const rows = yield* readReviewRows(sql, taskId, repository.idPrefix);
           return yield* Effect.forEach(rows, (row) =>
-            decodeReview(sql, row, repository.idPrefix, repository.commonDirectory),
+            decodeReview(sql, row, repository.idPrefix, mainCheckoutRoot),
           );
         }),
       ),
@@ -188,7 +185,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               input.findings,
               input.toolingFailure,
               repository.idPrefix,
-              repository.commonDirectory,
+              mainCheckoutRoot,
               true,
             );
             if (!completed.ok)
@@ -225,7 +222,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           const row = rows[0];
           return row === undefined
             ? undefined
-            : yield* decodeReview(sql, row, repository.idPrefix, repository.commonDirectory);
+            : yield* decodeReview(sql, row, repository.idPrefix, mainCheckoutRoot);
         }),
       ),
     proposalIsCurrent: (review) =>
@@ -268,8 +265,8 @@ export const admitTaskReview = (
   sql: SqlClient.SqlClient,
   input: AdmitTaskReviewInput,
   idPrefix: string,
+  mainCheckoutRoot: string,
   linkedChangeId?: string,
-  commonDirectory = ".git",
 ): Effect.Effect<AdmitTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
     const rejected = yield* taskReviewAdmissionRejection(
@@ -302,11 +299,11 @@ export const admitTaskReview = (
     `;
     const reviewId = inserted[0]?.id;
     if (reviewId === undefined) return yield* invalid("admit Task Review", "Review ID is missing");
-    const stored = yield* getReview(sql, reviewId, idPrefix, commonDirectory);
+    const stored = yield* getReview(sql, reviewId, idPrefix, mainCheckoutRoot);
     if (stored === undefined) return yield* invalid("admit Task Review", "Review disappeared");
     return {
       ok: true as const,
-      review: { ...stored, policy: input.policy },
+      review: stored,
       proposal,
       dependencyEvidence: dependencies,
     };
@@ -317,7 +314,7 @@ const reuseTaskReviewJudgment = (
   taskId: string,
   _now: string,
   idPrefix: string,
-  commonDirectory: string,
+  mainCheckoutRoot: string,
 ) =>
   Effect.gen(function* () {
     const tasks = yield* sql<{
@@ -346,7 +343,7 @@ const reuseTaskReviewJudgment = (
         continue;
       }
       if (row.outcome !== "passed") return undefined;
-      const review = yield* decodeReview(sql, row, idPrefix, commonDirectory);
+      const review = yield* decodeReview(sql, row, idPrefix, mainCheckoutRoot);
       const judgment = completedTaskReviewResult(review, "new");
       if (judgment === undefined || judgment.outcome !== "passed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
@@ -366,11 +363,11 @@ const completeReview = (
   findings: readonly TaskReviewFinding[],
   toolingFailure: TaskReviewToolingFailure | undefined,
   idPrefix: string,
-  commonDirectory: string,
+  mainCheckoutRoot: string,
   allowAlreadyComplete = false,
 ) =>
   Effect.gen(function* () {
-    const current = yield* getReview(sql, reviewId, idPrefix, commonDirectory);
+    const current = yield* getReview(sql, reviewId, idPrefix, mainCheckoutRoot);
     if (current === undefined) {
       return { ok: false as const, code: "task_review_not_found" as const };
     }
@@ -404,7 +401,7 @@ const completeReview = (
         tooling_failure = ${failure === undefined ? null : JSON.stringify(failure)}
       WHERE id = ${reviewId} AND outcome IS NULL
     `;
-    const completed = yield* getReview(sql, reviewId, idPrefix, commonDirectory);
+    const completed = yield* getReview(sql, reviewId, idPrefix, mainCheckoutRoot);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
     const result = completedTaskReviewResult(
@@ -480,7 +477,7 @@ const getReview = (
   sql: SqlClient.SqlClient,
   reviewId: number,
   idPrefix: string,
-  commonDirectory: string,
+  mainCheckoutRoot: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<ReviewRow>(
@@ -489,14 +486,14 @@ const getReview = (
     );
     return rows[0] === undefined
       ? undefined
-      : yield* decodeReview(sql, rows[0], idPrefix, commonDirectory);
+      : yield* decodeReview(sql, rows[0], idPrefix, mainCheckoutRoot);
   });
 
 const decodeReview = (
   sql: SqlClient.SqlClient,
   row: ReviewRow,
   idPrefix: string,
-  commonDirectory: string,
+  mainCheckoutRoot: string,
 ) =>
   Effect.gen(function* () {
     const task = yield* sql<{
@@ -519,10 +516,9 @@ const decodeReview = (
           taskId: publicTaskIdFromInternal(row.taskId, idPrefix),
           proposal: parseProposal(row.proposalSnapshot),
           dependencyEvidence: parseDependencies(row.dependencyEvidence),
-          ...(policy === undefined ? {} : { policy }),
           baseRef: row.baseRef,
           baseCommit: row.baseCommit,
-          workspacePath: expectedTaskReviewWorkspacePath(dirname(commonDirectory), row.id),
+          workspacePath: expectedTaskReviewWorkspacePath(mainCheckoutRoot, row.id),
           state: row.outcome === null ? "running" : "complete",
           outcome: parseReviewOutcome(row.outcome),
           workspaceCleanup: cleanupPending

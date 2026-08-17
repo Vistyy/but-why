@@ -459,10 +459,11 @@ The live operator cutover follows BY-274 acceptance as a separately authorized o
 
 ## Disposable cutover rehearsal observations
 
+The retained [rehearsal evidence](release-baseline-cutover-rehearsal.json) records the commands, exit statuses, executable identity, archive checks, and persisted observations from the completed disposable run.
 The completed disposable rehearsal used an exact old executable bundle built from canonical source commit `10bdce30c94c1d3510b061c7d75f0206328a2494`.
 The bundle executable SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`.
-The rehearsal created representative old Task and Change state and reconciled the exact merged disposable Change `BY-C1` with that bundle.
-The first reconciliation completed the Change and its Task, and the cleanup retry cleared the retained cleanup obligation.
+The rehearsal reconciled the exact merged disposable Change `BY-C1` with that bundle.
+The reconciliation completed the Change, and the cleanup retry cleared the retained cleanup obligation.
 
 The rehearsal archive contained the complete old Git Common Directory But Why state, repository reviewer files, repository and executable identity metadata, inspection instructions, and a SHA-256 manifest.
 Every archived checksum verified.

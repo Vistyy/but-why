@@ -25,10 +25,10 @@ const policy = {
 };
 
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
-  withTemporaryRepositoryState(() =>
+  withTemporaryRepositoryState(({ commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
       yield* tasks.createTask({ title: "Dependency", description: "Required", now });
       yield* tasks.createTask({
         title: "Approved proposal",
@@ -95,10 +95,10 @@ it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
 it.scoped(
   "rejects revision for linked, actively reviewed, and terminal Tasks without mutation",
   () =>
-    withTemporaryRepositoryState(() =>
+    withTemporaryRepositoryState(({ commonDirectory }) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence();
+        const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
         const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {

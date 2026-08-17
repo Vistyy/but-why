@@ -1,123 +1,272 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import type { RepositorySql as RepositorySqlService } from "../../src/sqlite/repositorySql.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const expectedColumns = {
-  shared_state_identity: ["id", "common_directory", "id_prefix"],
-  tasks: [
-    "id",
-    "title",
-    "description",
-    "state",
-    "cancel_reason",
-    "reviewer_configuration",
-    "reviewer_agent_session_id",
-  ],
-  task_dependencies: ["dependent_task_id", "prerequisite_task_id"],
-  task_reviews: [
-    "id",
-    "task_id",
-    "proposal",
-    "dependency_evidence",
-    "base_ref",
-    "base_commit",
-    "outcome",
-    "findings",
-    "tooling_failure",
-    "cleanup_pending",
-    "cleanup_blocking_reason",
-  ],
-  task_review_agent_invocations: ["task_review_id", "agent_invocation_id"],
-  task_change_links: ["task_id", "change_id"],
-  changes: [
-    "id",
-    "branch_ref",
-    "base_ref",
-    "base_remote_url",
-    "worktree_path",
-    "initial_acceptance_context",
-    "reviewer_configuration",
-    "prepare_definition",
-    "prepare_failure",
-    "close_reason",
-    "cancel_reason",
-    "cleanup_pending",
-    "cleanup_blocking_reason",
-  ],
-  implementation_decisions: ["id", "change_id", "choice", "rationale"],
-  implementation_blockers: ["id", "change_id", "content", "resolution_content"],
-  candidates: ["id", "change_id", "base_commit", "head_commit"],
-  validation_runs: [
-    "id",
-    "candidate_id",
-    "policy_snapshot",
-    "highest_decision_id",
-    "highest_blocker_id",
-    "outcome",
-    "run_tooling_failure",
-    "cleanup_pending",
-    "cleanup_blocking_reason",
-  ],
-  validation_phase_results: [
-    "validation_run_id",
-    "phase",
-    "producer",
-    "outcome",
-    "findings",
-    "artifacts",
-    "tooling_failure",
-  ],
-  validation_phase_agent_invocations: [
-    "validation_run_id",
-    "phase",
-    "producer",
-    "agent_invocation_id",
-  ],
-  change_agent_sessions: ["change_id", "producer", "agent_session_id"],
-  github_publications: ["change_id", "candidate_id", "validation_run_id", "pull_request_number"],
-  agent_sessions: ["id"],
+  shared_state_identity: ["id:INTEGER:0:1", "common_directory:TEXT:1:0", "id_prefix:TEXT:1:0"],
+  agent_sessions: ["id:INTEGER:0:1"],
   agent_continuations: [
-    "id",
-    "agent_session_id",
-    "harness",
-    "provider",
-    "model",
-    "thinking",
-    "transcript_path",
-    "unusable_reason",
+    "id:INTEGER:0:1",
+    "agent_session_id:INTEGER:1:0",
+    "harness:TEXT:1:0",
+    "provider:TEXT:0:0",
+    "model:TEXT:1:0",
+    "thinking:TEXT:0:0",
+    "transcript_path:TEXT:0:0",
+    "unusable_reason:TEXT:0:0",
   ],
   agent_invocations: [
-    "id",
-    "continuation_id",
-    "created_at",
-    "settled_at",
-    "settlement_kind",
-    "input_tokens",
-    "cached_input_tokens",
-    "cache_write_tokens",
-    "output_tokens",
-    "total_tokens",
+    "id:INTEGER:0:1",
+    "continuation_id:INTEGER:1:0",
+    "created_at:TEXT:1:0",
+    "settled_at:TEXT:0:0",
+    "settlement_kind:TEXT:0:0",
+    "input_tokens:INTEGER:0:0",
+    "cached_input_tokens:INTEGER:0:0",
+    "cache_write_tokens:INTEGER:0:0",
+    "output_tokens:INTEGER:0:0",
+    "total_tokens:INTEGER:0:0",
+  ],
+  tasks: [
+    "id:INTEGER:0:1",
+    "title:TEXT:1:0",
+    "description:TEXT:1:0",
+    "state:TEXT:1:0",
+    "cancel_reason:TEXT:0:0",
+    "reviewer_configuration:TEXT:0:0",
+    "reviewer_agent_session_id:INTEGER:0:0",
+  ],
+  task_dependencies: ["dependent_task_id:INTEGER:1:1", "prerequisite_task_id:INTEGER:1:2"],
+  task_reviews: [
+    "id:INTEGER:0:1",
+    "task_id:INTEGER:1:0",
+    "proposal:TEXT:1:0",
+    "dependency_evidence:TEXT:1:0",
+    "base_ref:TEXT:1:0",
+    "base_commit:TEXT:1:0",
+    "outcome:TEXT:0:0",
+    "findings:TEXT:1:0",
+    "tooling_failure:TEXT:0:0",
+    "cleanup_pending:INTEGER:1:0",
+    "cleanup_blocking_reason:TEXT:0:0",
+  ],
+  task_review_agent_invocations: ["task_review_id:INTEGER:1:1", "agent_invocation_id:INTEGER:1:2"],
+  changes: [
+    "id:INTEGER:0:1",
+    "branch_ref:TEXT:1:0",
+    "base_ref:TEXT:1:0",
+    "base_remote_url:TEXT:1:0",
+    "worktree_path:TEXT:1:0",
+    "initial_acceptance_context:TEXT:0:0",
+    "reviewer_configuration:TEXT:1:0",
+    "prepare_definition:TEXT:0:0",
+    "prepare_failure:TEXT:0:0",
+    "close_reason:TEXT:0:0",
+    "cancel_reason:TEXT:0:0",
+    "cleanup_pending:INTEGER:1:0",
+    "cleanup_blocking_reason:TEXT:0:0",
+  ],
+  task_change_links: ["task_id:INTEGER:0:1", "change_id:INTEGER:1:0"],
+  implementation_decisions: [
+    "id:INTEGER:0:1",
+    "change_id:INTEGER:1:0",
+    "choice:TEXT:1:0",
+    "rationale:TEXT:1:0",
+  ],
+  implementation_blockers: [
+    "id:INTEGER:0:1",
+    "change_id:INTEGER:1:0",
+    "content:TEXT:1:0",
+    "resolution_content:TEXT:0:0",
+  ],
+  candidates: [
+    "id:INTEGER:0:1",
+    "change_id:INTEGER:1:0",
+    "base_commit:TEXT:1:0",
+    "head_commit:TEXT:1:0",
+  ],
+  validation_runs: [
+    "id:INTEGER:0:1",
+    "candidate_id:INTEGER:1:0",
+    "policy_snapshot:TEXT:1:0",
+    "highest_decision_id:INTEGER:0:0",
+    "highest_blocker_id:INTEGER:0:0",
+    "outcome:TEXT:0:0",
+    "run_tooling_failure:TEXT:0:0",
+    "cleanup_pending:INTEGER:1:0",
+    "cleanup_blocking_reason:TEXT:0:0",
+  ],
+  validation_phase_results: [
+    "validation_run_id:INTEGER:1:1",
+    "phase:TEXT:1:2",
+    "producer:TEXT:1:3",
+    "outcome:TEXT:1:0",
+    "findings:TEXT:1:0",
+    "artifacts:TEXT:1:0",
+    "tooling_failure:TEXT:0:0",
+  ],
+  validation_phase_agent_invocations: [
+    "validation_run_id:INTEGER:1:1",
+    "phase:TEXT:1:2",
+    "producer:TEXT:1:3",
+    "agent_invocation_id:INTEGER:1:4",
+  ],
+  change_agent_sessions: [
+    "change_id:INTEGER:1:1",
+    "producer:TEXT:1:2",
+    "agent_session_id:INTEGER:1:0",
+  ],
+  github_publications: [
+    "change_id:INTEGER:0:1",
+    "candidate_id:INTEGER:1:0",
+    "validation_run_id:INTEGER:1:0",
+    "pull_request_number:INTEGER:0:0",
   ],
 } as const;
 
-const expectedIndexes = [
-  "agent_continuations_session_id_idx",
-  "agent_invocations_continuation_id_idx",
-  "agent_invocations_unsettled_idx",
-  "candidates_change_id_idx",
-  "changes_close_reason_id_idx",
-  "implementation_blockers_change_id_idx",
-  "implementation_blockers_unresolved_idx",
-  "implementation_decisions_change_id_idx",
-  "task_dependencies_prerequisite_idx",
-  "task_reviews_active_idx",
-  "task_reviews_task_id_idx",
-  "tasks_state_id_idx",
-  "validation_runs_active_idx",
-  "validation_runs_candidate_id_idx",
-  "validation_runs_passed_idx",
-] as const;
+const expectedForeignKeys = {
+  agent_continuations: ["agent_session_id->agent_sessions.id"],
+  agent_invocations: ["continuation_id->agent_continuations.id"],
+  tasks: ["reviewer_agent_session_id->agent_sessions.id"],
+  task_dependencies: ["dependent_task_id->tasks.id", "prerequisite_task_id->tasks.id"],
+  task_reviews: ["task_id->tasks.id"],
+  task_review_agent_invocations: [
+    "agent_invocation_id->agent_invocations.id",
+    "task_review_id->task_reviews.id",
+  ],
+  task_change_links: ["change_id->changes.id", "task_id->tasks.id"],
+  implementation_decisions: ["change_id->changes.id"],
+  implementation_blockers: ["change_id->changes.id"],
+  candidates: ["change_id->changes.id"],
+  validation_runs: [
+    "candidate_id->candidates.id",
+    "highest_blocker_id->implementation_blockers.id",
+    "highest_decision_id->implementation_decisions.id",
+  ],
+  validation_phase_results: ["validation_run_id->validation_runs.id"],
+  validation_phase_agent_invocations: [
+    "agent_invocation_id->agent_invocations.id",
+    "validation_run_id->validation_runs.id",
+  ],
+  change_agent_sessions: ["agent_session_id->agent_sessions.id", "change_id->changes.id"],
+  github_publications: [
+    "candidate_id->candidates.id",
+    "change_id->changes.id",
+    "validation_run_id->validation_runs.id",
+  ],
+} as const;
+
+const expectedIndexes = {
+  agent_continuations_session_id_idx: {
+    table: "agent_continuations",
+    unique: 0,
+    partial: 0,
+    keys: ["agent_session_id:ASC", "id:DESC"],
+  },
+  agent_invocations_continuation_id_idx: {
+    table: "agent_invocations",
+    unique: 0,
+    partial: 0,
+    keys: ["continuation_id:ASC", "id:ASC"],
+  },
+  agent_invocations_unsettled_idx: {
+    table: "agent_invocations",
+    unique: 0,
+    partial: 1,
+    keys: ["continuation_id:ASC"],
+    predicate: "WHERE settled_at IS NULL",
+  },
+  candidates_change_id_idx: {
+    table: "candidates",
+    unique: 0,
+    partial: 0,
+    keys: ["change_id:ASC", "id:DESC"],
+  },
+  changes_close_reason_id_idx: {
+    table: "changes",
+    unique: 0,
+    partial: 0,
+    keys: ["close_reason:ASC", "id:ASC"],
+  },
+  implementation_blockers_change_id_idx: {
+    table: "implementation_blockers",
+    unique: 0,
+    partial: 0,
+    keys: ["change_id:ASC", "id:ASC"],
+  },
+  implementation_blockers_unresolved_idx: {
+    table: "implementation_blockers",
+    unique: 1,
+    partial: 1,
+    keys: ["change_id:ASC"],
+    predicate: "WHERE resolution_content IS NULL",
+  },
+  implementation_decisions_change_id_idx: {
+    table: "implementation_decisions",
+    unique: 0,
+    partial: 0,
+    keys: ["change_id:ASC", "id:ASC"],
+  },
+  task_dependencies_prerequisite_idx: {
+    table: "task_dependencies",
+    unique: 0,
+    partial: 0,
+    keys: ["prerequisite_task_id:ASC", "dependent_task_id:ASC"],
+  },
+  task_reviews_active_idx: {
+    table: "task_reviews",
+    unique: 1,
+    partial: 1,
+    keys: ["task_id:ASC"],
+    predicate: "WHERE outcome IS NULL",
+  },
+  task_reviews_task_id_idx: {
+    table: "task_reviews",
+    unique: 0,
+    partial: 0,
+    keys: ["task_id:ASC", "id:DESC"],
+  },
+  tasks_state_id_idx: {
+    table: "tasks",
+    unique: 0,
+    partial: 0,
+    keys: ["state:ASC", "id:ASC"],
+  },
+  validation_runs_active_idx: {
+    table: "validation_runs",
+    unique: 0,
+    partial: 1,
+    keys: ["candidate_id:ASC", "id:DESC"],
+    predicate: "WHERE outcome IS NULL",
+  },
+  validation_runs_candidate_id_idx: {
+    table: "validation_runs",
+    unique: 0,
+    partial: 0,
+    keys: ["candidate_id:ASC", "id:DESC"],
+  },
+  validation_runs_passed_idx: {
+    table: "validation_runs",
+    unique: 0,
+    partial: 1,
+    keys: ["candidate_id:ASC", "id:DESC"],
+    predicate: "WHERE outcome = 'passed'",
+  },
+} as const;
+
+const expectStatementRejected = (
+  repository: RepositorySqlService,
+  operationName: string,
+  statement: string,
+) =>
+  Effect.gen(function* () {
+    const attempted = yield* Effect.either(
+      repository.operation(operationName, (sql) => sql.unsafe(statement)),
+    );
+    expect(attempted._tag, `${operationName} must be rejected`).toBe("Left");
+  });
 
 it.scoped("installs the exact first-release product schema from one baseline migration", () =>
   withTemporaryRepositoryState(() =>
@@ -136,28 +285,220 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       expect(tables.map((table) => table.name).sort()).toEqual(Object.keys(expectedColumns).sort());
       expect(tables).toHaveLength(18);
 
+      const tableList = yield* repository.operation("inspect strict table flags", (sql) =>
+        sql.unsafe<{ readonly name: string; readonly strict: number }>("PRAGMA table_list"),
+      );
+      expect(
+        tableList
+          .filter((table) => Object.hasOwn(expectedColumns, table.name))
+          .map((table) => `${table.name}:${table.strict}`)
+          .sort(),
+      ).toEqual(
+        Object.keys(expectedColumns)
+          .map((table) => `${table}:1`)
+          .sort(),
+      );
+
       for (const [table, expected] of Object.entries(expectedColumns)) {
         const columns = yield* repository.operation(`inspect ${table} columns`, (sql) =>
-          sql.unsafe<{ readonly name: string }>(`PRAGMA table_info(${table})`),
+          sql.unsafe<{
+            readonly name: string;
+            readonly type: string;
+            readonly notnull: number;
+            readonly dflt_value: unknown;
+            readonly pk: number;
+          }>(`PRAGMA table_info(${table})`),
         );
         expect(
-          columns.map((column) => column.name),
+          columns.every((column) => column.dflt_value === null),
+          table,
+        ).toBe(true);
+        expect(
+          columns.map((column) => `${column.name}:${column.type}:${column.notnull}:${column.pk}`),
           table,
         ).toEqual(expected);
       }
 
-      expect(
-        objects
-          .filter((object) => object.type === "index")
-          .map((index) => index.name)
-          .sort(),
-      ).toEqual([...expectedIndexes].sort());
+      for (const table of Object.keys(expectedColumns)) {
+        const foreignKeys = yield* repository.operation(`inspect ${table} foreign keys`, (sql) =>
+          sql.unsafe<{
+            readonly table: string;
+            readonly from: string;
+            readonly to: string;
+            readonly on_update: string;
+            readonly on_delete: string;
+            readonly match: string;
+          }>(`PRAGMA foreign_key_list(${table})`),
+        );
+        expect(
+          foreignKeys.map((key) => `${key.from}->${key.table}.${key.to}`).sort(),
+          table,
+        ).toEqual(
+          [...(expectedForeignKeys[table as keyof typeof expectedForeignKeys] ?? [])].sort(),
+        );
+        expect(
+          foreignKeys.every(
+            (key) =>
+              key.on_update === "NO ACTION" &&
+              key.on_delete === "NO ACTION" &&
+              key.match === "NONE",
+          ),
+          table,
+        ).toBe(true);
+      }
+
+      const namedIndexes = objects.filter((object) => object.type === "index");
+      expect(namedIndexes.map((index) => index.name).sort()).toEqual(
+        Object.keys(expectedIndexes).sort(),
+      );
+      for (const [name, expected] of Object.entries(expectedIndexes)) {
+        const listed = yield* repository.operation(`inspect ${name} flags`, (sql) =>
+          sql.unsafe<{ readonly name: string; readonly unique: number; readonly partial: number }>(
+            `PRAGMA index_list(${expected.table})`,
+          ),
+        );
+        expect(
+          listed.find((index) => index.name === name),
+          name,
+        ).toMatchObject({
+          unique: expected.unique,
+          partial: expected.partial,
+        });
+        const keys = yield* repository.operation(`inspect ${name} keys`, (sql) =>
+          sql.unsafe<{
+            readonly name: string | null;
+            readonly desc: number;
+            readonly key: number;
+          }>(`PRAGMA index_xinfo(${name})`),
+        );
+        expect(
+          keys
+            .filter((key) => key.key === 1)
+            .map((key) => `${key.name}:${key.desc === 1 ? "DESC" : "ASC"}`),
+          name,
+        ).toEqual(expected.keys);
+        const source = namedIndexes.find((index) => index.name === name)?.sql ?? "";
+        if ("predicate" in expected) {
+          expect(source.replace(/\s+/gu, " ")).toContain(expected.predicate);
+        } else {
+          expect(source.toUpperCase()).not.toContain(" WHERE ");
+        }
+      }
+
       expect(tables.every((table) => !table.sql?.includes("AUTOINCREMENT"))).toBe(true);
       expect(
         tables
           .filter((table) => table.name !== "agent_invocations")
           .every((table) => !table.sql?.match(/created_at|updated_at|closed_at|round_number/)),
       ).toBe(true);
+
+      const foreignKeysEnabled = yield* repository.operation(
+        "inspect foreign key enforcement",
+        (sql) => sql.unsafe<{ readonly foreign_keys: number }>("PRAGMA foreign_keys"),
+      );
+      expect(foreignKeysEnabled).toEqual([{ foreign_keys: 1 }]);
+
+      yield* repository.operation("create baseline constraint parents", (sql) =>
+        Effect.gen(function* () {
+          yield* sql.unsafe("INSERT INTO agent_sessions (id) VALUES (1)");
+          yield* sql.unsafe(
+            "INSERT INTO agent_continuations (id, agent_session_id, harness, model) VALUES (1, 1, 'pi', 'test')",
+          );
+          yield* sql.unsafe(
+            "INSERT INTO tasks (id, title, description, state) VALUES (1, 'Task', 'Intent', 'new')",
+          );
+          yield* sql.unsafe(
+            "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (1, 'refs/heads/change', 'refs/heads/main', 'https://example.test/repo.git', '/tmp/change', '{}', 0)",
+          );
+          yield* sql.unsafe(
+            "INSERT INTO candidates (id, change_id, base_commit, head_commit) VALUES (1, 1, 'base', 'head')",
+          );
+          yield* sql.unsafe(
+            "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (1, 1, '{}', 0)",
+          );
+        }),
+      );
+
+      yield* expectStatementRejected(
+        repository,
+        "reject unsafe integer",
+        "INSERT INTO agent_sessions (id) VALUES (9007199254740992)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject missing foreign key parent",
+        "INSERT INTO task_dependencies VALUES (1, 999)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Task lifecycle state",
+        "INSERT INTO tasks (id, title, description, state) VALUES (2, 'Task', 'Intent', 'unknown')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject inconsistent Task cancellation",
+        "INSERT INTO tasks (id, title, description, state, cancel_reason) VALUES (2, 'Task', 'Intent', 'new', 'reason')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject incomplete Task reviewer configuration",
+        "INSERT INTO tasks (id, title, description, state, reviewer_configuration) VALUES (2, 'Task', 'Intent', 'new', '{}')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Task Review outcome",
+        "INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, outcome, findings, cleanup_pending) VALUES (1, 1, '{}', '[]', 'main', 'head', 'unknown', '[]', 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Task Review cleanup flag",
+        "INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, findings, cleanup_pending) VALUES (1, 1, '{}', '[]', 'main', 'head', '[]', 2)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject inconsistent Change closure",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, close_reason, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'completed', 'reason', 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Change cleanup flag",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 2)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject unsettled invocation settlement kind",
+        "INSERT INTO agent_invocations (id, continuation_id, created_at, settlement_kind) VALUES (1, 1, 'now', 'returned')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject partial Agent token usage",
+        "INSERT INTO agent_invocations (id, continuation_id, created_at, input_tokens) VALUES (1, 1, 'now', 1)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject negative Agent token usage",
+        "INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, total_tokens) VALUES (1, 1, 'now', 'later', 'returned', -1, 0, 0, 0, 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Validation Run outcome",
+        "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, outcome, cleanup_pending) VALUES (2, 1, '{}', 'unknown', 0)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Validation Run cleanup flag",
+        "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (2, 1, '{}', 2)",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject invalid Validation Phase outcome",
+        "INSERT INTO validation_phase_results (validation_run_id, phase, producer, outcome, findings, artifacts) VALUES (1, 'check', 'test', 'unknown', '[]', '[]')",
+      );
+      yield* expectStatementRejected(
+        repository,
+        "reject nonpositive pull request number",
+        "INSERT INTO github_publications (change_id, candidate_id, validation_run_id, pull_request_number) VALUES (1, 1, 1, 0)",
+      );
 
       const migrations = yield* repository.operation(
         "inspect migration ledger",

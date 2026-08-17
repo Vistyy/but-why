@@ -43,7 +43,6 @@ export type TaskReviewRecord = {
   readonly taskId: string;
   readonly proposal: TaskReviewProposal;
   readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
-  readonly policy?: TaskReviewPolicySnapshot;
   readonly baseRef: string;
   readonly baseCommit: string;
   readonly workspacePath: string;

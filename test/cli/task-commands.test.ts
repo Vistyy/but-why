@@ -50,7 +50,7 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   taskId: "BY-1",
   proposal: { title: "Inspect task", description: "Description", dependencyIds: [] },
   dependencyEvidence: [],
-  policy: {
+  reviewerConfiguration: {
     profile: {
       agentProfile: "review",
       scope: "global",

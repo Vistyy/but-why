@@ -64,7 +64,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence().pipe(
+    openSqliteTaskReviewPersistence(context.mainCheckoutRoot).pipe(
       Effect.flatMap((persistence) =>
         use({
           getById: persistence.getById,
@@ -100,7 +100,7 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence().pipe(
+    openSqliteTaskReviewPersistence(context.mainCheckoutRoot).pipe(
       Effect.flatMap((persistence) =>
         use({
           abandon: (reviewId, reason, now) =>
@@ -147,7 +147,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
   if (!reuseRuntime.ok) return Effect.succeed(reuseRuntime);
   return reuseRuntime.runtime
     .provide(
-      openSqliteTaskReviewPersistence().pipe(
+      openSqliteTaskReviewPersistence(reuseRuntime.runtime.context.mainCheckoutRoot).pipe(
         Effect.flatMap((persistence) => persistence.reuseJudgment(input.taskId, input.now)),
       ),
     )
@@ -185,8 +185,8 @@ const submitFreshTaskReview = <A, E, R>(
     return use(resolved).pipe(Effect.map((value) => ({ ok: true as const, value })));
   return loaded.runtime.provide(
     Effect.all({
-      admission: openSqliteTaskChangeReviewAdmissionPersistence(),
-      persistence: openSqliteTaskReviewPersistence(),
+      admission: openSqliteTaskChangeReviewAdmissionPersistence(context.mainCheckoutRoot),
+      persistence: openSqliteTaskReviewPersistence(context.mainCheckoutRoot),
       agentPersistence: openSqliteAgentSessionPersistence(),
     }).pipe(
       Effect.flatMap(({ admission, persistence, agentPersistence }) =>

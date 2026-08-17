@@ -22,7 +22,8 @@ const taskReviewPolicyFixture = {
 
 export const passTaskReviewFixture = (taskId: PublicTaskId, now: string) =>
   Effect.gen(function* () {
-    const reviews = yield* openSqliteTaskReviewPersistence();
+    const repository = yield* RepositorySql;
+    const reviews = yield* openSqliteTaskReviewPersistence(repository.commonDirectory);
     const admitted = yield* reviews.admit({
       taskId,
       policy: taskReviewPolicyFixture,

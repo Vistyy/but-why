@@ -13,6 +13,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { runTestProcess } from "../support/testProcess.js";
@@ -284,6 +285,63 @@ describe("release package boundary", () => {
           packedFiles.has(`dist/${target.slice(2)}`),
       ),
     ).toBe(true);
+  });
+
+  it.effect("initializes the release baseline through the installed executable", () => {
+    const repositoryRoot = createGitRepo();
+    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+    expect(JSON.parse(initialized.stdout)).toMatchObject({ init: { status: "initialized" } });
+
+    const listed = runTestProcess(bin, ["task", "list"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(listed.status, listed.stderr || listed.stdout).toBe(0);
+    expect(JSON.parse(listed.stdout)).toMatchObject({ tasks: [] });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const migrations = yield* repository.operation(
+          "inspect installed migration ledger",
+          (sql) =>
+            sql<{ readonly migrationId: number }>`
+            SELECT migration_id AS migrationId
+            FROM effect_sql_migrations
+            ORDER BY migration_id
+          `,
+        );
+        expect(migrations).toEqual([{ migrationId: 1 }]);
+
+        const tables = yield* repository.operation(
+          "inspect installed product tables",
+          (sql) =>
+            sql<{ readonly name: string }>`
+            SELECT name FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name NOT LIKE 'effect_sql_%'
+            ORDER BY name
+          `,
+        );
+        expect(tables).toHaveLength(18);
+        expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
+        expect(tables.map(({ name }) => name)).toContain("validation_runs");
+      }).pipe(
+        Effect.provide(
+          repositorySqlLayer({
+            commonDirectory: join(repositoryRoot, ".git"),
+            statePath: join(repositoryRoot, ".git", "but-why", "state.sqlite"),
+            lifecycle: "open",
+          }),
+        ),
+      ),
+    );
   });
 
   it.effect(

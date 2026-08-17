@@ -32,9 +32,7 @@ export const taskReviewView = (
   dependencyEvidence: review.dependencyEvidence,
   reviewerConfiguration:
     review.reviewerConfiguration === undefined
-      ? review.policy === undefined
-        ? null
-        : taskReviewPolicyView(review.policy)
+      ? null
       : taskReviewPolicyView(review.reviewerConfiguration),
   reviewBase: { ref: review.baseRef, commit: review.baseCommit },
   workspace: {

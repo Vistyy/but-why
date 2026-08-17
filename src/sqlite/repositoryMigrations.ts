@@ -8,4 +8,6 @@ export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord(migrations),
 });
 
-export const repositoryMigrationIds: readonly number[] = [1];
+export const repositoryMigrationIds: readonly number[] = Object.keys(migrations)
+  .map((key) => Number(key.slice(0, key.indexOf("_"))))
+  .sort((left, right) => left - right);

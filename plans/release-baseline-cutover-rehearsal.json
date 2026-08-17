@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "rehearsal": {
+    "repository": "/tmp/by-cutover-rehearsal.fccQ8K",
+    "completedAtUtc": "2026-08-17T19:51:49Z",
+    "oldExecutable": {
+      "sourceCommit": "10bdce30c94c1d3510b061c7d75f0206328a2494",
+      "entrypoint": "/tmp/by-old-bundle.4saLDf/bin/by",
+      "mainSha256": "33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc",
+      "verification": {
+        "command": "sha256sum /tmp/by-old-bundle.4saLDf/dist/main.js",
+        "exitCode": 0,
+        "stdout": "33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc  /tmp/by-old-bundle.4saLDf/dist/main.js"
+      }
+    },
+    "steps": [
+      {
+        "name": "exact old-bundle reconciliation",
+        "command": "BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-rehearsal.fccQ8K /tmp/by-old-bundle.4saLDf/bin/by change reconcile BY-C1",
+        "exitCode": 0,
+        "committedResult": {
+          "changeId": "BY-C1",
+          "state": "closed",
+          "closeReason": "completed",
+          "cleanup": "complete"
+        },
+        "persistedVerification": "The archived changes row has state=closed, close_reason=completed, cleanup_state=complete, and cleanup_blocking_reason=NULL."
+      },
+      {
+        "name": "complete archive integrity",
+        "command": "cd /tmp/by-cutover-rehearsal.fccQ8K/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
+        "exitCode": 0,
+        "stdout": "./archive-metadata.txt: OK\n./git-common-but-why/execution-locks/change_submission/BY-C1.sqlite: OK\n./git-common-but-why/state.sqlite: OK\n./INSPECTING.md: OK",
+        "persistedVerification": {
+          "archiveTimeUtc": "2026-08-17T19:51:33Z",
+          "repositoryCommonDirectory": "/tmp/by-cutover-rehearsal.fccQ8K/.git",
+          "repositoryMainCommit": "a4e446c8f5dbff3dbf114cbaf0885ce49256a74b",
+          "migrationIds": {
+            "minimum": 1,
+            "maximum": 43,
+            "count": 43
+          }
+        }
+      },
+      {
+        "name": "fresh release initialization",
+        "command": "just by init --id-prefix BY",
+        "cwd": "/tmp/by-cutover-rehearsal.fccQ8K",
+        "exitCode": 0,
+        "persistedVerification": {
+          "productTableCount": 18,
+          "migrationIds": [1],
+          "oldChangeCount": 0
+        }
+      },
+      {
+        "name": "failure before new work and old-state restoration",
+        "failureCommand": "just by task list",
+        "failureExitCode": 1,
+        "failure": "An injected unknown migration ID was rejected before state was changed.",
+        "restorationVerificationCommand": "BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-rehearsal.fccQ8K /tmp/by-old-bundle.4saLDf/bin/by change show BY-C1",
+        "restorationVerificationExitCode": 0,
+        "restorationVerification": "The exact old executable read BY-C1 as closed and completed from the restored archive copy."
+      },
+      {
+        "name": "failure after new work and forward repair",
+        "newWorkCommand": "just by task create --title 'Post-cutover task' --file -",
+        "newWorkStdin": "Exercise forward repair after recording new work.\n",
+        "newWorkExitCode": 0,
+        "failureCommand": "just by task list",
+        "failureExitCode": 1,
+        "failure": "An induced shared-state repository identity mismatch was rejected.",
+        "repairVerificationCommand": "just by task show BY-1",
+        "repairVerificationExitCode": 0,
+        "persistedVerification": {
+          "task": {
+            "id": "BY-1",
+            "state": "new"
+          },
+          "productTableCount": 18,
+          "migrationIds": [1],
+          "oldChangeCount": 0
+        }
+      }
+    ],
+    "finalArchiveIntegrity": {
+      "command": "cd /tmp/by-cutover-rehearsal.fccQ8K/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
+      "exitCode": 0,
+      "result": "Every archived checksum remained valid after both recovery exercises."
+    }
+  }
+}

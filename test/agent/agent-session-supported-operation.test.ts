@@ -70,7 +70,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
     const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence();
+        const reviews = yield* openSqliteTaskReviewPersistence(root);
         const agents = yield* openSqliteAgentSessionPersistence();
         const created = yield* tasks.createTask({
           title: "Real Agent Session sentinel",
