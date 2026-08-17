@@ -192,9 +192,7 @@ const deleteBranchOwnershipRef = (
   branchRef: string,
 ): ChangeCleanupResult | undefined => {
   const ownershipRef = changeBranchOwnershipRef(branchRef);
-  if (ownershipRef === undefined) {
-    return { state: "pending", blockingReason: "branch_ref_invalid" };
-  }
+  if (ownershipRef === undefined) return undefined;
   return git(repositoryCommonDirectory, ["update-ref", "--no-deref", "-d", ownershipRef]).ok
     ? undefined
     : { state: "pending", blockingReason: "branch_deletion_failed" };
