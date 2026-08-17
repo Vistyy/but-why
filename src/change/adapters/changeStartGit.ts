@@ -146,16 +146,9 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
-  }
-  if (recovering) {
-    return {
-      ok: false,
-      code: "managed_branch_missing",
-      branch: start.branchRef,
-      path: start.worktreePath,
-      startingCommit: start.startingCommit,
-    };
+    return recovering && branchCommit === start.startingCommit
+      ? { ok: true }
+      : { ok: false, code: "change_start_conflict" };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);

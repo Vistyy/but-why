@@ -110,25 +110,4 @@ describe("Change lifecycle CLI results", () => {
       "prepareFailure",
     );
   });
-
-  it("keeps Task ID out of linked Change Prepare recovery errors", () => {
-    const prepared = prepareResult({
-      ok: false,
-      code: "managed_branch_missing",
-      branch: change().branchRef,
-      path: change().worktreePath,
-      startingCommit: change().startingCommit,
-      change: change(),
-    });
-    expect(prepared).toMatchObject({
-      exitCode: 1,
-      stdout: {
-        help: [
-          expect.stringContaining("by change prepare change-1"),
-          expect.stringContaining("by change cancel change-1"),
-        ],
-      },
-    });
-    expect(JSON.stringify(prepared.stdout)).not.toContain("BY-197");
-  });
 });

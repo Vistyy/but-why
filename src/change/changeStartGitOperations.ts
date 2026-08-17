@@ -41,13 +41,6 @@ export type ProvisionChangeWorktreeResult =
     }
   | {
       readonly ok: false;
-      readonly code: "managed_branch_missing";
-      readonly branch: string;
-      readonly path: string;
-      readonly startingCommit: string;
-    }
-  | {
-      readonly ok: false;
       readonly code: "managed_branch_attached";
       readonly branch: string;
       readonly path: string;

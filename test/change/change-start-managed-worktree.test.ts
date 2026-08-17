@@ -294,90 +294,41 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect(
-    "reports an actionable sibling-path failure and then stops recovery while the branch is missing",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* repositoryCopy();
-        const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-        yield* passTaskReviewFixture(root, taskId, now);
-        const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
-        writeFileSync(siblingRoot, "occupied\n");
-
-        const failed = yield* runByInProcessEffect(
-          root,
-          ["change", "start", "--task", taskId],
-          now,
-        );
-
-        expect(failed.status).toBe(1);
-        const failure = JSON.parse(failed.stdout);
-        expect(failure).toMatchObject({
-          error: {
-            code: "managed_worktree_path_unavailable",
-            changeId: expect.any(String),
-            worktreePath: expect.stringMatching(
-              new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "BY-C"))}[1-9][0-9]*$`, "u"),
-            ),
-          },
-          help: [
-            expect.stringContaining("Make the parent directory writable"),
-            expect.stringContaining("suitable ownership"),
-            expect.stringContaining("Move the repository to a writable parent"),
-          ],
-        });
-
-        rmSync(siblingRoot);
-        const retried = yield* runByInProcessEffect(
-          root,
-          ["change", "start", "--task", taskId],
-          now,
-        );
-        expect(retried.status).toBe(1);
-        const retryFailure = JSON.parse(retried.stdout);
-        expect(retryFailure).toMatchObject({
-          error: {
-            code: "managed_branch_missing",
-            changeId: failure.error.changeId,
-            worktreePath: failure.error.worktreePath,
-          },
-          help: [
-            expect.stringContaining("Recover the branch externally"),
-            expect.stringContaining(`by task cancel ${taskId}`),
-          ],
-        });
-        expect(existsSync(failure.error.worktreePath)).toBe(false);
-      }),
-  );
-
-  it.effect("recovers the Managed Worktree at the recorded branch's advanced commit", () =>
+  it.effect("recovers after an actionable sibling-path failure", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
-      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
-      expect(started.status).toBe(0);
-      const output = JSON.parse(started.stdout) as ChangeOutput;
-      writeFileSync(join(output.worktreePath, "advanced.txt"), "preserve this commit\n");
-      git(output.worktreePath, "add", "advanced.txt");
-      git(output.worktreePath, "commit", "-m", "Advanced commit");
-      const advancedCommit = git(output.worktreePath, "rev-parse", "HEAD^{commit}");
-      expect(advancedCommit).not.toBe(output.startingCommit);
+      const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
+      yield* passTaskReviewFixture(root, taskId, now);
+      const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
+      writeFileSync(siblingRoot, "occupied\n");
 
-      git(root, "worktree", "remove", output.worktreePath);
+      const failed = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
 
-      const recovered = yield* runByInProcessEffect(
+      expect(failed.status).toBe(1);
+      const failure = JSON.parse(failed.stdout);
+      expect(failure).toMatchObject({
+        error: {
+          code: "managed_worktree_path_unavailable",
+          changeId: expect.any(String),
+          worktreePath: expect.stringMatching(
+            new RegExp(`^${escapeRegExp(join(siblingRoot, "but-why", "BY-C"))}[1-9][0-9]*$`, "u"),
+          ),
+        },
+        help: [
+          expect.stringContaining("Make the parent directory writable"),
+          expect.stringContaining("suitable ownership"),
+          expect.stringContaining("Move the repository to a writable parent"),
+        ],
+      });
+
+      rmSync(siblingRoot);
+      const retried = yield* runByInProcessEffect(
         root,
-        ["change", "prepare", output.change.id],
+        ["change", "prepare", failure.error.changeId],
         now,
       );
-      expect(recovered.status).toBe(0);
-      expect(JSON.parse(recovered.stdout)).toMatchObject({
-        change: { id: output.change.id },
-        worktreePath: output.worktreePath,
-      });
-      expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
-      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(advancedCommit);
-      expect(existsSync(join(output.worktreePath, "advanced.txt"))).toBe(true);
-      expect(git(root, "rev-parse", output.branch)).toBe(advancedCommit);
+      expect(retried.status).toBe(0);
+      expect(existsSync(failure.error.worktreePath)).toBe(true);
     }),
   );
 
@@ -419,22 +370,13 @@ describe("Change Start Managed Worktree boundaries", () => {
         ["change", "prepare", output.change.id],
         now,
       );
-      expect(recovered.status).toBe(1);
+      expect(recovered.status).toBe(0);
       expect(JSON.parse(recovered.stdout)).toMatchObject({
-        error: {
-          code: "managed_branch_missing",
-          changeId: output.change.id,
-          branch: output.branch,
-          startingCommit: output.startingCommit,
-          worktreePath: output.worktreePath,
-        },
-        help: [
-          expect.stringContaining("Recover the branch externally"),
-          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
-        ],
+        change: { id: output.change.id },
+        worktreePath: output.worktreePath,
       });
-      expect(git(root, "branch", "--list", output.branch.slice("refs/heads/".length))).toBe("");
-      expect(existsSync(output.worktreePath)).toBe(false);
+      expect(git(root, "rev-parse", output.branch)).toBe(output.startingCommit);
+      expect(existsSync(output.worktreePath)).toBe(true);
     }),
   );
 
