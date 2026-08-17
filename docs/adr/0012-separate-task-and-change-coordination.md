@@ -33,7 +33,8 @@ Change-only inspection and delivery do not expose Task identity.
 
 Task inspection obtains its Change activity through the joined coordination projection.
 
-The first supported relationship remains one Task to one Change and uses the current string identifiers.
+The first supported relationship remains one Task to one Change and stores only their internal integer identities.
+Public Task and Change IDs derive from the immutable repository ID Prefix.
 
 The prerelease schema change is an immutable forward migration that copies existing valid links and rejects a linked Change without Acceptance Context.
 

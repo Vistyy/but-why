@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -86,7 +86,7 @@ exit 1
           ...baseEnv,
           BY_FAKE_CAPTURE: capture,
           BY_FAKE_WORKTREE: fixture.worktreePath,
-          BY_FAKE_SESSION: `change-${fixture.id.slice(0, 8)}`,
+          BY_FAKE_SESSION: fixture.id,
         };
 
         const piped = runBuiltByWithInput(
@@ -110,7 +110,7 @@ exit 1
     () =>
       Effect.gen(function* () {
         const root = createInitializedRepo();
-        const changeId = randomUUID();
+        const changeId = "BY-C1";
         yield* withTestRepository(
           root,
           Effect.gen(function* () {
@@ -122,7 +122,7 @@ exit 1
                 id, repository_common_directory, branch_ref, state,
                 close_reason, created_at, updated_at, closed_at
               ) VALUES
-                (${changeId}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+                (${internalChangeId(changeId, "BY")}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
             `,
             );
           }),

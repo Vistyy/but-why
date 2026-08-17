@@ -161,12 +161,12 @@ describe("by CLI", () => {
   it.effect("initializes the Git work tree root and renders setup decisions", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const result = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(parseOutput(result.stdout)).toEqual({
-        init: { status: "initialized", root, taskPrefix: "BY" },
+        init: { status: "initialized", root, idPrefix: "BY" },
         created: [
           ".but-why/config.json",
           "<git-common-dir>/but-why/state.sqlite",
@@ -192,7 +192,7 @@ describe("by CLI", () => {
         },
       });
       expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
-        taskPrefix: "BY",
+        idPrefix: "BY",
       });
       expect(existsSync(sharedStatePath(root))).toBe(true);
       expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
@@ -206,7 +206,7 @@ describe("by CLI", () => {
       const subdirectory = join(root, "packages/app");
       mkdirSync(subdirectory, { recursive: true });
 
-      const result = yield* runByInProcessEffect(subdirectory, ["init", "--task-prefix", "BY"]);
+      const result = yield* runByInProcessEffect(subdirectory, ["init", "--id-prefix", "BY"]);
 
       expect(result.status).toBe(0);
       expect(parseOutput(result.stdout)).toMatchObject({ init: { root } });
@@ -218,15 +218,15 @@ describe("by CLI", () => {
   it.effect("renders repaired initialization artifacts", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      expect((yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
+      expect((yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"])).status).toBe(0);
       rmSync(sharedStatePath(root));
       rmSync(join(root, ".but-why/reviewers"), { recursive: true });
 
-      const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const result = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
 
       expect(result.status).toBe(0);
       expect(parseOutput(result.stdout)).toMatchObject({
-        init: { status: "repaired", root, taskPrefix: "BY" },
+        init: { status: "repaired", root, idPrefix: "BY" },
         created: ["<git-common-dir>/but-why/state.sqlite", ".but-why/reviewers/"],
       });
     }),
@@ -236,7 +236,7 @@ describe("by CLI", () => {
     Effect.gen(function* () {
       const outsideGit = yield* runByInProcessEffect(createTestWorkspace(), [
         "init",
-        "--task-prefix",
+        "--id-prefix",
         "BY",
       ]);
       expect(outsideGit.status).toBe(1);
@@ -246,32 +246,32 @@ describe("by CLI", () => {
 
       const invalidPrefix = yield* runByInProcessEffect(createGitRepo(), [
         "init",
-        "--task-prefix",
+        "--id-prefix",
         "by",
       ]);
       expect(invalidPrefix.status).toBe(2);
       expect(parseOutput(invalidPrefix.stdout)).toMatchObject({
-        error: { code: "invalid_task_prefix", taskPrefix: "by" },
+        error: { code: "invalid_id_prefix", idPrefix: "by" },
       });
 
       const conflictRoot = createGitRepo();
       expect(
-        (yield* runByInProcessEffect(conflictRoot, ["init", "--task-prefix", "OLD"])).status,
+        (yield* runByInProcessEffect(conflictRoot, ["init", "--id-prefix", "OLD"])).status,
       ).toBe(0);
-      const conflict = yield* runByInProcessEffect(conflictRoot, ["init", "--task-prefix", "BY"]);
+      const conflict = yield* runByInProcessEffect(conflictRoot, ["init", "--id-prefix", "BY"]);
       expect(conflict.status).toBe(1);
       expect(parseOutput(conflict.stdout)).toMatchObject({
         error: {
-          code: "task_prefix_conflict",
-          existingTaskPrefix: "OLD",
-          requestedTaskPrefix: "BY",
+          code: "id_prefix_conflict",
+          existingIdPrefix: "OLD",
+          requestedIdPrefix: "BY",
         },
       });
 
       const malformedRoot = createGitRepo();
       mkdirSync(join(malformedRoot, ".but-why"));
       writeFileSync(join(malformedRoot, ".but-why/config.json"), "{");
-      const malformed = yield* runByInProcessEffect(malformedRoot, ["init", "--task-prefix", "BY"]);
+      const malformed = yield* runByInProcessEffect(malformedRoot, ["init", "--id-prefix", "BY"]);
       expect(malformed.status).toBe(1);
       expect(parseOutput(malformed.stdout)).toMatchObject({
         error: { code: "invalid_repo_config", diagnostics: [{ path: [], expected: "valid JSON" }] },

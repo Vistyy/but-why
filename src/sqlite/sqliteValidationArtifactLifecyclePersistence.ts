@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ValidationArtifactLifecyclePort } from "../change/validation/changeValidationPorts.js";
 
 import { RepositorySql } from "./repositorySql.js";
@@ -13,18 +14,18 @@ export const openSqliteValidationArtifactLifecyclePort = () =>
     (repository): ValidationArtifactLifecyclePort => ({
       listRunIdsForChange: (changeId) =>
         repository.transaction("list Candidate Validation Run IDs", (sql) =>
-          listRunIdsForChange(sql, changeId),
+          listRunIdsForChange(sql, changeId, repository.idPrefix),
         ),
     }),
   );
 
-const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
+const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<{
       readonly runId: string;
       readonly runCandidateId: string;
       readonly candidateId: string;
-      readonly candidateChangeId: string;
+      readonly candidateChangeId: number;
       readonly createdAt: string;
     }>`
       SELECT run.id AS runId, run.candidate_id AS runCandidateId,
@@ -32,7 +33,7 @@ const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
         run.created_at AS createdAt
       FROM candidates AS candidate
       JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
-      WHERE candidate.change_id = ${changeId}
+      WHERE candidate.change_id = ${internalChangeId(changeId, idPrefix)}
     `;
     return yield* decodePersisted("list Candidate Validation Run IDs", () =>
       rows
@@ -41,7 +42,10 @@ const listRunIdsForChange = (sql: SqlClient.SqlClient, changeId: string) =>
           const runCandidateId = row.runCandidateId;
           const candidateId = row.candidateId;
           const candidateChangeId = row.candidateChangeId;
-          if (runCandidateId !== candidateId || candidateChangeId !== changeId) {
+          if (
+            runCandidateId !== candidateId ||
+            publicChangeId(idPrefix, candidateChangeId) !== changeId
+          ) {
             throw new Error("Validation Run cleanup relationship is inconsistent");
           }
           return {

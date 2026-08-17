@@ -7,6 +7,7 @@ export type TaskIdParseErrorCode =
   | "empty_task_id"
   | "task_id_has_whitespace"
   | "task_id_has_control"
+  | "task_id_invalid_shape"
   | "task_id_too_long";
 
 export type PublicTaskIdParseResult =
@@ -27,11 +28,15 @@ export type PublicTaskIdParseResult =
 const maxTaskIdLength = 256;
 const maxTaskSlugReadableLength = 48;
 const taskSlugHashLength = 12;
-const publicTaskIdShapePattern = /^[A-Z][A-Z0-9]*-[1-9][0-9]*$/;
+const publicTaskIdShapePattern = /^[A-Z][A-Z0-9]*-([1-9][0-9]*)$/;
 const unsafeSlugCharacterPattern = /[^a-z0-9]+/g;
 
-export const hasPublicTaskIdShape = (value: string): boolean =>
-  publicTaskIdShapePattern.test(value);
+export const hasPublicTaskIdShape = (value: string): boolean => {
+  const match = publicTaskIdShapePattern.exec(value);
+  if (match?.[1] === undefined) return false;
+  const internalId = Number(match[1]);
+  return Number.isSafeInteger(internalId) && internalId >= 1;
+};
 
 export const parsePublicTaskId = (value: string): PublicTaskIdParseResult => {
   if (value.trim().length === 0) {
@@ -50,6 +55,10 @@ export const parsePublicTaskId = (value: string): PublicTaskIdParseResult => {
     return { ok: false, code: "task_id_too_long", maxLength: maxTaskIdLength };
   }
 
+  if (!hasPublicTaskIdShape(value)) {
+    return { ok: false, code: "task_id_invalid_shape" };
+  }
+
   return { ok: true, taskId: brandPublicTaskId(value) };
 };
 
@@ -63,17 +72,19 @@ export const publicTaskId = (value: string): PublicTaskId => {
   return parsed.taskId;
 };
 
-export const generatedPublicTaskId = (prefix: string, numericId: number): PublicTaskId =>
-  publicTaskId(`${prefix}-${numericId}`);
-
-export const storedPublicTaskId = (value: string): PublicTaskId => {
-  const parsed = parsePublicTaskId(value);
-
-  if (!parsed.ok) {
-    throw new Error("Invalid stored Task ID");
+export const publicTaskIdFromInternal = (internalId: number, idPrefix: string): PublicTaskId => {
+  if (!Number.isSafeInteger(internalId) || internalId < 1) {
+    throw new Error("Invalid internal Task identity");
   }
+  return brandPublicTaskId(`${idPrefix}-${internalId}`);
+};
 
-  return parsed.taskId;
+export const internalTaskId = (value: PublicTaskId | string, idPrefix: string): number => {
+  const match = new RegExp(`^${idPrefix}-([1-9][0-9]*)$`, "u").exec(value);
+  const id = match?.[1] === undefined ? Number.NaN : Number(match[1]);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw new Error("Task ID does not belong to this repository");
+  return id;
 };
 
 export const taskSlugForId = (taskId: PublicTaskId): TaskSlug => {

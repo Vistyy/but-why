@@ -1,5 +1,5 @@
 {
-  "taskPrefix": "BY",
+  "idPrefix": "BY",
   "agentEnvironment": {
     "command": ["nix", "develop", "-c", "pnpm", "exec"]
   },

@@ -203,11 +203,11 @@ const submitFreshTaskReview = <A, E, R>(
               return { ok: false, message: `Repo Config is missing at Review Base ${commit}.` };
             const decoded = decodeRepoConfigSource(source.content);
             if (!decoded.ok) return { ok: false, message: decoded.error.message };
-            return decoded.config.taskPrefix === context.taskPrefix
+            return decoded.config.idPrefix === context.idPrefix
               ? decoded
               : {
                   ok: false,
-                  message: `Repo Config taskPrefix at Review Base is ${decoded.config.taskPrefix}; expected ${context.taskPrefix}.`,
+                  message: `Repo Config idPrefix at Review Base is ${decoded.config.idPrefix}; expected ${context.idPrefix}.`,
                 };
           },
           resolvePolicy: (repoConfig, commit) => {

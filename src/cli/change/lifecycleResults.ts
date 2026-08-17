@@ -148,17 +148,6 @@ const operationalError = (
           startingCommit: change.startingCommit,
           worktreePath: change.worktreePath,
         };
-  if (code === "managed_branch_missing") {
-    return runtimeError({
-      code,
-      message: "The recorded Repository Branch is missing.",
-      details: identityDetails,
-      help: [
-        `Recover the branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
-        cancelChangeHelp(change, taskId, context),
-      ],
-    });
-  }
   if (code === "managed_branch_attached") {
     return runtimeError({
       code,
@@ -169,6 +158,17 @@ const operationalError = (
       },
       help: [
         `Remove or relocate the worktree that holds the branch, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+        cancelChangeHelp(change, taskId, context),
+      ],
+    });
+  }
+  if (code === "managed_branch_missing") {
+    return runtimeError({
+      code,
+      message: "The recorded Repository Branch is missing.",
+      details: identityDetails,
+      help: [
+        `Recover the recorded branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
         cancelChangeHelp(change, taskId, context),
       ],
     });

@@ -33,8 +33,8 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
         repository.operation("reject a wrong Task storage class", (sql) =>
           sql.unsafe(`
             INSERT INTO tasks (
-              id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
-            ) VALUES ('BY-1', 1, X'00', 'Description', 'new', NULL, 'now', 'now')
+              id, title, description, state, cancel_reason, created_at, updated_at
+            ) VALUES (1, X'00', 'Description', 'new', NULL, 'now', 'now')
           `),
         ),
       );
@@ -44,7 +44,7 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
             INSERT INTO changes (
               id, repository_common_directory, branch_ref, state,
               created_at, updated_at, prepare_command
-            ) VALUES ('change-1', '/repo/.git', 'refs/heads/change-1', 'open', 'now', 'now', 'prepare')
+            ) VALUES (1, '/repo/.git', 'refs/heads/change-1', 'open', 'now', 'now', 'prepare')
           `),
         ),
       );
@@ -55,7 +55,7 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
               id, repository_common_directory, branch_ref, state,
               created_at, updated_at, cancel_reason
             ) VALUES (
-              'change-cancel-reason', '/repo/.git', 'refs/heads/change-cancel-reason',
+              1, '/repo/.git', 'refs/heads/change-cancel-reason',
               'open', 'now', 'now', 'reason'
             )
           `),
@@ -67,7 +67,7 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
             INSERT INTO changes (
               id, repository_common_directory, branch_ref, state, created_at, updated_at
             ) VALUES (
-              'change-invalid-state', '/repo/.git', 'refs/heads/invalid',
+              1, '/repo/.git', 'refs/heads/invalid',
               'invalid', 'now', 'now'
             )
           `),
@@ -86,7 +86,7 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
         repository.operation("reject a dangling Task dependency", (sql) =>
           sql.unsafe(`
             INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-            VALUES ('missing-dependent', 'missing-prerequisite')
+            VALUES (404, 405)
           `),
         ),
       );
@@ -95,12 +95,12 @@ it.scoped("enforces stable Shared Repository State facts in SQLite", () =>
           yield* sql.unsafe(`
             INSERT INTO changes (
               id, repository_common_directory, branch_ref, state, created_at, updated_at
-            ) VALUES ('change-reuse', '/repo/.git', 'refs/heads/change-reuse', 'open', 'now', 'now')
+            ) VALUES (1, '/repo/.git', 'refs/heads/change-reuse', 'open', 'now', 'now')
           `);
           yield* sql.unsafe(`
             INSERT INTO candidates (
               id, change_id, change_base_sha, head_sha, created_at
-            ) VALUES ('candidate-reuse', 'change-reuse', 'base', 'head', 'now')
+            ) VALUES ('candidate-reuse', 1, 'base', 'head', 'now')
           `);
           yield* sql.unsafe(`
             INSERT INTO candidate_validation_runs (

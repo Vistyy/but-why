@@ -12,7 +12,7 @@ export type LoadAbandonValidationRunResult =
       readonly ok: false;
       readonly error:
         | ResolveLocalRepositoryError
-        | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+        | { readonly code: "state_store_unavailable"; readonly idPrefix: string };
     };
 
 export const loadAbandonValidationRun = (input: {

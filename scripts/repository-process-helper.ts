@@ -6,7 +6,7 @@ import { Effect } from "effect";
 
 import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
-import { storedPublicTaskId } from "../src/task/taskId.js";
+import { publicTaskId } from "../src/task/taskId.js";
 
 const usage = `Usage: repositoryProcessHelper.ts <hold-lock|open-state|open-read> ...
 
@@ -37,17 +37,17 @@ type OpenStateInput = {
 
 const openState = async (input: OpenStateInput): Promise<number> => {
   const program = Effect.gen(function* () {
-    const tasks = yield* openSqliteTaskPersistence("BY");
+    const tasks = yield* openSqliteTaskPersistence();
     const created = yield* tasks.createTask({
       title: input.title,
       description: "Concurrent Shared Repository State initialization evidence.",
       now: "2026-07-17T22:45:00.000Z",
     });
     if (!created.ok) return { ok: false as const, code: created.code };
-    const stored = yield* tasks.getTaskById(storedPublicTaskId(created.task.id));
+    const stored = yield* tasks.getTaskById(publicTaskId(created.task.id));
     return {
       ok: true as const,
-      taskId: storedPublicTaskId(created.task.id),
+      taskId: created.task.id,
       found: stored !== undefined,
     };
   });

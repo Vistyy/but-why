@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { Effect } from "effect";
-
 import type { ChangePrepareFailure } from "../../src/change/change.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { internalTaskId } from "../../src/task/taskId.js";
 import { withTestRepository } from "./repository.js";
 
 export type ChangeImplementFixtureOptions = {
@@ -21,26 +20,27 @@ export const createChangeImplementFixture = (
   options: ChangeImplementFixtureOptions = {},
 ): Effect.Effect<{ readonly id: string; readonly worktreePath: string }, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const id = randomUUID();
-    const worktreePath = join(root, "fixture-worktrees", "but-why", `change-${id.slice(0, 8)}`);
+    const id = "BY-C1";
+    const worktreePath = join(root, "fixture-worktrees", "but-why", id);
     mkdirSync(join(worktreePath, ".but-why"), { recursive: true });
     writeFileSync(
       join(worktreePath, ".but-why", "config.json"),
-      `${JSON.stringify(options.managedRepoConfig ?? { taskPrefix: "BY" }, null, 2)}\n`,
+      `${JSON.stringify(options.managedRepoConfig ?? { idPrefix: "BY" }, null, 2)}\n`,
     );
     yield* withTestRepository(
       root,
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        if (options.taskId !== undefined) {
-          const numericId = Number(/[0-9]+$/u.exec(options.taskId)?.[0] ?? "1");
+        const taskId = options.taskId;
+        if (taskId !== undefined) {
+          const numericId = Number(/[0-9]+$/u.exec(taskId)?.[0] ?? "1");
           yield* repository.operation(
             "create Change Implement fixture Task for a Change linked to a Task",
             (sql) => sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, created_at, updated_at
+                id, title, description, state, created_at, updated_at
               ) VALUES (
-                ${options.taskId}, ${numericId},
+                ${numericId},
                 ${options.acceptanceContext?.title ?? "Fixture Task"},
                 ${options.acceptanceContext?.description ?? ""},
                 'todo', '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z'
@@ -57,7 +57,7 @@ export const createChangeImplementFixture = (
               prepare_command, prepare_timeout_seconds, prepare_failure,
               state, close_reason, created_at, updated_at, closed_at, cleanup_state
             ) VALUES (
-              ${id}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
+              ${internalChangeId(id, "BY")}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
               'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
               '18fca05273fefafb6a99d64e81d2b698d60e17a4', ${worktreePath},
               ${
@@ -78,12 +78,12 @@ export const createChangeImplementFixture = (
             )
           `,
         );
-        if (options.taskId !== undefined) {
+        if (taskId !== undefined) {
           yield* repository.operation(
             "link Change Implement fixture to its Task",
             (sql) => sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES (${options.taskId}, ${id})
+              VALUES (${internalTaskId(taskId, "BY")}, ${internalChangeId(id, "BY")})
             `,
           );
         }

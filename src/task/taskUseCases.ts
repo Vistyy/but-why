@@ -26,7 +26,7 @@ import type {
 } from "./taskStore.js";
 
 export type TaskUseCases = {
-  readonly taskPrefix: string;
+  readonly idPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly createTask: (
     input: CreateTaskInput,
@@ -87,7 +87,7 @@ export const openTaskUseCases = (
   context: LocalRepositoryContext,
   tasks: TaskPersistence,
 ): TaskUseCases => ({
-  taskPrefix: context.taskPrefix,
+  idPrefix: context.idPrefix,
   resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
   createTask: tasks.createTask,
   editTaskDependencies: (input) => tasks.editTaskDependencies(input),

@@ -1,6 +1,5 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
@@ -12,6 +11,7 @@ import {
   type CandidateValidationService,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -298,8 +298,8 @@ describe("Candidate validation", () => {
             repository.operation("install current Acceptance Context", (sql) =>
               Effect.gen(function* () {
                 yield* sql`
-                  INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-                  VALUES ('BY-1', 1, 'Validate the fixed Gate',
+                  INSERT INTO tasks (id, title, description, state, created_at, updated_at)
+                  VALUES (1, 'Validate the fixed Gate',
                     'Run each eligible phase in its fixed order.', 'todo', ${now}, ${now})
                 `;
                 yield* sql`
@@ -309,11 +309,11 @@ describe("Candidate validation", () => {
                     description: "Run each eligible phase in its fixed order.",
                   })}, base_remote_url = 'https://github.com/acme/repo.git',
                     starting_commit = ${captured.changeBaseSha}, worktree_path = ${mainCheckout}
-                  WHERE id = ${captured.changeId}
+                  WHERE id = ${internalChangeId(captured.changeId, "BY")}
                 `;
                 yield* sql`
                   INSERT INTO task_change_links (task_id, change_id)
-                  VALUES ('BY-1', ${captured.changeId})
+                  VALUES (1, ${internalChangeId(captured.changeId, "BY")})
                 `;
               }),
             ),

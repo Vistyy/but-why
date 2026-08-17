@@ -17,6 +17,7 @@ import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const sourceNow = "2026-06-30T12:00:00.000Z";
+const pinnedIdentityPredecessor = "094761dbbab1d00a9512f2e0abbe245bffa3d395";
 
 const prepareSourceRepository = () => {
   const main = createTestWorkspace();
@@ -33,14 +34,14 @@ const prepareSourceRepository = () => {
   git(main, "config", "user.name", "But Why Test");
   git(main, "config", "user.email", "but-why@example.test");
   git(main, "branch", "-M", "main");
-  const initialized = runTestProcess("just", ["by", "init", "--task-prefix", "BY"], {
+  const initialized = runTestProcess("just", ["by", "init", "--id-prefix", "BY"], {
     cwd: main,
   });
   expect(initialized.status).toBe(0);
   writeFileSync(
     join(main, ".but-why/config.json"),
     `${JSON.stringify({
-      taskPrefix: "BY",
+      idPrefix: "BY",
       interactiveSession: { agentProfile: { scope: "repo", name: "implementation" } },
       agentProfiles: {
         implementation: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
@@ -103,7 +104,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
 
 test("source Change operations ignore a future Managed Worktree Repo Config", () => {
   const { main, candidate } = prepareSourceRepository();
-  const changeId = "11111111-1111-4111-8111-111111111111";
+  const changeId = "BY-C1";
   const head = git(candidate, "rev-parse", "HEAD");
   const database = new DatabaseSync(join(main, ".git/but-why/state.sqlite"));
   try {
@@ -117,7 +118,7 @@ test("source Change operations ignore a future Managed Worktree Repo Config", ()
         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'open', NULL, ?, ?, NULL, 'complete')
       `)
       .run(
-        changeId,
+        1,
         join(main, ".git"),
         "refs/heads/candidate",
         "refs/remotes/origin/main",
@@ -167,7 +168,7 @@ test("source Change operations ignore a future Managed Worktree Repo Config", ()
     herdr,
     `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
-  printf '{"result":{"type":"agent_list","agents":[{"name":"change-${changeId.slice(0, 8)}","cwd":"${candidate}","pane_id":"pane","agent_status":"working"}]}}\\n'
+  printf '{"result":{"type":"agent_list","agents":[{"name":"${changeId.toLowerCase()}","cwd":"${candidate}","pane_id":"pane","agent_status":"working"}]}}\\n'
   exit 0
 fi
 exit 1
@@ -199,12 +200,12 @@ exit 1
 }, 30_000);
 
 test("source workflow uses an integrity-checked predecessor only for exact reconciliation", () => {
-  const { candidate } = prepareLauncherRepository();
+  const { main, candidate } = prepareLauncherRepository();
   const bundle = createTestWorkspace();
   const executable = join(bundle, "pinned-by");
   writeFileSync(
     executable,
-    '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ args: process.argv.slice(2), executable: process.env.BUT_WHY_EXECUTABLE_PATH }) + "\\n");\n',
+    '#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({ args: process.argv.slice(2), executable: process.env.BUT_WHY_EXECUTABLE_PATH, operationalRoot: process.env.BUT_WHY_SOURCE_TRUSTED_ROOT }) + "\\n");\n',
   );
   chmodSync(executable, 0o755);
   const manifest = join(bundle, "predecessor.json");
@@ -227,6 +228,7 @@ test("source workflow uses an integrity-checked predecessor only for exact recon
   expect(JSON.parse(reconciled.stdout)).toEqual({
     args: ["change", "reconcile", "BY-1"],
     executable,
+    operationalRoot: main,
   });
 
   const rejected = runTestProcess("just", ["by", "task", "list"], {
@@ -316,6 +318,92 @@ test("source workflow uses an integrity-checked predecessor only for exact recon
   });
 }, 30_000);
 
+test("pinned predecessor reconciliation uses its pre-cutover operational Repo Config", () => {
+  const workspace = createTestWorkspace();
+  const main = join(workspace, "main");
+  const bundle = join(workspace, "predecessor");
+  mkdirSync(main);
+  mkdirSync(bundle);
+  exportGitCommit(pinnedIdentityPredecessor, main);
+  exportGitCommit(pinnedIdentityPredecessor, bundle);
+  symlinkSync(join(repoRoot, "node_modules"), join(main, "node_modules"), "dir");
+  symlinkSync(join(repoRoot, "node_modules"), join(bundle, "node_modules"), "dir");
+
+  const built = runTestProcess("just", ["build"], { cwd: bundle });
+  expect(built.status, `${built.stdout}${built.stderr}`).toBe(0);
+  const predecessorExecutable = join(bundle, "dist/main.js");
+  chmodSync(predecessorExecutable, 0o755);
+
+  git(main, "init", "-q");
+  git(main, "config", "user.name", "But Why Test");
+  git(main, "config", "user.email", "but-why@example.test");
+  git(main, "branch", "-M", "main");
+  git(main, "add", ".");
+  git(main, "commit", "-m", "pre-cutover source");
+  const initialized = runTestProcess("just", ["by", "init", "--task-prefix", "BY"], { cwd: main });
+  expect(initialized.status, `${initialized.stdout}${initialized.stderr}`).toBe(0);
+
+  const changeId = "4dc70e5f-b9c6-4fe0-9c0d-f0158590f858";
+  const database = new DatabaseSync(join(main, ".git/but-why/state.sqlite"));
+  try {
+    database
+      .prepare(`
+        INSERT INTO changes (
+          id, repository_common_directory, branch_ref, state, close_reason,
+          created_at, updated_at, closed_at, cleanup_state
+        ) VALUES (?, ?, ?, 'closed', 'completed', ?, ?, ?, 'complete')
+      `)
+      .run(changeId, main, "refs/heads/pre-cutover-change", sourceNow, sourceNow, sourceNow);
+  } finally {
+    database.close();
+  }
+
+  for (const path of ["bin", "src"]) {
+    rmSync(join(main, path), { recursive: true, force: true });
+    cpSync(join(repoRoot, path), join(main, path), { recursive: true });
+  }
+  cpSync(join(repoRoot, "package.json"), join(main, "package.json"));
+  cpSync(join(repoRoot, "justfile"), join(main, "justfile"));
+  writeFileSync(join(main, ".but-why/config.json"), `${JSON.stringify({ idPrefix: "BY" })}\n`);
+  git(main, "add", "bin", "src", "package.json", "justfile", ".but-why/config.json");
+  git(main, "commit", "-m", "post-cutover source");
+
+  const candidate = join(workspace, "candidate");
+  git(main, "worktree", "add", "-b", "candidate", candidate, "main");
+  const manifest = join(bundle, "predecessor.json");
+  writeFileSync(
+    manifest,
+    `${JSON.stringify({
+      version: 1,
+      changeId,
+      commit: pinnedIdentityPredecessor,
+      sha256: createHash("sha256").update(readFileSync(predecessorExecutable)).digest("hex"),
+      executable: "dist/main.js",
+    })}\n`,
+  );
+
+  const mergedConfigPath = join(main, ".but-why/config.json");
+  const mergedConfig = readFileSync(mergedConfigPath, "utf8");
+  let reconciled: ReturnType<typeof runTestProcess>;
+  try {
+    writeFileSync(mergedConfigPath, `${JSON.stringify({ taskPrefix: "BY" })}\n`);
+    reconciled = runTestProcess("just", ["by", "change", "reconcile", changeId], {
+      cwd: candidate,
+      env: { BUT_WHY_PINNED_PREDECESSOR_MANIFEST: manifest },
+    });
+  } finally {
+    writeFileSync(mergedConfigPath, mergedConfig);
+  }
+  expect(readFileSync(mergedConfigPath, "utf8")).toBe(mergedConfig);
+  expect(git(main, "hash-object", mergedConfigPath)).toBe(
+    git(main, "rev-parse", "HEAD:.but-why/config.json"),
+  );
+  expect(reconciled.status, `${reconciled.stdout}${reconciled.stderr}`).toBe(0);
+  expect(JSON.parse(reconciled.stdout)).toMatchObject({
+    changes: [{ changeId, status: "cleanup_complete" }],
+  });
+}, 120_000);
+
 test("source workflow fails without Candidate fallback when the main checkout is unavailable", () => {
   const { candidate } = prepareSourceRepository();
   const fakeGitDirectory = createTestWorkspace();
@@ -385,6 +473,17 @@ const prepareLauncherRepository = () => {
   git(main, "worktree", "add", "-b", "candidate", candidate, "main");
 
   return { main, candidate };
+};
+
+const exportGitCommit = (commit: string, target: string): void => {
+  const archive = join(target, "source.tar");
+  runTestProcessOrThrow(
+    "git",
+    ["-C", repoRoot, "archive", "--format=tar", `--output=${archive}`, commit],
+    { cwd: target },
+  );
+  runTestProcessOrThrow("tar", ["-xf", archive, "-C", target], { cwd: target });
+  rmSync(archive);
 };
 
 const readFile = (path: string): string => readFileSync(path, "utf8");

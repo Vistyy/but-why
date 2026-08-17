@@ -5,7 +5,6 @@ import { basename, dirname, join } from "node:path";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
-import { resolveLocalBranch } from "../candidateCapture/adapters/localGitCandidate.js";
 import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
@@ -27,14 +26,11 @@ export const resolveChangeStartGitIntent = (
   if (!configSource.ok) return { ok: false, code: "committed_repo_config_missing" };
 
   const config = decodeRepoConfigSource(configSource.stdout);
-  if (!config.ok || config.config.taskPrefix !== context.taskPrefix) {
+  if (!config.ok || config.config.idPrefix !== context.idPrefix) {
     return { ok: false, code: "committed_repo_config_invalid" };
   }
 
   const branchRef = changeBranchRefForSlug(slug);
-  if (resolveLocalBranch(context.root, branchRef) !== undefined) {
-    return { ok: false, code: "change_start_conflict" };
-  }
   return {
     ok: true,
     intent: {
@@ -69,11 +65,11 @@ export const provisionChangeWorktree = (
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
-  const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
-  if (worktree !== "missing" && worktree !== "stale") return worktree;
-
   const branch = ensureRecordedBranch(cwd, start, recovering);
   if (!branch.ok) return branch;
+
+  const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
+  if (worktree !== "missing" && worktree !== "stale") return worktree;
   if (worktree === "stale") {
     const removed = removeStaleWorktreeRegistration(cwd, start);
     if (!removed.ok) return removed;
@@ -141,10 +137,11 @@ const ensureRecordedBranch = (
   start: ChangeStartRecord,
   recovering: boolean,
 ): ProvisionChangeWorktreeResult => {
-  const branchCommit = resolveLocalBranch(cwd, start.branchRef);
-  if (branchCommit !== undefined) {
+  const branch = inspectRecordedBranch(cwd, start.branchRef);
+  if (branch === "present") {
     return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
   }
+  if (branch === "tooling_error") return { ok: false, code: "git_tooling_error" };
   if (recovering) {
     return {
       ok: false,
@@ -157,6 +154,17 @@ const ensureRecordedBranch = (
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+};
+
+const inspectRecordedBranch = (
+  cwd: string,
+  branchRef: string,
+): "present" | "missing" | "tooling_error" => {
+  const exists = git(cwd, "show-ref", "--verify", "--quiet", branchRef);
+  if (!exists.ok) return exists.status === 1 ? "missing" : "tooling_error";
+  return git(cwd, "rev-parse", "--verify", `${branchRef}^{commit}`).ok
+    ? "present"
+    : "tooling_error";
 };
 
 const removeStaleWorktreeRegistration = (
@@ -268,7 +276,7 @@ const pathEntryExists = (path: string): boolean => {
 
 type GitResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly stderr: string };
+  | { readonly ok: false; readonly status: number | null; readonly stderr: string };
 
 const git = (cwd: string, ...args: readonly string[]): GitResult => {
   const result = spawnSync("git", args, {
@@ -278,5 +286,5 @@ const git = (cwd: string, ...args: readonly string[]): GitResult => {
   });
   return result.status === 0
     ? { ok: true, stdout: result.stdout.trim() }
-    : { ok: false, stderr: result.stderr.trim() };
+    : { ok: false, status: result.status, stderr: result.stderr.trim() };
 };

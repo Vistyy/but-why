@@ -50,11 +50,12 @@ const fixture = (options: FixtureOptions = {}) => {
   const store: ChangeStartPersistence = {
     create: (input) => {
       events.push("create");
-      current = recordFrom({
+      const change = recordFrom({
         ...input,
         ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
       });
-      return Effect.succeed({ ok: true as const, change: current });
+      current = change;
+      return Effect.succeed({ ok: true as const, change });
     },
     getById: (id) => Effect.succeed(current?.id === id ? current : undefined),
     recordPrepareOutcome: (id, failure) => {
@@ -101,7 +102,7 @@ describe("Change Start orchestration", () => {
         change: { acceptanceContext: null },
       });
       expect(changeWithoutTask.events).toEqual([
-        expect.stringMatching(/^resolveIntent:change-/u),
+        "resolveIntent:pending-change-start:default",
         "create",
         "provisionWorktree:create",
         expect.stringMatching(/^recordPrepareOutcome:/u),
@@ -133,7 +134,7 @@ describe("Change Start orchestration", () => {
       if (!("change" in result)) return;
       expect(result.change).toBe(captured.current());
       expect(captured.events).toEqual([
-        expect.stringMatching(/^resolveIntent:change-/u),
+        "resolveIntent:pending-change-start:default",
         "create",
         "provisionWorktree:create",
       ]);

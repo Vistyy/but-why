@@ -22,7 +22,7 @@ describe("by task CLI process boundary", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        expect((yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
+        expect((yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"])).status).toBe(0);
         expect(
           runBuiltByWithInput(
             root,
@@ -59,7 +59,7 @@ describe("by task CLI process boundary", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
         expect(initialized.status).toBe(0);
 
         const description = "Descripción exacta\n";

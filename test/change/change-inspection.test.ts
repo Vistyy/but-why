@@ -1,12 +1,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
-
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
@@ -104,6 +103,32 @@ describe("Change inspection CLI", () => {
     }),
   );
 
+  it.effect("rejects a retired Change ID without reporting a state outage", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      commitButWhyConfigAndRecordDefault(root);
+
+      const results = yield* Effect.all(
+        ["change-1", "ZZ-C1", "BY-C9007199254740992"]
+          .flatMap((changeId) => [
+            ["change", "show", changeId],
+            ["change", "decision", "list", changeId],
+            ["change", "blocker", "list", changeId],
+            ["change", "reconcile", changeId],
+          ])
+          .map((args) => runByInProcessEffect(root, args)),
+      );
+
+      for (const result of results) {
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: { code: "change_not_found", message: "Change was not found." },
+          help: ["Use a Change ID returned by `by change list --all`."],
+        });
+      }
+    }),
+  );
+
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
@@ -122,7 +147,7 @@ describe("Change inspection CLI", () => {
           yield* repository.operation(
             "conflict Change branch fixture",
             (sql) =>
-              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${startedView.change.id}`,
+              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${internalChangeId(startedView.change.id, "BY")}`,
           );
         }),
       );
@@ -319,7 +344,7 @@ describe("Change inspection CLI", () => {
       writeFileSync(
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "base", command: "true" }] } },
+          { idPrefix: "BY", validation: { checks: [{ id: "base", command: "true" }] } },
           null,
           2,
         )}\n`,
@@ -335,7 +360,7 @@ describe("Change inspection CLI", () => {
         join(root, ".but-why", "config.json"),
         `${JSON.stringify(
           {
-            taskPrefix: "BY",
+            idPrefix: "BY",
             validation: { checks: [{ id: "caller", command: "false" }] },
             review: { specialists: ["caller"] },
             reviewers: {
@@ -356,7 +381,7 @@ describe("Change inspection CLI", () => {
         join(change.worktreePath, ".but-why", "config.json"),
         `${JSON.stringify(
           {
-            taskPrefix: "BY",
+            idPrefix: "BY",
             validation: { checks: [{ id: "managed", command: "false" }] },
             review: { specialists: ["candidate"] },
             reviewers: {

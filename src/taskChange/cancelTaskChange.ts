@@ -20,7 +20,7 @@ import {
 } from "../contracts/repositoryStorageError.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { type PublicTaskId, publicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   TaskChangeCancellationChange,
@@ -309,7 +309,7 @@ const loadLinkedTask = (
 ): Effect.Effect<TaskRecord | null, RepositoryStorageError> =>
   change.taskId === null
     ? Effect.succeed(null)
-    : Effect.flatMap(dependencies.tasks.getTaskById(storedPublicTaskId(change.taskId)), (task) =>
+    : Effect.flatMap(dependencies.tasks.getTaskById(publicTaskId(change.taskId)), (task) =>
         task === undefined
           ? Effect.fail(
               new RepositoryPersistedDataInvalid({

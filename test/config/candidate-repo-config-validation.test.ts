@@ -9,7 +9,7 @@ describe("Candidate Repo Config validation", () => {
     const root = createTestWorkspace();
     mkdirSync(join(root, ".but-why"));
     const path = join(root, ".but-why", "config.json");
-    writeFileSync(path, '{"taskPrefix":"BY"}\n');
+    writeFileSync(path, '{"idPrefix":"BY"}\n');
 
     expect(validateCandidateRepoConfig(root)).toEqual({ ok: true });
 

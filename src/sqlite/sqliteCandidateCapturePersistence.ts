@@ -7,6 +7,7 @@ import type {
   CommitCandidateCaptureInput,
 } from "../change/candidateCapture/candidateCapturePersistence.js";
 import { changeState } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -28,28 +29,34 @@ export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
   Effect.map(RepositorySql, (repository) => ({
     getChangeById: (changeId) =>
       repository
-        .operation("read Change for Candidate capture", (sql) => readChangeById(sql, changeId))
-        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row))),
+        .operation("read Change for Candidate capture", (sql) =>
+          readChangeById(sql, changeId, repository.idPrefix),
+        )
+        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row, repository.idPrefix))),
     getChangeByRepositoryBranch: (repositoryCommonDirectory, branchRef) =>
       repository
         .operation("read Change branch for Candidate capture", (sql) =>
           readChangeByBranch(sql, repositoryCommonDirectory, branchRef),
         )
-        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row))),
+        .pipe(Effect.flatMap((row) => decodeCandidateCaptureOptional(row, repository.idPrefix))),
     commitCapture: (input) =>
       repository.transactionImmediate("commit Candidate capture", (sql) =>
-        commitCapture(sql, input),
+        commitCapture(sql, input, repository.idPrefix),
       ),
   }));
 
-const commitCapture = (sql: SqlClient.SqlClient, input: CommitCandidateCaptureInput) =>
+const commitCapture = (
+  sql: SqlClient.SqlClient,
+  input: CommitCandidateCaptureInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const selected = yield* selectStoredChange(sql, input);
+    const selected = yield* selectStoredChange(sql, input, idPrefix);
     if (!selected.ok) return selected;
-    const baseAssignment = yield* assignBase(sql, selected.change, input);
+    const baseAssignment = yield* assignBase(sql, selected.change, input, idPrefix);
     if (!baseAssignment.ok) return baseAssignment;
-    const candidate = yield* captureStoredCandidate(sql, selected.change.id, input);
-    yield* selectCurrentCandidate(sql, selected.change.id, candidate.candidateId);
+    const candidate = yield* captureStoredCandidate(sql, selected.change.id, input, idPrefix);
+    yield* selectCurrentCandidate(sql, selected.change.id, candidate.candidateId, idPrefix);
 
     return {
       ok: true,
@@ -59,38 +66,46 @@ const commitCapture = (sql: SqlClient.SqlClient, input: CommitCandidateCaptureIn
     } as const;
   });
 
-const selectStoredChange = (sql: SqlClient.SqlClient, input: CommitCandidateCaptureInput) =>
+const selectStoredChange = (
+  sql: SqlClient.SqlClient,
+  input: CommitCandidateCaptureInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const destination = yield* getChangeByBranch(
       sql,
       input.repositoryCommonDirectory,
       input.branchRef,
+      idPrefix,
     );
     return input.expectedChangeId === undefined
-      ? yield* createStoredChange(sql, input, destination)
-      : yield* selectExpectedChange(sql, input.expectedChangeId, input, destination);
+      ? yield* createStoredChange(sql, input, destination, idPrefix)
+      : yield* selectExpectedChange(sql, input.expectedChangeId, input, destination, idPrefix);
   });
 
 const createStoredChange = (
   sql: SqlClient.SqlClient,
   input: CommitCandidateCaptureInput,
   destination: CandidateCaptureChange | undefined,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     if (destination !== undefined) {
       return { ok: false, code: "destination_branch_has_history" } as const;
     }
-    const changeId = randomUUID();
-    yield* sql`
+    const inserted = yield* sql<{ readonly id: number }>`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, state,
+        repository_common_directory, branch_ref, base_ref, state,
         close_reason, created_at, updated_at, closed_at
       ) VALUES (
-        ${changeId}, ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL,
+        ${input.repositoryCommonDirectory}, ${input.branchRef}, NULL,
         'open', NULL, ${input.now}, ${input.now}, NULL
       )
+      RETURNING id
     `;
-    const change = yield* getChangeById(sql, changeId);
+    const allocatedId = inserted[0]?.id;
+    if (allocatedId === undefined) return yield* invalidData("Change identity was not allocated");
+    const change = yield* getChangeById(sql, publicChangeId(idPrefix, allocatedId), idPrefix);
     if (change === undefined)
       return yield* invalidData("Change disappeared after capture creation");
     return { ok: true, change } as const;
@@ -101,9 +116,10 @@ const selectExpectedChange = (
   expectedChangeId: string,
   input: CommitCandidateCaptureInput,
   destination: CandidateCaptureChange | undefined,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const expected = yield* getChangeById(sql, expectedChangeId);
+    const expected = yield* getChangeById(sql, expectedChangeId, idPrefix);
     if (expected === undefined) return { ok: false, code: "change_not_found" } as const;
     if (expected.state === changeState.closed) return { ok: false, code: "change_closed" } as const;
     if (expected.repositoryCommonDirectory !== input.repositoryCommonDirectory) {
@@ -123,9 +139,9 @@ const selectExpectedChange = (
 
     yield* sql`
       UPDATE changes SET branch_ref = ${input.branchRef}, updated_at = ${input.now}
-      WHERE id = ${expected.id}
+      WHERE id = ${internalChangeId(expected.id, idPrefix)}
     `;
-    const rebound = yield* getChangeById(sql, expected.id);
+    const rebound = yield* getChangeById(sql, expected.id, idPrefix);
     if (rebound === undefined) return yield* invalidData("Change disappeared during capture");
     return { ok: true, change: rebound } as const;
   });
@@ -134,6 +150,7 @@ const assignBase = (
   sql: SqlClient.SqlClient,
   change: CandidateCaptureChange,
   input: CommitCandidateCaptureInput,
+  idPrefix: string,
 ) => {
   if (change.baseRef !== null) {
     return Effect.succeed(
@@ -145,7 +162,7 @@ const assignBase = (
   return Effect.as(
     sql`
       UPDATE changes SET base_ref = ${input.baseRef}, updated_at = ${input.now}
-      WHERE id = ${change.id}
+      WHERE id = ${internalChangeId(change.id, idPrefix)}
     `,
     { ok: true as const },
   );
@@ -155,6 +172,7 @@ const captureStoredCandidate = (
   sql: SqlClient.SqlClient,
   changeId: string,
   input: CommitCandidateCaptureInput,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCandidateRow>(
@@ -162,12 +180,12 @@ const captureStoredCandidate = (
        FROM candidates AS candidate
        WHERE candidate.change_id = ?
          AND candidate.change_base_sha = ? AND candidate.head_sha = ?`,
-      [changeId, input.changeBaseSha, input.headSha],
+      [internalChangeId(changeId, idPrefix), input.changeBaseSha, input.headSha],
     );
     const row = rows[0];
     if (row !== undefined) {
       const existing = yield* decodePersisted("commit Candidate capture", () => {
-        const candidate = decodeCandidate(row);
+        const candidate = decodeCandidate(row, idPrefix);
         if (candidate.changeId !== changeId) {
           throw new Error("Candidate belongs to another Change");
         }
@@ -187,29 +205,36 @@ const captureStoredCandidate = (
       INSERT INTO candidates (
         id, change_id, change_base_sha, head_sha, created_at
       ) VALUES (
-        ${candidateId}, ${changeId}, ${input.changeBaseSha}, ${input.headSha}, ${input.now}
+        ${candidateId}, ${internalChangeId(changeId, idPrefix)}, ${input.changeBaseSha}, ${input.headSha}, ${input.now}
       )
     `;
     return { ok: true, candidateId, reused: false } as const;
   });
 
-const selectCurrentCandidate = (sql: SqlClient.SqlClient, changeId: string, candidateId: string) =>
+const selectCurrentCandidate = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  candidateId: string,
+  idPrefix: string,
+) =>
   sql`
     INSERT INTO current_candidates (change_id, candidate_id)
-    VALUES (${changeId}, ${candidateId})
+    VALUES (${internalChangeId(changeId, idPrefix)}, ${candidateId})
     ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
   `;
 
-const getChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.flatMap(readChangeById(sql, changeId), (row) => decodeCandidateCaptureOptional(row));
+const getChangeById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
+  Effect.flatMap(readChangeById(sql, changeId, idPrefix), (row) =>
+    decodeCandidateCaptureOptional(row, idPrefix),
+  );
 
-const readChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
+const readChangeById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.map(
     sql<StoredCandidateCaptureChangeRow>`
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
       FROM changes
-      WHERE id = ${changeId}
+      WHERE id = ${internalChangeId(changeId, idPrefix)}
     `,
     (rows) => rows[0],
   );
@@ -218,9 +243,10 @@ const getChangeByBranch = (
   sql: SqlClient.SqlClient,
   repositoryCommonDirectory: string,
   branchRef: string,
+  idPrefix: string,
 ) =>
   Effect.flatMap(readChangeByBranch(sql, repositoryCommonDirectory, branchRef), (row) =>
-    decodeCandidateCaptureOptional(row),
+    decodeCandidateCaptureOptional(row, idPrefix),
   );
 
 const readChangeByBranch = (
@@ -239,8 +265,10 @@ const readChangeByBranch = (
     (rows) => rows[0],
   );
 
-const decodeCandidateCaptureOptional = (row: StoredCandidateCaptureChangeRow | undefined) =>
-  Effect.succeed(row === undefined ? undefined : decodeCandidateCaptureChange(row));
+const decodeCandidateCaptureOptional = (
+  row: StoredCandidateCaptureChangeRow | undefined,
+  idPrefix: string,
+) => Effect.succeed(row === undefined ? undefined : decodeCandidateCaptureChange(row, idPrefix));
 
 const invalidData = (message: string) =>
   Effect.fail(

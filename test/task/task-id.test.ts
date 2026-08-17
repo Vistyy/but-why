@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { parsePublicTaskId, publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 
 describe("Task identity seam", () => {
-  it("accepts local and opaque Task IDs through one bounded parser", () => {
+  it("accepts only derived public Task IDs through one bounded parser", () => {
     expect(parsePublicTaskId("BY-1")).toEqual({ ok: true, taskId: publicTaskId("BY-1") });
     expect(parsePublicTaskId("linear/ENG-123:acceptance")).toEqual({
-      ok: true,
-      taskId: publicTaskId("linear/ENG-123:acceptance"),
+      ok: false,
+      code: "task_id_invalid_shape",
+    });
+    expect(parsePublicTaskId("BY-9007199254740992")).toEqual({
+      ok: false,
+      code: "task_id_invalid_shape",
     });
 
     expect(parsePublicTaskId("")).toEqual({ ok: false, code: "empty_task_id" });
@@ -22,24 +26,13 @@ describe("Task identity seam", () => {
     });
   });
 
-  it("derives deterministic safe slugs with readable parts and raw-ID hash suffixes", () => {
-    const localSlug = taskSlugForId(publicTaskId("BY-1"));
-    const remoteSlug = taskSlugForId(publicTaskId("linear/ENG-123:acceptance"));
-    const collidingReadablePart = taskSlugForId(publicTaskId("linear ENG 123 acceptance"));
+  it("derives deterministic safe slugs from public Task IDs", () => {
+    const first = taskSlugForId(publicTaskId("BY-1"));
+    const second = taskSlugForId(publicTaskId("BY-2"));
 
-    expect(localSlug).toMatch(/^by-1-[0-9a-f]{12}$/);
-    expect(remoteSlug).toMatch(/^linear-eng-123-acceptance-[0-9a-f]{12}$/);
-    expect(collidingReadablePart).toMatch(/^linear-eng-123-acceptance-[0-9a-f]{12}$/);
-    expect(remoteSlug).not.toBe(collidingReadablePart);
-    expect(taskSlugForId(publicTaskId("BY-1"))).toBe(localSlug);
-  });
-
-  it("bounds readable slug parts while preserving hash suffixes", () => {
-    const slug = taskSlugForId(publicTaskId(`Remote/${"VeryLongSegment".repeat(10)}`));
-    const suffix = slug.match(/[0-9a-f]{12}$/)?.[0];
-
-    expect(slug.length).toBeLessThanOrEqual(61);
-    expect(suffix).toBeDefined();
-    expect(slug.endsWith(`-${suffix}`)).toBe(true);
+    expect(first).toMatch(/^by-1-[0-9a-f]{12}$/);
+    expect(second).toMatch(/^by-2-[0-9a-f]{12}$/);
+    expect(first).not.toBe(second);
+    expect(taskSlugForId(publicTaskId("BY-1"))).toBe(first);
   });
 });

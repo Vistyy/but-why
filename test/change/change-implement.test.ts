@@ -125,7 +125,7 @@ describe("by change implement", () => {
       const root = yield* readyRepository();
       const fixture = yield* createChangeImplementFixture(root, {
         managedRepoConfig: {
-          taskPrefix: "BY",
+          idPrefix: "BY",
           agentEnvironment: { command: ["nix", "develop", "-c"] },
         },
       });
@@ -153,7 +153,7 @@ describe("by change implement", () => {
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
         changeId: fixture.id,
-        hostSessionName: `change-${fixture.id.slice(0, 8)}`,
+        hostSessionName: fixture.id.toLowerCase(),
         agentSessionName: `Change ${fixture.id}`,
         repositoryPath: root,
         worktreePath: fixture.worktreePath,
@@ -228,7 +228,7 @@ describe("by change implement", () => {
         expect(result.status).toBe(0);
         expect(launchInput).toMatchObject({
           changeId: fixture.id,
-          hostSessionName: `change-${fixture.id.slice(0, 8)}`,
+          hostSessionName: fixture.id.toLowerCase(),
           agentSessionName: `${fixture.id} Record cancellation reasons`,
         });
       }),
@@ -443,7 +443,7 @@ describe("by change implement", () => {
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const fixture = yield* createChangeImplementFixture(root, {
-        managedRepoConfig: { idPrefix: "BY" },
+        managedRepoConfig: { idPrefix: "BY", agentEnvironment: { command: [] } },
       });
       let launches = 0;
 
@@ -682,7 +682,7 @@ const initializedRepository = (workspace?: string): string => {
     join(root, ".but-why", "config.json"),
     `${JSON.stringify(
       {
-        taskPrefix: "BY",
+        idPrefix: "BY",
         validation: { checks: [{ id: "quality", command: "true" }] },
       },
       null,

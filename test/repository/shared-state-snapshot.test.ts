@@ -20,7 +20,7 @@ describe("Shared Repository State Snapshots", () => {
   it.effect("creates unique readable immutable snapshots without changing source state", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
 
       const seededSource = new DatabaseSync(statePath(root));
@@ -81,7 +81,7 @@ describe("Shared Repository State Snapshots", () => {
   it.effect("resolves one source and snapshot directory from main and linked worktrees", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       runGit(root, "config", "user.name", "But Why Test");
       runGit(root, "config", "user.email", "but-why@example.test");
@@ -108,7 +108,7 @@ describe("Shared Repository State Snapshots", () => {
   it.effect("identifies snapshot storage in failure guidance", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       writeFileSync(snapshotsPath(root), "not a directory\n");
 
@@ -129,7 +129,7 @@ describe("Shared Repository State Snapshots", () => {
   it.effect("returns no snapshot path and leaves no output after a source failure", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       writeFileSync(statePath(root), "not sqlite\n");
 

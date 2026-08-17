@@ -42,8 +42,9 @@ import { candidateValidationReuseMigration as candidateValidationReuse } from ".
 import { agentSessionsMigration as agentSessions } from "./migrations/0040_agent_sessions.js";
 import { agentInvocationCacheWriteTokensMigration as agentInvocationCacheWriteTokens } from "./migrations/0041_agent_invocation_cache_write_tokens.js";
 import { taskChangeBoundaryMigration as taskChangeBoundary } from "./migrations/0042_task_change_boundary.js";
+import { internalTaskChangeIdentitiesMigration } from "./migrations/0043_internal_task_change_identities.js";
 
-const migrations = {
+const migrationsThroughTaskChangeBoundary = {
   "0001_baseline": baseline,
   "0002_reviewer_sessions": reviewerSessions,
   "0003_implementation_decisions": implementationDecisions,
@@ -88,19 +89,25 @@ const migrations = {
   "0042_task_change_boundary": taskChangeBoundary,
 };
 
-const migrationKeys = Object.keys(migrations).sort();
-
-export const migrateRepositoryState = Migrator.make({})({
-  loader: Migrator.fromRecord(migrations),
+const migrations = (idPrefix: string) => ({
+  ...migrationsThroughTaskChangeBoundary,
+  "0043_internal_task_change_identities": internalTaskChangeIdentitiesMigration(idPrefix),
 });
 
-export const migrateRepositoryStateThrough = (lastMigrationId: number) =>
+const migrationKeys = Object.keys(migrations("BY")).sort();
+
+export const migrateRepositoryState = (idPrefix: string) =>
+  Migrator.make({})({
+    loader: Migrator.fromRecord(migrations(idPrefix)),
+  });
+
+export const migrateRepositoryStateThrough = (lastMigrationId: number, idPrefix: string) =>
   Migrator.make({})({
     loader: Migrator.fromRecord(
       Object.fromEntries(
         migrationKeys
           .filter((key) => Number(key.slice(0, 4)) <= lastMigrationId)
-          .map((key) => [key, migrations[key as keyof typeof migrations]]),
+          .map((key) => [key, migrations(idPrefix)[key as keyof ReturnType<typeof migrations>]]),
       ),
     ),
   });

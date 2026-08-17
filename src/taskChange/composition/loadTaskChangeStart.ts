@@ -3,6 +3,7 @@ import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
 } from "../../change/adapters/changeStartGit.js";
+import type { ChangeStartGitOperations } from "../../change/changeStartGitOperations.js";
 import { resolveChangeReviewerConfiguration } from "../../change/composition/resolveChangeReviewerConfiguration.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
@@ -27,13 +28,11 @@ export const openTaskChangeStartOperation = (input: {
           command: TaskChangeStartInput,
         ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
           Effect.gen(function* () {
-            const git = {
-              resolveIntent: (slug: string, requestedBaseBranch: string | undefined) =>
+            const git: ChangeStartGitOperations = {
+              resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(input.context, slug, requestedBaseBranch),
-              provisionWorktree: (
-                change: Parameters<typeof provisionChangeWorktree>[1],
-                recovering: boolean,
-              ) => provisionChangeWorktree(input.context.root, change, recovering),
+              provisionWorktree: (change, recovering) =>
+                provisionChangeWorktree(input.context.root, change, recovering),
             };
             return yield* startTaskChange(
               store,

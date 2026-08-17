@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import continueChange from "../../extensions/continue-change.js";
 
-const changeId = "de32d32a-ecd8-46b4-b2d8-5a08d2128869";
+const changeId = "BY-C1";
 
 const snapshot = (overrides: Record<string, unknown> = {}) => ({
   change: {
@@ -749,7 +749,7 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("input", {
-      text: "Change identity: 11111111-1111-4111-8111-111111111111.",
+      text: "Change identity: BY-C2.",
       source: "interactive",
     });
     await harness.runCommand("continue-change");
@@ -990,7 +990,7 @@ describe("packaged Change Implement continuation extension", () => {
 
   it("ignores persisted state for a different Change", async () => {
     const harness = createHarness(sourceCwd, {
-      changeId: "11111111-1111-4111-8111-111111111111",
+      changeId: "BY-C2",
       fingerprint: "other-change",
       unchangedRestarts: 2,
       paused: true,

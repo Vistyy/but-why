@@ -9,7 +9,7 @@ import type { RepositoryStorageError } from "../../src/contracts/repositoryStora
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
-import type { PublicTaskId } from "../../src/task/taskId.js";
+import { internalTaskId, type PublicTaskId } from "../../src/task/taskId.js";
 
 const taskReviewPolicyFixture = {
   profile: {
@@ -56,7 +56,7 @@ export const setTerminalTaskStateFixture = (
       (sql) => sql`
         UPDATE tasks
         SET state = ${state}, cancel_reason = ${cancelReason}, updated_at = ${updatedAt}
-        WHERE id = ${taskId}
+        WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
       `,
     ),
   );

@@ -27,12 +27,13 @@ import type {
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
 type ReviewRow = {
   readonly id: string;
-  readonly taskId: string;
+  readonly taskId: number;
   readonly proposalSnapshot: string;
   readonly dependencyEvidence: string;
   readonly policySnapshot: string;
@@ -97,14 +98,16 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   Effect.map(RepositorySql, (repository) => ({
     reuseJudgment: (taskId, now) =>
       repository.transactionImmediate("reuse Task Review judgment", (sql) =>
-        reuseTaskReviewJudgment(sql, taskId, now),
+        reuseTaskReviewJudgment(sql, taskId, now, repository.idPrefix),
       ),
     checkAdmission: (taskId) =>
       repository.transaction("check Task Review admission", (sql) =>
-        taskReviewAdmissionRejection(sql, taskId),
+        taskReviewAdmissionRejection(sql, taskId, repository.idPrefix),
       ),
     admit: (input) =>
-      repository.transactionImmediate("admit Task Review", (sql) => admitTaskReview(sql, input)),
+      repository.transactionImmediate("admit Task Review", (sql) =>
+        admitTaskReview(sql, input, repository.idPrefix),
+      ),
     recordCleanup: (reviewId, cleanup, now) =>
       repository.transactionImmediate("record Task Review cleanup", (sql) =>
         sql`UPDATE task_reviews SET workspace_cleanup = ${cleanup}, updated_at = ${now} WHERE id = ${reviewId}`.pipe(
@@ -120,6 +123,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           input.toolingFailure,
           undefined,
           input.now,
+          repository.idPrefix,
           input.agentSettlement === true,
         ),
       ),
@@ -144,16 +148,19 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
             { operation: "task_review_abandoned", message: reason },
             reason,
             now,
+            repository.idPrefix,
           );
         }),
       ),
     getById: (reviewId) =>
-      repository.transaction("read Task Review", (sql) => getReview(sql, reviewId)),
+      repository.transaction("read Task Review", (sql) =>
+        getReview(sql, reviewId, repository.idPrefix),
+      ),
     listForTask: (taskId) =>
       repository.transaction("list Task Reviews", (sql) =>
         Effect.gen(function* () {
-          const rows = yield* readReviewRows(sql, taskId);
-          return yield* Effect.forEach(rows, (row) => decodeReview(sql, row));
+          const rows = yield* readReviewRows(sql, taskId, repository.idPrefix);
+          return yield* Effect.forEach(rows, (row) => decodeReview(sql, row, repository.idPrefix));
         }),
       ),
     getReviewerAgentSession: (taskId) =>
@@ -161,7 +168,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         Effect.map(
           sql<{ readonly agentSessionId: number | null }>`
             SELECT reviewer_agent_session_id AS agentSessionId
-            FROM tasks WHERE id = ${taskId}
+            FROM tasks WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
           `,
           (rows) => rows[0]?.agentSessionId ?? undefined,
         ),
@@ -170,7 +177,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("read Task Reviewer configuration", (sql) =>
         Effect.gen(function* () {
           const rows = yield* sql<{ readonly configuration: string | null }>`
-            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${taskId}
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
           `;
           const configuration = rows[0]?.configuration;
           if (configuration === undefined || configuration === null) return undefined;
@@ -188,7 +195,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transaction("check Task Reviewer configuration correction", (sql) =>
         Effect.gen(function* () {
           const sessions = yield* sql<{ readonly agentSessionId: number | null }>`
-            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${taskId}
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
           `;
           const sessionId = sessions[0]?.agentSessionId;
           if (sessionId === undefined || sessionId === null) return false;
@@ -238,7 +245,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           if (sessionId === undefined)
             return yield* invalid("link Task Agent Invocation", "Invocation Session is missing");
           const taskSession = yield* sql<{ readonly agentSessionId: number | null }>`
-            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${input.taskId}
+            SELECT reviewer_agent_session_id AS agentSessionId FROM tasks WHERE id = ${internalTaskId(input.taskId, repository.idPrefix)}
           `;
           if (
             taskSession[0]?.agentSessionId !== undefined &&
@@ -249,13 +256,13 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               "link Task Agent Invocation",
               "Task already has another Agent Session",
             );
-          const changeOwners = yield* sql<{ readonly changeId: string }>`
+          const changeOwners = yield* sql<{ readonly changeId: number }>`
             SELECT change_id AS changeId FROM change_agent_sessions
             WHERE agent_session_id = ${sessionId}
           `;
-          const taskOwners = yield* sql<{ readonly taskId: string }>`
+          const taskOwners = yield* sql<{ readonly taskId: number }>`
             SELECT id AS taskId FROM tasks
-            WHERE reviewer_agent_session_id = ${sessionId} AND id <> ${input.taskId}
+            WHERE reviewer_agent_session_id = ${sessionId} AND id <> ${internalTaskId(input.taskId, repository.idPrefix)}
           `;
           if (changeOwners.length > 0 || taskOwners.length > 0)
             return yield* invalid(
@@ -263,7 +270,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               "Agent Session already has another owner",
             );
           const stored = yield* sql<{ readonly configuration: string | null }>`
-            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${input.taskId}
+            SELECT reviewer_configuration AS configuration FROM tasks WHERE id = ${internalTaskId(input.taskId, repository.idPrefix)}
           `;
           const latest = yield* sql<{
             readonly settlementKind: string | null;
@@ -308,7 +315,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           UPDATE tasks
           SET reviewer_configuration = ${configuration},
               reviewer_agent_session_id = COALESCE(reviewer_agent_session_id, ${sessionId})
-          WHERE id = ${input.taskId}
+          WHERE id = ${internalTaskId(input.taskId, repository.idPrefix)}
         `;
           yield* sql`
           INSERT INTO task_review_agent_invocations (review_id, agent_invocation_id)
@@ -336,6 +343,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               input.toolingFailure,
               undefined,
               input.now,
+              repository.idPrefix,
               true,
             );
             if (!completed.ok)
@@ -374,22 +382,23 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
               state, outcome, workspace_cleanup AS workspaceCleanup,
               tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
               created_at AS createdAt, updated_at AS updatedAt
-            FROM task_reviews WHERE task_id = ${taskId}
+            FROM task_reviews WHERE task_id = ${internalTaskId(taskId, repository.idPrefix)}
             ORDER BY sequence DESC LIMIT 1
           `;
           const row = rows[0];
-          return row === undefined ? undefined : yield* decodeReview(sql, row);
+          return row === undefined ? undefined : yield* decodeReview(sql, row, repository.idPrefix);
         }),
       ),
     proposalIsCurrent: (review) =>
       repository.transaction("compare Task Review proposal", (sql) =>
-        currentProposalMatches(sql, review),
+        currentProposalMatches(sql, review, repository.idPrefix),
       ),
   }));
 
 export const taskReviewAdmissionRejection = (
   sql: SqlClient.SqlClient,
   taskId: string,
+  idPrefix: string,
   linkedChangeId?: string,
 ): Effect.Effect<
   TaskReviewAdmissionRejection | undefined,
@@ -397,7 +406,7 @@ export const taskReviewAdmissionRejection = (
 > =>
   Effect.gen(function* () {
     const tasks = yield* sql<{ readonly state: string }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
+      SELECT state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
@@ -408,7 +417,7 @@ export const taskReviewAdmissionRejection = (
       return { ok: false as const, code: "task_change_linked" as const, changeId: linkedChangeId };
     }
     const active = yield* sql<{ readonly id: string }>`
-      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+      SELECT id FROM task_reviews WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND state = 'running' LIMIT 1
     `;
     const activeReview = active[0];
     return activeReview === undefined
@@ -423,18 +432,24 @@ export const taskReviewAdmissionRejection = (
 export const admitTaskReview = (
   sql: SqlClient.SqlClient,
   input: AdmitTaskReviewInput,
+  idPrefix: string,
   linkedChangeId?: string,
 ): Effect.Effect<AdmitTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const rejected = yield* taskReviewAdmissionRejection(sql, input.taskId, linkedChangeId);
+    const rejected = yield* taskReviewAdmissionRejection(
+      sql,
+      input.taskId,
+      idPrefix,
+      linkedChangeId,
+    );
     if (rejected !== undefined) return rejected;
     const tasks = yield* sql<{
       readonly title: string;
       readonly description: string;
-    }>`SELECT title, description FROM tasks WHERE id = ${input.taskId}`;
+    }>`SELECT title, description FROM tasks WHERE id = ${internalTaskId(input.taskId, idPrefix)}`;
     const task = tasks[0];
     if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
-    const dependencies = yield* dependencyEvidence(sql, input.taskId);
+    const dependencies = yield* dependencyEvidence(sql, input.taskId, idPrefix);
     const proposal: TaskReviewProposal = {
       title: task.title,
       description: task.description,
@@ -446,33 +461,38 @@ export const admitTaskReview = (
         base_ref, base_commit, workspace_path, state, outcome, workspace_cleanup,
         tooling_failure, abandon_reason, created_at, updated_at
       ) VALUES (
-        ${input.reviewId}, ${input.taskId}, ${JSON.stringify(proposal)},
+        ${input.reviewId}, ${internalTaskId(input.taskId, idPrefix)}, ${JSON.stringify(proposal)},
         ${JSON.stringify(dependencies)}, ${JSON.stringify(input.policy)}, ${input.baseRef},
         ${input.baseCommit}, ${input.workspacePath}, 'running', NULL, 'not_created',
         NULL, NULL, ${input.now}, ${input.now}
       )
     `;
-    const review = yield* getReview(sql, input.reviewId);
+    const review = yield* getReview(sql, input.reviewId, idPrefix);
     if (review === undefined) return yield* invalid("admit Task Review", "Review disappeared");
     return { ok: true as const, review, proposal, dependencyEvidence: dependencies };
   });
 
-const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
+const reuseTaskReviewJudgment = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  now: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const tasks = yield* sql<{
       readonly title: string;
       readonly description: string;
       readonly state: string;
-    }>`SELECT title, description, state FROM tasks WHERE id = ${taskId}`;
+    }>`SELECT title, description, state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}`;
     const task = tasks[0];
     if (task === undefined || task.state !== "new") return undefined;
 
     const active = yield* sql<{ readonly id: string }>`
-      SELECT id FROM task_reviews WHERE task_id = ${taskId} AND state = 'running' LIMIT 1
+      SELECT id FROM task_reviews WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND state = 'running' LIMIT 1
     `;
     if (active[0] !== undefined) return undefined;
 
-    const dependencyIds = yield* directDependencyIds(sql, taskId);
+    const dependencyIds = yield* directDependencyIds(sql, taskId, idPrefix);
     const currentProposal: TaskReviewProposal = {
       title: task.title,
       description: task.description,
@@ -486,21 +506,21 @@ const reuseTaskReviewJudgment = (sql: SqlClient.SqlClient, taskId: string, now: 
         tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
         created_at AS createdAt, updated_at AS updatedAt
       FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete'
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND state = 'complete'
       ORDER BY sequence DESC
     `;
     for (const row of rows) {
       const proposal = yield* decodeProposalSnapshot(row.proposalSnapshot);
       if (JSON.stringify(proposal) !== JSON.stringify(currentProposal)) continue;
       if (row.outcome !== "passed") return undefined;
-      const review = yield* decodeReview(sql, row);
+      const review = yield* decodeReview(sql, row, idPrefix);
       const judgment = completedTaskReviewResult(review, "new");
       if (judgment === undefined || judgment.outcome !== "passed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
       }
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
-        WHERE id = ${taskId} AND state = 'new'
+        WHERE id = ${internalTaskId(taskId, idPrefix)} AND state = 'new'
       `;
       return judgment;
     }
@@ -575,33 +595,45 @@ const decodeProposalSnapshot = (source: string) =>
       new RepositoryPersistedDataInvalid({ operationName: "read Task Review", cause }),
   });
 
-const readReviewRows = (sql: SqlClient.SqlClient, taskId: string) => sql<ReviewRow>`
+const readReviewRows = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+) => sql<ReviewRow>`
   SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
     dependency_evidence AS dependencyEvidence, policy_snapshot AS policySnapshot,
     base_ref AS baseRef, base_commit AS baseCommit, workspace_path AS workspacePath,
     state, outcome, workspace_cleanup AS workspaceCleanup,
     tooling_failure AS toolingFailure, abandon_reason AS abandonReason,
     created_at AS createdAt, updated_at AS updatedAt
-  FROM task_reviews WHERE task_id = ${taskId} ORDER BY sequence ASC
+  FROM task_reviews WHERE task_id = ${internalTaskId(taskId, idPrefix)} ORDER BY sequence ASC
 `;
 
-const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string) =>
+const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
   Effect.map(
-    sql<{ readonly id: string }>`
-      SELECT prerequisite_task_id AS id FROM task_dependencies
-      WHERE dependent_task_id = ${taskId} ORDER BY prerequisite_task_id ASC
+    sql<{ readonly taskId: number }>`
+      SELECT prerequisite_task_id AS taskId FROM task_dependencies
+      WHERE dependent_task_id = ${internalTaskId(taskId, idPrefix)} ORDER BY prerequisite_task_id ASC
     `,
-    (dependencies) => dependencies.map((dependency) => dependency.id),
+    (dependencies) =>
+      dependencies.map((dependency) => publicTaskIdFromInternal(dependency.taskId, idPrefix)),
   );
 
-const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string) =>
-  sql<TaskReviewDependencyEvidence>`
-    SELECT prerequisite.id, prerequisite.title, prerequisite.description, prerequisite.state
-    FROM task_dependencies
-    JOIN tasks prerequisite ON prerequisite.id = task_dependencies.prerequisite_task_id
-    WHERE task_dependencies.dependent_task_id = ${taskId}
-    ORDER BY prerequisite.id ASC
-  `;
+const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
+  Effect.map(
+    sql<Omit<TaskReviewDependencyEvidence, "id"> & { readonly id: number }>`
+      SELECT prerequisite.id, prerequisite.title, prerequisite.description, prerequisite.state
+      FROM task_dependencies
+      JOIN tasks prerequisite ON prerequisite.id = task_dependencies.prerequisite_task_id
+      WHERE task_dependencies.dependent_task_id = ${internalTaskId(taskId, idPrefix)}
+      ORDER BY prerequisite.id ASC
+    `,
+    (dependencies) =>
+      dependencies.map((dependency) => ({
+        ...dependency,
+        id: publicTaskIdFromInternal(dependency.id, idPrefix),
+      })),
+  );
 
 const completeReview = (
   sql: SqlClient.SqlClient,
@@ -610,10 +642,11 @@ const completeReview = (
   toolingFailure: TaskReviewToolingFailure | undefined,
   abandonReason: string | undefined,
   now: string,
+  idPrefix: string,
   allowAlreadyComplete = false,
 ) =>
   Effect.gen(function* () {
-    const current = yield* getReview(sql, reviewId);
+    const current = yield* getReview(sql, reviewId, idPrefix);
     if (current === undefined) {
       return { ok: false as const, code: "task_review_not_found" as const };
     }
@@ -624,7 +657,7 @@ const completeReview = (
       ) {
         return { ok: false as const, code: "task_review_not_active" as const };
       }
-      const taskState = yield* readTaskState(sql, current.taskId);
+      const taskState = yield* readTaskState(sql, current.taskId, idPrefix);
       const completed = completedTaskReviewResult(current, taskState);
       if (completed === undefined)
         return yield* invalid("complete Task Review", "Completion facts are inconsistent");
@@ -633,14 +666,14 @@ const completeReview = (
     if (current.workspaceCleanup !== "removed") {
       return { ok: false as const, code: "task_review_not_active" as const };
     }
-    const admission = yield* inspectCurrentAdmission(sql, current);
+    const admission = yield* inspectCurrentAdmission(sql, current, idPrefix);
     const failure = admission.ok ? toolingFailure : admission.failure;
     const outcome =
       failure !== undefined ? "tooling_failed" : findings.length > 0 ? "blocked" : "passed";
     if (outcome === "passed") {
       yield* sql`
         UPDATE tasks SET state = 'todo', updated_at = ${now}
-        WHERE id = ${current.taskId} AND state = 'new'
+        WHERE id = ${internalTaskId(current.taskId, idPrefix)} AND state = 'new'
       `;
     }
     yield* Effect.forEach(
@@ -658,10 +691,10 @@ const completeReview = (
         abandon_reason = ${abandonReason ?? null}, updated_at = ${now}
       WHERE id = ${reviewId}
     `;
-    const completed = yield* getReview(sql, reviewId);
+    const completed = yield* getReview(sql, reviewId, idPrefix);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
-    const taskState = yield* readTaskState(sql, current.taskId);
+    const taskState = yield* readTaskState(sql, current.taskId, idPrefix);
     const result = completedTaskReviewResult(completed, taskState);
     if (result === undefined)
       return yield* invalid("complete Task Review", "Completion facts are inconsistent");
@@ -723,10 +756,10 @@ const completedTaskReviewResult = (
   }
 };
 
-const readTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
+const readTaskState = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly state: TaskState }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
+      SELECT state FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
     const row = rows[0];
     return row === undefined
@@ -734,14 +767,18 @@ const readTaskState = (sql: SqlClient.SqlClient, taskId: string) =>
       : row.state;
   });
 
-const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
+const inspectCurrentAdmission = (
+  sql: SqlClient.SqlClient,
+  review: TaskReviewRecord,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<{
       readonly title: string;
       readonly description: string;
       readonly state: TaskState;
     }>`
-      SELECT title, description, state FROM tasks WHERE id = ${review.taskId}
+      SELECT title, description, state FROM tasks WHERE id = ${internalTaskId(review.taskId, idPrefix)}
     `;
     const task = rows[0];
     if (task === undefined) {
@@ -771,7 +808,7 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
         },
       };
     }
-    const dependencies = yield* dependencyEvidence(sql, review.taskId);
+    const dependencies = yield* dependencyEvidence(sql, review.taskId, idPrefix);
     if (
       JSON.stringify(dependencies.map((dependency) => dependency.id)) !==
       JSON.stringify(review.proposal.dependencyIds)
@@ -787,14 +824,18 @@ const inspectCurrentAdmission = (sql: SqlClient.SqlClient, review: TaskReviewRec
     return { ok: true as const };
   });
 
-const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewRecord) =>
+const currentProposalMatches = (
+  sql: SqlClient.SqlClient,
+  review: TaskReviewRecord,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<{ readonly title: string; readonly description: string }>`
-      SELECT title, description FROM tasks WHERE id = ${review.taskId}
+      SELECT title, description FROM tasks WHERE id = ${internalTaskId(review.taskId, idPrefix)}
     `;
     const task = rows[0];
     if (task === undefined) return false;
-    const dependencies = yield* dependencyEvidence(sql, review.taskId);
+    const dependencies = yield* dependencyEvidence(sql, review.taskId, idPrefix);
     return (
       task.title === review.proposal.title &&
       task.description === review.proposal.description &&
@@ -803,7 +844,7 @@ const currentProposalMatches = (sql: SqlClient.SqlClient, review: TaskReviewReco
     );
   });
 
-const getReview = (sql: SqlClient.SqlClient, reviewId: string) =>
+const getReview = (sql: SqlClient.SqlClient, reviewId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<ReviewRow>`
       SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
@@ -815,10 +856,10 @@ const getReview = (sql: SqlClient.SqlClient, reviewId: string) =>
       FROM task_reviews WHERE id = ${reviewId}
     `;
     const row = rows[0];
-    return row === undefined ? undefined : yield* decodeReview(sql, row);
+    return row === undefined ? undefined : yield* decodeReview(sql, row, idPrefix);
   });
 
-const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
+const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow, idPrefix: string) =>
   Effect.gen(function* () {
     const findings = yield* sql<FindingRow>`
       SELECT title, description, evidence, files FROM task_review_findings
@@ -875,11 +916,15 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
       WHERE observation.review_id = ${row.id}
       ORDER BY transcript.sequence ASC
     `;
-    const legacyTaskReviewerSession = yield* readLegacyTaskReviewerSession(sql, row.taskId);
+    const legacyTaskReviewerSession = yield* readLegacyTaskReviewerSession(
+      sql,
+      publicTaskIdFromInternal(row.taskId, idPrefix),
+      idPrefix,
+    );
     return yield* Effect.try({
       try: (): TaskReviewRecord => ({
         id: row.id,
-        taskId: row.taskId,
+        taskId: publicTaskIdFromInternal(row.taskId, idPrefix),
         proposal: parseProposal(row.proposalSnapshot),
         dependencyEvidence: parseDependencies(row.dependencyEvidence),
         policy: parsePolicy(row.policySnapshot),
@@ -919,11 +964,15 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow) =>
     });
   });
 
-const readLegacyTaskReviewerSession = (sql: SqlClient.SqlClient, taskId: string) =>
+const readLegacyTaskReviewerSession = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+) =>
   sql<LegacyTaskReviewerSessionRow>`
     SELECT fingerprint, session_reference AS sessionReference
     FROM task_reviewer_sessions
-    WHERE task_id = ${taskId}
+    WHERE task_id = ${internalTaskId(taskId, idPrefix)}
   `.pipe(Effect.map((rows) => rows[0]));
 
 type TaskReviewJsonObject = Record<string, unknown> & {

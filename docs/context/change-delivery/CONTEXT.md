@@ -10,6 +10,7 @@ It does not mutate Task state or expose the correlation link as public Change in
 
 **Change**:
 The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned pull request, optionally linked to one Task.
+A Change has a SQLite-allocated internal integer identity, and its public ID is `<id-prefix>-C<change-integer>`.
 _Avoid_: Task, branch, pull request, generic workflow
 
 **Change linked to a Task**:

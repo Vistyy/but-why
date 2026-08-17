@@ -20,7 +20,7 @@ describe("Specialist Review configuration", () => {
     writeFileSync(join(root.global, "standards.md"), "Global standards instructions\n");
 
     const repoConfig = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       review: { specialists: ["security"] },
       reviewers: {
         security: {
@@ -66,7 +66,7 @@ describe("Specialist Review configuration", () => {
     expect(
       resolve(
         root,
-        { taskPrefix: "BY" },
+        { idPrefix: "BY" },
         {
           review: { specialists: ["standards"] },
           reviewers: { standards: { instructionsFile: "standards.md" } },
@@ -93,7 +93,7 @@ describe("Specialist Review configuration", () => {
   it("rejects a configured missing or unreadable Specialist instructions file", () => {
     const root = configRoot();
     const repoConfig = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       review: { specialists: ["security"] },
       reviewers: {
         security: {
@@ -131,19 +131,19 @@ describe("Specialist Review configuration", () => {
       reviewers: { standards: { instructionsFile: "standards.md" } },
     } satisfies GlobalConfig;
 
-    expect(resolve(root, { taskPrefix: "BY", review: { specialists: [] } }, globalConfig)).toEqual({
+    expect(resolve(root, { idPrefix: "BY", review: { specialists: [] } }, globalConfig)).toEqual({
       ok: true,
       policies: [],
     });
     expect(
-      resolve(root, { taskPrefix: "BY", review: { specialists: ["missing"] } }, {}),
+      resolve(root, { idPrefix: "BY", review: { specialists: ["missing"] } }, {}),
     ).toMatchObject({
       ok: false,
       error: { _tag: "InvalidReviewerConfig", message: "Specialist is not defined: missing" },
     });
     const reserved = resolve(
       root,
-      { taskPrefix: "BY", review: { specialists: ["acceptance"] } },
+      { idPrefix: "BY", review: { specialists: ["acceptance"] } },
       { reviewers: { acceptance: { instructionsFile: "acceptance.md" } } },
     );
     expect(reserved).toMatchObject({
@@ -152,7 +152,7 @@ describe("Specialist Review configuration", () => {
     });
     const duplicate = resolve(
       root,
-      { taskPrefix: "BY", review: { specialists: ["same", "same"] } },
+      { idPrefix: "BY", review: { specialists: ["same", "same"] } },
       {},
     );
     expect(duplicate).toMatchObject({ ok: false, error: { _tag: "InvalidReviewerConfig" } });

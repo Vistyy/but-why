@@ -69,10 +69,10 @@ The package directory contains the references and Implementer instructions that 
 
 ## Initialize repository policy
 
-In the target repository, initialize But Why with a repository-specific uppercase Task prefix:
+In the target repository, initialize But Why with a repository-specific uppercase ID Prefix:
 
 ```bash
-<but-why> init --task-prefix BY
+<but-why> init --id-prefix BY
 ```
 
 The command creates `.but-why/config.json` and `.but-why/reviewers/`.

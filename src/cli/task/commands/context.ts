@@ -28,7 +28,7 @@ export const runContextCommand = (
         ? loadTaskContextInspection(taskRepositoryInput(environment))
         : undefined;
     if (contextInspection !== undefined && !contextInspection.ok) {
-      return Effect.succeed(stateStoreUnavailable(tasks.taskPrefix));
+      return Effect.succeed(stateStoreUnavailable(tasks.idPrefix));
     }
     const getTaskContext =
       environment.taskContextInspectionUseCases?.getTaskContextById ??

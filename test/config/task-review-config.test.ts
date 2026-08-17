@@ -33,7 +33,7 @@ describe("Task Review configuration", () => {
     expect(
       resolve(
         {
-          taskPrefix: "BY",
+          idPrefix: "BY",
           review: { task: { agentProfile: { scope: "repo", name: "repo" } } },
           agentProfiles: { repo: profile("repo-model", ["skills/task"]) },
         },
@@ -52,13 +52,13 @@ describe("Task Review configuration", () => {
         },
       },
     });
-    expect(resolve({ taskPrefix: "BY" }, globalConfig)).toMatchObject({
+    expect(resolve({ idPrefix: "BY" }, globalConfig)).toMatchObject({
       ok: true,
       policy: { snapshot: { profile: { agentProfile: "global", scope: "global" } } },
     });
     expect(
       resolve(
-        { taskPrefix: "BY" },
+        { idPrefix: "BY" },
         {
           defaultAgentProfile: globalConfig.defaultAgentProfile,
           agentProfiles: globalConfig.agentProfiles,
@@ -73,7 +73,7 @@ describe("Task Review configuration", () => {
   it("selects at most one Repo-first guidance file and keeps the mandatory core separate", () => {
     const result = resolve(
       {
-        taskPrefix: "BY",
+        idPrefix: "BY",
         review: { task: { instructionsFile: "review/task.md" } },
       },
       {
@@ -98,7 +98,7 @@ describe("Task Review configuration", () => {
     expect(
       resolve(
         {
-          taskPrefix: "BY",
+          idPrefix: "BY",
           review: { task: { agentProfile: { scope: "repo", name: "repo" } } },
           agentProfiles: { repo: profile("repo-model", ["skills/missing"]) },
         },

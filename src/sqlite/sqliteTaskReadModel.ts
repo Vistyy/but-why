@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { isTaskState, type TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { type PublicTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
 
 export type DecodedTaskSummaryRow = {
   readonly id: PublicTaskId;
@@ -19,7 +19,7 @@ export type DecodedStoredTaskRecordRow = DecodedTaskSummaryRow & {
 };
 
 export type StoredTaskSummaryRow = {
-  readonly id: string;
+  readonly id: number;
   readonly numericId: number;
   readonly title: string;
   readonly state: unknown;
@@ -33,13 +33,13 @@ export type StoredTaskRecordRow = StoredTaskSummaryRow & {
 };
 
 export type StoredTaskContextRow = {
-  readonly id: string;
+  readonly id: number;
   readonly title: string;
   readonly description: string;
 };
 
 export type StoredTaskDependencyFactRow = {
-  readonly id: string;
+  readonly id: number;
   readonly numericId: number;
   readonly title: string;
   readonly state: unknown;
@@ -52,31 +52,36 @@ export const decodeTaskState = (value: unknown): TaskState => {
   return value;
 };
 
-export const decodeTaskSummaryRow = (row: StoredTaskSummaryRow): DecodedTaskSummaryRow => ({
+export const decodeTaskSummaryRow = (
+  row: StoredTaskSummaryRow,
+  idPrefix: string,
+): DecodedTaskSummaryRow => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: publicTaskIdFromInternal(row.id, idPrefix),
   state: decodeTaskState(row.state),
 });
 
 export const decodeStoredTaskRecordRow = (
   row: StoredTaskRecordRow,
+  idPrefix: string,
 ): DecodedStoredTaskRecordRow => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: publicTaskIdFromInternal(row.id, idPrefix),
   state: decodeTaskState(row.state),
 });
 
-export const decodeTaskContextRow = (row: StoredTaskContextRow) => ({
+export const decodeTaskContextRow = (row: StoredTaskContextRow, idPrefix: string) => ({
   ...row,
-  id: storedPublicTaskId(row.id),
+  id: publicTaskIdFromInternal(row.id, idPrefix),
 });
 
 export const decodeTaskDependencyFacts = (
   rows: readonly StoredTaskDependencyFactRow[],
   ownerTaskId: PublicTaskId,
+  idPrefix: string,
 ): readonly TaskDependencyFact[] =>
   rows.map((row) => {
-    const id = storedPublicTaskId(row.id);
+    const id = publicTaskIdFromInternal(row.id, idPrefix);
     if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
     return { id, title: row.title, state: decodeTaskState(row.state) };
   });

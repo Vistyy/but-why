@@ -23,7 +23,7 @@ const unexpected = (method: string): never => {
 
 export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): TaskUseCases => {
   const sync: SyncTaskUseCases = {
-    taskPrefix: "BY",
+    idPrefix: "BY",
     resolveTaskId: (taskId) => ({ ok: true, taskId }),
     createTask: () => unexpected("createTask"),
     editTaskDependencies: () => unexpected("editTaskDependencies"),
@@ -42,7 +42,7 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
   };
 
   return {
-    taskPrefix: sync.taskPrefix,
+    idPrefix: sync.idPrefix,
     resolveTaskId: sync.resolveTaskId,
     createTask: (...args) => {
       const task = sync.createTask(...args);

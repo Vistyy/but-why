@@ -17,6 +17,7 @@ _Avoid_: Worktree root, Repo Config location, per-worktree Git directory
 
 **Shared Repository State**:
 SQLite and other local operational state owned by But Why and resolved through Git's common directory so every linked worktree sees the same facts.
+It stores one immutable repository ID Prefix with the canonical Git Common Directory and rejects a conflicting Repo Config prefix.
 Task and Change owner tables remain separate, while `task_change_links` stores their optional one-to-one correlation.
 Direct modification outside But Why is unsupported.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database

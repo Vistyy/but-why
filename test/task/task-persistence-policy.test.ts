@@ -14,10 +14,29 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 const terminalStates = ["done", "cancelled"] as const;
 
+it.scoped("preserves ID-shaped freeform Task Context text", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const created = yield* tasks.createTask({
+        title: "BY-C1",
+        description: "BY-1",
+        now: firstNow,
+      });
+
+      expect(created).toMatchObject({
+        ok: true,
+        task: { title: "BY-C1", description: "BY-1" },
+        context: { title: "BY-C1", description: "BY-1" },
+      });
+    }),
+  ),
+);
+
 it.scoped("preserves terminal Task policy", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
 
       for (const [index, state] of terminalStates.entries()) {
         const created = yield* tasks.createTask({
@@ -53,7 +72,7 @@ it.scoped(
   () => {
     return withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const approved = yield* tasks.createTask({
           title: "Approved title",
           description: "Approved description",
@@ -108,7 +127,7 @@ it.scoped(
   () => {
     return withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const repository = yield* RepositorySql;
 
         yield* tasks.createTask({
@@ -136,14 +155,14 @@ it.scoped(
           (sql) => sql`
           UPDATE tasks SET
             updated_at = CASE id
-              WHEN 'BY-1' THEN ${firstNow}
-              WHEN 'BY-2' THEN ${thirdNow}
-              WHEN 'BY-3' THEN ${thirdNow}
-              WHEN 'BY-4' THEN ${secondNow}
-              WHEN 'BY-5' THEN ${thirdNow}
+              WHEN 1 THEN ${firstNow}
+              WHEN 2 THEN ${thirdNow}
+              WHEN 3 THEN ${thirdNow}
+              WHEN 4 THEN ${secondNow}
+              WHEN 5 THEN ${thirdNow}
               ELSE ${thirdNow}
             END
-          WHERE id IN ('BY-1', 'BY-2', 'BY-3', 'BY-4', 'BY-5')
+          WHERE id IN (1, 2, 3, 4, 5)
         `,
         );
 
@@ -164,7 +183,7 @@ it.scoped(
 it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       yield* tasks.createTask({ title: "First", description: "First", now: firstNow });
       yield* tasks.createTask({ title: "Second", description: "Second", now: firstNow });
       yield* tasks.createTask({ title: "Third", description: "Third", now: firstNow });

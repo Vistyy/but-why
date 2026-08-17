@@ -4,9 +4,11 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { CurrentChangeEvidenceQuery } from "../../src/change/changePorts.js";
 import {
   RepositoryIdentityConflict,
+  RepositoryIdPrefixConflict,
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
@@ -15,7 +17,7 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { storedPublicTaskId } from "../../src/task/taskId.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { repoRoot } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -42,12 +44,12 @@ const installPublicationIdentity = (
           INSERT OR IGNORE INTO candidates (
             id, change_id, change_base_sha, head_sha, created_at
           ) VALUES (
-            ${candidateId}, ${changeId}, ${`${candidateId}-base`}, ${expectedHeadSha}, ${now}
+            ${candidateId}, ${internalChangeId(changeId, "BY")}, ${`${candidateId}-base`}, ${expectedHeadSha}, ${now}
           )
         `;
         yield* sql`
           INSERT INTO current_candidates (change_id, candidate_id)
-          VALUES (${changeId}, ${candidateId})
+          VALUES (${internalChangeId(changeId, "BY")}, ${candidateId})
           ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
         `;
         yield* sql`
@@ -130,14 +132,14 @@ describe("repository SQL storage", () => {
   it.scoped("persists, replaces, and clears Repository Preparation failure", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const task = yield* tasks.createTask({
           title: "Persist exact accepted intent",
           description: "Capture this approved Task description.",
           now: "2026-07-17T22:48:00.000Z",
         });
         if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
-        const taskId = storedPublicTaskId(task.task.id);
+        const taskId = publicTaskId(task.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:49:00.000Z");
 
         const starts = yield* openSqliteChangeStartPersistence();
@@ -208,7 +210,7 @@ describe("repository SQL storage", () => {
   it.scoped("raises a Blocker without writing blocked Change or Task lifecycle state", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -217,7 +219,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-raise-blocker",
@@ -262,7 +264,7 @@ describe("repository SQL storage", () => {
   it.scoped("rejects a duplicate Blocker while one is unresolved", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -271,7 +273,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-duplicate-blocker",
@@ -317,7 +319,7 @@ describe("repository SQL storage", () => {
   it.scoped("raises a Blocker after publication or a passing Candidate", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -326,7 +328,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-published-blocker",
@@ -347,7 +349,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-              VALUES ('candidate-published', ${started.change.id}, 'base-sha', 'head-sha', '2026-07-17T22:56:00.000Z')
+              VALUES ('candidate-published', ${internalChangeId(started.change.id, "BY")}, 'base-sha', 'head-sha', '2026-07-17T22:56:00.000Z')
             `;
             yield* sql`
               INSERT INTO candidate_validation_runs (
@@ -366,7 +368,7 @@ describe("repository SQL storage", () => {
                 publication_head_branch = 'published-blocker',
                 publication_expected_head_sha = 'head-sha',
                 publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
-              WHERE id = ${started.change.id}
+              WHERE id = ${internalChangeId(started.change.id, "BY")}
             `;
           }),
         );
@@ -399,7 +401,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -408,7 +410,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T23:02:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T23:03:00.000Z");
         const started = yield* starts.create({
           id: "change-resolve-blocker",
@@ -455,7 +457,7 @@ describe("repository SQL storage", () => {
             sql<{ readonly acceptanceContext: string | null }>`
             SELECT acceptance_context AS acceptanceContext
             FROM changes
-            WHERE id = ${started.change.id}
+            WHERE id = ${internalChangeId(started.change.id, "BY")}
           `,
         );
         expect(storedContext).toEqual([
@@ -569,7 +571,7 @@ describe("repository SQL storage", () => {
     () =>
       withTemporaryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const starts = yield* openSqliteChangeStartPersistence();
           const changes = yield* openSqliteChangeTestDependencies();
           const created = yield* tasks.createTask({
@@ -578,7 +580,7 @@ describe("repository SQL storage", () => {
             now: "2026-07-17T22:55:00.000Z",
           });
           if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-          const taskId = storedPublicTaskId(created.task.id);
+          const taskId = publicTaskId(created.task.id);
           yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
           const started = yield* starts.create({
             id: "change-cancel-atomic",
@@ -628,7 +630,7 @@ describe("repository SQL storage", () => {
   it.scoped("preserves an open Change when observed merge evidence is stale", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -637,7 +639,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-stale-evidence",
@@ -739,7 +741,7 @@ describe("repository SQL storage", () => {
   it.scoped("rejects an older merged Candidate after a newer publication", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -748,7 +750,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-newer-publication",
@@ -863,7 +865,7 @@ describe("repository SQL storage", () => {
   it.scoped("rolls back terminal completion when the linked Task transition fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -872,7 +874,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-atomic-completion",
@@ -1137,7 +1139,7 @@ describe("repository SQL storage", () => {
                 publication_base_branch = 'main', publication_remote_name = 'origin',
                 publication_head_branch = 'feature', publication_expected_head_sha = 'head-sha',
                 publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
-              WHERE id = ${captured.changeId}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );
@@ -1168,7 +1170,7 @@ describe("repository SQL storage", () => {
             yield* sql`
               UPDATE changes SET
                 publication_validation_run_id = 'run-repaired-publication'
-              WHERE id = ${captured.changeId}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );
@@ -1189,7 +1191,7 @@ describe("repository SQL storage", () => {
           (sql) =>
             sql`
               UPDATE changes SET publication_validation_run_id = 'run-1'
-              WHERE id = ${captured.changeId}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `,
         );
 
@@ -1246,7 +1248,7 @@ describe("repository SQL storage", () => {
               yield* sql`
                 UPDATE changes SET
                   publication_validation_run_id = 'run-duplicate-representation'
-                WHERE id = ${captured.changeId}
+                WHERE id = ${internalChangeId(captured.changeId, "BY")}
               `;
             }),
         );
@@ -1259,7 +1261,7 @@ describe("repository SQL storage", () => {
         yield* repository.operation(
           "restore publication evidence reference",
           (sql) =>
-            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         expect(
           yield* changes.authority.getCurrentPassingEvidence(captured.changeId, authority),
@@ -1322,7 +1324,7 @@ describe("repository SQL storage", () => {
               UPDATE changes SET
                 publication_candidate_id = ${other.candidateId},
                 publication_validation_run_id = 'run-2'
-              WHERE id = ${captured.changeId}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
           }),
         );
@@ -2015,7 +2017,7 @@ describe("repository SQL storage", () => {
               id, repository_common_directory, branch_ref, base_ref, state,
               close_reason, created_at, updated_at, closed_at
             ) VALUES (
-              'change-1', ${input.commonDirectory}, 'refs/heads/feature', NULL,
+              1, ${input.commonDirectory}, 'refs/heads/feature', NULL,
               'open', NULL, '2026-07-17T23:00:00.000Z', '2026-07-17T23:00:00.000Z', NULL
             )
           `,
@@ -2035,7 +2037,7 @@ describe("repository SQL storage", () => {
           .commitCapture({
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
-            expectedChangeId: "change-1",
+            expectedChangeId: "BY-C1",
             baseRef: "refs/heads/main",
             changeBaseSha: "base",
             headSha: "head",
@@ -2043,7 +2045,7 @@ describe("repository SQL storage", () => {
           })
           .pipe(Effect.flip);
 
-        expect(yield* capture.getChangeById("change-1")).toMatchObject({ baseRef: null });
+        expect(yield* capture.getChangeById("BY-C1")).toMatchObject({ baseRef: null });
         const candidates = yield* repository.operation(
           "read failed Candidate capture",
           (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM candidates`,
@@ -2065,7 +2067,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-a', 'a', 'refs/heads/a',
+                1, 'a', 'refs/heads/a',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2074,7 +2076,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-b', 'b', 'refs/heads/b',
+                2, 'b', 'refs/heads/b',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2085,27 +2087,25 @@ describe("repository SQL storage", () => {
             yield* sql`
               INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
               VALUES
-                ('change-transcript-a', 'acceptance', 'session-a-1', 'reviewer-sessions/review_session-a-1.jsonl'),
-                ('change-transcript-a', 'standards', 'session-a-2', 'reviewer-sessions/review_session-a-2.jsonl'),
-                ('change-transcript-b', 'acceptance', 'session-b-1', 'reviewer-sessions/review_session-b-1.jsonl')
+                (1, 'acceptance', 'session-a-1', 'reviewer-sessions/review_session-a-1.jsonl'),
+                (1, 'standards', 'session-a-2', 'reviewer-sessions/review_session-a-2.jsonl'),
+                (2, 'acceptance', 'session-b-1', 'reviewer-sessions/review_session-b-1.jsonl')
             `;
           }),
         );
 
-        const first =
-          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-a");
-        const second =
-          yield* changes.reviewerTranscripts.listReviewerTranscripts("change-transcript-b");
+        const first = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C1");
+        const second = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C2");
 
         expect(first).toEqual([
           {
-            changeId: "change-transcript-a",
+            changeId: "BY-C1",
             producer: "acceptance",
             piSessionId: "session-a-1",
             filePath: "reviewer-sessions/review_session-a-1.jsonl",
           },
           {
-            changeId: "change-transcript-a",
+            changeId: "BY-C1",
             producer: "standards",
             piSessionId: "session-a-2",
             filePath: "reviewer-sessions/review_session-a-2.jsonl",
@@ -2113,7 +2113,7 @@ describe("repository SQL storage", () => {
         ]);
         expect(second).toEqual([
           {
-            changeId: "change-transcript-b",
+            changeId: "BY-C2",
             producer: "acceptance",
             piSessionId: "session-b-1",
             filePath: "reviewer-sessions/review_session-b-1.jsonl",
@@ -2135,7 +2135,7 @@ describe("repository SQL storage", () => {
                 id, repository_common_directory, branch_ref, state,
                 created_at, updated_at
               ) VALUES (
-                'change-transcript-retained', 'retained', 'refs/heads/retained',
+                1, 'retained', 'refs/heads/retained',
                 'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
               )
             `;
@@ -2145,32 +2145,28 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
-              VALUES ('change-transcript-retained', 'acceptance', 'fingerprint', 'session-live')
+              VALUES (1, 'acceptance', 'fingerprint', 'session-live')
             `;
             yield* sql`
               INSERT INTO reviewer_transcripts (change_id, producer, pi_session_id, file_path)
-              VALUES ('change-transcript-retained', 'acceptance', 'session-live', 'reviewer-sessions/review_session-live.jsonl')
+              VALUES (1, 'acceptance', 'session-live', 'reviewer-sessions/review_session-live.jsonl')
             `;
           }),
         );
 
-        const live = yield* changes.reviewerSessions.listReviewerSessions(
-          "change-transcript-retained",
-        );
+        const live = yield* changes.reviewerSessions.listReviewerSessions("BY-C1");
         expect(live).toEqual([
           {
-            ownerId: "change-transcript-retained",
+            ownerId: "BY-C1",
             producer: "acceptance",
             fingerprint: "fingerprint",
             sessionReference: "session-live",
           },
         ]);
-        const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts(
-          "change-transcript-retained",
-        );
+        const transcripts = yield* changes.reviewerTranscripts.listReviewerTranscripts("BY-C1");
         expect(transcripts).toEqual([
           {
-            changeId: "change-transcript-retained",
+            changeId: "BY-C1",
             producer: "acceptance",
             piSessionId: "session-live",
             filePath: "reviewer-sessions/review_session-live.jsonl",
@@ -2242,6 +2238,41 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.effect("rejects a configured ID Prefix that conflicts with Shared Repository State", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) => {
+        const statePath = join(directory, "state.sqlite");
+        const acquire = (idPrefix: string, lifecycle?: "initialize") =>
+          Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: directory,
+                  statePath,
+                  idPrefix,
+                  ...(lifecycle === undefined ? {} : { lifecycle }),
+                }),
+              ),
+            ),
+          );
+
+        return Effect.gen(function* () {
+          yield* acquire("BY", "initialize");
+          const error = yield* acquire("AC").pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryIdPrefixConflict);
+          expect(error).toMatchObject({
+            _tag: "RepositoryIdPrefixConflict",
+            configuredIdPrefix: "AC",
+            storedIdPrefix: "BY",
+          });
+        });
+      },
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("closes and reopens the same migrated repository state", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
@@ -2256,11 +2287,11 @@ describe("repository SQL storage", () => {
           ),
         );
         return Effect.gen(function* () {
-          expect(yield* initializeMigrationCount).toBe(42);
+          expect(yield* initializeMigrationCount).toBe(43);
           const readMigrationCount = Effect.scoped(
             migrationCount.pipe(Effect.provide(repositorySqlLayer(config))),
           );
-          expect(yield* readMigrationCount).toBe(42);
+          expect(yield* readMigrationCount).toBe(43);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -2360,9 +2391,9 @@ describe("repository SQL storage", () => {
                     ORDER BY migration_id
                   `,
               );
-              expect(migrations.length).toBe(42);
+              expect(migrations.length).toBe(43);
               expect(migrations.map((row) => row.migration_id)).toEqual(
-                Array.from({ length: 42 }, (_, index) => index + 1),
+                Array.from({ length: 43 }, (_, index) => index + 1),
               );
               const identities = yield* repository.operation(
                 "read concurrent repository identity",
@@ -2374,7 +2405,7 @@ describe("repository SQL storage", () => {
               );
               expect(identities).toEqual([{ common_directory: directory }]);
 
-              const tasks = yield* openSqliteTaskPersistence("BY");
+              const tasks = yield* openSqliteTaskPersistence();
               const created = yield* tasks.createTask({
                 title: "After concurrent initialization",
                 description: "Read and write after concurrent startup.",
@@ -2461,7 +2492,7 @@ describe("repository SQL storage", () => {
             expect(reopened.status).toBe(0);
             expect(JSON.parse(reopened.stdout)).toMatchObject({
               ok: true,
-              migrationCount: 42,
+              migrationCount: 43,
             });
             writeFileSync(releasePath, "release\n");
             const released = yield* Effect.promise(() => holder.done);

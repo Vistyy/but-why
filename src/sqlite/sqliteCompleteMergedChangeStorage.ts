@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import { type ChangePublication, changeState } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -10,7 +10,7 @@ import {
   decodeChangePublication,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import { decodeChangeLifecycle, decodeStoredString } from "./sqliteChangeValueDecoders.js";
+import { decodeChangeLifecycle } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 const operationName = "complete merged Change";
@@ -28,9 +28,13 @@ const completeChangeSelectionColumns = `
   close_reason AS closeReason
 `;
 
-export const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
+export const completeMergedChange = (
+  sql: SqlClient.SqlClient,
+  input: CompleteMergedChangeInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const lifecycle = yield* readChangeLifecycle(sql, input.changeId, operationName);
+    const lifecycle = yield* readChangeLifecycle(sql, input.changeId, operationName, idPrefix);
     if (lifecycle === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (lifecycle.state === changeState.closed) {
       if (lifecycle.closeReason !== "completed") {
@@ -38,12 +42,12 @@ export const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMe
       }
       return { ok: true as const, changed: false };
     }
-    const change = yield* readCompleteChange(sql, input.changeId);
+    const change = yield* readCompleteChange(sql, input.changeId, idPrefix);
     if (change === undefined) return yield* invalidData("Change disappeared");
     if (!matchesExactMergedEvidence(change, input.observed)) {
       return { ok: false as const, code: "publication_mismatch" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND state = 'open'`;
     return { ok: true as const, changed: true };
   });
 
@@ -51,31 +55,32 @@ export const readChangeLifecycle = (
   sql: SqlClient.SqlClient,
   changeId: string,
   selectedOperationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredChangeLifecycleRow>`
       SELECT id, state, close_reason AS closeReason
-      FROM changes WHERE id = ${changeId}
+      FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
     return yield* decodePersisted(selectedOperationName, () => {
-      const id = decodeStoredString(row.id, "Change id");
+      const id = publicChangeId(idPrefix, row.id);
       if (id !== changeId) throw new Error("Change identity does not match lookup");
       return { id, ...decodeChangeLifecycle(row) };
     });
   });
 
-const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
+const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCompleteChangeRow>(
       `SELECT ${completeChangeSelectionColumns} FROM changes WHERE id = ?`,
-      [changeId],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () => {
-      const id = decodeStoredString(row.id, "Change id");
+      const id = publicChangeId(idPrefix, row.id);
       if (id !== changeId) throw new Error("Change identity does not match lookup");
       return {
         id,
@@ -88,6 +93,7 @@ const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string) =>
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
     return selected;
   });
@@ -116,7 +122,7 @@ const invalidData = (message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type StoredChangeLifecycleRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly state: unknown;
   readonly closeReason: unknown;
 };

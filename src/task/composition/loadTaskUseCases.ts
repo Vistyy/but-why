@@ -15,7 +15,7 @@ export type LoadTaskUseCasesError =
   | ResolveLocalRepositoryError
   | {
       readonly code: "state_store_unavailable";
-      readonly taskPrefix: string;
+      readonly idPrefix: string;
     };
 
 export type WithTaskUseCasesResult<A> =
@@ -31,7 +31,7 @@ export const withTaskUseCases = <A, E, R>(
   const { context } = loaded.runtime;
 
   return loaded.runtime.provide(
-    openSqliteTaskPersistence(context.taskPrefix).pipe(
+    openSqliteTaskPersistence().pipe(
       Effect.flatMap((persistence) => use(openTaskUseCases(context, persistence))),
       Effect.map((value) => ({ ok: true as const, value })),
     ),

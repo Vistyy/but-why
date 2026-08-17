@@ -10,7 +10,12 @@ export const openSqliteActiveValidationRunPort = () =>
     (repository): ActiveValidationRunPort => ({
       getActiveForChange: (changeId) =>
         repository.transaction("read Active Candidate Validation Run", (sql) =>
-          readActiveValidationRunForChange(sql, changeId, "read Active Candidate Validation Run"),
+          readActiveValidationRunForChange(
+            sql,
+            changeId,
+            "read Active Candidate Validation Run",
+            repository.idPrefix,
+          ),
         ),
     }),
   );

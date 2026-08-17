@@ -9,7 +9,7 @@ import {
 } from "../../cliResults.js";
 import { taskIdResolutionError } from "../../cliTaskId.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { resolveRepositoryTaskPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
+import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 import { stderrSubmitProgress } from "../../submission/submissionProgress.js";
 import {
   type LoadTaskReviewError,
@@ -70,7 +70,7 @@ export const withTasks = (
       Effect.succeed(
         repositoryStorageErrorResult(
           error,
-          resolveRepositoryTaskPrefix(environment.cwd, environment.operationalRepoRoot),
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
         ),
       ),
     ),
@@ -86,7 +86,7 @@ export const withTaskChangeTasks = (
     (environment.taskUseCases === undefined
       ? undefined
       : {
-          taskPrefix: environment.taskUseCases.taskPrefix,
+          idPrefix: environment.taskUseCases.idPrefix,
           resolveTaskId: environment.taskUseCases.resolveTaskId,
           editTaskDependencies: environment.taskUseCases.editTaskDependencies,
           reviseTask: environment.taskUseCases.reviseTask,
@@ -102,7 +102,7 @@ export const withTaskChangeTasks = (
       Effect.succeed(
         repositoryStorageErrorResult(
           error,
-          resolveRepositoryTaskPrefix(environment.cwd, environment.operationalRepoRoot),
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
         ),
       ),
     ),
@@ -174,7 +174,7 @@ export const withTaskReviewSubmission = (
       Effect.succeed(
         repositoryStorageErrorResult(
           error,
-          resolveRepositoryTaskPrefix(environment.cwd, environment.operationalRepoRoot),
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
         ),
       ),
     ),
@@ -190,7 +190,7 @@ const catchTaskReviewStorageError = (
       Effect.succeed(
         repositoryStorageErrorResult(
           error,
-          resolveRepositoryTaskPrefix(environment.cwd, environment.operationalRepoRoot),
+          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
         ),
       ),
     ),

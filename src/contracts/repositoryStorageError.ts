@@ -29,14 +29,41 @@ export class RepositoryIdentityConflict extends Data.TaggedError("RepositoryIden
   readonly actualCommonDirectory: string;
 }> {}
 
+export class RepositoryIdPrefixConflict extends Data.TaggedError("RepositoryIdPrefixConflict")<{
+  readonly configuredIdPrefix: string;
+  readonly storedIdPrefix: string;
+}> {}
+
 export class RepositorySqlOperationFailed extends Data.TaggedError("RepositorySqlOperationFailed")<{
   readonly operationName: string;
   readonly cause: unknown;
 }> {}
 
+export type PredecessorReconciliationBlockedConditions = {
+  readonly openChanges: number;
+  readonly activeTaskReviews: number;
+  readonly activeValidationRuns: number;
+  readonly unsettledAgentInvocations: number;
+  readonly pendingTaskReviewCleanup: number;
+  readonly pendingValidationCleanup: number;
+  readonly pendingChangeCleanup: number;
+};
+
+export class PredecessorReconciliationRequiredError extends Data.TaggedError(
+  "PredecessorReconciliationRequiredError",
+)<{
+  readonly blocked: PredecessorReconciliationBlockedConditions;
+}> {}
+
 export class RepositoryMigrationFailed extends Data.TaggedError("RepositoryMigrationFailed")<{
   readonly statePath: string;
   readonly cause: unknown;
+}> {}
+
+export class RepositoryPredecessorReconciliationRequired extends Data.TaggedError(
+  "RepositoryPredecessorReconciliationRequired",
+)<{
+  readonly blocked: PredecessorReconciliationBlockedConditions;
 }> {}
 
 export class RepositoryRestoredTransientState extends Data.TaggedError(
@@ -56,7 +83,9 @@ export class RepositoryPersistedDataInvalid extends Data.TaggedError(
 export type RepositoryStorageError =
   | RepositoryStateUnavailable
   | RepositoryIdentityConflict
+  | RepositoryIdPrefixConflict
   | RepositorySqlOperationFailed
   | RepositoryMigrationFailed
+  | RepositoryPredecessorReconciliationRequired
   | RepositoryRestoredTransientState
   | RepositoryPersistedDataInvalid;

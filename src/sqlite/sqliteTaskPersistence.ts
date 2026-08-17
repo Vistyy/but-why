@@ -4,7 +4,12 @@ import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
-import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import {
+  internalTaskId,
+  type PublicTaskId,
+  publicTaskId,
+  publicTaskIdFromInternal,
+} from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   CancelTaskInput,
@@ -31,54 +36,74 @@ import {
   type StoredTaskSummaryRow,
 } from "./sqliteTaskReadModel.js";
 
-export const openSqliteTaskPersistence = (
-  taskPrefix: string,
-): Effect.Effect<TaskPersistence, never, RepositorySql> =>
-  Effect.map(RepositorySql, (repository) => ({
-    createTask: (input) =>
-      repository.transactionImmediate("create Task", (sql) => createTask(sql, taskPrefix, input)),
-    editTaskDependencies: (input) =>
-      repository.transactionImmediate("edit Task dependencies", (sql) =>
-        editTaskDependencies(sql, input),
-      ),
-    listTasks: (input) => repository.transaction("list Tasks", (sql) => listTasks(sql, input)),
-    listActionableTasks: () => repository.transaction("list actionable Tasks", listActionableTasks),
-    getTaskById: (taskId) => repository.transaction("read Task", (sql) => getTaskById(sql, taskId)),
-    getTaskContextById: (taskId) =>
-      repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
-    updateTaskContext: (input) =>
-      repository.transactionImmediate("update Task Context", (sql) =>
-        updateTaskContext(sql, input),
-      ),
-    reviseTask: (input) =>
-      repository.transactionImmediate("revise Task", (sql) => reviseTask(sql, input)),
-    cancelTask: (input) =>
-      repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input)),
-  }));
+export const openSqliteTaskPersistence = (): Effect.Effect<TaskPersistence, never, RepositorySql> =>
+  Effect.map(RepositorySql, (repository) => {
+    const idPrefix = repository.idPrefix;
+    return {
+      createTask: (input) =>
+        repository.transactionImmediate("create Task", (sql) => createTask(sql, idPrefix, input)),
+      editTaskDependencies: (input) =>
+        repository.transactionImmediate("edit Task dependencies", (sql) =>
+          editTaskDependencies(sql, input, idPrefix),
+        ),
+      listTasks: (input) =>
+        repository.transaction("list Tasks", (sql) => listTasks(sql, idPrefix, input)),
+      listActionableTasks: () =>
+        repository.transaction("list actionable Tasks", (sql) =>
+          listActionableTasks(sql, idPrefix),
+        ),
+      getTaskById: (taskId) =>
+        repository.transaction("read Task", (sql) => getTaskById(sql, taskId, idPrefix)),
+      getTaskContextById: (taskId) =>
+        repository.transaction("read Task Context", (sql) =>
+          getTaskContextById(sql, taskId, idPrefix),
+        ),
+      updateTaskContext: (input) =>
+        repository.transactionImmediate("update Task Context", (sql) =>
+          updateTaskContext(sql, idPrefix, input),
+        ),
+      reviseTask: (input) =>
+        repository.transactionImmediate("revise Task", (sql) => reviseTask(sql, input, idPrefix)),
+      cancelTask: (input) =>
+        repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input, idPrefix)),
+    };
+  });
 
-const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateTaskInput) =>
+const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTaskInput) =>
   Effect.gen(function* () {
-    const numericId = yield* nextTaskNumericId(sql);
-    const taskId = generatedPublicTaskId(taskPrefix, numericId);
-    const prerequisiteTaskIds = input.dependsOn ?? [];
-    const dependencyError = yield* validateDependencies(sql, taskId, prerequisiteTaskIds, false);
-    if (dependencyError !== undefined) return dependencyError;
-
-    yield* sql`
-      INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-      VALUES (${taskId}, ${numericId}, ${input.title}, ${input.description}, 'new', ${input.now}, ${input.now})
+    const inserted = yield* sql<{ readonly id: number }>`
+      INSERT INTO tasks (title, description, state, created_at, updated_at)
+      VALUES (${input.title}, ${input.description}, 'new', ${input.now}, ${input.now})
+      RETURNING id
     `;
-    yield* insertDependencies(sql, taskId, prerequisiteTaskIds);
-    const created = yield* getTaskById(sql, taskId);
+    const allocatedId = inserted[0]?.id;
+    if (allocatedId === undefined)
+      return yield* invalidData("create Task", "Task identity was not allocated");
+    const taskId = publicTaskIdFromInternal(allocatedId, idPrefix);
+    const prerequisiteTaskIds = input.dependsOn ?? [];
+    const dependencyError = yield* validateDependencies(
+      sql,
+      taskId,
+      prerequisiteTaskIds,
+      false,
+      idPrefix,
+    );
+    if (dependencyError !== undefined) return dependencyError;
+    yield* insertDependencies(sql, taskId, prerequisiteTaskIds, idPrefix);
+    const created = yield* getTaskById(sql, taskId, idPrefix);
     if (created === undefined) return yield* invalidData("create Task", "Task disappeared");
-    const context = yield* getTaskContextById(sql, taskId);
+    const context = yield* getTaskContextById(sql, taskId, idPrefix);
     if (context === undefined) return yield* invalidData("create Task", "Task Context disappeared");
     return { ok: true as const, task: created, context };
   });
 
-export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
+export const editTaskDependencies = (
+  sql: SqlClient.SqlClient,
+  input: EditTaskDependenciesInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const target = yield* validateTaskDependencyEditTarget(sql, input.taskId);
+    const target = yield* validateTaskDependencyEditTarget(sql, input.taskId, idPrefix);
     if (!target.ok) return target;
 
     if (input.operation === "replace" && input.prerequisiteTaskIds.length === 0) {
@@ -88,18 +113,20 @@ export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDe
     const dependencyError =
       input.operation === "clear"
         ? undefined
-        : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true);
+        : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true, idPrefix);
     if (dependencyError !== undefined) return dependencyError;
 
-    const currentIds = yield* Effect.forEach(target.task.prerequisites, (dependency) =>
-      Effect.try({
-        try: () => storedPublicTaskId(dependency.id),
-        catch: (cause) =>
-          new RepositoryPersistedDataInvalid({
-            operationName: "edit Task dependencies",
-            cause,
-          }),
-      }),
+    const currentIds: readonly PublicTaskId[] = yield* Effect.forEach(
+      target.task.prerequisites,
+      (dependency) =>
+        Effect.try({
+          try: () => publicTaskId(dependency.id),
+          catch: (cause) =>
+            new RepositoryPersistedDataInvalid({
+              operationName: "edit Task dependencies",
+              cause,
+            }),
+        }),
     );
     const requestedIds = input.prerequisiteTaskIds;
     const currentSet = new Set(currentIds);
@@ -128,23 +155,24 @@ export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDe
         sql,
         input.taskId,
         requestedIds.filter((taskId) => !currentSet.has(taskId)),
+        idPrefix,
       );
     } else if (input.operation === "remove") {
       yield* Effect.forEach(
         requestedIds,
         (prerequisiteTaskId) => sql`
           DELETE FROM task_dependencies
-          WHERE dependent_task_id = ${input.taskId}
-            AND prerequisite_task_id = ${prerequisiteTaskId}
+          WHERE dependent_task_id = ${internalTaskId(input.taskId, idPrefix)}
+            AND prerequisite_task_id = ${internalTaskId(prerequisiteTaskId, idPrefix)}
         `,
         { discard: true },
       );
     } else {
-      yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${input.taskId}`;
-      yield* insertDependencies(sql, input.taskId, desiredIds);
+      yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${internalTaskId(input.taskId, idPrefix)}`;
+      yield* insertDependencies(sql, input.taskId, desiredIds, idPrefix);
     }
 
-    const updated = yield* getTaskById(sql, input.taskId);
+    const updated = yield* getTaskById(sql, input.taskId, idPrefix);
     if (updated === undefined) {
       return yield* invalidData("edit Task dependencies", "Task disappeared");
     }
@@ -158,36 +186,40 @@ export const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDe
     };
   });
 
-const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
+const listTasks = (sql: SqlClient.SqlClient, idPrefix: string, input: ListTasksInput) =>
   Effect.gen(function* () {
     const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
     const rows = input.state
       ? yield* sql<StoredTaskSummaryRow>`
-          SELECT id, numeric_id AS numericId, title, state,
+          SELECT id, id AS numericId, title, state,
             created_at AS createdAt, updated_at AS updatedAt
           FROM tasks
           WHERE state = ${input.state}
-          ORDER BY created_at ASC, numeric_id ASC
+          ORDER BY created_at ASC, id ASC
           LIMIT ${limit}
         `
       : input.includeDone
         ? yield* sql<StoredTaskSummaryRow>`
-            SELECT id, numeric_id AS numericId, title, state,
+            SELECT id, id AS numericId, title, state,
               created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
-            ORDER BY created_at ASC, numeric_id ASC
+            ORDER BY created_at ASC, id ASC
             LIMIT ${limit}
           `
         : yield* sql<StoredTaskSummaryRow>`
-            SELECT id, numeric_id AS numericId, title, state,
+            SELECT id, id AS numericId, title, state,
               created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
             WHERE state IN ('new', 'todo')
-            ORDER BY created_at ASC, numeric_id ASC
+            ORDER BY created_at ASC, id ASC
             LIMIT ${limit}
           `;
-    const decoded = yield* decodePersisted("list Tasks", () => rows.map(decodeTaskSummaryRow));
-    const tasks = yield* Effect.forEach(decoded, (row) => rowToTaskSummary(sql, row, "list Tasks"));
+    const decoded = yield* decodePersisted("list Tasks", () =>
+      rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
+    );
+    const tasks = yield* Effect.forEach(decoded, (row) =>
+      rowToTaskSummary(sql, row, "list Tasks", idPrefix),
+    );
     return { tasks, total: yield* countTasks(sql, input) };
   });
 
@@ -209,44 +241,51 @@ const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
     return rows[0]?.count ?? 0;
   });
 
-const listActionableTasks = (sql: SqlClient.SqlClient) =>
+const listActionableTasks = (sql: SqlClient.SqlClient, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskSummaryRow>`
-      SELECT id, numeric_id AS numericId, title, state,
+      SELECT id, id AS numericId, title, state,
         created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
       WHERE state IN ('new', 'todo')
       ORDER BY
         CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
         updated_at DESC,
-        numeric_id ASC
+        id ASC
     `;
     const decoded = yield* decodePersisted("list actionable Tasks", () =>
-      rows.map(decodeTaskSummaryRow),
+      rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
     );
     return yield* Effect.forEach(decoded, (row) =>
-      rowToTaskSummary(sql, row, "list actionable Tasks"),
+      rowToTaskSummary(sql, row, "list actionable Tasks", idPrefix),
     );
   });
 
-export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
-      SELECT id, numeric_id AS numericId, title, description, state,
+      SELECT id, id AS numericId, title, description, state,
         cancel_reason AS cancelReason, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
-      WHERE id = ${taskId}
+      WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    const decoded = yield* decodePersisted("read Task", () => decodeStoredTaskRecordRow(row));
-    return yield* rowToStoredTaskRecord(sql, decoded, "read Task");
+    const decoded = yield* decodePersisted("read Task", () =>
+      decodeStoredTaskRecordRow(row, idPrefix),
+    );
+    return yield* rowToStoredTaskRecord(sql, decoded, "read Task", idPrefix);
   });
 
-export const completeTask = (sql: SqlClient.SqlClient, taskId: string, now: string) =>
+export const completeTask = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  now: string,
+  idPrefix: string,
+) =>
   sql`
     UPDATE tasks SET state = 'done', updated_at = ${now}
-    WHERE id = ${taskId} AND state = 'todo'
+    WHERE id = ${internalTaskId(taskId, idPrefix)} AND state = 'todo'
   `;
 
 export const cancelTaskState = (
@@ -254,25 +293,30 @@ export const cancelTaskState = (
   taskId: string,
   reason: string,
   now: string,
+  idPrefix: string,
 ) =>
   sql`
     UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}, updated_at = ${now}
-    WHERE id = ${taskId} AND state <> 'cancelled'
+    WHERE id = ${internalTaskId(taskId, idPrefix)} AND state <> 'cancelled'
   `;
 
-const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskContextRow>`
-      SELECT id, title, description FROM tasks WHERE id = ${taskId}
+      SELECT id, title, description FROM tasks WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    return yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row));
+    return yield* decodePersisted("read Task Context", () => decodeTaskContextRow(row, idPrefix));
   });
 
-const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
+const updateTaskContext = (
+  sql: SqlClient.SqlClient,
+  idPrefix: string,
+  input: UpdateTaskContextInput,
+) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
+    const current = yield* getTaskById(sql, input.taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state !== "new") {
       return {
@@ -286,26 +330,26 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     }
     yield* sql`
       UPDATE tasks SET description = ${input.description}, updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
-    const updated = yield* getTaskById(sql, input.taskId);
+    const updated = yield* getTaskById(sql, input.taskId, idPrefix);
     if (updated === undefined) {
       return yield* invalidData("update Task Context", "Task disappeared");
     }
-    const context = yield* getTaskContextById(sql, input.taskId);
+    const context = yield* getTaskContextById(sql, input.taskId, idPrefix);
     if (context === undefined) {
       return yield* invalidData("update Task Context", "Task Context disappeared");
     }
     return { ok: true as const, task: updated, context };
   });
 
-export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
+export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput, idPrefix: string) =>
   Effect.gen(function* () {
-    const validated = yield* validateTaskRevisionTarget(sql, input.taskId);
+    const validated = yield* validateTaskRevisionTarget(sql, input.taskId, idPrefix);
     if (!validated.ok) return validated;
     const current = validated.task;
     if (current.state === "new") {
-      const activeReview = yield* activeTaskReviewId(sql, input.taskId);
+      const activeReview = yield* activeTaskReviewId(sql, input.taskId, idPrefix);
       if (activeReview !== undefined) {
         return {
           ok: false as const,
@@ -317,9 +361,9 @@ export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
     }
     yield* sql`
       UPDATE tasks SET state = 'new', updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
-    const revised = yield* getTaskById(sql, input.taskId);
+    const revised = yield* getTaskById(sql, input.taskId, idPrefix);
     if (revised === undefined) return yield* invalidData("revise Task", "Task disappeared");
     return { ok: true as const, changed: true, task: revised };
   });
@@ -327,24 +371,29 @@ export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput) =>
 const cancelTask = (
   sql: SqlClient.SqlClient,
   input: CancelTaskInput,
+  idPrefix: string,
 ): Effect.Effect<CancelTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
+    const current = yield* getTaskById(sql, input.taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state === "done") return { ok: false as const, code: "task_already_done" as const };
     if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
     yield* sql`
       UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
-      WHERE id = ${input.taskId}
+      WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
-    const updated = yield* getTaskById(sql, input.taskId);
+    const updated = yield* getTaskById(sql, input.taskId, idPrefix);
     if (updated === undefined) return yield* invalidData("cancel Task", "Task disappeared");
     return { ok: true as const, changed: true, task: updated };
   });
 
-export const validateTaskRevisionTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const validateTaskRevisionTarget = (
+  sql: SqlClient.SqlClient,
+  taskId: PublicTaskId,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, taskId);
+    const current = yield* getTaskById(sql, taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (current.state !== "new" && current.state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
@@ -354,9 +403,13 @@ export const validateTaskRevisionTarget = (sql: SqlClient.SqlClient, taskId: Pub
 
 const taskDependenciesAreEditable = (state: TaskState): boolean => state === "new";
 
-export const validateTaskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+export const validateTaskDependencyEditTarget = (
+  sql: SqlClient.SqlClient,
+  taskId: PublicTaskId,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, taskId);
+    const current = yield* getTaskById(sql, taskId, idPrefix);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (!taskDependenciesAreEditable(current.state)) {
       return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
@@ -364,11 +417,11 @@ export const validateTaskDependencyEditTarget = (sql: SqlClient.SqlClient, taskI
     return { ok: true as const, task: current };
   });
 
-const activeTaskReviewId = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const activeTaskReviewId = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
   Effect.map(
     sql<{ readonly id: string }>`
       SELECT id FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'running'
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND state = 'running'
       LIMIT 1
     `,
     (rows) => rows[0]?.id,
@@ -385,6 +438,7 @@ const validateDependencies = (
   dependentTaskId: PublicTaskId,
   prerequisiteTaskIds: readonly PublicTaskId[],
   dependentExists: boolean,
+  idPrefix: string,
 ): Effect.Effect<
   DependencyValidationResult | undefined,
   SqlError | RepositoryPersistedDataInvalid
@@ -399,6 +453,7 @@ const validateDependencies = (
         dependentTaskId,
         prerequisiteTaskId,
         dependentExists,
+        idPrefix,
       );
       if (storedError !== undefined) return storedError;
     }
@@ -424,10 +479,11 @@ const validateStoredDependency = (
   dependentTaskId: PublicTaskId,
   prerequisiteTaskId: PublicTaskId,
   dependentExists: boolean,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: string }>`
-      SELECT id FROM tasks WHERE id = ${prerequisiteTaskId}
+    const rows = yield* sql<{ readonly id: number }>`
+      SELECT id FROM tasks WHERE id = ${internalTaskId(prerequisiteTaskId, idPrefix)}
     `;
     if (rows[0] === undefined) {
       return {
@@ -437,7 +493,7 @@ const validateStoredDependency = (
       };
     }
     if (!dependentExists) return undefined;
-    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
+    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId, idPrefix))
       ? { ok: false as const, code: "dependency_cycle" as const }
       : undefined;
   });
@@ -446,11 +502,12 @@ const dependencyPathExists = (
   sql: SqlClient.SqlClient,
   fromTaskId: PublicTaskId,
   targetTaskId: PublicTaskId,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<{ readonly taskId: string | null }>`
+    const rows = yield* sql<{ readonly taskId: number | null }>`
       WITH RECURSIVE prerequisites(task_id) AS (
-        SELECT ${fromTaskId}
+        SELECT ${internalTaskId(fromTaskId, idPrefix)}
         UNION
         SELECT task_dependencies.prerequisite_task_id
         FROM task_dependencies
@@ -463,7 +520,7 @@ const dependencyPathExists = (
     const reachableTaskIds = yield* decodePersisted("validate Task dependencies", () =>
       rows.map((row) => {
         if (row.taskId === null) throw new Error("Task dependency references an unknown Task");
-        return storedPublicTaskId(row.taskId);
+        return publicTaskIdFromInternal(row.taskId, idPrefix);
       }),
     );
     return reachableTaskIds.includes(targetTaskId);
@@ -473,12 +530,13 @@ const insertDependencies = (
   sql: SqlClient.SqlClient,
   dependentTaskId: PublicTaskId,
   prerequisiteTaskIds: readonly PublicTaskId[],
+  idPrefix: string,
 ) =>
   Effect.forEach(
     prerequisiteTaskIds,
     (prerequisiteTaskId) => sql`
       INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
-      VALUES (${dependentTaskId}, ${prerequisiteTaskId})
+      VALUES (${internalTaskId(dependentTaskId, idPrefix)}, ${internalTaskId(prerequisiteTaskId, idPrefix)})
     `,
     { discard: true },
   );
@@ -488,47 +546,39 @@ const dependencyFacts = (
   taskId: PublicTaskId,
   direction: "prerequisites" | "dependents",
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows =
       direction === "prerequisites"
         ? yield* sql<StoredTaskDependencyFactRow>`
-            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
+            SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-            WHERE task_dependencies.dependent_task_id = ${taskId}
-            ORDER BY tasks.numeric_id ASC
+            WHERE task_dependencies.dependent_task_id = ${internalTaskId(taskId, idPrefix)}
+            ORDER BY tasks.id ASC
           `
         : yield* sql<StoredTaskDependencyFactRow>`
-            SELECT tasks.id, tasks.numeric_id AS numericId, tasks.title, tasks.state
+            SELECT tasks.id, tasks.id AS numericId, tasks.title, tasks.state
             FROM task_dependencies
             LEFT JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
-            WHERE task_dependencies.prerequisite_task_id = ${taskId}
-            ORDER BY tasks.numeric_id ASC
+            WHERE task_dependencies.prerequisite_task_id = ${internalTaskId(taskId, idPrefix)}
+            ORDER BY tasks.id ASC
           `;
-    return yield* decodePersisted(operationName, () => decodeTaskDependencyFacts(rows, taskId));
-  });
-
-const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredMaximumNumericIdRow>`
-      SELECT MAX(numeric_id) AS maximumNumericId
-      FROM tasks
-    `;
-    const next = (rows[0]?.maximumNumericId ?? 0) + 1;
-    if (!Number.isSafeInteger(next)) {
-      return yield* invalidData("create Task", "Next Task numeric ID must be safe");
-    }
-    return next;
+    return yield* decodePersisted(operationName, () =>
+      decodeTaskDependencyFacts(rows, taskId, idPrefix),
+    );
   });
 
 const rowToTaskSummary = (
   sql: SqlClient.SqlClient,
   row: DecodedTaskSummaryRow,
   operationName: string,
+  idPrefix: string,
 ) =>
-  Effect.map(dependencyFacts(sql, row.id, "prerequisites", operationName), (prerequisites) =>
-    taskSummary(row, prerequisites),
+  Effect.map(
+    dependencyFacts(sql, row.id, "prerequisites", operationName, idPrefix),
+    (prerequisites) => taskSummary(row, prerequisites),
   );
 
 const taskSummary = (
@@ -544,10 +594,17 @@ const rowToStoredTaskRecord = (
   sql: SqlClient.SqlClient,
   row: DecodedStoredTaskRecordRow,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const prerequisites = yield* dependencyFacts(sql, row.id, "prerequisites", operationName);
-    const dependents = yield* dependencyFacts(sql, row.id, "dependents", operationName);
+    const prerequisites = yield* dependencyFacts(
+      sql,
+      row.id,
+      "prerequisites",
+      operationName,
+      idPrefix,
+    );
+    const dependents = yield* dependencyFacts(sql, row.id, "dependents", operationName, idPrefix);
     return {
       ...taskSummary(row, prerequisites),
       description: row.description,
@@ -565,5 +622,4 @@ const invalidData = (operationName: string, message: string) =>
     }),
   );
 
-type StoredMaximumNumericIdRow = { readonly maximumNumericId: number | null };
 type StoredCountRow = { readonly count: number };

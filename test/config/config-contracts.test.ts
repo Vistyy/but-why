@@ -71,7 +71,7 @@ describe("configuration contracts", () => {
 
   it("decodes the Repo Interactive Session Agent Profile selection", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       interactiveSession: { agentProfile: { scope: "repo", name: "implementation" } },
     };
 
@@ -138,7 +138,7 @@ describe("configuration contracts", () => {
 
   it("decodes repo validation and reviewer policy", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       prepare: { command: "pnpm install", timeoutSeconds: 60 },
       validation: {
         checks: [{ id: "quality", command: "just quality", timeoutSeconds: 120 }],
@@ -171,7 +171,7 @@ describe("configuration contracts", () => {
   it("rejects validation-scoped preparation", () => {
     const error = left(
       decodeRepoConfig({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         validation: { prepare: { command: "pnpm install" } },
       }),
     );
@@ -184,7 +184,7 @@ describe("configuration contracts", () => {
 
   it("decodes a repository Agent Environment command", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       agentEnvironment: { command: ["nix", "develop", "-c"] },
     };
 
@@ -193,7 +193,7 @@ describe("configuration contracts", () => {
 
   it("decodes repository Task Review overrides", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       review: {
         task: {
           instructionsFile: ".but-why/reviewers/task.md",
@@ -207,7 +207,7 @@ describe("configuration contracts", () => {
 
   it("decodes repository Acceptance overrides", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       review: {
         acceptance: {
           instructionsFile: ".but-why/reviewers/acceptance.md",
@@ -221,7 +221,7 @@ describe("configuration contracts", () => {
 
   it("decodes an empty Repo Specialist list that disables inherited Specialists", () => {
     const config = {
-      taskPrefix: "BY",
+      idPrefix: "BY",
       review: { specialists: [] },
     };
 
@@ -245,7 +245,7 @@ describe("configuration contracts", () => {
   it("reports actionable repo config diagnostics", () => {
     const error = left(
       decodeRepoConfig({
-        taskPrefix: "BY",
+        idPrefix: "BY",
         validation: { checks: [{ id: "quality", command: "" }] },
       }),
     );
@@ -263,11 +263,11 @@ describe("configuration contracts", () => {
   });
 
   it.each([
-    ["unknown keys", { taskPrefix: "BY", ignorePatterns: ["dist/**"] }],
+    ["unknown keys", { idPrefix: "BY", ignorePatterns: ["dist/**"] }],
     [
       "empty profile names",
       {
-        taskPrefix: "BY",
+        idPrefix: "BY",
         agentProfiles: { "": { agentRuntime: "pi", runtimeConfig: { model: "model" } } },
       },
     ],
@@ -281,53 +281,50 @@ describe("configuration contracts", () => {
 
 describe("repository configuration rejection matrix", () => {
   it.each([
-    ["missing taskPrefix", {}],
-    ["non-string taskPrefix", { taskPrefix: 123 }],
-    ["invalid existing taskPrefix", { taskPrefix: "B" }],
-    ["extra key", { taskPrefix: "BY", extra: true }],
-    ["unknown review key", { taskPrefix: "BY", review: { unsupported: true } }],
-    ["top-level checks", { taskPrefix: "BY", checks: [{ id: "quality", command: "true" }] }],
+    ["missing idPrefix", {}],
+    ["non-string idPrefix", { idPrefix: 123 }],
+    ["invalid existing idPrefix", { idPrefix: "B" }],
+    ["extra key", { idPrefix: "BY", extra: true }],
+    ["unknown review key", { idPrefix: "BY", review: { unsupported: true } }],
+    ["top-level checks", { idPrefix: "BY", checks: [{ id: "quality", command: "true" }] }],
     [
       "check severity",
       {
-        taskPrefix: "BY",
+        idPrefix: "BY",
         validation: { checks: [{ id: "quality", command: "true", severity: "high" }] },
       },
     ],
-    ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
-    ["empty Agent Environment command", { taskPrefix: "BY", agentEnvironment: { command: [] } }],
+    ["prepare severity", { idPrefix: "BY", prepare: { severity: "high" } }],
+    ["empty Agent Environment command", { idPrefix: "BY", agentEnvironment: { command: [] } }],
     [
       "blank Agent Environment command entry",
-      { taskPrefix: "BY", agentEnvironment: { command: ["   "] } },
+      { idPrefix: "BY", agentEnvironment: { command: ["   "] } },
     ],
-    [
-      "disabled Acceptance Review",
-      { taskPrefix: "BY", review: { acceptance: { enabled: false } } },
-    ],
-    ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],
+    ["disabled Acceptance Review", { idPrefix: "BY", review: { acceptance: { enabled: false } } }],
+    ["validation prepare without command", { idPrefix: "BY", validation: { prepare: {} } }],
     [
       "validation prepare empty command",
-      { taskPrefix: "BY", validation: { prepare: { command: "   " } } },
+      { idPrefix: "BY", validation: { prepare: { command: "   " } } },
     ],
     [
       "validation prepare command array",
-      { taskPrefix: "BY", validation: { prepare: { command: ["pnpm", "install"] } } },
+      { idPrefix: "BY", validation: { prepare: { command: ["pnpm", "install"] } } },
     ],
     [
       "validation prepare commands array",
-      { taskPrefix: "BY", validation: { prepare: { commands: ["pnpm install"] } } },
+      { idPrefix: "BY", validation: { prepare: { commands: ["pnpm install"] } } },
     ],
     [
       "validation prepare zero timeout",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 0 } } },
+      { idPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 0 } } },
     ],
     [
       "validation prepare decimal timeout",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 1.5 } } },
+      { idPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 1.5 } } },
     ],
     [
       "validation prepare extra key",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", severity: "high" } } },
+      { idPrefix: "BY", validation: { prepare: { command: "true", severity: "high" } } },
     ],
   ])("rejects repo config with %s", (_name, input) => {
     const error = left(decodeRepoConfig(input));

@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import type { ChangeRecord } from "../change/change.js";
+import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -37,24 +37,36 @@ export const openSqliteChangeSubmissionPort = () =>
     (repository): ChangeSubmissionPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for submission", (sql) =>
-          readSubmissionChange(sql, changeId),
+          readSubmissionChange(sql, changeId, repository.idPrefix),
         ),
       agentSessionConfigurationCanBeCorrected: (changeId, producer) =>
         repository.transaction("check Change Agent configuration correction", (sql) =>
-          agentSessionConfigurationCanBeCorrected(sql, changeId, producer),
+          agentSessionConfigurationCanBeCorrected(sql, changeId, producer, repository.idPrefix),
         ),
       getChangeForOutputById: (changeId) =>
-        repository.transaction("read Change for Submit output", (sql) => getById(sql, changeId)),
+        repository.transaction("read Change for Submit output", (sql) =>
+          getById(sql, changeId, repository.idPrefix),
+        ),
       getCompletedPublicationEvidence: (changeId, candidateId, validationRunId) =>
         repository.transaction("read completed Candidate Publication evidence", (sql) =>
-          readCompletedCandidatePublicationEvidence(sql, changeId, candidateId, validationRunId),
+          readCompletedCandidatePublicationEvidence(
+            sql,
+            changeId,
+            candidateId,
+            validationRunId,
+            repository.idPrefix,
+          ),
         ),
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeChangeOnly(sql, input);
+            const result = yield* completeChangeOnly(sql, input, repository.idPrefix);
             if (!result.ok) return result;
-            const changeId = yield* readCommittedCompletionId(sql, input.changeId);
+            const changeId = yield* readCommittedCompletionId(
+              sql,
+              input.changeId,
+              repository.idPrefix,
+            );
             return { ...result, changeId };
           }),
         ),
@@ -64,12 +76,13 @@ const agentSessionConfigurationCanBeCorrected = (
   sql: SqlClient.SqlClient,
   changeId: string,
   producer: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const sessions = yield* sql<{ readonly agentSessionId: number }>`
       SELECT agent_session_id AS agentSessionId
       FROM change_agent_sessions
-      WHERE change_id = ${changeId} AND producer = ${producer}
+      WHERE change_id = ${internalChangeId(changeId, idPrefix)} AND producer = ${producer}
     `;
     const sessionId = sessions[0]?.agentSessionId;
     if (sessionId === undefined) return false;
@@ -117,11 +130,21 @@ const publicationSelectionColumns = `
   publication_pr_number AS publicationPrNumber,
   publication_pr_url AS publicationPrUrl
 `;
-const readActiveBlocker = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+const readActiveBlocker = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName: string,
+  idPrefix: string,
+) =>
   Effect.map(
-    readSelectedBlockers(sql, changeId, operationName, "change_id = ? AND resolved_at IS NULL", [
+    readSelectedBlockers(
+      sql,
       changeId,
-    ]),
+      operationName,
+      "change_id = ? AND resolved_at IS NULL",
+      [internalChangeId(changeId, idPrefix)],
+      idPrefix,
+    ),
     (history) => history.active,
   );
 const readSelectedBlockers = (
@@ -130,6 +153,7 @@ const readSelectedBlockers = (
   operationName: string,
   predicate: string,
   parameters: readonly unknown[],
+  idPrefix: string,
 ) =>
   Effect.flatMap(
     sql.unsafe<StoredImplementationBlockerRow>(
@@ -137,9 +161,11 @@ const readSelectedBlockers = (
       parameters,
     ),
     (rows) =>
-      decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
+      decodePersisted(operationName, () =>
+        decodeImplementationBlockerHistory(rows, changeId, idPrefix),
+      ),
   );
-const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
+const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const operationName = "read Change for submission";
     const rows = yield* sql.unsafe<StoredSubmissionChangeRow>(
@@ -148,7 +174,7 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
         acceptance_context AS acceptanceContext,
         reviewer_configuration AS reviewerConfiguration
        FROM changes WHERE id = ?`,
-      [changeId],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
@@ -160,7 +186,7 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
         throw new Error("Stored managed Change submission facts are incomplete");
       }
       return {
-        ...decodeSelectedChangeState(row, changeId),
+        ...decodeSelectedChangeState(row, changeId, idPrefix),
         branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
         baseRef,
         baseRemoteUrl,
@@ -177,8 +203,14 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
-    const blockerHistory = yield* readImplementationBlockerHistory(sql, selected.id, operationName);
+    const blockerHistory = yield* readImplementationBlockerHistory(
+      sql,
+      selected.id,
+      operationName,
+      idPrefix,
+    );
     const activeBlocker = blockerHistory.active;
     return {
       ...selected,
@@ -186,16 +218,16 @@ const readSubmissionChange = (sql: SqlClient.SqlClient, changeId: string) =>
       activeBlocker,
     } satisfies SubmissionChange;
   });
-const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string) =>
+const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
     const operationName = "complete merged Change";
-    const rows = yield* sql<{ readonly id: unknown }>`
-      SELECT id FROM changes WHERE id = ${changeId}
+    const rows = yield* sql<{ readonly id: number }>`
+      SELECT id FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     const row = rows[0];
     if (row === undefined) return yield* invalidData(operationName, "Change disappeared");
     return yield* decodePersisted(operationName, () => {
-      const committedId = decodeStoredString(row.id, "Change id");
+      const committedId = publicChangeId(idPrefix, row.id);
       if (committedId !== changeId) throw new Error("Change identity does not match lookup");
       return committedId;
     });
@@ -215,73 +247,83 @@ const decodeReviewerConfiguration = (value: unknown) => {
   }
   return decoded as ChangeReviewerConfiguration;
 };
-const getById = (sql: SqlClient.SqlClient, changeId: string) =>
+const getById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
-      changeId,
+      internalChangeId(changeId, idPrefix),
     ]),
-    (rows) => mapRow(rows[0], "read Change", sql),
+    (rows) => mapRow(rows[0], "read Change", sql, idPrefix),
   );
-const decodeSelectedChangeState = (row: StoredChangeStateRow, changeId: string) => {
-  const id = decodeStoredString(row.id, "Change id");
+const decodeSelectedChangeState = (
+  row: StoredChangeStateRow,
+  changeId: string,
+  idPrefix: string,
+) => {
+  const id = publicChangeId(idPrefix, row.id);
   if (id !== changeId) throw new Error("Change identity does not match lookup");
   return { id, state: decodeChangeState(row.state) };
 };
-const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
+const listDecisions = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
     sql<StoredImplementationDecisionRow>`
       SELECT id, change_id AS changeId, sequence,
         recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${changeId}
+      FROM implementation_decisions WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
-        decodeImplementationDecisions(rows, changeId),
+        decodeImplementationDecisions(rows, changeId, idPrefix),
       ),
   );
 const mapRow = (
   row: StoredChangeRow | undefined,
   operationName: string,
   sql: SqlClient.SqlClient,
+  idPrefix: string,
 ) =>
-  Effect.flatMap(mapChangeWithoutHistoryRow(row, operationName, sql), (changeWithoutHistory) =>
-    changeWithoutHistory === undefined
-      ? Effect.succeed(undefined)
-      : Effect.gen(function* () {
-          const decisions = yield* listDecisions(sql, changeWithoutHistory.id);
-          const activeBlocker = yield* readActiveBlocker(
-            sql,
-            changeWithoutHistory.id,
-            operationName,
-          );
-          return {
-            ...changeWithoutHistory,
-            implementationDecisions: decisions,
-            activeBlocker,
-          } satisfies ChangeRecord;
-        }),
+  Effect.flatMap(
+    mapChangeWithoutHistoryRow(row, operationName, sql, idPrefix),
+    (changeWithoutHistory) =>
+      changeWithoutHistory === undefined
+        ? Effect.succeed(undefined)
+        : Effect.gen(function* () {
+            const decisions = yield* listDecisions(sql, changeWithoutHistory.id, idPrefix);
+            const activeBlocker = yield* readActiveBlocker(
+              sql,
+              changeWithoutHistory.id,
+              operationName,
+              idPrefix,
+            );
+            return {
+              ...changeWithoutHistory,
+              implementationDecisions: decisions,
+              activeBlocker,
+            } satisfies ChangeRecord;
+          }),
   );
 const mapChangeWithoutHistoryRow = (
   row: StoredChangeRow | undefined,
   operationName: string,
   sql: SqlClient.SqlClient,
+  idPrefix: string,
 ) =>
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
-        const change = yield* decodePersisted(operationName, () => decodeChangeRow(row));
+        const change = yield* decodePersisted(operationName, () => decodeChangeRow(row, idPrefix));
         yield* validateChangePublicationRelationships(
           sql,
           change.id,
           change.publication,
           operationName,
+          idPrefix,
         );
         return change;
       });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 type StoredChangeStateRow = {
-  readonly id: unknown;
+  readonly id: number;
   readonly state: unknown;
 };
 type StoredSubmissionChangeRow = StoredChangeStateRow &

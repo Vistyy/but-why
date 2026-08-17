@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
@@ -28,7 +29,7 @@ const installPublicationIdentity = (changeId: string) =>
       Effect.gen(function* () {
         yield* sql`
           INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-          VALUES ('candidate-1', ${changeId}, 'base', 'head', ${now})
+          VALUES ('candidate-1', ${internalChangeId(changeId, "BY")}, 'base', 'head', ${now})
         `;
         yield* sql`
           INSERT INTO candidate_validation_runs (
@@ -245,7 +246,7 @@ describe("by change reconcile", () => {
   it.effect("atomically completes a merged Change and its linked Task before cleanup", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const createdTask = yield* tasks.createTask({
           title: "Merged Change",
           description: "Complete me",
@@ -483,7 +484,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const createdTask = yield* tasks.createTask({
             title: "Merged blocked Change",
             description: "Exact merge evidence outranks the historical Blocker.",
@@ -601,7 +602,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const createdTask = yield* tasks.createTask({
             title: "Single observation",
             description: "Completion derives the linked Task from durable Change state.",

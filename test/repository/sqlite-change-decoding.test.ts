@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
+import { internalChangeId } from "../../src/change/changeId.js";
 
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
@@ -31,13 +32,13 @@ describe("SQLite Change decoding", () => {
           const changes = yield* openSqliteChangeTestDependencies();
           const repository = yield* RepositorySql;
           const created = yield* starts.create({
-            id: "change-decoded",
+            id: "BY-C1",
             repositoryCommonDirectory: input.commonDirectory,
-            branchRef: "refs/heads/change-decoded",
+            branchRef: "refs/heads/BY-C1",
             baseRef: "refs/remotes/origin/main",
             baseRemoteUrl: "https://github.com/acme/repo.git",
             startingCommit: "base-sha",
-            worktreePath: `${input.commonDirectory}/worktrees/change-decoded`,
+            worktreePath: `${input.commonDirectory}/worktrees/BY-C1`,
             prepare: { command: "just init", timeoutSeconds: 120 },
             now: "2026-08-09T20:00:00.000Z",
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
@@ -48,21 +49,21 @@ describe("SQLite Change decoding", () => {
             Effect.gen(function* () {
               yield* sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
-                'BY-901', 901, 'Historical intent', 'Preserve snapshots.', 'todo', NULL,
+                901, 'Historical intent', 'Preserve snapshots.', 'todo', NULL,
                 '2026-08-09T20:00:00.000Z', '2026-08-09T20:00:00.000Z'
               )
             `;
               yield* sql`
               UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Historical intent","description":"Preserve snapshots.","comments":["first\\ncomment","second"],"resolutions":["keep  spacing"]}'
-              WHERE id = 'change-decoded'
+              WHERE id = 1
             `;
             }),
           );
 
-          const storedWithoutLink = yield* changes.reads.getChangeById("change-decoded");
+          const storedWithoutLink = yield* changes.reads.getChangeById("BY-C1");
           expect(storedWithoutLink?.acceptanceContext).toEqual({
             version: 1,
             title: "Historical intent",
@@ -70,17 +71,17 @@ describe("SQLite Change decoding", () => {
             comments: ["first\ncomment", "second"],
             resolutions: ["keep  spacing"],
           });
-          yield* expectPersistedDataInvalid(starts.getById("change-decoded"));
+          yield* expectPersistedDataInvalid(starts.getById("BY-C1"));
 
           yield* repository.operation(
             "install Change Task link",
             (sql) => sql`
             INSERT INTO task_change_links (task_id, change_id)
-            VALUES ('BY-901', 'change-decoded')
+            VALUES (901, 1)
           `,
           );
 
-          const stored = yield* changes.reads.getChangeById("change-decoded");
+          const stored = yield* changes.reads.getChangeById("BY-C1");
           expect(stored?.acceptanceContext).toEqual({
             version: 1,
             title: "Historical intent",
@@ -88,7 +89,7 @@ describe("SQLite Change decoding", () => {
             comments: ["first\ncomment", "second"],
             resolutions: ["keep  spacing"],
           });
-          expect((yield* starts.getById("change-decoded"))?.acceptanceContext).toEqual(
+          expect((yield* starts.getById("BY-C1"))?.acceptanceContext).toEqual(
             stored?.acceptanceContext,
           );
         }),
@@ -102,13 +103,13 @@ describe("SQLite Change decoding", () => {
         const changes = yield* openSqliteChangeTestDependencies();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
-          id: "change-malformed",
+          id: "BY-C1",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/change-malformed",
+          branchRef: "refs/heads/BY-C1",
           baseRef: "refs/remotes/origin/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "base-sha",
-          worktreePath: `${input.commonDirectory}/worktrees/change-malformed`,
+          worktreePath: `${input.commonDirectory}/worktrees/BY-C1`,
           now: "2026-08-09T20:10:00.000Z",
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
@@ -116,26 +117,25 @@ describe("SQLite Change decoding", () => {
 
         yield* repository.operation(
           "inject incomplete Change Start",
-          (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-malformed'`,
+          (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 1`,
         );
-        expect(yield* changes.reads.getChangeById("change-malformed")).toMatchObject({
+        expect(yield* changes.reads.getChangeById("BY-C1")).toMatchObject({
           startingCommit: null,
         });
-        yield* expectPersistedDataInvalid(starts.getById("change-malformed"));
+        yield* expectPersistedDataInvalid(starts.getById("BY-C1"));
         yield* repository.operation(
           "restore Change Start",
-          (sql) =>
-            sql`UPDATE changes SET starting_commit = 'base-sha' WHERE id = 'change-malformed'`,
+          (sql) => sql`UPDATE changes SET starting_commit = 'base-sha' WHERE id = 1`,
         );
 
         const other = yield* starts.create({
-          id: "change-publication-owner",
+          id: "BY-C2",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/change-publication-owner",
+          branchRef: "refs/heads/BY-C2",
           baseRef: "refs/remotes/origin/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "base-sha",
-          worktreePath: `${input.commonDirectory}/worktrees/change-publication-owner`,
+          worktreePath: `${input.commonDirectory}/worktrees/BY-C2`,
           now: "2026-08-09T20:10:00.000Z",
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
@@ -145,7 +145,7 @@ describe("SQLite Change decoding", () => {
             yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
               VALUES (
-                'foreign-candidate', 'change-publication-owner', 'base-sha', 'head-sha',
+                'foreign-candidate', 2, 'base-sha', 'head-sha',
                 '2026-08-09T20:10:00.000Z'
               )
             `;
@@ -167,13 +167,13 @@ describe("SQLite Change decoding", () => {
                 publication_repo = 'repo', publication_base_branch = 'main',
                 publication_remote_name = 'origin', publication_head_branch = 'foreign',
                 publication_expected_head_sha = 'head-sha'
-              WHERE id = 'change-malformed'
+              WHERE id = 1
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
-        expect(yield* starts.getById("change-malformed")).toMatchObject({
-          id: "change-malformed",
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("BY-C1"));
+        expect(yield* starts.getById("BY-C1")).toMatchObject({
+          id: "BY-C1",
           startingCommit: "base-sha",
         });
 
@@ -182,7 +182,7 @@ describe("SQLite Change decoding", () => {
             yield* sql`
               INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
               VALUES (
-                'owned-candidate', 'change-malformed', 'base-sha', 'actual-head',
+                'owned-candidate', 1, 'base-sha', 'actual-head',
                 '2026-08-09T20:10:00.000Z'
               )
             `;
@@ -205,11 +205,11 @@ describe("SQLite Change decoding", () => {
                 publication_remote_name = 'origin', publication_head_branch = 'owned',
                 publication_expected_head_sha = 'different-head', publication_pr_number = 7,
                 publication_pr_url = 'https://github.test/pull/7'
-              WHERE id = 'change-malformed'
+              WHERE id = 1
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("BY-C1"));
         const publicationEvidenceQuery = {
           candidateId: "owned-candidate",
           validationRunId: "owned-run",
@@ -224,10 +224,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
         expect(
-          yield* changes.authority.getCurrentPassingEvidence(
-            "change-malformed",
-            publicationEvidenceQuery,
-          ),
+          yield* changes.authority.getCurrentPassingEvidence("BY-C1", publicationEvidenceQuery),
         ).toBeUndefined();
         yield* repository.operation(
           "inject malformed Implementation Decision Snapshot",
@@ -239,24 +236,18 @@ describe("SQLite Change decoding", () => {
           `,
         );
         expect(
-          yield* changes.authority.getCurrentPassingEvidence(
-            "change-malformed",
-            publicationEvidenceQuery,
-          ),
+          yield* changes.authority.getCurrentPassingEvidence("BY-C1", publicationEvidenceQuery),
         ).toBeUndefined();
         yield* repository.operation(
           "inject foreign publication Implementation Decision",
           (sql) => sql`
             UPDATE candidate_validation_runs
-            SET implementation_decisions = '[{"id":"decision-1","changeId":"change-publication-owner","sequence":1,"recordedAt":"2026-08-09T20:10:00.000Z","choice":"Foreign choice","rationale":"Foreign rationale"}]'
+            SET implementation_decisions = '[{"id":"decision-1","changeId":"BY-C2","sequence":1,"recordedAt":"2026-08-09T20:10:00.000Z","choice":"Foreign choice","rationale":"Foreign rationale"}]'
             WHERE id = 'owned-run'
           `,
         );
         expect(
-          yield* changes.authority.getCurrentPassingEvidence(
-            "change-malformed",
-            publicationEvidenceQuery,
-          ),
+          yield* changes.authority.getCurrentPassingEvidence("BY-C1", publicationEvidenceQuery),
         ).toBeUndefined();
         yield* repository.operation("inject foreign latest resolved Blocker", (sql) =>
           Effect.gen(function* () {
@@ -266,7 +257,7 @@ describe("SQLite Change decoding", () => {
                 id, change_id, reported_at, content, resolved_at, resolution_id,
                 resolution_recorded_at, resolution_content
               ) VALUES (
-                'foreign-blocker', 'change-publication-owner',
+                'foreign-blocker', 2,
                 '2026-08-09T20:10:00.000Z', 'Foreign blocker.',
                 '2026-08-09T20:10:01.000Z', 'foreign-resolution',
                 '2026-08-09T20:10:01.000Z', 'Resolved elsewhere.'
@@ -280,10 +271,7 @@ describe("SQLite Change decoding", () => {
           }),
         );
         expect(
-          yield* changes.authority.getCurrentPassingEvidence(
-            "change-malformed",
-            publicationEvidenceQuery,
-          ),
+          yield* changes.authority.getCurrentPassingEvidence("BY-C1", publicationEvidenceQuery),
         ).toBeUndefined();
         yield* repository.operation(
           "restore absent publication",
@@ -294,7 +282,7 @@ describe("SQLite Change decoding", () => {
               publication_remote_name = NULL, publication_head_branch = NULL,
               publication_expected_head_sha = NULL, publication_pr_number = NULL,
               publication_pr_url = NULL
-            WHERE id = 'change-malformed'
+            WHERE id = 1
           `,
         );
 
@@ -302,40 +290,40 @@ describe("SQLite Change decoding", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
-                'BY-902', 902, 'Malformed intent', 'Reject it.', 'todo', NULL,
+                902, 'Malformed intent', 'Reject it.', 'todo', NULL,
                 '2026-08-09T20:10:00.000Z', '2026-08-09T20:10:00.000Z'
               )
             `;
             yield* sql`
               UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed intent","description":"Reject it.","unexpected":true}'
-              WHERE id = 'change-malformed'
+              WHERE id = 1
             `;
             yield* sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES ('BY-902', 'change-malformed')
+              VALUES (902, 1)
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("BY-C1"));
         yield* repository.operation(
           "install malformed Acceptance Context resolutions",
           (sql) => sql`
             UPDATE changes SET acceptance_context =
               '{"version":1,"title":"Malformed intent","description":"Reject it.","resolutions":"not-an-array"}'
-            WHERE id = 'change-malformed'
+            WHERE id = 1
           `,
         );
-        yield* expectPersistedDataInvalid(changes.reads.getChangeById("change-malformed"));
+        yield* expectPersistedDataInvalid(changes.reads.getChangeById("BY-C1"));
         yield* repository.operation(
           "restore Change without a Task context",
-          (sql) => sql`UPDATE changes SET acceptance_context = NULL WHERE id = 'change-malformed'`,
+          (sql) => sql`UPDATE changes SET acceptance_context = NULL WHERE id = 1`,
         );
         yield* repository.operation(
           "remove malformed Change link",
-          (sql) => sql`DELETE FROM task_change_links WHERE change_id = 'change-malformed'`,
+          (sql) => sql`DELETE FROM task_change_links WHERE change_id = 1`,
         );
       }),
     ),
@@ -348,13 +336,13 @@ describe("SQLite Change decoding", () => {
         const publication = yield* openSqliteCandidatePublicationPort();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
-          id: "change-publication-selection",
+          id: "BY-C1",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/change-publication-selection",
+          branchRef: "refs/heads/BY-C1",
           baseRef: "refs/remotes/origin/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "base-sha",
-          worktreePath: `${input.commonDirectory}/worktrees/change-publication-selection`,
+          worktreePath: `${input.commonDirectory}/worktrees/BY-C1`,
           now: "2026-08-09T20:15:00.000Z",
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
@@ -365,12 +353,12 @@ describe("SQLite Change decoding", () => {
             yield* sql`PRAGMA ignore_check_constraints = ON`;
             yield* sql`
               UPDATE changes SET prepare_command = 'just init', cleanup_state = 'unsupported'
-              WHERE id = 'change-publication-selection'
+              WHERE id = 1
             `;
           }),
         );
-        expect(yield* publication.getChangeById("change-publication-selection")).toMatchObject({
-          id: "change-publication-selection",
+        expect(yield* publication.getChangeById("BY-C1")).toMatchObject({
+          id: "BY-C1",
           publication: null,
         });
 
@@ -378,25 +366,25 @@ describe("SQLite Change decoding", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
-                ' BY-904', 904, 'Malformed selected metadata', 'Reject it.', 'todo', NULL,
+                904, 'Selected metadata', 'Keep publication projection independent.', 'todo', NULL,
                 '2026-08-09T20:15:00.000Z', '2026-08-09T20:15:00.000Z'
               )
             `;
             yield* sql`
               UPDATE changes SET acceptance_context =
                 '{"version":1,"title":"Malformed selected metadata","description":"Reject it."}'
-              WHERE id = 'change-publication-selection'
+              WHERE id = 1
             `;
             yield* sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES (' BY-904', 'change-publication-selection')
+              VALUES (904, 1)
             `;
           }),
         );
-        expect(yield* publication.getChangeById("change-publication-selection")).toMatchObject({
-          id: "change-publication-selection",
+        expect(yield* publication.getChangeById("BY-C1")).toMatchObject({
+          id: "BY-C1",
           publication: null,
         });
       }),
@@ -430,9 +418,9 @@ describe("SQLite Change decoding", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (
-                id, numeric_id, title, description, state, cancel_reason, created_at, updated_at
+                id, title, description, state, cancel_reason, created_at, updated_at
               ) VALUES (
-                'BY-903', 903, 'Scoped task lookup', 'Ignore unrelated Blocker history.',
+                903, 'Scoped task lookup', 'Ignore unrelated Blocker history.',
                 'todo', NULL, '2026-08-09T20:20:00.000Z', '2026-08-09T20:20:00.000Z'
               )
             `;
@@ -441,11 +429,11 @@ describe("SQLite Change decoding", () => {
                 '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}',
                 base_remote_url = 'https://github.com/acme/repo.git',
                 starting_commit = 'base-sha', worktree_path = ${input.commonDirectory}
-              WHERE id = ${captured.changeId}
+              WHERE id = ${internalChangeId(captured.changeId, "BY")}
             `;
             yield* sql`
               INSERT INTO task_change_links (task_id, change_id)
-              VALUES ('BY-903', ${captured.changeId})
+              VALUES (903, ${internalChangeId(captured.changeId, "BY")})
             `;
           }),
         );
@@ -464,9 +452,9 @@ describe("SQLite Change decoding", () => {
         if (!firstResolution.ok) throw new Error(firstResolution.code);
         yield* repository.operation("change unrelated Change history", (sql) =>
           Effect.gen(function* () {
-            yield* sql`UPDATE implementation_decisions SET choice = 'Changed Decision' WHERE change_id = ${captured.changeId}`;
+            yield* sql`UPDATE implementation_decisions SET choice = 'Changed Decision' WHERE change_id = ${internalChangeId(captured.changeId, "BY")}`;
             yield* sql`UPDATE implementation_blockers SET content = 'Changed Blocker' WHERE id = ${raised.blocker.id}`;
-            yield* sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${captured.changeId}`;
+            yield* sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${internalChangeId(captured.changeId, "BY")}`;
           }),
         );
         expect(
@@ -475,7 +463,7 @@ describe("SQLite Change decoding", () => {
         yield* repository.operation(
           "restore Acceptance Context",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history."}' WHERE id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         expect(
           yield* changes.authority.recordImplementationDecision({
@@ -495,7 +483,7 @@ describe("SQLite Change decoding", () => {
           "restore Decision history required by publication",
           (sql) =>
             sql`UPDATE implementation_decisions SET choice = 'Restored Decision'
-                WHERE change_id = ${captured.changeId}`,
+                WHERE change_id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         const second = yield* changes.authority.raiseImplementationBlocker({
           changeId: captured.changeId,
@@ -535,13 +523,13 @@ describe("SQLite Change decoding", () => {
         yield* repository.operation(
           "corrupt selected submission data",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = 'malformed context' WHERE id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         yield* expectPersistedDataInvalid(changes.submission.getChangeById(captured.changeId));
         yield* repository.operation(
           "restore selected submission data",
           (sql) =>
-            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history.","resolutions":["Proceed.","Proceed again."]}' WHERE id = ${captured.changeId}`,
+            sql`UPDATE changes SET acceptance_context = '{"version":1,"title":"Scoped task lookup","description":"Ignore unrelated Blocker history.","resolutions":["Proceed.","Proceed again."]}' WHERE id = ${internalChangeId(captured.changeId, "BY")}`,
         );
         expect(
           yield* changes.delivery.cancelChange({
@@ -565,7 +553,7 @@ describe("SQLite Change decoding", () => {
           (sql) =>
             sql`
             INSERT INTO implementation_blockers (id, change_id, reported_at, content)
-            VALUES ('closed-active-blocker', ${captured.changeId},
+            VALUES ('closed-active-blocker', ${internalChangeId(captured.changeId, "BY")},
               '2026-08-09T20:26:00.000Z', 'Closed projection does not select this Blocker.')
           `,
         );
@@ -605,13 +593,13 @@ describe("SQLite Change decoding", () => {
         const cleanup = yield* openSqliteTerminalChangeCleanupPort();
         const repository = yield* RepositorySql;
         const created = yield* starts.create({
-          id: "change-selected-corruption",
+          id: "BY-C1",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/change-selected-corruption",
+          branchRef: "refs/heads/BY-C1",
           baseRef: "refs/remotes/origin/main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "base-sha",
-          worktreePath: `${input.commonDirectory}/worktrees/change-selected-corruption`,
+          worktreePath: `${input.commonDirectory}/worktrees/BY-C1`,
           now: "2026-08-09T20:27:00.000Z",
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
         });
@@ -622,29 +610,25 @@ describe("SQLite Change decoding", () => {
             yield* sql`PRAGMA ignore_check_constraints = ON`;
             yield* sql`
               UPDATE changes SET state = 'unsupported'
-              WHERE id = 'change-selected-corruption'
+              WHERE id = 1
             `;
           }),
         );
-        yield* expectPersistedDataInvalid(starts.getById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(publication.getChangeById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(
-          reconciliation.getChangeById("change-selected-corruption"),
-        );
-        yield* expectPersistedDataInvalid(
-          changes.submission.getChangeById("change-selected-corruption"),
-        );
+        yield* expectPersistedDataInvalid(starts.getById("BY-C1"));
+        yield* expectPersistedDataInvalid(publication.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(reconciliation.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(changes.submission.getChangeById("BY-C1"));
         yield* expectPersistedDataInvalid(
           changes.authority.raiseImplementationBlocker({
-            changeId: "change-selected-corruption",
+            changeId: "BY-C1",
             content: "Do not record this Blocker.",
             now: "2026-08-09T20:28:00.000Z",
           }),
         );
         yield* expectPersistedDataInvalid(
           cleanup.recordCleanup({
-            changeId: "change-selected-corruption",
+            changeId: "BY-C1",
             cleanup: { state: "complete", blockingReason: null },
             now: "2026-08-09T20:28:00.000Z",
           }),
@@ -655,19 +639,15 @@ describe("SQLite Change decoding", () => {
           (sql) =>
             sql`
             UPDATE changes SET state = 'open', publication_owner = 'acme'
-            WHERE id = 'change-selected-corruption'
+            WHERE id = 1
           `,
         );
-        yield* expectPersistedDataInvalid(publication.getChangeById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(
-          reconciliation.getChangeById("change-selected-corruption"),
-        );
-        yield* expectPersistedDataInvalid(
-          changes.submission.getChangeById("change-selected-corruption"),
-        );
-        expect(yield* starts.getById("change-selected-corruption")).toMatchObject({
-          id: "change-selected-corruption",
+        yield* expectPersistedDataInvalid(publication.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(reconciliation.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(changes.submission.getChangeById("BY-C1"));
+        expect(yield* starts.getById("BY-C1")).toMatchObject({
+          id: "BY-C1",
         });
 
         yield* repository.operation(
@@ -677,21 +657,19 @@ describe("SQLite Change decoding", () => {
             UPDATE changes SET publication_owner = NULL, state = 'closed',
               close_reason = 'cancelled', closed_at = '2026-08-09T20:29:00.000Z',
               cleanup_state = 'unsupported'
-            WHERE id = 'change-selected-corruption'
+            WHERE id = 1
           `,
         );
-        yield* expectPersistedDataInvalid(cancellation.getChangeById("change-selected-corruption"));
-        yield* expectPersistedDataInvalid(
-          reconciliation.getChangeById("change-selected-corruption"),
-        );
+        yield* expectPersistedDataInvalid(cancellation.getChangeById("BY-C1"));
+        yield* expectPersistedDataInvalid(reconciliation.getChangeById("BY-C1"));
         yield* expectPersistedDataInvalid(
           cleanup.recordCleanup({
-            changeId: "change-selected-corruption",
+            changeId: "BY-C1",
             cleanup: { state: "complete", blockingReason: null },
             now: "2026-08-09T20:30:00.000Z",
           }),
         );
-        expect(yield* publication.getChangeById("change-selected-corruption")).toMatchObject({
+        expect(yield* publication.getChangeById("BY-C1")).toMatchObject({
           state: "closed",
         });
       }),
@@ -707,7 +685,7 @@ describe("SQLite Change decoding", () => {
           const cleanup = yield* openSqliteTerminalChangeCleanupPort();
           const repository = yield* RepositorySql;
           const created = yield* starts.create({
-            id: "cleanup-selected-data",
+            id: "BY-C1",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/cleanup-selected-data",
             baseRef: "refs/remotes/origin/main",
@@ -726,14 +704,14 @@ describe("SQLite Change decoding", () => {
                 SET state = 'closed', close_reason = 'cancelled',
                   closed_at = '2026-08-09T20:31:00.000Z', cleanup_state = 'pending',
                   acceptance_context = 'malformed unrelated context'
-                WHERE id = 'cleanup-selected-data'
+                WHERE id = 1
               `;
             }),
           );
 
           expect(
             yield* cleanup.recordCleanup({
-              changeId: "cleanup-selected-data",
+              changeId: "BY-C1",
               cleanup: { state: "complete", blockingReason: null },
               now: "2026-08-09T20:32:00.000Z",
             }),

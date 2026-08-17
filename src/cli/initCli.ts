@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import type { CliEnvironment } from "../cli.js";
 import {
   type CliResult,
+  predecessorReconciliationRequired,
   restoredTransientState,
   runtimeError,
   stateStoreUnavailable,
@@ -17,7 +18,7 @@ import { structuredContractDiagnostics } from "../output/contractDiagnostics.js"
 import { initializeRepositoryRuntime } from "../repositoryRuntime/repositoryContext.js";
 
 export const runInitCommand = (
-  command: { readonly taskPrefix: string },
+  command: { readonly idPrefix: string },
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> =>
   initializeRepositoryRuntime({
@@ -25,16 +26,16 @@ export const runInitCommand = (
     ...(environment.operationalRepoRoot === undefined
       ? {}
       : { operationalRepoRoot: environment.operationalRepoRoot }),
-    taskPrefix: command.taskPrefix,
+    idPrefix: command.idPrefix,
   }).pipe(
     Effect.map((initResult) => {
       if (!initResult.ok) {
         switch (initResult.error.code) {
-          case "invalid_task_prefix":
+          case "invalid_id_prefix":
             return usageError({
-              code: "invalid_task_prefix",
-              message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
-              details: { taskPrefix: initResult.error.taskPrefix },
+              code: "invalid_id_prefix",
+              message: "ID Prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
+              details: { idPrefix: initResult.error.idPrefix },
               help: [
                 "Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY.",
               ],
@@ -55,17 +56,17 @@ export const runInitCommand = (
               },
               help: ["Fix the JSON or move the file aside before running init again."],
             });
-          case "task_prefix_conflict":
+          case "id_prefix_conflict":
             return runtimeError({
-              code: "task_prefix_conflict",
-              message: `Repository is already initialized with task prefix ${initResult.error.existingTaskPrefix}.`,
+              code: "id_prefix_conflict",
+              message: `Repository is already initialized with ID Prefix ${initResult.error.existingIdPrefix}.`,
               details: {
                 path: ".but-why/config.json",
-                existingTaskPrefix: initResult.error.existingTaskPrefix,
-                requestedTaskPrefix: initResult.error.requestedTaskPrefix,
+                existingIdPrefix: initResult.error.existingIdPrefix,
+                requestedIdPrefix: initResult.error.requestedIdPrefix,
               },
               help: [
-                `Keep using ${initResult.error.existingTaskPrefix}, or manually migrate .but-why/config.json before running init again.`,
+                `Keep using ${initResult.error.existingIdPrefix}, or manually migrate .but-why/config.json before running init again.`,
               ],
             });
           case "invalid_repo_state":
@@ -80,13 +81,15 @@ export const runInitCommand = (
               code: "shared_state_identity_conflict",
               message: "Shared But Why? state belongs to a different Git repository.",
               help: [
-                "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
+                "Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.",
               ],
             });
+          case "predecessor_reconciliation_required":
+            return predecessorReconciliationRequired(initResult.error.blocked);
           case "restored_transient_state":
             return restoredTransientState(initResult.error.tasks, initResult.error.changes);
           case "state_store_unavailable":
-            return stateStoreUnavailable(command.taskPrefix);
+            return stateStoreUnavailable(command.idPrefix);
         }
       }
 
@@ -94,7 +97,7 @@ export const runInitCommand = (
         init: {
           status: initResult.status,
           root: initResult.root,
-          taskPrefix: initResult.taskPrefix,
+          idPrefix: initResult.idPrefix,
         },
         ...(initResult.created.length > 0 ? { created: initResult.created } : {}),
         ...(initResult.updated.length > 0 ? { updated: initResult.updated } : {}),

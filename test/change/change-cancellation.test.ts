@@ -47,7 +47,7 @@ describe("Change cancellation", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
         expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
         writeDefaultReviewConfig(root);
@@ -103,7 +103,7 @@ describe("Change cancellation", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
         expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
         writeDefaultReviewConfig(root);
@@ -144,7 +144,7 @@ describe("Change cancellation", () => {
   it.effect("directly cancels an unlinked Task through Task Cancel", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
       writeFileSync(join(root, "task.md"), "Implement the requested change.");
@@ -177,7 +177,7 @@ describe("Change cancellation", () => {
   it.effect("cancels a Change without a Task and exposes its reason through inspection", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
 
@@ -210,7 +210,7 @@ describe("Change cancellation", () => {
   it.effect("rejects empty cancellation reasons for Change and Task Cancel", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
       writeFileSync(join(root, "task.md"), "Implement the requested change.");
@@ -256,7 +256,7 @@ describe("Change cancellation", () => {
     () =>
       Effect.gen(function* () {
         const root = createGitRepo();
-        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        const initialized = yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
         expect(initialized.status).toBe(0);
         commitButWhyConfigAndRecordDefault(root);
 
@@ -303,7 +303,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -328,7 +328,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -364,7 +364,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1", "--reason", "Stop"],
+        ["change", "cancel", "BY-C1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );

@@ -1,5 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
 import {
   RepositoryPersistedDataInvalid,
@@ -15,7 +16,7 @@ import {
   validateTaskDependencyEditTarget,
   validateTaskRevisionTarget,
 } from "../../../sqlite/sqliteTaskPersistence.js";
-import { storedPublicTaskId } from "../../../task/taskId.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
@@ -40,11 +41,11 @@ export const openSqliteTaskChangeLinkPort = () =>
     (repository): TaskChangeLinkPort => ({
       getByTaskId: (taskId) =>
         repository.transaction("read Change link by Task", (sql) =>
-          readTaskChangeLinkByTaskId(sql, taskId),
+          readTaskChangeLinkByTaskId(sql, taskId, repository.idPrefix),
         ),
       getByChangeId: (changeId) =>
         repository.transaction("read Task link by Change", (sql) =>
-          readTaskChangeLinkByChangeId(sql, changeId),
+          readTaskChangeLinkByChangeId(sql, changeId, repository.idPrefix),
         ),
     }),
   );
@@ -56,9 +57,13 @@ export const openSqliteTaskChangeTaskPersistence = () =>
       editTaskDependencies: (input) =>
         repository.transactionImmediate("edit Task dependencies", (sql) =>
           Effect.gen(function* () {
-            const target = yield* validateTaskDependencyEditTarget(sql, input.taskId);
+            const target = yield* validateTaskDependencyEditTarget(
+              sql,
+              input.taskId,
+              repository.idPrefix,
+            );
             if (!target.ok) return target;
-            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId);
+            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
             if (link !== undefined) {
               return {
                 ok: false as const,
@@ -66,15 +71,19 @@ export const openSqliteTaskChangeTaskPersistence = () =>
                 state: target.task.state,
               };
             }
-            return yield* editTaskDependencies(sql, input);
+            return yield* editTaskDependencies(sql, input, repository.idPrefix);
           }),
         ),
       reviseTask: (input) =>
         repository.transactionImmediate("revise Task", (sql) =>
           Effect.gen(function* () {
-            const current = yield* validateTaskRevisionTarget(sql, input.taskId);
+            const current = yield* validateTaskRevisionTarget(
+              sql,
+              input.taskId,
+              repository.idPrefix,
+            );
             if (!current.ok) return current;
-            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId);
+            const link = yield* readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix);
             if (link !== undefined) {
               return {
                 ok: false as const,
@@ -82,18 +91,22 @@ export const openSqliteTaskChangeTaskPersistence = () =>
                 changeId: link.changeId,
               };
             }
-            return yield* reviseTask(sql, input);
+            return yield* reviseTask(sql, input, repository.idPrefix);
           }),
         ),
     }),
   );
 
-export const completeLinkedChange = (sql: SqlClient.SqlClient, input: CompleteMergedChangeInput) =>
+export const completeLinkedChange = (
+  sql: SqlClient.SqlClient,
+  input: CompleteMergedChangeInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const link = yield* readTaskChangeLinkByChangeId(sql, input.changeId);
+    const link = yield* readTaskChangeLinkByChangeId(sql, input.changeId, idPrefix);
     let taskDecision: TaskCompletionDecision | undefined;
     if (link !== undefined) {
-      const task = yield* getTaskById(sql, storedPublicTaskId(link.taskId));
+      const task = yield* getTaskById(sql, link.taskId, idPrefix);
       if (task === undefined) {
         return yield* Effect.fail(
           new RepositoryPersistedDataInvalid({
@@ -108,30 +121,54 @@ export const completeLinkedChange = (sql: SqlClient.SqlClient, input: CompleteMe
       }
     }
 
-    const result = yield* completeChangeOnly(sql, input);
+    const result = yield* completeChangeOnly(sql, input, idPrefix);
     if (!result.ok) return result;
     if (link !== undefined && taskDecision?.state === "todo") {
-      yield* completeTask(sql, link.taskId, input.now);
+      yield* completeTask(sql, link.taskId, input.now, idPrefix);
     }
     return result;
   });
 
-export const readTaskChangeLinkByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
+export const readTaskChangeLinkByTaskId = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  idPrefix: string,
+) =>
   Effect.flatMap(
-    sql<{ readonly taskId: string; readonly changeId: string }>`
+    sql<{ readonly taskId: number; readonly changeId: number }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE task_id = ${taskId}
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)}
     `,
-    (rows) => Effect.succeed(rows[0]),
+    (rows) =>
+      Effect.succeed(
+        rows[0] === undefined
+          ? undefined
+          : {
+              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
+              changeId: publicChangeId(idPrefix, rows[0].changeId),
+            },
+      ),
   );
 
-const readTaskChangeLinkByChangeId = (sql: SqlClient.SqlClient, changeId: string) =>
+const readTaskChangeLinkByChangeId = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  idPrefix: string,
+) =>
   Effect.flatMap(
-    sql<{ readonly taskId: string; readonly changeId: string }>`
+    sql<{ readonly taskId: number; readonly changeId: number }>`
       SELECT task_id AS taskId, change_id AS changeId
       FROM task_change_links
-      WHERE change_id = ${changeId}
+      WHERE change_id = ${internalChangeId(changeId, idPrefix)}
     `,
-    (rows) => Effect.succeed(rows[0]),
+    (rows) =>
+      Effect.succeed(
+        rows[0] === undefined
+          ? undefined
+          : {
+              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
+              changeId: publicChangeId(idPrefix, rows[0].changeId),
+            },
+      ),
   );

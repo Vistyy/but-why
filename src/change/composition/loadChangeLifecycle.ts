@@ -26,6 +26,7 @@ import {
   startChange,
 } from "../changeLifecycle.js";
 import type { ChangeReconciliationPort } from "../changePorts.js";
+import type { ChangeStartGitOperations } from "../changeStartGitOperations.js";
 import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
@@ -35,7 +36,7 @@ import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =
   | ResolveLocalRepositoryError
-  | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+  | { readonly code: "state_store_unavailable"; readonly idPrefix: string };
 
 export type LoadedChangeOperationResult<A> =
   | { readonly ok: true; readonly value: A }
@@ -81,13 +82,11 @@ export const withChangeStart = <A, E, R>(
       Effect.flatMap(({ changes, taskStart }) =>
         use((command) =>
           Effect.gen(function* () {
-            const git = {
-              resolveIntent: (slug: string, requestedBaseBranch: string | undefined) =>
+            const git: ChangeStartGitOperations = {
+              resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (
-                change: Parameters<typeof provisionChangeWorktree>[1],
-                recovering: boolean,
-              ) => provisionChangeWorktree(context.root, change, recovering),
+              provisionWorktree: (change, recovering) =>
+                provisionChangeWorktree(context.root, change, recovering),
             };
             if (command.taskId !== undefined) {
               return yield* taskStart(command);

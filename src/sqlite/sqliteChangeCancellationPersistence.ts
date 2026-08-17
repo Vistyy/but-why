@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
 import { changeState } from "../change/change.js";
+import { internalChangeId } from "../change/changeId.js";
 import type {
   ChangeCancellationOwnerPort,
   ChangeCancellationRecord,
@@ -28,23 +28,36 @@ export const openSqliteChangeCancellationPort = () =>
     (repository): ChangeCancellationOwnerPort => ({
       getChangeById: (changeId) =>
         repository.transaction("read Change for cancellation", (sql) =>
-          readCancellationChange(sql, changeId, "read Change for cancellation"),
+          readCancellationChange(
+            sql,
+            changeId,
+            "read Change for cancellation",
+            repository.idPrefix,
+          ),
         ),
       completeMergedChange: (input) =>
         repository.transactionImmediate("complete merged Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* completeChangeOnly(sql, input);
+            const result = yield* completeChangeOnly(sql, input, repository.idPrefix);
             if (!result.ok) return result;
-            const change = yield* requireCancellationChange(sql, input.changeId);
+            const change = yield* requireCancellationChange(
+              sql,
+              input.changeId,
+              repository.idPrefix,
+            );
             return { ...result, change };
           }),
         ),
       cancelChange: (input) =>
         repository.transactionImmediate("cancel Change", (sql) =>
           Effect.gen(function* () {
-            const result = yield* cancelChange(sql, input);
+            const result = yield* cancelChange(sql, input, repository.idPrefix);
             if (!result.ok) return result;
-            const change = yield* requireCancellationChange(sql, input.changeId);
+            const change = yield* requireCancellationChange(
+              sql,
+              input.changeId,
+              repository.idPrefix,
+            );
             return { ...result, change };
           }),
         ),
@@ -54,8 +67,9 @@ export const openSqliteChangeCancellationPort = () =>
 const decodeCancellationChange = (
   row: StoredCancellationChangeRow,
   changeId: string,
+  idPrefix: string,
 ): ChangeCancellationRecord => {
-  const terminal = decodeTerminalChange(row, changeId);
+  const terminal = decodeTerminalChange(row, changeId, idPrefix);
   const lifecycle = decodeChangeLifecycle(row);
   const cancelReason = decodeStoredNullableString(row.cancelReason, "Change cancellation reason");
   if (cancelReason !== null && lifecycle.closeReason !== "cancelled") {
@@ -72,38 +86,46 @@ export const readCancellationChange = (
   sql: SqlClient.SqlClient,
   changeId: string,
   operationName: string,
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredCancellationChangeRow>(
       `SELECT ${terminalChangeSelectionColumns},
         close_reason AS closeReason, cancel_reason AS cancelReason
        FROM changes WHERE id = ?`,
-      [changeId],
+      [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
     const selected = yield* decodePersisted(operationName, () =>
-      decodeCancellationChange(row, changeId),
+      decodeCancellationChange(row, changeId, idPrefix),
     );
     yield* validateChangePublicationRelationships(
       sql,
       selected.id,
       selected.publication,
       operationName,
+      idPrefix,
     );
     return selected;
   });
 
-const requireCancellationChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.flatMap(readCancellationChange(sql, changeId, "read committed cancellation"), (change) =>
-    change === undefined
-      ? invalidData("read committed cancellation", "Change disappeared")
-      : Effect.succeed(change),
+const requireCancellationChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
+  Effect.flatMap(
+    readCancellationChange(sql, changeId, "read committed cancellation", idPrefix),
+    (change) =>
+      change === undefined
+        ? invalidData("read committed cancellation", "Change disappeared")
+        : Effect.succeed(change),
   );
 
-export const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
+export const cancelChange = (
+  sql: SqlClient.SqlClient,
+  input: CancelChangeInput,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
-    const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "cancel Change");
+    const lifecycle = yield* readChangeLifecycle(sql, input.changeId, "cancel Change", idPrefix);
     if (lifecycle === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (lifecycle.state === changeState.closed) {
       if (lifecycle.closeReason !== "cancelled") {
@@ -115,7 +137,7 @@ export const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput)
       SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${input.reason},
           cleanup_state = 'pending', cleanup_blocking_reason = NULL,
           updated_at = ${input.now}, closed_at = ${input.now}
-      WHERE id = ${input.changeId} AND state = 'open'`;
+      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND state = 'open'`;
     return { ok: true as const, changed: true };
   });
 

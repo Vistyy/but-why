@@ -26,7 +26,7 @@ describe("Candidate validation policy configuration", () => {
       }),
     );
     const decoded = decodeRepoConfig({
-      taskPrefix: "BY",
+      idPrefix: "BY",
       validation: { checks: [{ id: "quality", command: "true" }] },
       review: { acceptance: { agentProfile: { scope: "global", name: "acceptance" } } },
     });
@@ -37,7 +37,7 @@ describe("Candidate validation policy configuration", () => {
         root,
         mainCheckoutRoot: root,
         commonDirectory: root,
-        taskPrefix: "BY",
+        idPrefix: "BY",
         config: decoded.right,
         paths: {
           butWhyDir: join(root, ".but-why"),
@@ -73,7 +73,7 @@ describe("Candidate validation policy configuration", () => {
     const globalConfigPath = join(root, "global-config.json");
     writeFileSync(globalConfigPath, "malformed");
     const decoded = decodeRepoConfig({
-      taskPrefix: "BY",
+      idPrefix: "BY",
       validation: { checks: [{ id: "quality", command: "true" }] },
       review: { specialists: ["removed-reviewer"] },
     });
@@ -98,7 +98,7 @@ describe("Candidate validation policy configuration", () => {
     const globalConfigPath = join(root, "global-config.json");
     writeFileSync(globalConfigPath, "{}");
     const changeBase = decodeRepoConfig({
-      taskPrefix: "BY",
+      idPrefix: "BY",
       agentEnvironment: { command: ["trusted-environment"] },
       prepare: { command: "base-prepare" },
       validation: { checks: [{ id: "base", command: "true" }] },
@@ -145,7 +145,7 @@ describe("Candidate validation policy configuration", () => {
     );
 
     const decoded = decodeRepoConfig({
-      taskPrefix: "BY",
+      idPrefix: "BY",
       agentEnvironment: { command: ["nix", "develop", "-c"] },
       validation: { checks: [{ id: "quality", command: "true" }] },
       review: {
@@ -166,7 +166,7 @@ describe("Candidate validation policy configuration", () => {
         root,
         mainCheckoutRoot: root,
         commonDirectory: root,
-        taskPrefix: "BY",
+        idPrefix: "BY",
         config: decoded.right,
         paths: {
           butWhyDir: join(root, ".but-why"),

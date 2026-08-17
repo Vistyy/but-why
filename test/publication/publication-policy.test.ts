@@ -3,6 +3,7 @@ import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import { internalChangeId } from "../../src/change/changeId.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestCreationRequest,
@@ -59,7 +60,7 @@ const publicationTemplateLayer = Layer.effect(
           UPDATE changes
           SET starting_commit = ${git(candidateRepoTemplate, "rev-parse", "refs/heads/main")},
               worktree_path = ${candidateRepoTemplate}
-          WHERE id = ${captured.changeId}
+          WHERE id = ${internalChangeId(captured.changeId, "BY")}
         `,
         );
         const validation = yield* openSqliteChangeValidationTestDependencies();
@@ -311,8 +312,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         yield* repository.operation(
           "create publication Task",
           (sql) => sql`
-        INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-        VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
+        INSERT INTO tasks (id, title, description, state, created_at, updated_at)
+        VALUES (1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
       `,
         );
         yield* repository.operation("attach Task publication metadata", (sql) =>
@@ -321,11 +322,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
                 UPDATE changes
                 SET acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
                     base_remote_url = 'https://github.test/acme/widgets.git'
-                WHERE id = ${fixture.captured.changeId}
+                WHERE id = ${internalChangeId(fixture.captured.changeId, "BY")}
               `;
             yield* sql`
                 INSERT INTO task_change_links (task_id, change_id)
-                VALUES ('BY-1', ${fixture.captured.changeId})
+                VALUES (1, ${internalChangeId(fixture.captured.changeId, "BY")})
               `;
           }),
         );

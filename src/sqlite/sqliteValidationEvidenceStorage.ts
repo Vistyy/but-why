@@ -88,7 +88,11 @@ export const findingReadColumns = `
   created_at AS createdAt, updated_at AS updatedAt
 `;
 
-export const listValidationRounds = (sql: SqlClient.SqlClient, validationRunId: string) =>
+export const listValidationRounds = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const operationName = "list Candidate validation rounds";
     const rows = yield* sql<StoredValidationRoundRow>`
@@ -108,6 +112,7 @@ export const listValidationRounds = (sql: SqlClient.SqlClient, validationRunId: 
       sql,
       validationRunId,
       "decode Candidate Validation Run",
+      idPrefix,
     );
     if (run === undefined) {
       return yield* invalidData(operationName, "Validation rounds belong to an unknown Run");
@@ -152,7 +157,11 @@ export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validat
     );
   });
 
-export const listValidationFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
+export const listValidationFindings = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const operationName = "decode Candidate validation Finding";
     const rows = yield* sql.unsafe<StoredValidationFindingRow>(
@@ -165,7 +174,7 @@ export const listValidationFindings = (sql: SqlClient.SqlClient, validationRunId
       rows.map((row) => assertRunOwner(decodeValidationFinding(row), validationRunId)),
     );
     if (findings.length === 0) return findings;
-    const run = yield* requireRun(sql, validationRunId, operationName);
+    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
     const roundRows = yield* sql<StoredValidationRoundRow>`
       SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
         round.round_number AS roundNumber,
@@ -214,7 +223,11 @@ export const listValidationToolingFailures = (sql: SqlClient.SqlClient, validati
     return failures;
   });
 
-export const listValidationArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
+export const listValidationArtifacts = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const operationName = "list Candidate validation Artifacts";
     const rows = yield* sql<StoredValidationArtifactRow>`
@@ -230,7 +243,7 @@ export const listValidationArtifacts = (sql: SqlClient.SqlClient, validationRunI
         .sort(compareArtifacts),
     );
     if (artifacts.length === 0) return artifacts;
-    const run = yield* requireRun(sql, validationRunId, operationName);
+    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
     const roundRows = yield* sql<StoredValidationRoundRow>`
       SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
         round.round_number AS roundNumber,
@@ -394,9 +407,14 @@ export const validateFindingRoundRelationships = (
   for (const finding of findings) findingRound(finding, rounds);
 };
 
-const requireRun = (sql: SqlClient.SqlClient, validationRunId: string, operationName: string) =>
+const requireRun = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  operationName: string,
+  idPrefix: string,
+) =>
   Effect.flatMap(
-    readValidationRunById(sql, validationRunId, "decode Candidate Validation Run"),
+    readValidationRunById(sql, validationRunId, "decode Candidate Validation Run", idPrefix),
     (run) =>
       run === undefined
         ? invalidData(operationName, "Validation evidence belongs to an unknown Run")

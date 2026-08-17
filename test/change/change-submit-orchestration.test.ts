@@ -360,7 +360,7 @@ describe("Change Submit orchestration", () => {
             },
           }),
           trackPolicyResolution: true,
-          baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
+          baselineRepoConfig: { idPrefix: "BY", review: { specialists: ["baseline"] } },
           refreshResult: { ok: true, base: refreshedBase },
           resolvePolicy: (_acceptanceContextSupplied, repoConfig) => {
             expect(repoConfig.review?.specialists).toEqual(["baseline"]);
@@ -1611,7 +1611,7 @@ const dependencies = (input: {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
       const error = input.baselineRepoConfigError;
       return error === undefined
-        ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
+        ? { ok: true as const, config: input.baselineRepoConfig ?? { idPrefix: "BY" } }
         : { ok: false as const, message: error };
     },
     resolvePolicy: (

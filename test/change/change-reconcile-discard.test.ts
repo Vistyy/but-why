@@ -74,7 +74,11 @@ const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
       now,
     });
     if (!cancelled.ok) throw new Error(cancelled.code);
-    return { changeId: created.change.id, worktreePath };
+    return {
+      changeId: created.change.id,
+      worktreePath: created.change.worktreePath,
+      branchRef: created.change.branchRef,
+    };
   });
 
 const noPullRequestGateway = {
@@ -146,7 +150,7 @@ describe("Change reconciliation discard boundary", () => {
             {
               repositoryCommonDirectory: fixture.commonDirectory,
               worktreePath: first.worktreePath,
-              branchRef: "refs/heads/but-why/change-a",
+              branchRef: first.branchRef,
               remoteChangeBranch: null,
               discardWork: true,
             },
@@ -214,7 +218,7 @@ describe("Change reconciliation discard boundary", () => {
           {
             repositoryCommonDirectory: fixture.commonDirectory,
             worktreePath: terminal.worktreePath,
-            branchRef: "refs/heads/but-why/change-a",
+            branchRef: terminal.branchRef,
             remoteChangeBranch: null,
             discardWork: false,
           },
