@@ -146,19 +146,31 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    if (!recovering) return { ok: false, code: "change_start_conflict" };
-    const containsStartingCommit = git(
-      cwd,
-      "merge-base",
-      "--is-ancestor",
-      start.startingCommit,
-      branchCommit,
-    );
-    return containsStartingCommit.ok ? { ok: true } : { ok: false, code: "change_start_conflict" };
+    return recovering && recordedBranchIsOwned(cwd, start)
+      ? { ok: true }
+      : { ok: false, code: "change_start_conflict" };
   }
-  const branchName = start.branchRef.slice("refs/heads/".length);
-  const create = git(cwd, "branch", branchName, start.startingCommit);
+  const create = git(
+    cwd,
+    "update-ref",
+    "--create-reflog",
+    "-m",
+    branchOwnershipMessage(start),
+    start.branchRef,
+    start.startingCommit,
+    "0000000000000000000000000000000000000000",
+  );
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+};
+
+const branchOwnershipMessage = (start: ChangeStartRecord): string => `but-why Change ${start.id}`;
+
+const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean => {
+  const reflog = git(cwd, "reflog", "show", "--format=%H%x09%gs", start.branchRef);
+  return (
+    reflog.ok &&
+    reflog.stdout.split("\n").at(-1) === `${start.startingCommit}\t${branchOwnershipMessage(start)}`
+  );
 };
 
 const removeStaleWorktreeRegistration = (

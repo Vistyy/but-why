@@ -546,8 +546,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       expect(provisionChangeWorktree(root, start, true)).toEqual({
         ok: false,
-        code: "managed_worktree_path_unavailable",
-        path: start.worktreePath,
+        code: "change_start_conflict",
       });
       expect(existsSync(actualWorktree)).toBe(true);
     }),
