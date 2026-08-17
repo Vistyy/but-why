@@ -25,10 +25,10 @@ const policy = {
 };
 
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
+      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
       yield* tasks.createTask({ title: "Dependency", description: "Required", now });
       yield* tasks.createTask({
         title: "Approved proposal",
@@ -95,16 +95,16 @@ it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
 it.scoped(
   "rejects revision for linked, actively reviewed, and terminal Tasks without mutation",
   () =>
-    withTemporaryRepositoryState(({ commonDirectory }) =>
+    withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
+        const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
         const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
         }
-        yield* passTaskReviewFixture(publicTaskId("BY-1"), now);
+        yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), now);
         yield* repository.operation(
           "link Todo Task fixture to Change",
           (sql) => sql`INSERT INTO changes (

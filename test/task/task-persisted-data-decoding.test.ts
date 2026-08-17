@@ -14,7 +14,7 @@ const firstNow = "2026-08-09T12:00:00.000Z";
 const secondNow = "2026-08-09T12:05:00.000Z";
 
 it.scoped("decodes valid current Task states, relationships, Context, and Change Start facts", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const links = yield* openSqliteTaskChangeLinkPort();
@@ -26,10 +26,10 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
       yield* createTask(tasks, "Done Task");
       yield* createTask(tasks, "Cancelled Task");
       yield* createTask(tasks, "Task with Resolution");
-      yield* passTaskReviewFixture(publicTaskId("BY-2"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-4"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-5"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-2"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-4"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-5"), secondNow);
       yield* repository.operation("set terminal Task fixtures", (sql) =>
         sql.unsafe(`
           UPDATE tasks
@@ -95,7 +95,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
 );
 
 it.scoped("rejects malformed Task states selected by Change Start", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
@@ -103,8 +103,8 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       yield* createTask(tasks, "Prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1"]);
       yield* createTask(tasks, "Task with existing Change");
-      yield* passTaskReviewFixture(publicTaskId("BY-2"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-2"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
 
       yield* repository.operation("inject malformed prerequisite Task state", (sql) =>
         Effect.gen(function* () {
@@ -141,13 +141,13 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
 );
 
 it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
-  withTemporaryRepositoryState(() =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Self-dependent Task");
-      yield* passTaskReviewFixture(publicTaskId("BY-1"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), secondNow);
       yield* repository.operation("insert self-referential Task dependency", (sql) =>
         sql.unsafe(`
           INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)

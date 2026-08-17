@@ -119,6 +119,8 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       getLatestForTask: unused,
       listForTask: unused,
       getReviewerAgentSession: unused,
+      getReviewerConfiguration: () => Effect.succeed(undefined),
+      reviewerConfigurationCanBeCorrected: () => Effect.succeed(false),
       linkAgentInvocation: defaultAgentLink,
       settleAgentReview: () => () => Effect.void,
       recordActiveFailure: unused,

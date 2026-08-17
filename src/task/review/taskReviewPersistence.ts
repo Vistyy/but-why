@@ -132,10 +132,10 @@ export type TaskReviewPersistence = {
   readonly getReviewerAgentSession: (
     taskId: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly getReviewerConfiguration?: (
+  readonly getReviewerConfiguration: (
     taskId: string,
   ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
-  readonly reviewerConfigurationCanBeCorrected?: (
+  readonly reviewerConfigurationCanBeCorrected: (
     taskId: string,
   ) => Effect.Effect<boolean, RepositoryStorageError>;
   readonly linkAgentInvocation: (input: {

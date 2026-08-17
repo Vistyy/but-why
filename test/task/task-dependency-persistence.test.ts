@@ -88,12 +88,12 @@ it.scoped("rejects Task dependency cycles without changing the graph", () =>
 it.scoped(
   "rejects direct Task dependency edits for approved Tasks without changing the graph",
   () =>
-    withTasks((tasks) =>
+    withTasks((tasks, mainCheckoutRoot) =>
       Effect.gen(function* () {
         yield* createTask(tasks, "First");
         yield* createTask(tasks, "Second");
         yield* createTask(tasks, "Dependent", ["BY-1"]);
-        yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
+        yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
 
         for (const operation of ["add", "remove", "replace", "clear"] as const) {
           expect(
@@ -187,15 +187,15 @@ it.scoped("continues to reject direct Task dependency edits for terminal Tasks",
 );
 
 it.scoped("returns direct Task dependency facts and start eligibility", () =>
-  withTemporaryRepositoryState(() =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Done prerequisite");
       yield* createTask(tasks, "Open prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
-      yield* passTaskReviewFixture(publicTaskId("BY-1"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), secondNow);
+      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
       yield* repository.operation(
         "set done prerequisite fixture",
         (sql) => sql`
@@ -226,9 +226,11 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
   ),
 );
 
-const withTasks = <A, E>(use: (tasks: TaskPersistence) => Effect.Effect<A, E, RepositorySql>) => {
-  return withTemporaryRepositoryState(() =>
-    Effect.flatMap(openSqliteTaskPersistence(), (tasks) => use(tasks)),
+const withTasks = <A, E>(
+  use: (tasks: TaskPersistence, mainCheckoutRoot: string) => Effect.Effect<A, E, RepositorySql>,
+) => {
+  return withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+    Effect.flatMap(openSqliteTaskPersistence(), (tasks) => use(tasks, mainCheckoutRoot)),
   );
 };
 

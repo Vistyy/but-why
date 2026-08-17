@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,10 +20,13 @@ const taskReviewPolicyFixture = {
   guidance: null,
 };
 
-export const passTaskReviewFixture = (taskId: PublicTaskId, now: string) =>
+export const passTaskReviewFixture = (
+  mainCheckoutRoot: string,
+  taskId: PublicTaskId,
+  now: string,
+) =>
   Effect.gen(function* () {
-    const repository = yield* RepositorySql;
-    const reviews = yield* openSqliteTaskReviewPersistence(repository.commonDirectory);
+    const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
     const admitted = yield* reviews.admit({
       taskId,
       policy: taskReviewPolicyFixture,
@@ -72,24 +75,28 @@ export const withTestRepository = <A, E, R>(
 
 export const withTemporaryRepositoryState = <A, E>(
   use: (input: {
+    readonly mainCheckoutRoot: string;
     readonly commonDirectory: string;
     readonly statePath: string;
   }) => Effect.Effect<A, E, RepositorySql>,
 ): Effect.Effect<A, E | RepositoryStorageError> =>
   Effect.acquireUseRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
-    (directory) =>
-      use({
-        commonDirectory: directory,
-        statePath: join(directory, "state.sqlite"),
-      }).pipe(
+    (directory) => {
+      const mainCheckoutRoot = join(directory, "main");
+      const commonDirectory = join(directory, "git-common");
+      const statePath = join(commonDirectory, "state.sqlite");
+      mkdirSync(mainCheckoutRoot);
+      mkdirSync(commonDirectory);
+      return use({ mainCheckoutRoot, commonDirectory, statePath }).pipe(
         Effect.provide(
           repositorySqlLayer({
-            commonDirectory: directory,
-            statePath: join(directory, "state.sqlite"),
+            commonDirectory,
+            statePath,
             lifecycle: "initialize",
           }),
         ),
-      ),
+      );
+    },
     (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
   );

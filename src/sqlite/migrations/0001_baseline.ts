@@ -115,8 +115,9 @@ const baselineStatements = [
       cleanup_pending INTEGER NOT NULL CHECK (cleanup_pending IN (0, 1)),
       cleanup_blocking_reason TEXT,
       CHECK ((close_reason IS NULL AND cancel_reason IS NULL) OR
-             (close_reason = 'completed' AND cancel_reason IS NULL) OR
-             (close_reason = 'cancelled' AND cancel_reason IS NOT NULL))
+             (close_reason IS NOT NULL AND (
+               (close_reason = 'completed' AND cancel_reason IS NULL) OR
+               (close_reason = 'cancelled' AND cancel_reason IS NOT NULL))))
     ) STRICT
   `,
   `CREATE INDEX changes_close_reason_id_idx ON changes (close_reason, id)`,

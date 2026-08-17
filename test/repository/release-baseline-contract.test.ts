@@ -559,11 +559,13 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         "reject invalid Task Review outcome",
         "INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, outcome, findings, cleanup_pending) VALUES (1, 1, '{}', '[]', 'main', 'head', 'unknown', '[]', 0)",
       );
-      yield* expectStatementRejected(
-        repository,
-        "reject invalid Task Review cleanup flag",
-        "INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, findings, cleanup_pending) VALUES (1, 1, '{}', '[]', 'main', 'head', '[]', 2)",
-      );
+      for (const invalidCleanup of [-1, 2]) {
+        yield* expectStatementRejected(
+          repository,
+          `reject Task Review cleanup flag ${invalidCleanup}`,
+          `INSERT INTO task_reviews (id, task_id, proposal, dependency_evidence, base_ref, base_commit, findings, cleanup_pending) VALUES (1, 1, '{}', '[]', 'main', 'head', '[]', ${invalidCleanup})`,
+        );
+      }
       yield* expectStatementRejected(
         repository,
         "reject inconsistent Change closure",
@@ -576,9 +578,16 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       );
       yield* expectStatementRejected(
         repository,
-        "reject invalid Change cleanup flag",
-        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 2)",
+        "reject open Change with cancellation reason",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'reason', 0)",
       );
+      for (const invalidCleanup of [-1, 2]) {
+        yield* expectStatementRejected(
+          repository,
+          `reject Change cleanup flag ${invalidCleanup}`,
+          `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', ${invalidCleanup})`,
+        );
+      }
       yield* expectStatementRejected(
         repository,
         "reject unsettled invocation settlement kind",
@@ -594,11 +603,6 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         "reject partial Agent token usage",
         "INSERT INTO agent_invocations (id, continuation_id, created_at, input_tokens) VALUES (1, 1, 'now', 1)",
       );
-      yield* expectStatementRejected(
-        repository,
-        "reject Agent token usage missing one value",
-        "INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens) VALUES (1, 1, 'now', 'later', 'returned', 0, 0, 0, 0)",
-      );
       const tokenColumns = [
         "input_tokens",
         "cached_input_tokens",
@@ -606,6 +610,16 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         "output_tokens",
         "total_tokens",
       ] as const;
+      for (const omittedToken of tokenColumns) {
+        const values = tokenColumns.map((tokenColumn) =>
+          tokenColumn === omittedToken ? "NULL" : "0",
+        );
+        yield* expectStatementRejected(
+          repository,
+          `reject Agent token usage missing ${omittedToken}`,
+          `INSERT INTO agent_invocations (id, continuation_id, created_at, settled_at, settlement_kind, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, total_tokens) VALUES (1, 1, 'now', 'later', 'returned', ${values.join(", ")})`,
+        );
+      }
       for (const tokenColumn of tokenColumns) {
         for (const invalidToken of [-1, 9_007_199_254_740_992]) {
           const values = {
@@ -628,11 +642,13 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         "reject invalid Validation Run outcome",
         "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, outcome, cleanup_pending) VALUES (2, 1, '{}', 'unknown', 0)",
       );
-      yield* expectStatementRejected(
-        repository,
-        "reject invalid Validation Run cleanup flag",
-        "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (2, 1, '{}', 2)",
-      );
+      for (const invalidCleanup of [-1, 2]) {
+        yield* expectStatementRejected(
+          repository,
+          `reject Validation Run cleanup flag ${invalidCleanup}`,
+          `INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (2, 1, '{}', ${invalidCleanup})`,
+        );
+      }
       yield* expectStatementRejected(
         repository,
         "reject invalid Validation Phase outcome",

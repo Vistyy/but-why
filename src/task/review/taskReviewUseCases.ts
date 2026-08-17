@@ -209,15 +209,11 @@ const submitTaskReview = (
     if (!config.ok)
       return { ok: false, code: "review_base_unavailable", message: config.message } as const;
     const repoConfig = config.config;
-    const storedPolicy =
-      input.persistence.getReviewerConfiguration === undefined
-        ? undefined
-        : yield* input.persistence.getReviewerConfiguration(taskId);
+    const storedPolicy = yield* input.persistence.getReviewerConfiguration(taskId);
     const configurationCanBeCorrected =
-      storedPolicy !== undefined &&
-      input.persistence.reviewerConfigurationCanBeCorrected !== undefined
-        ? yield* input.persistence.reviewerConfigurationCanBeCorrected(taskId)
-        : false;
+      storedPolicy === undefined
+        ? false
+        : yield* input.persistence.reviewerConfigurationCanBeCorrected(taskId);
     const resolvedPolicy =
       storedPolicy === undefined || configurationCanBeCorrected
         ? input.resolvePolicy(repoConfig, base.base.commit)

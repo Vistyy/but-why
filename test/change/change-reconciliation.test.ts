@@ -252,7 +252,7 @@ describe("by change reconcile", () => {
         });
         if (!createdTask.ok) throw new Error(createdTask.code);
         const taskId = publicTaskId(createdTask.task.id);
-        yield* passTaskReviewFixture(taskId, now);
+        yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
 
         const starts = yield* openSqliteChangeStartPersistence();
         const prepared = yield* starts.prepareTask(taskId);
@@ -490,7 +490,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* passTaskReviewFixture(taskId, now);
+          yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
@@ -608,7 +608,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* passTaskReviewFixture(taskId, now);
+          yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);

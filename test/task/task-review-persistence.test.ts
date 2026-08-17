@@ -29,10 +29,10 @@ const policy = {
 };
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
+      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
       yield* tasks.createTask({ title: "Dependency", description: "Observed dependency", now });
       yield* tasks.createTask({
         title: "Proposal",
@@ -171,10 +171,10 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
 });
 
 it.scoped("orders immutable Task Review history by its SQLite ID", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(commonDirectory);
+      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({

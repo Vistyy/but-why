@@ -174,7 +174,9 @@ export const passTaskReviewFixture = (
 ) => {
   const loaded = openRepositoryRuntime(root);
   if (!loaded.ok) throw new Error(`Could not open Task fixture repository: ${loaded.error.code}`);
-  return loaded.runtime.provide(passStoredTaskReviewFixture(publicTaskId(taskId), now));
+  return loaded.runtime.provide(
+    passStoredTaskReviewFixture(loaded.runtime.context.mainCheckoutRoot, publicTaskId(taskId), now),
+  );
 };
 
 export const createGitRepo = (root = createTestWorkspace()) => {
