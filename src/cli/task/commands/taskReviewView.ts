@@ -1,10 +1,10 @@
 import type { PiAgentProfileConfig, PiRuntimeConfig } from "../../../contracts/agentConfig.js";
-import { agentInvocationView } from "../../agentInvocationView.js";
 import type {
   TaskReviewPolicySnapshot,
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
 import type { TaskReviewIdentityInspection } from "../../../task/review/taskReviewUseCases.js";
+import { agentInvocationView } from "../../agentInvocationView.js";
 
 export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
   id: review.id,
