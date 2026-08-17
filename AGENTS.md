@@ -12,6 +12,7 @@
 
 - Read `CONTEXT-MAP.md` and the applicable context before naming domain-facing behavior.
 - Read `docs/architecture.md` for current ownership and workflow boundaries.
+- Read `VISION.md` before proposing, reviewing, or accepting a change that affects product direction, scope, or a lasting acceptance boundary.
 - Read `docs/cli-output.md` for structured CLI output contracts.
 - Read `docs/tooling.md` for contributor verification and architecture checks.
 - Read accepted decisions in `docs/adr/` when a change affects their constraints.
