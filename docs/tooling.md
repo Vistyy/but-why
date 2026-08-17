@@ -50,11 +50,12 @@ The release-ready runtime supports only `0001_baseline` and does not open prerel
 Use this ordered procedure for the one-time live cutover.
 
 1. Immediately before the baseline Change is merged, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
-   Record the source commit and executable SHA-256 in an integrity-checked bundle manifest.
-2. Before the live cutover, verify the exact old executable against its manifest, verify the manifest integrity, and rehearse the exact `change reconcile <merged-change-id>` command on a disposable repository.
+   Record the source commit, the actual runtime entrypoint, and every bundled runtime file in an integrity-checked SHA-256 manifest.
+2. Before the live cutover, verify every old runtime file against the manifest, verify the manifest integrity, and rehearse the exact direct `change reconcile <merged-change-id>` invocation on a disposable repository.
+   Verify the entrypoint that the reconciliation command actually invokes rather than a dispatcher that can select another executable.
 3. After the merged baseline Change is available, pause all But Why opens and writes.
 4. Verify the merged `idPrefix` Repo Config against the merged commit, and verify that no `taskPrefix` compatibility overlay is installed.
-5. Run the old bundle directly from canonical `main`, with canonical `main` assigned as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID and unchanged merged `idPrefix`.
+5. Invoke the verified old runtime entrypoint directly from canonical `main`, with canonical `main` assigned as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID and unchanged merged `idPrefix`.
    Do not use the merged executable, a Candidate executable, or a source-checkout dispatcher for old-state reconciliation.
    If reconciliation fails, verify the merged `idPrefix` against the merged commit again before any retry or new-runtime open.
    If the reconciliation result is uncertain, determine whether the exact Change and cleanup mutations committed before retrying.

@@ -461,16 +461,17 @@ The live operator cutover follows BY-274 acceptance as a separately authorized o
 
 The retained [rehearsal evidence](release-baseline-cutover-rehearsal.json) records the commands, exit statuses, executable identity, archive checks, and persisted observations from the completed disposable run.
 The completed disposable rehearsal used an exact old executable bundle built from canonical source commit `10bdce30c94c1d3510b061c7d75f0206328a2494`.
-The bundle executable SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`.
-The rehearsal reconciled the exact merged disposable Change `BY-C1` with that bundle.
-The reconciliation completed the Change, and the cleanup retry cleared the retained cleanup obligation.
+The directly invoked `dist/main.js` entrypoint SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`, and all 129 files in the complete runtime manifest verified.
+The Source Checkout Guard in `bin/by` was not invoked because it can dispatch to a different checkout executable.
+The rehearsal reconciled the exact merged disposable Change `BY-C1` by invoking the manifest-covered old runtime directly.
+The reconciliation completed the Change, retained complete cleanup, and changed its linked Task from Todo to Done.
 
-The rehearsal archive contained the complete old Git Common Directory But Why state, repository reviewer files, repository and executable identity metadata, inspection instructions, and a SHA-256 manifest.
+The rehearsal archive contained the complete old Git Common Directory But Why state, repository reviewer files, repository and executable identity metadata, inspection instructions, the exact reconciliation output, and SHA-256 manifests.
 Every archived checksum verified.
-The archived SQLite database remained readable with migration ledger entries 1 through 43 and showed the reconciled Change as closed and completed.
+The archived SQLite database remained readable with migration ledger entries 1 through 43 and showed the linked Task as Done and the reconciled Change as closed, completed, and fully cleaned up.
 
 Fresh initialization with the release executable produced exactly the 18 approved product tables and migration ledger `[1]` without old Task or Change records.
-The before-new-work recovery rehearsal inserted an unknown migration ID, observed initialization rejection, restored the complete old operational state from the archive copy, and verified `BY-C1` through the exact old bundle.
+The before-new-work recovery rehearsal inserted an unknown migration ID, observed read rejection without a state mutation, restored the complete old operational state from the archive copy, and verified both linked `BY-C1` and its Done Task through the manifest-covered old runtime entrypoint.
 Fresh initialization then succeeded again.
 
 The after-new-work recovery rehearsal recorded new Task `BY-1`, induced repository identity verification failure, and repaired the new state forward without restoring or merging old state.
