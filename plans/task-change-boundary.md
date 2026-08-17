@@ -1,6 +1,7 @@
 # Task and Change boundary plan
 
 **Status:** Approved planning direction.
+BY-275 completed the Agent Session design prerequisite for the direct BY-274 baseline.
 It is the current Task and Change boundary planning record.
 It is not implementation authority.
 
@@ -10,6 +11,15 @@ It is not implementation authority.
 
 Define strong boundaries between Tasks and Changes while keeping one `by` installation and CLI.
 Allow each workflow to be used independently where its own inputs are sufficient, without prematurely creating separate products or executables.
+
+## Current planning position
+
+BY-269 completed the Task and Change coordination direction recorded here, including the durable one-to-one link, coordinated Change Start and cancellation, joined inspection, and exact merged completion in one SQLite transaction.
+BY-271 completed the internal Task and Change identity direction, including independent SQLite-allocated numeric IDs, immutable table-local ordering, the frozen repository `idPrefix`, derived public IDs, and Change-owned operational names.
+BY-275 completed the Agent Session and Agent Invocation design prerequisite for BY-274.
+BY-274 is the one remaining direct baseline cutover.
+It establishes the final schema without importing or converting old data, retains working internal code unless the final schema, a retired representation, or supported behavior requires a change, and defers Adapter relocation, SQL ownership, and general cleanup to `post-baseline-hardening.md`.
+This file remains a plan for the accepted boundary and does not become current implementation authority.
 
 ## Accepted planning direction
 
@@ -237,10 +247,10 @@ Task Review also depends on infrastructure currently shared with Change Delivery
 - Disposable exact-commit workspaces.
 - Structured CLI output.
 
-The boundary is implemented through independently reviewable prerelease Tasks before the final `0001_baseline` cutover.
-Intermediate Tasks may append immutable temporary prerelease migrations so every merged state remains supported and verifiable.
-They do not edit existing migration files or add dual runtime compatibility.
-The final baseline Task removes the complete prerelease chain after the final physical model is working.
+The completed BY-269, BY-271, and BY-275 work supplies the ownership, identity, and Agent Session direction for the final `0001_baseline`.
+The remaining BY-274 cutover does not import or convert old data and does not require intermediate persistence migrations or dual runtime compatibility.
+Working internal code remains in place unless the final schema, retired representation removal, or supported behavior requires a change.
+The cutover removes the retired prerelease representation from the released product and preserves its historical evidence only in the operational archive.
 
 ### Verification inventory
 
@@ -255,7 +265,7 @@ The current coupling is materially exercised by:
 - SQLite decoding, constraint, and migration tests.
 - Package-content and portable-skill tests.
 
-The migration plan must replace these claims through supported independent and coordinated interfaces rather than merely delete the coupled tests.
+The baseline cutover must preserve these supported independent and coordinated interfaces rather than merely delete the coupled tests.
 
 ## Required boundaries
 
@@ -359,10 +369,8 @@ The cleanup inventory must cover implementation, persistence, migrations, CLI co
 
 Do not treat the boundary change as moving `src/task/` alone.
 Place cross-domain application operations under `src/taskChange/` without naming a generic coordination service.
-The completed boundary moves all owner-specific SQLite Adapters from the flat `src/sqlite/` area to `src/task/adapters/sqlite/`, `src/change/adapters/sqlite/`, and `src/taskChange/adapters/sqlite/`.
-During staged implementation, Task 3 places its new coordination Adapter directly under `src/taskChange/adapters/sqlite/` while existing owner Adapters may remain temporarily under `src/sqlite/`.
-Task 5 moves Task Adapters, Task 6 moves Change Adapters, and Task 7 verifies that no owner-specific flat Adapter remains.
-The released architecture retains no flat Adapter exception.
+BY-274 does not require moving working owner-specific SQLite Adapters from the flat `src/sqlite/` area.
+Adapter relocation, SQL ownership enforcement, and general cleanup are deferred to `post-baseline-hardening.md`, where their final scope and verification can be bounded against the baseline.
 Keep shared database lifecycle and immutable ordered migrations under Repository Runtime.
 Tasks and Changes currently share repository and agent infrastructure.
 The design must inspect ownership of:
@@ -428,9 +436,10 @@ Fallow must enforce the module dependency graph, including these rules:
 - Repository Runtime remains the owner of the shared database lifecycle and repository-scoped runtime capabilities.
 
 Real SQLite behavior tests must verify atomic Change Start, completion, cancellation, and rollback through the supported coordination operations.
-Initial table-ownership separation is verified through adapter placement, targeted search, and review.
+BY-274 does not move Adapters or add SQL ownership enforcement.
+After the baseline, verify any retained table-ownership rule through the final owner placement, targeted search, and review.
 Do not add an ast-grep rule that guesses table ownership from SQL strings.
-Add a durable SQL ownership checker only if repository evidence later shows recurring violations that justify its maintenance cost.
+Add a durable SQL ownership checker only if post-baseline evidence shows recurring violations that justify its maintenance cost.
 
 ## Independent and coordinated verification
 
@@ -451,9 +460,9 @@ The boundary is sufficient only when all of these paths are practical through on
 3. **Complete:** Define and review Change-owned authority after Change Start.
 4. **Complete:** Define and review coordinated Task and Change completion.
 5. **Complete:** Inventory shared infrastructure and define the module dependency rules.
-6. **Complete:** Finish and approve Agent Session design before reviewing the complete first-release database baseline.
-7. Implement the approved direction through the independently reviewable prerelease Task sequence defined by the baseline plan.
-   Each intermediate state remains supported through append-only temporary prerelease migrations, and the final baseline removes that chain without retaining compatibility behavior.
+6. **Complete (BY-275):** BY-275 completed the Agent Session and Agent Invocation design prerequisite for the first-release database baseline.
+7. **Remaining (BY-274):** Complete the direct first-release baseline and operational cutover.
+   Do not import or convert old data, add intermediate persistence migrations, or move working internal code unless the final schema, retired representation removal, or supported behavior requires it.
    Candidate Publication presentation remains deferred and adds any later storage through a normal post-baseline migration.
 8. Reassess the release and Global Watcher plans against the accepted boundary.
 9. Remove superseded plans and record only still-supported outcomes in replacement plans or authoritative work records.

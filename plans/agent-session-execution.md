@@ -1,14 +1,15 @@
 # Agent Session and invocation plan
 
 **Status:** Approved planning direction.
+BY-275 completed the Agent Session and Agent Invocation design captured here, and this plan supplies its exact contracts to BY-274.
 This plan is separate from and consistent with the accepted modular-monolith direction in `task-change-boundary.md`.
-Complete this design before reviewing the first-release database baseline.
 It is not implementation authority.
 
 **Removal condition:** Remove this file after the approved behavior is implemented, recorded in applicable current architecture and domain authorities, and represented by completed SQLite Tasks.
 
 ## Outcome
 
+BY-269 and BY-271 are completed planning and implementation predecessors, and BY-275 is the completed Agent Session prerequisite, for the direct BY-274 baseline cutover.
 Task Review and Change reviewers use shared Agent Session and Agent Invocation capabilities for mechanics they currently share.
 Candidate Publication may adopt these capabilities later but is not part of the initial Agent Session work.
 Tasks and Changes retain role policy, prompts, structured results, Findings, lifecycle effects, and recovery decisions.
@@ -73,10 +74,13 @@ Shared Invocation evidence includes:
 - The physical harness continuation used.
 - `created_at` and nullable `settled_at` timestamps.
 - An application-decoded settlement kind.
-- Nullable input, output, cached-input, and total token columns stored as one all-present or all-absent measured set.
+- Nullable domain `input`, `cacheRead`, `cacheWrite`, `output`, and `total` token fields stored as one all-present or all-absent measured set.
 - The transcript-relative path discovered for the physical harness continuation.
 
 Each physical continuation stores its required Agent Harness name, nullable model provider, required selected model slug, and nullable thinking level.
+Domain token fields `input`, `cacheRead`, `cacheWrite`, `output`, and `total` correspond respectively to physical `input_tokens`, `cached_input_tokens`, `cache_write_tokens`, `output_tokens`, and `total_tokens`.
+All five physical token columns are either all present or all absent.
+Each Invocation retains domain `input`, `cacheRead`, `cacheWrite`, `output`, and `total` token evidence when measured, and unavailable usage remains `null` rather than zero.
 These dimensions describe the physical conversation and make usage queryable without repeating them on every Invocation.
 The first release stores `pi` as the Agent Harness; retaining this explicit fact does not add support for another harness.
 Provider remains nullable when the harness cannot report it reliably, and thinking remains nullable because it is not a capability of every harness.
@@ -99,7 +103,7 @@ Domain records retain authoritative inputs and results, while harness transcript
 Monetary cost and generic harness-specific metadata are excluded until a supported use and evidence contract require them.
 
 Public domain inspection exposes exact ordered Invocation evidence rather than retained reviewer execution aggregates.
-Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none input, cached-input, output, and total token usage; transcript-relative path; and unusable reason.
+Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none input, `cacheRead`, `cacheWrite`, output, and total token usage; transcript-relative path; and unusable reason.
 Task Review and Validation phase inspection associates each Invocation with its owning operation, phase, and producer as applicable.
 Do not expose compatibility fingerprint, continuity, review-call count, or aggregate reviewer duration.
 The Invocation list and timestamps provide the underlying evidence without storing or presenting those retired summaries.
@@ -176,12 +180,15 @@ Task or Change composition connects its domain operation with narrow transaction
 Agent infrastructure does not access Task or Change tables.
 A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
-The release baseline needs durable representation for logical sessions, physical continuations, and invocations because they have distinct write and recovery lifecycles.
-During prerelease staging, existing Reviewer Session records remain temporary read-only legacy inspection evidence because they lack the per-call facts needed to reconstruct exact Invocations honestly.
+The direct BY-274 baseline needs durable representation for logical sessions, physical continuations, and Invocations because they have distinct write and recovery lifecycles.
+Existing Reviewer Session records remain read-only legacy evidence until the old state is archived because they lack the per-call facts needed to reconstruct exact Invocations honestly.
+No old Reviewer Session record is imported or converted into the new baseline.
 All new reviewer work writes only the Agent Session representation.
-The final baseline and released executable remove this inspection compatibility after the verified prerelease archive preserves the old evidence.
+The final baseline and released executable remove legacy Reviewer tables and readers after the archive preserves the old evidence.
+Working internal Agent Session code remains in place unless the final schema, retired legacy representation removal, or supported behavior requires a change.
+Adapter relocation and general cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
-The physical schema must be selected through the release-baseline review rather than copied from the prerelease Reviewer Session schema.
+The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
 
@@ -210,11 +217,11 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 
 - Shared Agent infrastructure stores no generic owner fields; Tasks and Changes store their own Agent Session links.
 - Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
-- Invocation and transcript evidence is limited to the fields defined above; Invocation rows do not duplicate prompts or returned text.
+- Invocation and transcript evidence is limited to the fields defined above, including `cacheRead` and `cacheWrite` token evidence; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
 - Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying configuration into each Review or Run.
 - Retire generic Reviewer Session, transcript-array, per-Review policy, and reviewer execution-summary presentation in favor of owner-role configuration, Agent Session, continuation, Invocation, domain Tooling Failure, and cleanup evidence.
-- The release-baseline review selects the physical schema after this plan is approved.
+- The direct BY-274 baseline conforms to this exact physical schema without importing or converting legacy Reviewer records.
 
 ## Exclusions
 

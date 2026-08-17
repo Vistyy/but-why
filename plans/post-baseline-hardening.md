@@ -1,6 +1,7 @@
 # Post-baseline hardening plan
 
 **Status:** Active investigation plan.
+BY-275 completed the Agent Session design prerequisite for the direct BY-274 baseline.
 This plan records concerns and decision work discovered during the first-release baseline cutover.
 It is not implementation authority and is not a substitute for SQLite Tasks.
 
@@ -8,20 +9,12 @@ It is not implementation authority and is not a substitute for SQLite Tasks.
 
 ## Purpose
 
-The BY-270 through BY-274 sequence is changing ownership boundaries and then replacing the migration history with the first-release baseline.
-Creating durable follow-up Tasks against transient structures during that sequence would create avoidable rework.
+BY-269 completed the Task and Change coordination direction, BY-271 completed the internal numeric identity and operational naming direction, and BY-275 completed the Agent Session design prerequisite.
+BY-274 is the one remaining direct first-release baseline and operational cutover.
+BY-274 does not import or convert old data, and it retains working internal code unless the final schema, retired representation removal, or supported behavior requires a change.
+This plan owns the post-baseline hardening concerns that do not belong in that direct cutover, including Adapter relocation, SQL ownership enforcement, and general cleanup.
+Creating durable follow-up Tasks against transient structures before the baseline would create avoidable rework.
 This plan preserves the concerns until they can be reinspected against the final baseline.
-
-The sequence is:
-
-```text
-BY-270  Separate Task and Change coordination
-  -> BY-271  Adopt internal Task and Change identities
-  -> BY-272  Simplify Task persistence
-  -> BY-273  Simplify Change persistence
-  -> BY-274  Establish first-release SQLite baseline
-  -> reconcile this plan against the resulting system
-```
 
 This plan does not authorize implementation.
 It does not extend the accepted scope of an active Change.
@@ -41,15 +34,15 @@ After BY-274 is accepted:
 Observed rule counts and locations in this plan are investigation snapshots.
 Rerun the applicable searches before using them as Task evidence.
 
-## 1. Enforce source and SQL ownership after adapter movement
+## 1. Enforce source and SQL ownership after the baseline
 
 ### Concern
 
-BY-270 exposed repeated uncertainty about whether Task-owned and Change-owned knowledge is confined to the owning modules.
-Source placement helps human review, but it does not by itself prevent a later adapter from reading or writing another owner's tables.
+BY-269 and BY-271 exposed repeated uncertainty about whether Task-owned and Change-owned knowledge is confined to the owning modules.
+Source placement helps human review, but it does not by itself prevent a later Adapter from reading or writing another owner's tables.
 
-BY-272 and BY-273 will move persistence adapters and BY-274 will replace the migration history.
-An ownership rule written before those changes would encode transient paths and schema details.
+BY-274 retains working Adapter placement while it replaces the migration history.
+Adapter relocation and SQL ownership enforcement therefore remain post-baseline decisions, and an ownership rule written before those decisions would encode transient paths and schema details.
 
 ### Investigation outcome
 
@@ -99,7 +92,7 @@ Do not add both static and runtime enforcement unless each covers a demonstrated
 
 ### Concern
 
-BY-270 revealed structural patterns that let one owner expose or coordinate more knowledge than a caller needs:
+The completed BY-269 boundary revealed structural patterns that let one owner expose or coordinate more knowledge than a caller needs:
 
 - broad completion ports that expose unrelated owner operations;
 - composition by spreading broad ports into new objects;
@@ -490,7 +483,7 @@ It favors Oxlint or a token-aware custom check.
 **Candidate disposition:** Do not enable globally.
 Consider a scoped policy only after deciding how to treat `as unknown`, test doubles, serialization boundaries, and assertions required by external library typing gaps.
 
-### Provisional rule groups
+### Rule groups under investigation
 
 The following grouping is an investigation aid rather than an adoption decision.
 
