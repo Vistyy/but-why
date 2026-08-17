@@ -117,7 +117,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("retains a new Reviewer Session transcript", () =>
+  it.effect("retains a new Agent Session transcript", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-transcript-"));
       const sessions = join(root, "sessions");
@@ -156,7 +156,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("does not recursively discover a new Reviewer Session transcript", () =>
+  it.effect("does not recursively discover a new Agent Session transcript", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-nested-"));
       const sessions = join(root, "sessions");
@@ -188,7 +188,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("rejects ambiguous direct Reviewer Session transcripts", () =>
+  it.effect("rejects ambiguous direct Agent Session transcripts", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-ambiguous-"));
       const sessions = join(root, "sessions");
@@ -219,7 +219,7 @@ describe("Pi reviewer process executor", () => {
           _tag: "Left",
           left: {
             sessionUsability: "unusable",
-            message: expect.stringContaining("Multiple Reviewer Session transcripts"),
+            message: expect.stringContaining("Multiple Agent Session transcripts"),
           },
         });
       } finally {
@@ -473,7 +473,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("classifies a confirmed missing resumed session as unusable", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-missing-reviewer-session-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-missing-agent-session-"));
       try {
         const result = yield* Effect.either(
           createPiReviewerProcessExecutor(() => Effect.die("must not execute")).execute({
@@ -495,7 +495,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("rejects a resumed transcript outside session storage", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-outside-reviewer-session-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-outside-agent-session-"));
       const sessions = join(root, "sessions");
       mkdirSync(sessions);
       const sessionId = "outside-session";
@@ -528,7 +528,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("preserves session storage inspection failures as unknown", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-invalid-reviewer-session-root-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-invalid-agent-session-root-"));
       const storageFile = join(root, "not-a-directory");
       writeFileSync(storageFile, "not a session directory");
       try {

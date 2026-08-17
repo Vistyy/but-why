@@ -1,11 +1,9 @@
-import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-
 import { Effect } from "effect";
 
 import type {
   CandidateValidationFinding,
-  RecordCandidateValidationCommandRoundInput,
+  RecordCandidateValidationPhaseResultInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
@@ -30,28 +28,16 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
-import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
-  assertRunOwner,
-  decodeValidationFinding,
-  decodeValidationRound,
-  findingReadColumns,
   listValidationArtifacts,
   listValidationFindings,
-  listValidationRounds,
+  listValidationPhaseResults,
   listValidationToolingFailures,
-  type StoredValidationFindingRow,
-  type StoredValidationRoundRow,
-  validateFindingRoundRelationships,
-  validateRoundPolicyRelationships,
 } from "./sqliteValidationEvidenceStorage.js";
 import {
-  decodeValidationRun,
   readActiveValidationRunForChange,
-  readValidationRunById,
   type StoredValidationRunRow,
-  validateValidationRunAuthorityRelationships,
   validationRunReadColumns,
 } from "./sqliteValidationRunStorage.js";
 
@@ -68,76 +54,55 @@ export const openSqliteCandidateValidationExecutionPort = () =>
           complete(sql, input),
         ),
       recordWorkspaceCleanup: (input) =>
-        repository
-          .operation(
-            "record Candidate Snapshot Workspace cleanup",
-            (sql) => sql<{ readonly validationRunId: string }>`
-              UPDATE candidate_snapshot_workspaces
-              SET cleanup_workspace = ${input.cleanupWorkspace}
-              WHERE validation_run_id = ${input.validationRunId}
-              RETURNING validation_run_id AS validationRunId
-            `,
-          )
-          .pipe(
-            Effect.flatMap((updated) =>
-              updated.length === 1 && updated[0]?.validationRunId === input.validationRunId
-                ? Effect.void
-                : invalidData(
-                    "record Candidate Snapshot Workspace cleanup",
-                    "Snapshot Workspace cleanup requires its persisted Validation Run identity.",
-                  ),
-            ),
-          ),
+        repository.transactionImmediate("record Validation Run cleanup", (sql) =>
+          recordWorkspaceCleanup(sql, input.validationRunId, input.cleanupWorkspace),
+        ),
       recordToolingFailure: (input) =>
-        repository.operation("record Candidate validation Tooling Failure", (sql) =>
+        repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
           Effect.asVoid(sql`
-            INSERT INTO candidate_validation_tooling_failures (
-              validation_run_id, error_kind, operation_name, error_message, created_at
-            ) VALUES (
-              ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
-              ${input.errorMessage}, ${input.now}
-            )
+            UPDATE validation_runs
+            SET run_tooling_failure = ${JSON.stringify(toolingFailureValue(input))}
+            WHERE id = ${input.validationRunId} AND outcome IS NULL
           `),
         ),
-      recordPrepareRound: (input) =>
-        repository.transactionImmediate("record Candidate validation Prepare round", (sql) =>
-          recordRound(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
+      recordPrepareResult: (input) =>
+        repository.transactionImmediate("record Candidate validation Prepare Result", (sql) =>
+          recordPhaseResult(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
         ),
-      recordCheckRound: (input) =>
-        repository.transactionImmediate("record Candidate validation Check round", (sql) =>
-          recordRound(sql, { ...input, phase: validationPhase.checks }),
+      recordCheckResult: (input) =>
+        repository.transactionImmediate("record Candidate validation Check Result", (sql) =>
+          recordPhaseResult(sql, { ...input, phase: validationPhase.checks }),
         ),
-      recordAcceptanceRound: (input) =>
-        repository.transactionImmediate("record Candidate Acceptance Review round", (sql) =>
-          recordRound(sql, {
+      recordAcceptanceResult: (input) =>
+        repository.transactionImmediate("record Candidate Acceptance Review Result", (sql) =>
+          recordPhaseResult(sql, {
             ...input,
             phase: validationPhase.acceptanceReview,
             producer: "acceptance",
           }),
         ),
-      recordSpecialistRound: (input) =>
-        repository.transactionImmediate("record Candidate Specialist Review round", (sql) =>
-          recordRound(sql, { ...input, phase: validationPhase.specialistReview }),
+      recordSpecialistResult: (input) =>
+        repository.transactionImmediate("record Candidate Specialist Review Result", (sql) =>
+          recordPhaseResult(sql, { ...input, phase: validationPhase.specialistReview }),
         ),
-      settleAgentInvocationRound: (input) => (sql) =>
-        recordRound(sql, {
+      settleAgentInvocationResult: (input) => (sql) =>
+        recordPhaseResult(sql, {
           validationRunId: input.validationRunId,
           phase: input.phase,
           producer: input.producer,
-          roundNumber: input.roundNumber,
-          roundStatus: input.roundStatus,
+          outcome: input.outcome,
           artifactRecords: input.artifactRecords,
           findings: input.findings,
           ...(input.toolingFailure === undefined ? {} : { toolingFailure: input.toolingFailure }),
           now: input.now,
         }),
-      listRounds: (validationRunId) =>
-        repository.transaction("list Candidate validation rounds", (sql) =>
-          listRounds(sql, validationRunId, repository.idPrefix),
+      listPhaseResults: (validationRunId) =>
+        repository.transaction("list Validation Phase Results", (sql) =>
+          listValidationPhaseResults(sql, validationRunId, repository.idPrefix),
         ),
       listFindings: (validationRunId) =>
         repository.transaction("list Candidate validation Findings", (sql) =>
-          listFindings(sql, validationRunId, repository.idPrefix),
+          listValidationFindings(sql, validationRunId, repository.idPrefix),
         ),
       listPreviousCandidateReviewerFindings: (input) =>
         repository.transaction("list previous Candidate reviewer Findings", (sql) =>
@@ -145,11 +110,11 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       listToolingFailures: (validationRunId) =>
         repository.transaction("list Candidate validation Tooling Failures", (sql) =>
-          listToolingFailures(sql, validationRunId),
+          listValidationToolingFailures(sql, validationRunId),
         ),
       listArtifacts: (validationRunId) =>
         repository.transaction("list Candidate validation Artifacts", (sql) =>
-          listArtifacts(sql, validationRunId, repository.idPrefix),
+          listValidationArtifacts(sql, validationRunId, repository.idPrefix),
         ),
     }),
   );
@@ -160,156 +125,34 @@ const startOrReuse = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const candidate = yield* readCandidateById(
-      sql,
-      input.candidateId,
-      "start Candidate Validation Run",
-      idPrefix,
-    );
+    const operationName = "start Candidate Validation Run";
+    const candidate = yield* readCandidateById(sql, input.candidateId, operationName, idPrefix);
     if (
       candidate === undefined ||
       candidate.headSha !== input.headSha ||
       (input.changeBaseSha !== undefined && candidate.changeBaseSha !== input.changeBaseSha)
     ) {
       return yield* invalidData(
-        "start Candidate Validation Run",
+        operationName,
         "Candidate validation requires the exact stored Candidate identity.",
       );
     }
     const currentCandidate = yield* readCurrentCandidateForChange(
       sql,
       candidate.changeId,
-      "start Candidate Validation Run",
+      operationName,
       idPrefix,
     );
-    if (currentCandidate === undefined) {
+    if (currentCandidate?.id !== candidate.id) {
       return yield* invalidData(
-        "start Candidate Validation Run",
-        "Candidate validation requires a current Candidate.",
-      );
-    }
-    if (currentCandidate.id !== candidate.id) {
-      return yield* invalidData(
-        "start Candidate Validation Run",
+        operationName,
         "Candidate validation requires the current Candidate for its Change.",
       );
     }
-
-    const changeRows = yield* sql<{
-      readonly id: number;
-      readonly state: "open" | "closed";
-      readonly acceptanceContext: string | null;
-    }>`SELECT id, state, acceptance_context AS acceptanceContext
-       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}`;
-    const changeAuthority = yield* decodePersisted("start Candidate Validation Run", () => {
-      const row = changeRows[0];
-      if (row === undefined || publicChangeId(idPrefix, row.id) !== candidate.changeId) {
-        throw new Error("Candidate validation requires the current owning Change");
-      }
-      if (row.state !== "open") {
-        throw new Error("Candidate validation requires an open Change");
-      }
-      const encodedAcceptanceContext = row.acceptanceContext;
-      return {
-        acceptanceContext:
-          encodedAcceptanceContext === null
-            ? null
-            : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-      };
-    });
-    const decisionRows = yield* sql<StoredImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, sequence,
-        recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${internalChangeId(candidate.changeId, idPrefix)}
-    `;
-    const implementationDecisions = yield* decodePersisted("start Candidate Validation Run", () =>
-      decodeImplementationDecisions(decisionRows, candidate.changeId, idPrefix),
-    );
-
-    const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
-      `SELECT ${implementationBlockerReadColumns}
-       FROM implementation_blockers
-       WHERE change_id = ?`,
-      [internalChangeId(candidate.changeId, idPrefix)],
-    );
-    const blockerHistory = yield* decodePersisted("start Candidate Validation Run", () =>
-      decodeImplementationBlockerHistory(blockerRows, candidate.changeId, idPrefix),
-    );
-    const acceptanceContext = deriveAcceptanceContext(
-      changeAuthority.acceptanceContext,
-      blockerHistory,
-    );
-    if (blockerHistory.active !== null) {
-      return { reused: false, blocked: true } satisfies StartCandidateValidationRunResult;
-    }
-    const currentLatestResolvedBlockerId = latestResolvedBlockerId(blockerHistory);
-    const policy = {
-      ...input.policy,
-      ...(acceptanceContext === null ? {} : { acceptanceContext }),
-    };
-    const authority = {
-      candidate,
-      policy,
-      implementationDecisions,
-      blockerHistory,
-      latestResolvedBlockerId: currentLatestResolvedBlockerId,
-    };
-    const policySnapshot = yield* Effect.try({
-      try: () => encodeSqliteCandidateValidationPolicy(policy),
-      catch: (cause) =>
-        new RepositoryPersistedDataInvalid({
-          operationName: "start Candidate Validation Run",
-          cause,
-        }),
-    });
-    const decisionsSnapshot = JSON.stringify(implementationDecisions);
-
-    const reusableRows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs AS passed_run
-       WHERE passed_run.candidate_id = ?
-         AND passed_run.state = 'complete' AND passed_run.outcome = 'passed'
-         AND NOT EXISTS (
-           SELECT 1 FROM candidate_validation_runs AS later_run
-           WHERE later_run.candidate_id = passed_run.candidate_id
-             AND (
-               later_run.created_at > passed_run.created_at OR
-               (later_run.created_at = passed_run.created_at AND later_run.id > passed_run.id)
-             )
-         )
-       ORDER BY passed_run.created_at DESC, passed_run.id DESC LIMIT 1`,
-      [candidate.id],
-    );
-    const reusableRow = reusableRows[0];
-    const reusable =
-      reusableRow === undefined
-        ? undefined
-        : yield* decodePersisted("start Candidate Validation Run", () => {
-            const decoded = decodeValidationRun(reusableRow);
-            if (decoded.record.candidateId !== candidate.id) {
-              throw new Error("Validation Run belongs to another Candidate");
-            }
-            validateValidationRunAuthorityRelationships(
-              decoded,
-              candidate.changeId,
-              blockerHistory,
-            );
-            return decoded;
-          });
-    if (reusable !== undefined) {
-      return {
-        reused: true,
-        validationRunId: reusable.record.id,
-        outcome: "passed",
-        authority,
-      } satisfies StartCandidateValidationRunResult;
-    }
-
-    const validationRunId = input.validationRunId ?? randomUUID();
-    const active = yield* getActiveForChange(
+    const active = yield* readActiveValidationRunForChange(
       sql,
       candidate.changeId,
-      "read Active Candidate Validation Run",
+      operationName,
       idPrefix,
     );
     if (active !== undefined) {
@@ -320,28 +163,104 @@ const startOrReuse = (
       } satisfies StartCandidateValidationRunResult;
     }
 
-    yield* sql`
-      INSERT INTO candidate_validation_runs (
-        id, candidate_id, policy_snapshot, implementation_decisions, latest_resolved_blocker_id,
-        state, created_at, updated_at
+    const changeRows = yield* sql<{
+      readonly id: number;
+      readonly closeReason: string | null;
+      readonly acceptanceContext: string | null;
+    }>`
+      SELECT id, close_reason AS closeReason,
+        initial_acceptance_context AS acceptanceContext
+      FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
+    `;
+    const changeAuthority = yield* decodePersisted(operationName, () => {
+      const row = changeRows[0];
+      if (row === undefined || publicChangeId(idPrefix, row.id) !== candidate.changeId) {
+        throw new Error("Candidate validation requires the current owning Change");
+      }
+      if (row.closeReason !== null) throw new Error("Candidate validation requires an open Change");
+      return {
+        acceptanceContext:
+          row.acceptanceContext === null
+            ? null
+            : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
+      };
+    });
+    const decisionRows = yield* sql<StoredImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, choice, rationale
+      FROM implementation_decisions
+      WHERE change_id = ${internalChangeId(candidate.changeId, idPrefix)}
+      ORDER BY id
+    `;
+    const implementationDecisions = yield* decodePersisted(operationName, () =>
+      decodeImplementationDecisions(decisionRows, candidate.changeId, idPrefix),
+    );
+    const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns}
+       FROM implementation_blockers WHERE change_id = ? ORDER BY id`,
+      [internalChangeId(candidate.changeId, idPrefix)],
+    );
+    const blockerHistory = yield* decodePersisted(operationName, () =>
+      decodeImplementationBlockerHistory(blockerRows, candidate.changeId, idPrefix),
+    );
+    if (blockerHistory.active !== null) {
+      return { reused: false, blocked: true } satisfies StartCandidateValidationRunResult;
+    }
+    const highestDecisionId = implementationDecisions.at(-1)?.id ?? null;
+    const highestBlockerId = blockerHistory.blockers.at(-1)?.id ?? null;
+    const acceptanceContext = deriveAcceptanceContext(
+      changeAuthority.acceptanceContext,
+      blockerHistory,
+    );
+    const policy = {
+      ...input.policy,
+      ...(acceptanceContext === null ? {} : { acceptanceContext }),
+    };
+    const policySnapshot = yield* Effect.try({
+      try: () => encodeSqliteCandidateValidationPolicy(policy),
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    });
+    const authority = {
+      candidate,
+      policy,
+      implementationDecisions,
+      blockerHistory,
+      latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
+    };
+
+    const latestRows = yield* sql.unsafe<StoredValidationRunRow>(
+      `SELECT ${validationRunReadColumns}
+       FROM validation_runs WHERE candidate_id = ? ORDER BY id DESC LIMIT 1`,
+      [candidate.id],
+    );
+    const latest = latestRows[0];
+    if (
+      latest !== undefined &&
+      latest.outcome === "passed" &&
+      latest.policySnapshot === policySnapshot &&
+      latest.highestDecisionId === highestDecisionId &&
+      latest.highestBlockerId === highestBlockerId
+    ) {
+      return {
+        reused: true,
+        validationRunId: latest.id,
+        outcome: "passed",
+        authority,
+      } satisfies StartCandidateValidationRunResult;
+    }
+
+    const inserted = yield* sql<{ readonly id: number }>`
+      INSERT INTO validation_runs (
+        candidate_id, policy_snapshot, highest_decision_id, highest_blocker_id,
+        outcome, run_tooling_failure, cleanup_pending, cleanup_blocking_reason
       ) VALUES (
-        ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${decisionsSnapshot},
-        ${currentLatestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
+        ${candidate.id}, ${policySnapshot}, ${highestDecisionId}, ${highestBlockerId},
+        NULL, NULL, 1, NULL
       )
+      RETURNING id
     `;
-    yield* sql`
-      INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
-      VALUES (${internalChangeId(candidate.changeId, idPrefix)}, ${validationRunId}, ${input.now})
-    `;
-    if (input.workspaceSetup !== undefined) {
-      yield* sql`
-        INSERT INTO candidate_snapshot_workspaces (
-          validation_run_id, expected_commit_sha, workspace_path, cleanup_workspace, created_at
-        ) VALUES (
-          ${validationRunId}, ${candidate.headSha}, ${input.workspaceSetup.worktreePath},
-          'not_created', ${input.now}
-        )
-      `;
+    const validationRunId = inserted[0]?.id;
+    if (validationRunId === undefined) {
+      return yield* invalidData(operationName, "Validation Run identity was not allocated");
     }
     return {
       reused: false,
@@ -352,87 +271,66 @@ const startOrReuse = (
 
 const complete = (
   sql: SqlClient.SqlClient,
-  input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
+  input: { readonly validationRunId: number; readonly outcome: string; readonly now: string },
 ) =>
   Effect.gen(function* () {
-    const completed = yield* sql<{ readonly validationRunId: string }>`
-      UPDATE candidate_validation_runs
-      SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
-      WHERE id = ${input.validationRunId}
-        AND NOT EXISTS (
-          SELECT 1 FROM candidate_snapshot_workspaces
-          WHERE validation_run_id = ${input.validationRunId} AND cleanup_workspace = 'failed'
-        )
-      RETURNING id AS validationRunId
+    const updated = yield* sql<{ readonly id: number }>`
+      UPDATE validation_runs SET outcome = ${input.outcome}
+      WHERE id = ${input.validationRunId} AND outcome IS NULL AND cleanup_pending = 0
+      RETURNING id
     `;
-    if (completed.length === 1 && completed[0]?.validationRunId === input.validationRunId) {
-      yield* sql`
-        DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}
-      `;
+    if (updated[0]?.id !== input.validationRunId) {
+      return yield* invalidData(
+        "complete Candidate Validation Run",
+        "Validation Run cannot complete before cleanup succeeds.",
+      );
     }
   }).pipe(Effect.asVoid);
 
-const getActiveForChange = readActiveValidationRunForChange;
-
-const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationCommandRoundInput) =>
+const recordWorkspaceCleanup = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  cleanupWorkspace: "removed" | "not_created" | "failed",
+) =>
   Effect.gen(function* () {
-    yield* sql`
-      INSERT INTO candidate_validation_rounds (
-        validation_run_id, phase, producer, round_number, status, created_at
-      ) VALUES (
-        ${input.validationRunId}, ${input.phase}, ${input.producer}, ${input.roundNumber},
-        ${input.roundStatus}, ${input.now}
-      )
+    const pending = cleanupWorkspace === "failed" ? 1 : 0;
+    const reason = cleanupWorkspace === "failed" ? "Snapshot Workspace cleanup failed." : null;
+    const updated = yield* sql<{ readonly id: number }>`
+      UPDATE validation_runs
+      SET cleanup_pending = ${pending}, cleanup_blocking_reason = ${reason}
+      WHERE id = ${validationRunId} AND outcome IS NULL
+      RETURNING id
     `;
-    yield* Effect.forEach(
-      input.artifactRecords,
-      (artifact) => sql`
-        INSERT INTO candidate_validation_artifacts (
-          ref, validation_run_id, phase, producer, path, original_bytes,
-          stored_bytes, truncated, created_at
-        ) VALUES (
-          ${artifact.ref}, ${artifact.validationRunId}, ${artifact.phase}, ${artifact.producer},
-          ${artifact.path}, ${artifact.originalBytes ?? 0}, ${artifact.storedBytes ?? 0},
-          ${artifact.truncated === true ? 1 : 0}, ${input.now}
-        )
-      `,
-      { discard: true },
-    );
-    const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
-    yield* Effect.forEach(
-      findings,
-      (finding) => sql`
-        INSERT INTO candidate_validation_findings (
-          id, validation_run_id, phase, producer, title, description,
-          evidence, files, artifact_refs, created_at, updated_at
-        ) VALUES (
-          ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
-          ${finding.title}, ${finding.description}, ${finding.evidence},
-          ${encodeSqliteJsonStringArray(finding.files)},
-          ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
-        )
-      `,
-      { discard: true },
-    );
-    if (input.toolingFailure !== undefined) {
-      yield* sql`
-        INSERT INTO candidate_validation_tooling_failures (
-          validation_run_id, error_kind, operation_name, error_message, created_at
-        ) VALUES (
-          ${input.toolingFailure.validationRunId}, ${input.toolingFailure.errorKind},
-          ${input.toolingFailure.operationName}, ${input.toolingFailure.errorMessage}, ${input.now}
-        )
-      `;
+    if (updated[0]?.id !== validationRunId) {
+      return yield* invalidData("record Validation Run cleanup", "Validation Run was not active");
     }
-  });
+  }).pipe(Effect.asVoid);
 
-const listRounds = listValidationRounds;
-const listFindings = listValidationFindings;
+const recordPhaseResult = (
+  sql: SqlClient.SqlClient,
+  input: RecordCandidateValidationPhaseResultInput,
+) => {
+  const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
+  const artifacts = input.artifactRecords.map((artifact) => ({
+    path: artifact.path,
+    originalBytes: artifact.originalBytes,
+    storedBytes: artifact.storedBytes,
+  }));
+  return Effect.asVoid(sql`
+    INSERT INTO validation_phase_results (
+      validation_run_id, phase, producer, outcome, findings, artifacts, tooling_failure
+    ) VALUES (
+      ${input.validationRunId}, ${input.phase}, ${input.producer}, ${input.outcome},
+      ${JSON.stringify(findings.map(findingValue))}, ${JSON.stringify(artifacts)},
+      ${input.toolingFailure === undefined ? null : JSON.stringify(toolingFailureValue(input.toolingFailure))}
+    )
+  `);
+};
 
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,
   input: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly phase: CandidateValidationFinding["phase"];
     readonly producer: string;
   },
@@ -446,28 +344,23 @@ const listPreviousCandidateReviewerFindings = (
       idPrefix,
     );
     if (current === undefined) return [];
-    const selectedRows = yield* sql<{
-      readonly candidateId: string;
-      readonly validationRunId: string;
+    const rows = yield* sql<{
+      readonly candidateId: number;
+      readonly validationRunId: number;
+      readonly findings: string;
     }>`
-      SELECT candidate.id AS candidateId, run.id AS validationRunId
+      SELECT candidate.id AS candidateId, result.validation_run_id AS validationRunId,
+        result.findings
       FROM candidates AS candidate
-      JOIN candidate_validation_runs AS run ON run.candidate_id = candidate.id
-      JOIN candidate_validation_rounds AS round ON round.validation_run_id = run.id
+      JOIN validation_runs AS run ON run.candidate_id = candidate.id
+      JOIN validation_phase_results AS result ON result.validation_run_id = run.id
       WHERE candidate.change_id = ${internalChangeId(current.changeId, idPrefix)}
-        AND (candidate.created_at < ${current.createdAt}
-          OR (candidate.created_at = ${current.createdAt} AND candidate.id < ${current.id}))
-        AND round.phase = ${input.phase} AND round.producer = ${input.producer}
-        AND (round.status = 'passed' OR EXISTS (
-          SELECT 1 FROM candidate_validation_findings AS finding
-          WHERE finding.validation_run_id = round.validation_run_id
-            AND finding.phase = round.phase AND finding.producer = round.producer
-        ))
-      ORDER BY candidate.created_at DESC, candidate.id DESC,
-        run.created_at DESC, run.id DESC, round.round_number DESC
+        AND candidate.id < ${current.id}
+        AND result.phase = ${input.phase} AND result.producer = ${input.producer}
+      ORDER BY candidate.id DESC, run.id DESC
       LIMIT 1
     `;
-    const selected = selectedRows[0];
+    const selected = rows[0];
     if (selected === undefined) return [];
     const candidate = yield* readCandidateById(
       sql,
@@ -485,62 +378,54 @@ const listPreviousCandidateReviewerFindings = (
         "Selected reviewer history belongs to an unrelated Candidate",
       );
     }
-    const run = yield* requireRun(
-      sql,
-      selected.validationRunId,
-      "list previous Candidate reviewer Findings",
-      idPrefix,
-    );
-    if (run.candidateId !== candidate.id) {
-      return yield* invalidData(
-        "list previous Candidate reviewer Findings",
-        "Selected reviewer history belongs to an unrelated Validation Run",
-      );
-    }
-    const roundRows = yield* sql<StoredValidationRoundRow>`
-      SELECT validation_run_id AS validationRunId, phase, producer,
-        round_number AS roundNumber,
-        status, created_at AS createdAt
-      FROM candidate_validation_rounds
-      WHERE validation_run_id = ${run.id}
-        AND phase = ${input.phase} AND producer = ${input.producer}
-    `;
-    const findingRows = yield* sql.unsafe<StoredValidationFindingRow>(
-      `SELECT ${findingReadColumns}
-       FROM candidate_validation_findings
-       WHERE validation_run_id = ? AND phase = ? AND producer = ?`,
-      [run.id, input.phase, input.producer],
-    );
     return yield* decodePersisted("list previous Candidate reviewer Findings", () => {
-      const rounds = roundRows.map((row) => assertRunOwner(decodeValidationRound(row), run.id));
-      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]]));
-      const findings = findingRows.map((row) =>
-        assertRunOwner(decodeValidationFinding(row), run.id),
-      );
-      validateFindingRoundRelationships(findings, rounds);
-      return findings.sort((left, right) => compareStrings(left.id, right.id));
+      const value: unknown = JSON.parse(selected.findings) as unknown;
+      if (!Array.isArray(value)) throw new Error("Stored Findings are not an array");
+      return value.map((item) => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) {
+          throw new Error("Stored Finding is invalid");
+        }
+        const finding = item as Record<string, unknown>;
+        const field = (name: string) => finding[name];
+        return {
+          validationRunId: selected.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          title: requiredString(field("title")),
+          description: requiredString(field("description")),
+          evidence: requiredString(field("evidence")),
+          files: requiredStringArray(field("files")),
+          artifactRefs: requiredStringArray(field("artifactRefs")),
+        } satisfies CandidateValidationFinding;
+      });
     });
   });
 
-const listToolingFailures = listValidationToolingFailures;
-const listArtifacts = listValidationArtifacts;
-
-const requireRun = (
-  sql: SqlClient.SqlClient,
-  validationRunId: string,
-  operationName: string,
-  idPrefix: string,
-) =>
-  Effect.flatMap(
-    readValidationRunById(sql, validationRunId, "decode Candidate Validation Run", idPrefix),
-    (run) =>
-      run === undefined
-        ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
-        : Effect.succeed(run),
-  );
-
-const compareStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
-
+const findingValue = (finding: CandidateValidationFinding) => ({
+  title: finding.title,
+  description: finding.description,
+  evidence: finding.evidence,
+  files: finding.files,
+  artifactRefs: finding.artifactRefs,
+});
+const toolingFailureValue = (failure: {
+  readonly errorKind: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
+}) => ({
+  errorKind: failure.errorKind,
+  operationName: failure.operationName,
+  errorMessage: failure.errorMessage,
+});
+const requiredString = (value: unknown): string => {
+  if (typeof value !== "string") throw new Error("Stored Finding field is invalid");
+  return value;
+};
+const requiredStringArray = (value: unknown): readonly string[] => {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error("Stored Finding string array is invalid");
+  }
+  return value as readonly string[];
+};
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

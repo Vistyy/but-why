@@ -29,7 +29,7 @@ export type SnapshotWorkspaceOperationName =
 
 export type SnapshotWorkspaceToolingError = {
   readonly operationName: SnapshotWorkspaceOperationName;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly expectedCommitSha: string;
   readonly worktreePath: string;
   readonly errorMessage: string;

@@ -8,25 +8,25 @@ export type AbandonValidationRunResult =
   | {
       readonly ok: true;
       readonly status: "abandoned" | "already_complete";
-      readonly validationRunId: string;
+      readonly validationRunId: number;
     }
   | {
       readonly ok: false;
       readonly status: "not_found" | "cleanup_failed";
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly changeId?: string;
       readonly cleanup: { readonly workspace: string };
     }
   | {
       readonly ok: false;
       readonly status: "submission_in_progress";
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly changeId: string;
     };
 
 export type AbandonValidationRun = {
   readonly abandon: (input: {
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly reason: string;
     readonly now: string;
   }) => Effect.Effect<AbandonValidationRunResult, RepositoryStorageError>;
@@ -75,7 +75,7 @@ const abandonWhileLocked = (
     readonly persistence: ValidationRunAbandonmentPort;
     readonly workspaceCleanup: SnapshotWorkspaceCleanup;
   },
-  command: { readonly validationRunId: string; readonly reason: string; readonly now: string },
+  command: { readonly validationRunId: number; readonly reason: string; readonly now: string },
 ): Effect.Effect<AbandonValidationRunResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const context = yield* input.persistence.getAbandonmentContext(command.validationRunId);
@@ -123,7 +123,7 @@ const abandonWhileLocked = (
     return { ok: true, status: "abandoned", validationRunId: command.validationRunId } as const;
   });
 
-const notFound = (validationRunId: string): AbandonValidationRunResult => ({
+const notFound = (validationRunId: number): AbandonValidationRunResult => ({
   ok: false,
   status: "not_found",
   validationRunId,

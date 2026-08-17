@@ -2,17 +2,15 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import { internalChangeId } from "../change/changeId.js";
-import type { ChangeReviewerSessionPort } from "../change/changePorts.js";
+import type { ChangeAgentSessionPort } from "../change/changePorts.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { decodeReviewerSession, type StoredReviewerSessionRow } from "./sqliteChangeReadModel.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
-export const openSqliteChangeReviewerSessionPort = () =>
+export const openSqliteChangeAgentSessionPort = () =>
   Effect.map(
     RepositorySql,
-    (repository): ChangeReviewerSessionPort => ({
+    (repository): ChangeAgentSessionPort => ({
       getAgentSession: (changeId, producer) =>
         repository.transaction("read Change Agent Session", (sql) =>
           Effect.map(
@@ -94,27 +92,6 @@ export const openSqliteChangeReviewerSessionPort = () =>
           ) VALUES (${input.validationRunId}, ${input.phase}, ${input.producer}, ${invocationId})
         `;
         }).pipe(Effect.asVoid),
-      listReviewerSessions: (changeId) =>
-        repository.transaction("list legacy Reviewer Sessions", (sql) =>
-          Effect.flatMap(
-            sql<StoredReviewerSessionRow>`
-            SELECT change_id AS changeId, producer, fingerprint,
-              session_reference AS sessionReference
-            FROM reviewer_sessions
-            WHERE change_id = ${internalChangeId(changeId, repository.idPrefix)}
-          `,
-            (rows) =>
-              decodePersisted("list legacy Reviewer Sessions", () =>
-                rows
-                  .map((row) => decodeReviewerSession(row, changeId, repository.idPrefix))
-                  .sort(
-                    (left, right) =>
-                      compareStoredStrings(left.producer, right.producer) ||
-                      compareStoredStrings(left.sessionReference, right.sessionReference),
-                  ),
-              ),
-          ),
-        ),
     }),
   );
 
@@ -157,9 +134,6 @@ const changeAgentConfigurationCanBeCorrected = (
       (returned[0]?.count ?? 0) === 0
     );
   });
-
-const compareStoredStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
 
 const replaceChangeRoleConfiguration = (
   configuration: ChangeReviewerConfiguration,

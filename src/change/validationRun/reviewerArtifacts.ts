@@ -21,7 +21,7 @@ import { writeValidationRunArtifactFile } from "./artifactFiles.js";
 import type { ValidationPhase, ValidationRunArtifactRecord } from "./validationRun.js";
 
 export const writeReviewerArtifacts = (input: {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly result:
@@ -41,7 +41,7 @@ export const writeReviewerArtifacts = (input: {
   readonly artifactMaxBytes?: number;
   readonly executionEvidence: ReviewerExecutionEvidence;
 }): Effect.Effect<
-  readonly Omit<ValidationRunArtifactRecord, "createdAt">[],
+  readonly ValidationRunArtifactRecord[],
   ValidationToolingFailure,
   FileSystem.FileSystem
 > =>
@@ -60,7 +60,7 @@ export const writeReviewerArtifacts = (input: {
       },
     ] as const;
 
-    const artifacts: Omit<ValidationRunArtifactRecord, "createdAt">[] = [];
+    const artifacts: ValidationRunArtifactRecord[] = [];
     for (const { fileName, content } of contents) {
       const artifact = yield* writeValidationRunArtifactFile({
         artifactsRoot: input.artifactsRoot,

@@ -4,7 +4,7 @@ import { runTimedCommand } from "../../command/runTimedCommand.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { runWithSubmitProgress, type SubmitProgress } from "../../submission/submissionProgress.js";
-import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { RecordCandidateValidationCheckResultInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
@@ -17,7 +17,7 @@ import {
 import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
 export type RunCheckPhaseInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly checks: readonly SubmitCheckConfig[];
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly artifactsRoot: string;
@@ -28,8 +28,8 @@ export type RunCheckPhaseInput = {
   readonly progress?: SubmitProgress;
   readonly now: string;
   readonly continueAfterFinding?: boolean;
-  readonly recordCheckRound: (
-    input: RecordCandidateValidationCheckRoundInput,
+  readonly recordCheckResult: (
+    input: RecordCandidateValidationCheckResultInput,
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
@@ -41,7 +41,7 @@ export type RunCheckPhaseResult =
   | {
       readonly ok: true;
       readonly findings: 1;
-      readonly validationRunId: string;
+      readonly validationRunId: number;
     };
 
 type CommandResult = {
@@ -55,12 +55,11 @@ type CheckCommandResult = {
   readonly timedOut: boolean;
 };
 
-type CheckRound = {
+type CheckResult = {
   readonly producer: string;
-  readonly roundNumber: number;
   readonly failed: boolean;
-  readonly artifactRecords: RecordCandidateValidationCheckRoundInput["artifactRecords"];
-  readonly finding?: NonNullable<RecordCandidateValidationCheckRoundInput["finding"]>;
+  readonly artifactRecords: RecordCandidateValidationCheckResultInput["artifactRecords"];
+  readonly finding?: NonNullable<RecordCandidateValidationCheckResultInput["finding"]>;
 };
 
 export const runCheckPhase = (
@@ -73,21 +72,21 @@ export const runCheckPhase = (
   Effect.gen(function* () {
     let foundFailure = false;
 
-    for (const [index, check] of input.checks.entries()) {
-      const checkRound: CheckRound = yield* runWithSubmitProgress({
+    for (const check of input.checks) {
+      const checkResult: CheckResult = yield* runWithSubmitProgress({
         progress: input.progress,
         phase: { kind: "check", id: check.id },
         run: Effect.gen(function* () {
-          const checkRound = yield* runSingleCheck(input, check, index);
-          yield* recordCheckRound(input, checkRound);
-          return checkRound;
+          const checkResult = yield* runSingleCheck(input, check);
+          yield* recordCheckResult(input, checkResult);
+          return checkResult;
         }),
         outcome: (result) => (result.failed ? "failed" : "passed"),
         details: (result) => (result.failed ? { reason: "findings" } : undefined),
       });
-      foundFailure ||= checkRound.failed;
+      foundFailure ||= checkResult.failed;
 
-      if (checkRound.failed && input.continueAfterFinding !== true) {
+      if (checkResult.failed && input.continueAfterFinding !== true) {
         return { ok: true, findings: 1, validationRunId: input.validationRunId };
       }
     }
@@ -100,8 +99,7 @@ export const runCheckPhase = (
 const runSingleCheck = (
   input: RunCheckPhaseInput,
   check: SubmitCheckConfig,
-  index: number,
-): Effect.Effect<CheckRound, ValidationToolingFailure, FileSystem.FileSystem> =>
+): Effect.Effect<CheckResult, ValidationToolingFailure, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const { commandResult, timedOut } = yield* runCheckCommand(
@@ -126,14 +124,12 @@ const runSingleCheck = (
 
     return {
       producer: check.id,
-      roundNumber: index + 1,
       failed,
       artifactRecords,
       ...(failed
         ? {
             finding: checkFinding(
               input.validationRunId,
-              index + 1,
               check,
               commandResult,
               timedOut,
@@ -144,29 +140,26 @@ const runSingleCheck = (
     };
   });
 
-const recordCheckRound = (
+const recordCheckResult = (
   input: RunCheckPhaseInput,
-  checkRound: CheckRound,
+  result: CheckResult,
 ): Effect.Effect<void, RepositoryStorageError> =>
-  input.recordCheckRound({
+  input.recordCheckResult({
     validationRunId: input.validationRunId,
-    producer: checkRound.producer,
-    roundNumber: checkRound.roundNumber,
-    roundStatus: checkRound.failed ? "failed" : "passed",
-    artifactRecords: checkRound.artifactRecords,
-    ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
+    producer: result.producer,
+    outcome: result.failed ? "failed" : "passed",
+    artifactRecords: result.artifactRecords,
+    ...(result.finding === undefined ? {} : { finding: result.finding }),
     now: input.now,
   });
 
 const checkFinding = (
-  validationRunId: string,
-  findingNumber: number,
+  validationRunId: number,
   check: SubmitCheckConfig,
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
-): NonNullable<RecordCandidateValidationCheckRoundInput["finding"]> => ({
-  id: `${validationRunId}-F${findingNumber}`,
+): NonNullable<RecordCandidateValidationCheckResultInput["finding"]> => ({
   validationRunId,
   phase: validationPhase.checks,
   producer: check.id,
@@ -235,7 +228,7 @@ const runCheckCommand = (
   );
 
 const writeCheckArtifacts = (input: {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly check: SubmitCheckConfig;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;

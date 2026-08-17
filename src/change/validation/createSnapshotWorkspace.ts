@@ -20,7 +20,7 @@ import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type CreateSnapshotWorkspaceInput = {
   readonly repoRoot: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
   readonly recordWorkspaceCleanup?: (
@@ -91,7 +91,7 @@ const createSnapshotWorkspaceAdapter = (
       ValidationToolingFailure | RepositoryStorageError
     > = {
       repoRoot: input.repoRoot,
-      workspaceId: input.validationRunId,
+      workspaceId: String(input.validationRunId),
       commitSha: input.submittedSha,
       copyFiles: input.copyFiles,
       recordWorkspaceCleanup: (cleanupResult) =>
@@ -112,7 +112,7 @@ const createSnapshotWorkspaceAdapter = (
 
 const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
   operationName: snapshotWorkspaceOperation(error.operationName),
-  validationRunId: error.workspaceId,
+  validationRunId: Number(error.workspaceId),
   expectedCommitSha: error.commitSha,
   worktreePath: error.worktreePath,
   errorMessage: error.errorMessage,

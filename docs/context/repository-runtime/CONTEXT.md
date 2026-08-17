@@ -45,10 +45,11 @@ It does not open Shared Repository State or provide Candidate access to live rep
 The Trusted But Why Executable invokes it only through a Check selected from the exact Change Base Repo Config.
 _Avoid_: Candidate CLI, submission policy resolver, compatibility parser
 
-**Migration Artifact**:
-One numbered source artifact that defines an ordered Shared Repository State migration.
-Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.
-_Avoid_: Migration file, migration script, editable migration
+**Release Baseline Migration Artifact**:
+The single `0001_baseline` source artifact that defines all Shared Repository State supported by the release-ready prerelease executable.
+It excludes prerelease conversion and compatibility behavior.
+After publication makes a migration durable, later schema changes add immutable ordered Migration Artifacts.
+_Avoid_: prerelease migration chain, conversion script, compatibility schema
 
 **Agent Environment**:
 The optional command wrapper read from Repo Config that starts each headless reviewer with the repository's required development tools.
@@ -75,9 +76,3 @@ _Avoid_: Repository policy, detected Git fact
 A named reusable configuration of an agent runtime, including its model, thinking level, and runtime-specific execution resources.
 An Agent Profile does not define an agent role's lifecycle or safety invariants.
 _Avoid_: Reviewer instructions, agent role, validation phase
-
-**Pinned Predecessor Executable**:
-The Trusted But Why Executable selected from the canonical main checkout while the source repository is unreleased.
-The Source Checkout Guard binds every source-repository But Why command to this executable and its canonical operational Repo Config rather than the Candidate worktree's code or Repo Config.
-After publication, the published But Why Executable replaces this temporary rule.
-_Avoid_: Candidate executable, current-worktree executable, published package before publication

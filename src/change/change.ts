@@ -60,8 +60,8 @@ export type ChangeCleanup = {
 };
 
 export type ChangePublication = {
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly target: ChangePublicationTarget;
   readonly headBranch: string;
   readonly expectedHeadSha: string;
@@ -73,7 +73,7 @@ export type TerminalCleanupChange = {
   readonly state: ChangeState;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly worktreePath: string | null;
+  readonly worktreePath: string;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
   readonly remoteChangeBranch: RemoteChangeBranch | null;
@@ -83,12 +83,11 @@ export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
+  readonly baseRef: string;
+  readonly baseRemoteUrl: string;
+  readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
@@ -98,7 +97,4 @@ export type ChangeRecord = {
   readonly activeBlocker: ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
 };

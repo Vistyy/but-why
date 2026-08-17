@@ -12,7 +12,7 @@ import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessi
 import { openSqliteCandidateCapturePersistence } from "../../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidatePublicationPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
@@ -30,7 +30,7 @@ import { candidateValidationLayer } from "../candidateValidation/composition/can
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidatePublicationPort,
-  ChangeReviewerSessionPort,
+  ChangeAgentSessionPort,
   ChangeSubmissionPort,
 } from "../changePorts.js";
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
@@ -151,7 +151,7 @@ export const loadChangeSubmit = (input: {
   };
   const layerFor = (
     persistence: CandidateValidationExecutionPort,
-    reviewerSessions: ChangeReviewerSessionPort,
+    agentSessions: ChangeAgentSessionPort,
     agentPersistence: AgentSessionPersistence,
   ) =>
     candidateValidationLayer({
@@ -161,10 +161,10 @@ export const loadChangeSubmit = (input: {
       ...(input.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
-      reviewerSessionsRoot: context.paths.operationalDir,
+      agentSessionsRoot: context.paths.operationalDir,
       agentPersistence,
-      getAgentSession: reviewerSessions.getAgentSession,
-      linkAgentInvocation: reviewerSessions.linkAgentInvocation,
+      getAgentSession: agentSessions.getAgentSession,
+      linkAgentInvocation: agentSessions.linkAgentInvocation,
     });
 
   return {
@@ -176,7 +176,7 @@ export const loadChangeSubmit = (input: {
           validation: openSqliteCandidateValidationExecutionPort(),
           submissionOwner: openSqliteChangeSubmissionPort(),
           submissionCompletion: openSqliteTaskChangeSubmissionCompletion(),
-          reviewerSessions: openSqliteChangeReviewerSessionPort(),
+          agentSessions: openSqliteChangeAgentSessionPort(),
           agentPersistence: openSqliteAgentSessionPersistence(),
           publication: openSqliteCandidatePublicationPort(),
         }).pipe(
@@ -186,13 +186,13 @@ export const loadChangeSubmit = (input: {
               validation,
               submissionOwner,
               submissionCompletion,
-              reviewerSessions,
+              agentSessions,
               agentPersistence,
               publication,
             }) =>
               programFor(capture, submissionOwner, submissionCompletion, publication)
                 .submit(submitInput)
-                .pipe(Effect.provide(layerFor(validation, reviewerSessions, agentPersistence))),
+                .pipe(Effect.provide(layerFor(validation, agentSessions, agentPersistence))),
           ),
           loaded.runtime.provide,
         ),

@@ -10,8 +10,6 @@ export type TaskSummary = {
   readonly id: string;
   readonly title: string;
   readonly state: TaskState;
-  readonly createdAt: string;
-  readonly updatedAt: string;
   readonly startable: boolean;
   readonly blockedBy: readonly TaskDependencyFact[];
 };

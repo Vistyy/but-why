@@ -39,42 +39,25 @@ A nonzero result creates normal Check evidence and prevents reviewer execution a
 The validator reads only `.but-why/config.json` and does not open Shared Repository State.
 Do not invoke the Candidate CLI for this validation.
 
-While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
-The command must resolve the executable and operational Repo Config from the canonical main checkout before it reads or mutates Shared Repository State.
+While the source repository is unreleased, every source-repository But Why command resolves the executable and operational Repo Config from the canonical main checkout before it reads or mutates Shared Repository State.
 A Candidate worktree must not supply its own CLI or Repo Config as trusted repository policy for those operations.
 Change Base-controlled validation remains the only path that decodes Candidate Repo Config.
 After publication, packaged commands use the published But Why Executable and the target repository's normal Repo Config resolution instead.
 
-### Pinned Predecessor Executable for migration reconciliation
+### Prerelease release-baseline cutover
 
-For a prerelease migration Change, build the Pinned Predecessor Executable from canonical `main` immediately before merge.
-Preserve the self-contained executable bundle outside the checkout.
-The manifest's executable must contain the complete predecessor runtime that will execute reconciliation.
-Record the predecessor Git commit and the SHA-256 of that executable in an external manifest.
-The manifest path is supplied through `BUT_WHY_PINNED_PREDECESSOR_MANIFEST`.
-Its JSON shape is:
+The release-ready runtime supports only `0001_baseline` and does not open prerelease Shared Repository State.
+Before merging a baseline cutover, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
+Pause But Why operations during the cutover.
+Use the old bundle directly to inspect and reconcile every supported open or merged Change while it still owns the old state schema.
+Do not use the new executable or a Candidate executable for this reconciliation.
 
-```json
-{
-  "version": 1,
-  "changeId": "<exact-merged-change-id>",
-  "commit": "<pre-merge-git-commit>",
-  "sha256": "<sha-256-of-executable>",
-  "executable": "<bundle-executable-path-relative-to-this-manifest>"
-}
-```
-
-The source launcher verifies the manifest, the executable permission, and the recorded SHA-256 before it starts the executable.
-The manifest is accepted only for `change reconcile <exact-merged-change-id>` and its `--discard-work` form.
-The launcher rejects every other command while this manifest is selected.
-The bundle receives the target Local Repository as its current working directory and runs only the exact reconciliation command.
-
-For the internal identity cutover only, pause all But Why operations after merge and before the new executable opens Shared Repository State.
-Preserve the exact merged `idPrefix` Repo Config, then temporarily install the pinned predecessor's `taskPrefix`-compatible Repo Config with the same prefix in canonical `main`.
-Run only the exact reconciliation command through the pinned-predecessor launcher, which sets `BUT_WHY_SOURCE_TRUSTED_ROOT` to canonical `main`.
-Restore the exact merged Repo Config immediately after the command, including on failure, and verify it against the merged commit before running the new executable.
-
-After reconciliation succeeds, remove the temporary bundle and manifest unless the release archive requires the Task 7 predecessor.
+After reconciliation, archive the complete `.git/but-why` directory under an operator-selected unique path.
+Do not overwrite or delete that archive.
+Initialize fresh Shared Repository State with the merged executable and the merged `idPrefix` Repo Config.
+If interruption leaves the old directory in place, continue with the old bundle or finish the archive move before initialization.
+If interruption occurs after the archive move, rerun fresh initialization with the new executable.
+Verify the initialized state with a normal read-only command before resuming operations.
 
 ## Check ownership
 

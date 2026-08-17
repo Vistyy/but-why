@@ -27,7 +27,13 @@ export const openSqliteTaskChangeReviewAdmissionPersistence = (): Effect.Effect<
     admit: (input: AdmitTaskReviewInput) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.flatMap(readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix), (link) =>
-          admitTaskReview(sql, input, repository.idPrefix, link?.changeId),
+          admitTaskReview(
+            sql,
+            input,
+            repository.idPrefix,
+            link?.changeId,
+            repository.commonDirectory,
+          ),
         ),
       ),
   }));

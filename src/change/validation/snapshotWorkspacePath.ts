@@ -2,5 +2,5 @@ import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/dispo
 
 export const expectedSnapshotWorkspacePath = (
   mainCheckoutRoot: string,
-  validationRunId: string,
-): string => expectedDisposableWorkspacePath(mainCheckoutRoot, validationRunId);
+  validationRunId: number,
+): string => expectedDisposableWorkspacePath(mainCheckoutRoot, String(validationRunId));

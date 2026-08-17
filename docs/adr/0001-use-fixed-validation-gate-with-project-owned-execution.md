@@ -16,8 +16,8 @@ But Why owns command and reviewer execution contracts and uses project-owned nat
 
 ## Consequences
 
-But Why owns Validation Runs, phases, Findings, Artifacts, Reviewer Sessions, Snapshot Workspaces, execution diagnostics, and interruption behavior.
-A Pi Reviewer Adapter launches each reviewer invocation through Effect command execution and preserves bounded same-session output correction.
-Reviewer Sessions belong to one Change and persist independently from disposable Snapshot Workspaces so successor Candidates can reuse repository orientation.
+But Why owns Validation Runs, immutable Phase Results, Findings, Artifacts, Agent Sessions, Snapshot Workspaces, execution diagnostics, and interruption behavior.
+A Pi Reviewer Adapter launches each Agent Invocation through Effect command execution and preserves bounded same-continuation output correction.
+Change reviewer Agent Sessions belong to one Change and persist independently from disposable Snapshot Workspaces so successor Candidates can reuse repository orientation.
 Host interruption terminates the reviewer process tree before Snapshot Workspace cleanup begins.
 Snapshot Workspace creation and cleanup use project-owned native Git and provide no reviewer behavior or security isolation.

@@ -15,7 +15,6 @@ import { openTaskUseCases } from "../../src/task/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const taskId = publicTaskId("BY-1");
-const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 
 const task = (description = "Original description"): TaskRecord => ({
@@ -24,8 +23,6 @@ const task = (description = "Original description"): TaskRecord => ({
   description,
   state: "new",
   cancelReason: null,
-  createdAt: firstNow,
-  updatedAt: firstNow,
   startable: false,
   blockedBy: [],
   prerequisites: [],

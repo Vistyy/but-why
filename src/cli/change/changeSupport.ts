@@ -40,10 +40,7 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
-  startingCommit: change.startingCommit,
   acceptanceContext: change.acceptanceContext,
-  createdAt: change.createdAt,
-  closedAt: change.closedAt,
   ...(change.prepareFailure === null
     ? {}
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),
@@ -57,8 +54,6 @@ export const compactValidationRunView = (run: CandidateValidationRunRecord | nul
         candidateId: run.candidateId,
         state: run.state,
         outcome: run.outcome,
-        createdAt: run.createdAt,
-        updatedAt: run.updatedAt,
       };
 
 export const validationRunHistoryView = (runs: readonly CandidateValidationRunRecord[]) => {

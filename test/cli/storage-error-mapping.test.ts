@@ -6,8 +6,6 @@ import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
-  RepositoryPredecessorReconciliationRequired,
-  RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
 } from "../../src/contracts/repositoryStorageError.js";
@@ -61,74 +59,6 @@ describe("Shared Repository State error classification", () => {
       }
     },
   );
-
-  ordinaryIt("preserves predecessor migration recovery guidance", () => {
-    const result = repositoryStorageErrorResult(
-      new RepositoryPredecessorReconciliationRequired({
-        blocked: {
-          openChanges: 1,
-          activeTaskReviews: 0,
-          activeValidationRuns: 0,
-          unsettledAgentInvocations: 0,
-          pendingTaskReviewCleanup: 0,
-          pendingValidationCleanup: 0,
-          pendingChangeCleanup: 0,
-        },
-      }),
-    );
-
-    expect(result.exitCode).toBe(1);
-    expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
-      error: {
-        code: "predecessor_reconciliation_required",
-        message:
-          "Pinned predecessor reconciliation is required before Shared Repository State can be migrated.",
-        blocked: { openChanges: 1 },
-      },
-      help: [
-        "Run the pinned predecessor executable to reconcile the blocked prerelease state, then retry.",
-        "Do not restore or initialize Shared Repository State.",
-      ],
-    });
-  });
-
-  ordinaryIt("reports restored retired lifecycle states as restored_transient_state", () => {
-    const result = repositoryStorageErrorResult(
-      new RepositoryRestoredTransientState({
-        tasks: [
-          {
-            id: "BY-1",
-            numericId: 1,
-            title: "Restored Task",
-            state: "implementing",
-            changeId: "change-1",
-          },
-        ],
-        changes: [{ id: "change-1", taskId: "BY-1", state: "blocked" }],
-      }),
-    );
-
-    expect(result.exitCode).toBe(1);
-    expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
-      error: {
-        code: "restored_transient_state",
-        message: "Shared But Why? state contains retired lifecycle states.",
-        tasks: [
-          {
-            id: "BY-1",
-            numericId: 1,
-            title: "Restored Task",
-            state: "implementing",
-            changeId: "change-1",
-          },
-        ],
-        changes: [{ id: "change-1", taskId: "BY-1", state: "blocked" }],
-      },
-      help: [
-        "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
-      ],
-    });
-  });
 
   ordinaryIt("keeps repository identity conflict as its own result", () => {
     const result = repositoryStorageErrorResult(

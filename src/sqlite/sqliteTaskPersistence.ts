@@ -72,8 +72,8 @@ export const openSqliteTaskPersistence = (): Effect.Effect<TaskPersistence, neve
 const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTaskInput) =>
   Effect.gen(function* () {
     const inserted = yield* sql<{ readonly id: number }>`
-      INSERT INTO tasks (title, description, state, created_at, updated_at)
-      VALUES (${input.title}, ${input.description}, 'new', ${input.now}, ${input.now})
+      INSERT INTO tasks (title, description, state)
+      VALUES (${input.title}, ${input.description}, 'new')
       RETURNING id
     `;
     const allocatedId = inserted[0]?.id;
@@ -191,27 +191,24 @@ const listTasks = (sql: SqlClient.SqlClient, idPrefix: string, input: ListTasksI
     const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
     const rows = input.state
       ? yield* sql<StoredTaskSummaryRow>`
-          SELECT id, id AS numericId, title, state,
-            created_at AS createdAt, updated_at AS updatedAt
+          SELECT id, id AS numericId, title, state
           FROM tasks
           WHERE state = ${input.state}
-          ORDER BY created_at ASC, id ASC
+          ORDER BY id ASC
           LIMIT ${limit}
         `
       : input.includeDone
         ? yield* sql<StoredTaskSummaryRow>`
-            SELECT id, id AS numericId, title, state,
-              created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, id AS numericId, title, state
             FROM tasks
-            ORDER BY created_at ASC, id ASC
+            ORDER BY id ASC
             LIMIT ${limit}
           `
         : yield* sql<StoredTaskSummaryRow>`
-            SELECT id, id AS numericId, title, state,
-              created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, id AS numericId, title, state
             FROM tasks
             WHERE state IN ('new', 'todo')
-            ORDER BY created_at ASC, id ASC
+            ORDER BY id ASC
             LIMIT ${limit}
           `;
     const decoded = yield* decodePersisted("list Tasks", () =>
@@ -244,13 +241,11 @@ const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
 const listActionableTasks = (sql: SqlClient.SqlClient, idPrefix: string) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskSummaryRow>`
-      SELECT id, id AS numericId, title, state,
-        created_at AS createdAt, updated_at AS updatedAt
+      SELECT id, id AS numericId, title, state
       FROM tasks
       WHERE state IN ('new', 'todo')
       ORDER BY
         CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
-        updated_at DESC,
         id ASC
     `;
     const decoded = yield* decodePersisted("list actionable Tasks", () =>
@@ -265,7 +260,7 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
       SELECT id, id AS numericId, title, description, state,
-        cancel_reason AS cancelReason, created_at AS createdAt, updated_at AS updatedAt
+        cancel_reason AS cancelReason
       FROM tasks
       WHERE id = ${internalTaskId(taskId, idPrefix)}
     `;
@@ -280,11 +275,11 @@ export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPr
 export const completeTask = (
   sql: SqlClient.SqlClient,
   taskId: string,
-  now: string,
+  _now: string,
   idPrefix: string,
 ) =>
   sql`
-    UPDATE tasks SET state = 'done', updated_at = ${now}
+    UPDATE tasks SET state = 'done'
     WHERE id = ${internalTaskId(taskId, idPrefix)} AND state = 'todo'
   `;
 
@@ -292,11 +287,11 @@ export const cancelTaskState = (
   sql: SqlClient.SqlClient,
   taskId: string,
   reason: string,
-  now: string,
+  _now: string,
   idPrefix: string,
 ) =>
   sql`
-    UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}, updated_at = ${now}
+    UPDATE tasks SET state = 'cancelled', cancel_reason = ${reason}
     WHERE id = ${internalTaskId(taskId, idPrefix)} AND state <> 'cancelled'
   `;
 
@@ -329,7 +324,7 @@ const updateTaskContext = (
       };
     }
     yield* sql`
-      UPDATE tasks SET description = ${input.description}, updated_at = ${input.now}
+      UPDATE tasks SET description = ${input.description}
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
@@ -360,7 +355,7 @@ export const reviseTask = (sql: SqlClient.SqlClient, input: ReviseTaskInput, idP
       return { ok: true as const, changed: false, task: current };
     }
     yield* sql`
-      UPDATE tasks SET state = 'new', updated_at = ${input.now}
+      UPDATE tasks SET state = 'new'
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const revised = yield* getTaskById(sql, input.taskId, idPrefix);
@@ -379,7 +374,7 @@ const cancelTask = (
     if (current.state === "done") return { ok: false as const, code: "task_already_done" as const };
     if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
     yield* sql`
-      UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
+      UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const updated = yield* getTaskById(sql, input.taskId, idPrefix);
@@ -419,9 +414,9 @@ export const validateTaskDependencyEditTarget = (
 
 const activeTaskReviewId = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>
   Effect.map(
-    sql<{ readonly id: string }>`
+    sql<{ readonly id: number }>`
       SELECT id FROM task_reviews
-      WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND state = 'running'
+      WHERE task_id = ${internalTaskId(taskId, idPrefix)} AND outcome IS NULL
       LIMIT 1
     `,
     (rows) => rows[0]?.id,

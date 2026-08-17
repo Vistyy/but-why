@@ -1,6 +1,5 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import {
@@ -61,7 +60,6 @@ it.scoped("preserves terminal Task policy", () => {
           state,
         });
         expect(yield* tasks.getTaskContextById(taskId)).toEqual(contextBefore);
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ updatedAt: secondNow });
       }
     }),
   );
@@ -122,63 +120,44 @@ it.scoped(
   },
 );
 
-it.scoped(
-  "orders actionable Tasks new before todo, newer updated time first, then numeric ID",
-  () => {
-    return withTemporaryRepositoryState(() =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence();
-        const repository = yield* RepositorySql;
+it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => {
+  return withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
 
-        yield* tasks.createTask({
-          title: "Todo oldest",
-          description: "Todo oldest",
-          now: firstNow,
-        });
-        yield* tasks.createTask({
-          title: "Todo newest",
-          description: "Todo newest",
-          now: firstNow,
-        });
-        yield* tasks.createTask({ title: "New tied A", description: "New tied A", now: firstNow });
-        yield* tasks.createTask({ title: "New middle", description: "New middle", now: firstNow });
-        yield* tasks.createTask({ title: "New tied B", description: "New tied B", now: firstNow });
-        yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
-        yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
+      yield* tasks.createTask({
+        title: "Todo oldest",
+        description: "Todo oldest",
+        now: firstNow,
+      });
+      yield* tasks.createTask({
+        title: "Todo newest",
+        description: "Todo newest",
+        now: firstNow,
+      });
+      yield* tasks.createTask({ title: "New tied A", description: "New tied A", now: firstNow });
+      yield* tasks.createTask({ title: "New middle", description: "New middle", now: firstNow });
+      yield* tasks.createTask({ title: "New tied B", description: "New tied B", now: firstNow });
+      yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
+      yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
 
-        yield* passTaskReviewFixture(publicTaskId("BY-1"), firstNow);
-        yield* passTaskReviewFixture(publicTaskId("BY-2"), thirdNow);
-        yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
-        yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
-        yield* repository.operation(
-          "set actionable Task fixture timestamps",
-          (sql) => sql`
-          UPDATE tasks SET
-            updated_at = CASE id
-              WHEN 1 THEN ${firstNow}
-              WHEN 2 THEN ${thirdNow}
-              WHEN 3 THEN ${thirdNow}
-              WHEN 4 THEN ${secondNow}
-              WHEN 5 THEN ${thirdNow}
-              ELSE ${thirdNow}
-            END
-          WHERE id IN (1, 2, 3, 4, 5)
-        `,
-        );
+      yield* passTaskReviewFixture(publicTaskId("BY-1"), firstNow);
+      yield* passTaskReviewFixture(publicTaskId("BY-2"), thirdNow);
+      yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
+      yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
 
-        const actionable = yield* tasks.listActionableTasks();
-        expect(actionable.map(({ id, state, updatedAt }) => ({ id, state, updatedAt }))).toEqual([
-          { id: "BY-3", state: "new", updatedAt: thirdNow },
-          { id: "BY-5", state: "new", updatedAt: thirdNow },
-          { id: "BY-4", state: "new", updatedAt: secondNow },
-          { id: "BY-2", state: "todo", updatedAt: thirdNow },
-          { id: "BY-1", state: "todo", updatedAt: firstNow },
-        ]);
-        expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7")).toBe(false);
-      }),
-    );
-  },
-);
+      const actionable = yield* tasks.listActionableTasks();
+      expect(actionable.map(({ id, state }) => ({ id, state }))).toEqual([
+        { id: "BY-3", state: "new" },
+        { id: "BY-4", state: "new" },
+        { id: "BY-5", state: "new" },
+        { id: "BY-1", state: "todo" },
+        { id: "BY-2", state: "todo" },
+      ]);
+      expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7")).toBe(false);
+    }),
+  );
+});
 
 it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
   return withTemporaryRepositoryState(() =>

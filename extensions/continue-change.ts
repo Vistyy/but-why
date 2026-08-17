@@ -19,12 +19,12 @@ type ChangeCleanup = JsonObject & {
 };
 
 type CurrentCandidate = JsonObject & {
-  readonly id: string;
+  readonly id: number;
   readonly headSha: string;
 };
 
 type CurrentValidationRun = JsonObject & {
-  readonly id: string;
+  readonly id: number;
   readonly state: "running" | "complete";
 };
 
@@ -47,7 +47,7 @@ export type ChangeInspectionSnapshot = {
   readonly pullRequest: Readonly<Record<string, unknown>> | null;
   readonly cleanup?: ChangeCleanup;
   readonly publication?: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly expectedHeadSha: string;
     readonly pullRequest: Readonly<Record<string, unknown>> | null;
   } | null;
@@ -894,7 +894,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const runId = snapshot.currentValidationRun?.id;
     const detail =
       runId !== undefined
-        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", runId)}\`.`
+        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", String(runId))}\`.`
         : `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "change", "show", id)}\`.`;
     return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
   };
@@ -1262,7 +1262,10 @@ export default function continueChange(pi: ExtensionAPI): void {
 }
 
 const isNonNegativeInteger = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 0;
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
 const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
   value === undefined || value === null || typeof value === "string";
@@ -1280,12 +1283,12 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
 
 const isCandidate = (value: unknown): value is CurrentCandidate =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "id")) &&
   typeof recordValue(value, "headSha") === "string";
 
 const isValidationRun = (value: unknown): value is CurrentValidationRun =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "id")) &&
   (recordValue(value, "state") === "running" || recordValue(value, "state") === "complete");
 
 const isStringArray = (value: unknown): value is readonly string[] =>
@@ -1328,7 +1331,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (publication === undefined ||
       publication === null ||
       (isRecord(publication) &&
-        typeof recordValue(publication, "candidateId") === "string" &&
+        isPositiveInteger(recordValue(publication, "candidateId")) &&
         typeof recordValue(publication, "expectedHeadSha") === "string" &&
         (recordValue(publication, "pullRequest") === null ||
           isRecord(recordValue(publication, "pullRequest")))))

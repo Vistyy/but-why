@@ -157,7 +157,7 @@ export const cleanupExactDisposableWorkspace = (
       )
     ) {
       return cleanupFailed(
-        "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
+        `Recorded Snapshot Workspace identity does not match the expected workspace identity. Expected ${expectedWorktreePath}; received ${input.recordedWorktreePath ?? "<missing>"}.`,
       );
     }
     const parent = yield* inspectSafeWorkspaceContainers(mainCheckoutRoot);

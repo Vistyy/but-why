@@ -14,10 +14,9 @@ export type ChangeStartRecord = {
   readonly branchRef: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
-  readonly startingCommit: string;
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration: ChangeReviewerConfiguration | null;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly state: ChangeState;

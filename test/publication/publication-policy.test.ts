@@ -12,7 +12,7 @@ import { openCandidatePublication } from "../../src/change/publication/candidate
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
-import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
+import { candidateReadyRepo } from "../support/candidateReadyRepo.js";
 import {
   type ChangeTestDependencies,
   openSqliteChangeTestDependencies,
@@ -42,7 +42,7 @@ afterAll(() => {
 
 class PublicationTemplate extends Context.Tag("@but-why/PublicationTemplate")<
   PublicationTemplate,
-  { readonly captured: Captured; readonly validationRunId: string }
+  { readonly captured: Captured; readonly validationRunId: number }
 >() {}
 
 const publicationTemplateLayer = Layer.effect(
@@ -58,8 +58,7 @@ const publicationTemplateLayer = Layer.effect(
           "complete publication Change fixture",
           (sql) => sql`
           UPDATE changes
-          SET starting_commit = ${git(candidateRepoTemplate, "rev-parse", "refs/heads/main")},
-              worktree_path = ${candidateRepoTemplate}
+          SET worktree_path = ${candidateRepoTemplate}
           WHERE id = ${internalChangeId(captured.changeId, "BY")}
         `,
         );
@@ -312,16 +311,16 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         yield* repository.operation(
           "create publication Task",
           (sql) => sql`
-        INSERT INTO tasks (id, title, description, state, created_at, updated_at)
-        VALUES (1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
+        INSERT INTO tasks (id, title, description, state)
+        VALUES (1, 'Publish exact Candidate', 'Description', 'todo')
       `,
         );
         yield* repository.operation("attach Task publication metadata", (sql) =>
           Effect.gen(function* () {
             yield* sql`
                 UPDATE changes
-                SET acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
-                    base_remote_url = 'https://github.test/acme/widgets.git'
+                SET initial_acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
+                    base_remote_url = 'https://github.com/acme/widgets.git'
                 WHERE id = ${internalChangeId(fixture.captured.changeId, "BY")}
               `;
             yield* sql`
@@ -1469,7 +1468,7 @@ type Fixture = {
   readonly captured: Captured;
   readonly changes: ChangeTestDependencies;
   readonly validation: ChangeValidationTestDependencies;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
 };
 
 const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) =>
@@ -1506,6 +1505,10 @@ function completeValidation(
     });
     if (run.reused) return run.validationRunId;
     if ("blocked" in run) throw new Error("Expected a Validation Run");
+    yield* validation.execution.recordWorkspaceCleanup({
+      validationRunId: run.validationRunId,
+      cleanupWorkspace: "not_created",
+    });
     yield* validation.execution.complete({
       validationRunId: run.validationRunId,
       outcome: "passed",

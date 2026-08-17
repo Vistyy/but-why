@@ -88,7 +88,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
             policy: { profile, snapshot: policy },
           }),
           persistence: reviews,
-          reviewerSessionStorageRoot: sessionStorageRoot,
+          agentSessionStorageRoot: sessionStorageRoot,
           agentPersistence: agents,
           reviewerRuntime: piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
@@ -126,7 +126,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
       "task",
       "review",
       "show",
-      submitted.review.id,
+      String(submitted.review.id),
     ]);
     expect(shown.status, shown.stdout).toBe(0);
     expect(JSON.parse(shown.stdout)).toMatchObject({
@@ -141,12 +141,6 @@ it.effect("submits through the supported Task Review operation with a real Agent
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
             },
           ],
-        },
-        legacyReviewerEvidence: {
-          classification: "legacy",
-          legacyTaskReviewerSession: null,
-          sessions: [],
-          transcripts: [],
         },
       },
     });

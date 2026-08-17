@@ -38,11 +38,6 @@ Blocked Change activity is derived from the unresolved Blocker row and is not pe
 Blocker operations neither write nor depend on blocked lifecycle state.
 _Avoid_: Closed Change, Validation Run blocked by Findings
 
-**Transient Change State**:
-The retired persisted Change-state value `blocked`.
-It has no current lifecycle meaning and a migration stops rather than mapping it to Open or Closed.
-_Avoid_: Blocked Change, Change Activity
-
 **Closed Change**:
 A Change permanently completed or cancelled while preserving its history.
 _Avoid_: Deleted Change, merged branch
@@ -145,7 +140,7 @@ _Avoid_: Mutable current config, Candidate-controlled policy, raw config hash, r
 The durable conversation owner for one Task Reviewer or one Change reviewer producer.
 It owns the ordered Agent Continuations and their Invocations while the domain owner retains policy, Findings, and lifecycle state.
 An Agent Session does not cross its Task or Change owner boundary.
-_Avoid_: Reviewer Session, fresh conversation per Candidate, cross-owner conversation
+_Avoid_: alternate reviewer record, fresh conversation per Candidate, cross-owner conversation
 
 **Agent Continuation**:
 One Pi harness continuation within an Agent Session.
@@ -165,25 +160,10 @@ Task Review stores its resolved configuration snapshot before execution, and Cha
 Later configuration changes do not alter these stored facts.
 _Avoid_: current Repo Config, Agent Profile name alone, prompt
 
-**Reviewer Session**:
-A legacy read-only reviewer conversation record retained for historical evidence.
-Current reviewer execution does not create, update, or delete Reviewer Session records.
-_Avoid_: Agent Session, current reviewer execution
-
 **Agent Transcript**:
 The complete Pi session conversation produced by one Agent Continuation.
 The Agent Continuation records its path relative to the operational session root when the transcript is available.
 _Avoid_: Review report, reviewer stdout, security audit trail
-
-**Legacy Reviewer Transcript**:
-A historical transcript reference produced by the retired Reviewer Session path.
-It remains read-only evidence and is not created by current reviewer execution.
-_Avoid_: Agent Transcript, current transcript record
-
-**Legacy Reviewer Transcript Reference**:
-The immutable persisted record of one retained Legacy Reviewer Transcript, identifying its exact Change, Reviewer Producer, Pi session ID, and file path relative to the per-producer reviewer-session root.
-Terminal Cleanup does not create new references for current Agent Transcripts and does not remove historical references.
-_Avoid_: Agent Continuation transcript path, transcript copy, transcript move, CLI output
 
 **Agent Continuation Usability**:
 The Agent Runtime classification after a failed resumed Invocation.
@@ -199,16 +179,11 @@ _Avoid_: Agent Session total, inferred zero usage, cumulative resumed-session us
 **Producer**:
 The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
 A Producer identifies the source that creates an Artifact or Finding.
-_Avoid_: Agent Profile, Reviewer Session, Validation Run
+_Avoid_: Agent Profile, Agent Session, Validation Run
 
 **Reviewer Producer**:
 A Producer identifier for an Acceptance Reviewer or Specialist Reviewer that owns an Agent Session within its Change.
 _Avoid_: Agent Profile, generic validation phase, cross-Change reviewer
-
-**Legacy Reviewer Session Identity**:
-The Change, Reviewer Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that historically determined whether a Reviewer Session could safely continue.
-Its fingerprint remains historical evidence only.
-_Avoid_: Agent Session, Session file path, Candidate identity, Validation Run identity
 
 **Artifact**:
 A durable reference to bounded validation evidence with explicit Run, phase, producer, storage, and truncation metadata.
@@ -305,6 +280,11 @@ _Avoid_: Implementation Decision, silent Task edit, automatic recovery
 The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Change linked to a Task, and configured Specialists.
 _Avoid_: Generic pipeline language, publication, implementation
 
+**Validation Phase Result**:
+One immutable persisted result for a configured phase and Producer in one Validation Run.
+It stores the outcome and compact Finding, Artifact, and Tooling Failure evidence produced at that position.
+_Avoid_: Validation Run, retry attempt, mutable result
+
 **Acceptance Reviewer**:
 The coding agent that owns the overall judgment of whether a Candidate satisfies supplied Acceptance Context.
 It may require missing work necessary for approved intent, but it does not expand approved intent or require optional improvement.
@@ -319,8 +299,8 @@ _Avoid_: Acceptance Reviewer, Final Reviewer
 
 **Snapshot Workspace**:
 A disposable detached Git worktree in which one Validation Run judges the exact Candidate without changing it.
-Each Snapshot Workspace uses the Local Repository's sibling But Why worktree root and belongs to one Validation Run, expected commit, and exact path persisted before acquisition.
-Cleanup requires that persisted identity, a safe But Why-owned path, the exact Local Repository worktree registration, and the exact live HEAD.
+Each Snapshot Workspace uses the Local Repository's sibling But Why worktree root and belongs to one Validation Run, expected commit, and deterministic path derived from the Validation Run identity.
+Cleanup verifies the safe But Why-owned path, the exact Local Repository worktree registration, and the exact live HEAD.
 A later Validation Run uses a different Snapshot Workspace.
 Recovery may reuse only the same Validation Run's matching clean Snapshot Workspace.
 Snapshot Workspaces provide no security isolation.

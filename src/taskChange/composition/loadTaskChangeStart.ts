@@ -31,8 +31,8 @@ export const openTaskChangeStartOperation = (input: {
             const git: ChangeStartGitOperations = {
               resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(input.context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(input.context.root, change, recovering),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(input.context.root, change, recovering, startingCommit),
             };
             return yield* startTaskChange(
               store,

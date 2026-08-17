@@ -44,10 +44,10 @@ import { validationPhase } from "../validationRun/validationRun.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 
 export type RunAcceptanceReviewPhaseInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly changeId: string;
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -72,21 +72,21 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
   }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationRound: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationRound"]
+  readonly settleAgentInvocationResult: NonNullable<
+    CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
   readonly listArtifacts: (
-    validationRunId: string,
+    validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly phase: "acceptance_review";
     readonly producer: "acceptance";
   }) => Effect.Effect<
@@ -154,7 +154,6 @@ export const runAcceptanceReviewPhase = (
         validationRunId: input.validationRunId,
         phase: validationPhase.acceptanceReview,
         producer: "acceptance",
-        roundNumber: 1,
         reviewer: "acceptance",
         configuration: agentConfiguration(input.policy.profile),
         agentPersistence: input.agentPersistence,
@@ -221,7 +220,7 @@ export const runAcceptanceReviewPhase = (
                 ...finding,
               }))
             : [],
-        settleAgentInvocationRound: input.settleAgentInvocationRound,
+        settleAgentInvocationResult: input.settleAgentInvocationResult,
       });
       const findings = execution.result.ok ? execution.result.report.findings : [];
       if (execution.toolingFailure !== undefined) {

@@ -17,7 +17,7 @@ import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createS
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,
@@ -40,15 +40,15 @@ export const candidateValidationForTest = (input: {
   const sessionLayer = Layer.effect(
     CandidateValidationPaths,
     Effect.gen(function* () {
-      const reviewerSessions = yield* openSqliteChangeReviewerSessionPort();
+      const agentSessions = yield* openSqliteChangeAgentSessionPort();
       const agentPersistence = yield* openSqliteAgentSessionPersistence();
       return {
         localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
         artifactsRoot: input.artifactsRoot,
-        reviewerSessionsRoot: input.artifactsRoot,
+        agentSessionsRoot: input.artifactsRoot,
         agentPersistence,
-        getAgentSession: reviewerSessions.getAgentSession,
-        linkAgentInvocation: reviewerSessions.linkAgentInvocation,
+        getAgentSession: agentSessions.getAgentSession,
+        linkAgentInvocation: agentSessions.linkAgentInvocation,
       };
     }),
   ).pipe(Layer.provide(repositoryLayer));
@@ -77,19 +77,19 @@ export const candidateValidationForTest = (input: {
 
   return {
     layer,
-    getRun: (validationRunId: string) =>
+    getRun: (validationRunId: number) =>
       withPersistence((persistence) => persistence.reads.getRunById(validationRunId)),
-    listRounds: (validationRunId: string) =>
+    listPhaseResults: (validationRunId: number) =>
       withPersistence((persistence) =>
-        Effect.map(persistence.reads.listRounds(validationRunId), (rounds) =>
-          rounds.map(({ producer, status }) => ({ producer, status })),
+        Effect.map(persistence.reads.listPhaseResults(validationRunId), (results) =>
+          results.map(({ producer, outcome }) => ({ producer, outcome })),
         ),
       ),
-    listFindings: (validationRunId: string) =>
+    listFindings: (validationRunId: number) =>
       withPersistence((persistence) => persistence.reads.listFindings(validationRunId)),
-    listArtifacts: (validationRunId: string) =>
+    listArtifacts: (validationRunId: number) =>
       withPersistence((persistence) => persistence.reads.listArtifacts(validationRunId)),
-    listToolingFailures: (validationRunId: string) =>
+    listToolingFailures: (validationRunId: number) =>
       withPersistence((persistence) => persistence.reads.listToolingFailures(validationRunId)),
     runWithPersistence: withPersistence,
   };

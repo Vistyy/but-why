@@ -2,13 +2,15 @@
 status: accepted
 ---
 
-# Use immutable forward schema migrations before release
+# Cut over to one release baseline before publication
 
-But Why uses immutable ordered forward migrations before the first public release.
-After a migration is applied, a schema change appends a new migration instead of rewriting the applied migration.
-This decision does not require compatibility with a pre-release representation after that representation is explicitly retired.
+Before the first public release, But Why may replace prerelease Shared Repository State instead of preserving compatibility with unsupported development schemas.
+The release-ready schema starts from exactly one Effect SQL migration named `0001_baseline`.
+Repositories with prerelease state reconcile supported work with the old executable, archive the old state directory, and initialize fresh state with the new executable.
+The new executable does not convert, inspect, or dispatch to a predecessor schema.
 
 ## Consequences
 
-Migration `0001_baseline` and every later applied migration remain unchanged.
-The first public release freezes the complete migration chain shipped in that release rather than collapsing it into a new baseline.
+`0001_baseline` defines the complete schema that the first public release supports.
+No prerelease migration chain, compatibility alias, conversion path, or pinned predecessor dispatch ships in the release-ready runtime.
+After publication makes a baseline durable, later schema changes append immutable ordered migrations instead of rewriting an applied release migration.

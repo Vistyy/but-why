@@ -1,66 +1,92 @@
 import type { ChangePublication } from "../change/change.js";
-import { decodeStoredPositiveInteger, decodeStoredString } from "./sqliteChangeValueDecoders.js";
+import { parseGitHubRemoteUrl } from "../submissionEnvironment/adapters/githubTarget.js";
+import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
+import {
+  decodeStoredNullableString,
+  decodeStoredPositiveInteger,
+  decodeStoredString,
+} from "./sqliteChangeValueDecoders.js";
 
 export type SqliteChangePublicationRow = {
   readonly publicationCandidateId: unknown;
   readonly publicationValidationRunId: unknown;
-  readonly publicationOwner: unknown;
-  readonly publicationRepo: unknown;
-  readonly publicationBaseBranch: unknown;
-  readonly publicationRemoteName: unknown;
-  readonly publicationHeadBranch: unknown;
-  readonly publicationExpectedHeadSha: unknown;
   readonly publicationPrNumber: unknown;
-  readonly publicationPrUrl: unknown;
+  readonly publicationBaseRef: unknown;
+  readonly publicationBaseRemoteUrl: unknown;
+  readonly publicationBranchRef: unknown;
+  readonly publicationExpectedHeadSha: unknown;
 };
+
+export const sqliteChangePublicationColumns = `
+  publication.candidate_id AS publicationCandidateId,
+  publication.validation_run_id AS publicationValidationRunId,
+  publication.pull_request_number AS publicationPrNumber,
+  change_row.base_ref AS publicationBaseRef,
+  change_row.base_remote_url AS publicationBaseRemoteUrl,
+  change_row.branch_ref AS publicationBranchRef,
+  publication_candidate.head_commit AS publicationExpectedHeadSha
+`;
 
 export const decodeSqliteChangePublication = (
   row: SqliteChangePublicationRow,
 ): ChangePublication | null => {
-  const values = [
+  if (row.publicationCandidateId === null) {
+    if (
+      row.publicationValidationRunId !== null ||
+      row.publicationPrNumber !== null ||
+      row.publicationExpectedHeadSha !== null
+    ) {
+      throw new Error("Change publication relationship is incomplete");
+    }
+    return null;
+  }
+  const candidateId = decodeStoredPositiveInteger(
     row.publicationCandidateId,
+    "Publication Candidate id",
+  );
+  const validationRunId = decodeStoredPositiveInteger(
     row.publicationValidationRunId,
-    row.publicationOwner,
-    row.publicationRepo,
-    row.publicationBaseBranch,
-    row.publicationRemoteName,
-    row.publicationHeadBranch,
-    row.publicationExpectedHeadSha,
-    row.publicationPrNumber,
-    row.publicationPrUrl,
-  ];
-  if (values.every((value) => value === null)) return null;
-  if (values.slice(0, 8).some((value) => value === null)) {
-    throw new Error("Change publication relationship is incomplete");
+    "Publication Validation Run id",
+  );
+  const baseRef = decodeStoredString(row.publicationBaseRef, "Publication Change Base ref");
+  const remote = parseRemoteChangeBaseRef(baseRef);
+  const repository = parseGitHubRemoteUrl(
+    decodeStoredString(row.publicationBaseRemoteUrl, "Publication Change Base remote URL"),
+  );
+  const branchRef = decodeStoredString(row.publicationBranchRef, "Publication Change branch ref");
+  const headBranch = branchRef.startsWith("refs/heads/")
+    ? branchRef.slice("refs/heads/".length)
+    : undefined;
+  if (remote === undefined || repository === undefined || headBranch === undefined) {
+    throw new Error("Stored Change publication target is invalid");
   }
-  const prNumber = row.publicationPrNumber;
-  const prUrl = row.publicationPrUrl;
-  if ((prNumber === null) !== (prUrl === null)) {
-    throw new Error("Change publication pull request relationship is incomplete");
-  }
+  const pullRequestNumber =
+    row.publicationPrNumber === null
+      ? null
+      : decodeStoredPositiveInteger(row.publicationPrNumber, "Publication pull request number");
   return {
-    candidateId: decodeStoredString(row.publicationCandidateId, "Publication Candidate id"),
-    validationRunId: decodeStoredString(
-      row.publicationValidationRunId,
-      "Publication Validation Run id",
-    ),
+    candidateId,
+    validationRunId,
     target: {
-      owner: decodeStoredString(row.publicationOwner, "Publication owner"),
-      repo: decodeStoredString(row.publicationRepo, "Publication repository"),
-      baseBranch: decodeStoredString(row.publicationBaseBranch, "Publication base branch"),
-      remoteName: decodeStoredString(row.publicationRemoteName, "Publication remote name"),
+      owner: repository.owner,
+      repo: repository.repo,
+      baseBranch: remote.branchName,
+      remoteName: remote.remoteName,
     },
-    headBranch: decodeStoredString(row.publicationHeadBranch, "Publication head branch"),
+    headBranch,
     expectedHeadSha: decodeStoredString(
       row.publicationExpectedHeadSha,
       "Publication expected head",
     ),
     pullRequest:
-      prNumber === null
+      pullRequestNumber === null
         ? null
         : {
-            number: decodeStoredPositiveInteger(prNumber, "Publication pull request number"),
-            url: decodeStoredString(prUrl, "Publication pull request URL"),
+            number: pullRequestNumber,
+            url: `https://github.com/${repository.owner}/${repository.repo}/pull/${pullRequestNumber}`,
           },
   };
 };
+
+export const decodeNullablePublicationHead = (value: unknown): string | null =>
+  decodeStoredNullableString(value, "Publication expected head");

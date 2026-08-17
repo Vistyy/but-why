@@ -9,7 +9,7 @@ export const maxValidationArtifactBytes = 1_048_576;
 
 export const writeValidationRunArtifactFile = (input: {
   readonly artifactsRoot: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly fileName: string;
@@ -18,7 +18,7 @@ export const writeValidationRunArtifactFile = (input: {
 }): Effect.Effect<ValidationArtifactFile, PlatformError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const path = join(input.validationRunId, input.phase, input.producer, input.fileName);
+    const path = join(String(input.validationRunId), input.phase, input.producer, input.fileName);
     const absolutePath = join(input.artifactsRoot, path);
 
     yield* fileSystem.makeDirectory(dirname(absolutePath), { recursive: true });

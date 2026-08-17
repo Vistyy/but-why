@@ -26,8 +26,8 @@ export type RecordChangeCleanupInput = {
 
 export type BeginChangePublicationInput = {
   readonly changeId: string;
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly target: ChangePublicationTarget;
   readonly headBranch: string;
   readonly expectedHeadSha: string;
@@ -35,8 +35,8 @@ export type BeginChangePublicationInput = {
 };
 
 export type ReplacePendingChangePublicationInput = BeginChangePublicationInput & {
-  readonly expectedCurrentCandidateId: string;
-  readonly expectedCurrentValidationRunId: string;
+  readonly expectedCurrentCandidateId: number;
+  readonly expectedCurrentValidationRunId: number;
   readonly expectedCurrentHeadSha: string;
   readonly expectedCurrentHeadBranch: string;
   readonly expectedCurrentTarget: ChangePublicationTarget;
@@ -45,8 +45,8 @@ export type ReplacePendingChangePublicationInput = BeginChangePublicationInput &
 export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly pullRequest: ChangeOwnedPullRequest;
   readonly previousExpectedHeadSha?: string;
-  readonly previousCandidateId?: string;
-  readonly previousValidationRunId?: string;
+  readonly previousCandidateId?: number;
+  readonly previousValidationRunId?: number;
   readonly previousPullRequestNumber?: number;
   readonly changeBaseSha?: string;
 };

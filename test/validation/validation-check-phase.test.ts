@@ -4,8 +4,8 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option } from "effect";
 import { describe } from "vitest";
-import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
-import { runCheckPhase as runCheckPhaseWithFileSystem } from "../../src/change/validation/runCheckRound.js";
+import type { RecordCandidateValidationCheckResultInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import { runCheckPhase as runCheckPhaseWithFileSystem } from "../../src/change/validation/runCheckPhase.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -15,7 +15,7 @@ const now = "2026-06-30T12:00:00.000Z";
 const runCheckPhase = (input: Parameters<typeof runCheckPhaseWithFileSystem>[0]) =>
   runCheckPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
-describe("check round Findings", () => {
+describe("Check Phase Results", () => {
   it.effect(
     "fails as Validation Tooling Failure when the timeout utility is unavailable before the Check starts",
     () =>
@@ -44,7 +44,7 @@ describe("check round Findings", () => {
 
         const exit = yield* Effect.exit(
           runCheckPhase({
-            validationRunId: "candidate-run",
+            validationRunId: 133,
             checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
             artifactsRoot: createTestWorkspace(),
             now,
@@ -60,7 +60,7 @@ describe("check round Findings", () => {
                   stderr: result.stderr,
                 };
               }),
-            recordCheckRound: () => Effect.void,
+            recordCheckResult: () => Effect.void,
           }),
         );
 
@@ -78,13 +78,13 @@ describe("check round Findings", () => {
     Effect.gen(function* () {
       const exit = yield* Effect.exit(
         runCheckPhase({
-          validationRunId: "candidate-run",
+          validationRunId: 133,
           checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
           artifactsRoot: createTestWorkspace(),
           now,
           commandExecutor: () =>
             Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
-          recordCheckRound: () => Effect.void,
+          recordCheckResult: () => Effect.void,
         }),
       );
 
@@ -101,12 +101,12 @@ describe("check round Findings", () => {
       const defect = new Error("unexpected executor defect");
       const exit = yield* Effect.exit(
         runCheckPhase({
-          validationRunId: "candidate-run",
+          validationRunId: 133,
           checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
           artifactsRoot: createTestWorkspace(),
           now,
           commandExecutor: () => Effect.die(defect),
-          recordCheckRound: () => Effect.void,
+          recordCheckResult: () => Effect.void,
         }),
       );
 
@@ -119,10 +119,10 @@ describe("check round Findings", () => {
 
   it.effect("records every configured Check after failures when continuation is enabled", () =>
     Effect.gen(function* () {
-      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
+      const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
       const commands: string[] = [];
       const result = yield* runCheckPhase({
-        validationRunId: "candidate-run",
+        validationRunId: 133,
         continueAfterFinding: true,
         checks: [
           { id: "first", command: "exit 1", timeoutSeconds: 1 },
@@ -145,15 +145,15 @@ describe("check round Findings", () => {
                   stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n",
                 };
           }),
-        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
+        recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
+      expect(result).toEqual({ ok: true, findings: 1, validationRunId: 133 });
       expect(commands).toHaveLength(4);
-      expect(recordedRounds).toHaveLength(2);
-      expect(recordedRounds.map((round) => round.roundStatus)).toEqual(["failed", "passed"]);
-      expect(recordedRounds.map((round) => round.finding?.id)).toEqual([
-        "candidate-run-F1",
+      expect(recordedResults).toHaveLength(2);
+      expect(recordedResults.map((result) => result.outcome)).toEqual(["failed", "passed"]);
+      expect(recordedResults.map((result) => result.finding?.title)).toEqual([
+        "Check failed: first",
         undefined,
       ]);
     }),
@@ -166,7 +166,7 @@ describe("check round Findings", () => {
         const commands: string[] = [];
         const exit = yield* Effect.exit(
           runCheckPhase({
-            validationRunId: "candidate-run",
+            validationRunId: 133,
             checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
             artifactsRoot: createTestWorkspace(),
             expectedHeadSha: "abc123",
@@ -181,7 +181,7 @@ describe("check round Findings", () => {
                   stderr: "",
                 };
               }),
-            recordCheckRound: () => Effect.void,
+            recordCheckResult: () => Effect.void,
           }),
         );
 
@@ -197,10 +197,10 @@ describe("check round Findings", () => {
 
   it.effect("records timed-out check Findings and execution evidence", () =>
     Effect.gen(function* () {
-      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
+      const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
       const artifactsRoot = createTestWorkspace();
       const result = yield* runCheckPhase({
-        validationRunId: "by-1.v1",
+        validationRunId: 6,
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
         artifactsRoot,
         now,
@@ -210,14 +210,13 @@ describe("check round Findings", () => {
               ? { exitCode: 0, stdout: "", stderr: "" }
               : { exitCode: 124, stdout: "", stderr: "partial stderr" },
           ),
-        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
+        recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toEqual({ ok: true, findings: 1, validationRunId: "by-1.v1" });
-      expect(recordedRounds).toHaveLength(1);
-      expect(recordedRounds[0]?.finding).toEqual({
-        id: "by-1.v1-F1",
-        validationRunId: "by-1.v1",
+      expect(result).toEqual({ ok: true, findings: 1, validationRunId: 6 });
+      expect(recordedResults).toHaveLength(1);
+      expect(recordedResults[0]?.finding).toEqual({
+        validationRunId: 6,
         phase: "checks",
         producer: "quality",
         title: "Check timed out: quality",
@@ -225,15 +224,15 @@ describe("check round Findings", () => {
         evidence: "command: sleep 10\ntimeoutSeconds: 1",
         files: [],
         artifactRefs: [
-          "artifact:by-1.v1/checks/quality/stdout.txt",
-          "artifact:by-1.v1/checks/quality/stderr.txt",
-          "artifact:by-1.v1/checks/quality/exit-code.json",
-          "artifact:by-1.v1/checks/quality/logs.txt",
-          "artifact:by-1.v1/checks/quality/execution.json",
+          "artifact:6/checks/quality/stdout.txt",
+          "artifact:6/checks/quality/stderr.txt",
+          "artifact:6/checks/quality/exit-code.json",
+          "artifact:6/checks/quality/logs.txt",
+          "artifact:6/checks/quality/execution.json",
         ],
       });
-      const execution = recordedRounds[0]?.artifactRecords.find(
-        (artifact) => artifact.path === "by-1.v1/checks/quality/execution.json",
+      const execution = recordedResults[0]?.artifactRecords.find(
+        (artifact) => artifact.path === "6/checks/quality/execution.json",
       );
       expect(execution).toBeDefined();
       expect(JSON.parse(readFileSync(join(artifactsRoot, execution?.path ?? ""), "utf8"))).toEqual({
@@ -244,9 +243,9 @@ describe("check round Findings", () => {
 
   it.effect("treats Check IDs as literal completion-marker text", () =>
     Effect.gen(function* () {
-      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
+      const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
       const result = yield* runCheckPhase({
-        validationRunId: "candidate-run",
+        validationRunId: 133,
         checks: [{ id: "[quality]", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: createTestWorkspace(),
         now,
@@ -260,11 +259,11 @@ describe("check round Findings", () => {
                   stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
                 },
           ),
-        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
+        recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
       expect(result).toEqual({ ok: true, findings: 0 });
-      expect(recordedRounds).toMatchObject([{ producer: "[quality]", roundStatus: "passed" }]);
+      expect(recordedResults).toMatchObject([{ producer: "[quality]", outcome: "passed" }]);
     }),
   );
 });

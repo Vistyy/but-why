@@ -1,9 +1,7 @@
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
-import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import type { PiAgentProfileConfig } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
-import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
 
@@ -38,48 +36,24 @@ export type TaskReviewToolingFailure = {
   readonly message: string;
 };
 
-export type LegacyTaskReviewToolingFailure = TaskReviewToolingFailure & {
-  readonly pendingExecution: TaskReviewExecution;
-};
-
 export type TaskReviewFinding = ReviewerFindingCore;
 
-export type TaskReviewerTranscript = {
-  readonly producer: string;
-  readonly piSessionId: string;
-  readonly filePath: string;
-};
-
-export type LegacyTaskReviewerSession = {
-  readonly fingerprint: string;
-  readonly sessionReference: string;
-};
-
-export type TaskReviewExecution = ReviewerExecutionEvidence & {
-  readonly sessionReference: string | null;
-};
-
 export type TaskReviewRecord = {
-  readonly id: string;
+  readonly id: number;
   readonly taskId: string;
   readonly proposal: TaskReviewProposal;
   readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
-  readonly policy: TaskReviewPolicySnapshot;
+  readonly policy?: TaskReviewPolicySnapshot;
   readonly baseRef: string;
   readonly baseCommit: string;
   readonly workspacePath: string;
   readonly state: "running" | "complete";
   readonly outcome: TaskReviewOutcome | null;
-  readonly workspaceCleanup: DisposableWorkspaceCleanupState;
-  readonly toolingFailure: TaskReviewToolingFailure | LegacyTaskReviewToolingFailure | null;
-  readonly abandonReason: string | null;
+  readonly workspaceCleanup: "not_created" | "removed" | "failed";
+  readonly cleanupBlockingReason: string | null;
+  readonly toolingFailure: TaskReviewToolingFailure | null;
   readonly findings: readonly TaskReviewFinding[];
-  readonly sessions: readonly TaskReviewExecution[];
-  readonly transcripts: readonly TaskReviewerTranscript[];
-  readonly legacyTaskReviewerSession?: LegacyTaskReviewerSession;
   readonly agentSessionId?: number;
   readonly agentInvocations?: readonly AgentInvocationRecord[];
   readonly reviewerConfiguration?: TaskReviewPolicySnapshot;
-  readonly createdAt: string;
-  readonly updatedAt: string;
 };

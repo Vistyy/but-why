@@ -1,10 +1,5 @@
 import { type StructuredErrorInput, structuredError } from "./cliError.js";
-import type {
-  PredecessorReconciliationBlockedConditions,
-  RepositoryStorageError,
-  RestoredTransientChangeFact,
-  RestoredTransientTaskFact,
-} from "./contracts/repositoryStorageError.js";
+import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { StructuredObject } from "./output/structured.js";
 import type { ResolveLocalRepositoryError } from "./repositoryRuntime/repositoryContext.js";
@@ -119,30 +114,10 @@ export const repositoryStorageErrorResult = (
       return idPrefixConflict(error.configuredIdPrefix, error.storedIdPrefix);
     case "RepositoryPersistedDataInvalid":
       return persistedDataInvalid(error.operationName);
-    case "RepositoryPredecessorReconciliationRequired":
-      return predecessorReconciliationRequired(error.blocked);
-    case "RepositoryRestoredTransientState":
-      return restoredTransientState(error.tasks, error.changes);
     default:
       return stateStoreUnavailable(idPrefix);
   }
 };
-
-export const predecessorReconciliationRequired = (
-  blocked: PredecessorReconciliationBlockedConditions,
-): CliResult =>
-  runtimeError({
-    code: "predecessor_reconciliation_required",
-    message:
-      "Pinned predecessor reconciliation is required before Shared Repository State can be migrated.",
-    details: {
-      blocked: Object.fromEntries(Object.entries(blocked).filter(([, count]) => count !== 0)),
-    },
-    help: [
-      "Run the pinned predecessor executable to reconcile the blocked prerelease state, then retry.",
-      "Do not restore or initialize Shared Repository State.",
-    ],
-  });
 
 const persistedDataInvalid = (operation: string): CliResult =>
   runtimeError({
@@ -154,30 +129,12 @@ const persistedDataInvalid = (operation: string): CliResult =>
     ],
   });
 
-export const restoredTransientState = (
-  tasks: readonly RestoredTransientTaskFact[],
-  changes: readonly RestoredTransientChangeFact[],
-): CliResult =>
-  runtimeError({
-    code: "restored_transient_state",
-    message: "Shared But Why? state contains retired lifecycle states.",
-    details: {
-      ...(tasks.length === 0 ? {} : { tasks }),
-      ...(changes.length === 0 ? {} : { changes }),
-    },
-    help: [
-      "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
-    ],
-  });
-
 const idPrefixConflict = (configuredIdPrefix: string, storedIdPrefix: string): CliResult =>
   runtimeError({
     code: "id_prefix_conflict",
     message: `Repo Config ID Prefix ${configuredIdPrefix} conflicts with initialized Shared Repository State prefix ${storedIdPrefix}.`,
     details: { configuredIdPrefix, storedIdPrefix },
-    help: [
-      `Restore .but-why/config.json to use idPrefix ${storedIdPrefix}, then retry with the predecessor executable.`,
-    ],
+    help: [`Restore .but-why/config.json to use idPrefix ${storedIdPrefix}, then retry.`],
   });
 
 const sharedStateIdentityConflict = (): CliResult =>

@@ -16,7 +16,7 @@ export type CommitCandidateCaptureResult =
   | {
       readonly ok: true;
       readonly changeId: string;
-      readonly candidateId: string;
+      readonly candidateId: number;
       readonly reused: boolean;
     }
   | {
@@ -33,7 +33,7 @@ export type CandidateCaptureChange = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly baseRef: string | null;
+  readonly baseRef: string;
   readonly state: ChangeState;
 };
 

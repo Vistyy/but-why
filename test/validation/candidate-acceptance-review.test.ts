@@ -17,7 +17,6 @@ import { validationToolingFailureRecord } from "../../src/change/validation/vali
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -27,7 +26,6 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
-import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
@@ -131,46 +129,8 @@ layer(acceptanceTemplateLayer)(
           state: "complete",
           outcome: "blocked",
         });
-        const findingColumns = yield* withTestRepository(
-          ready.repo,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            return yield* repository.operation(
-              "inspect reviewer Finding table columns",
-              (sql) =>
-                sql<{ readonly name: string }>`
-                PRAGMA table_info(candidate_validation_findings)
-              `,
-            );
-          }),
-        );
-        expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
-        yield* withTestRepository(
-          ready.repo,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            yield* repository.operation(
-              "seed historical reviewer Finding",
-              (sql) =>
-                sql`
-                INSERT INTO candidate_validation_findings (
-                  id, validation_run_id, phase, producer, title, description,
-                  evidence, files, artifact_refs, created_at, updated_at
-                ) VALUES (
-                  ${`${result.validationRunId}-historical`}, ${result.validationRunId},
-                  'acceptance_review', 'acceptance', 'Historical Finding',
-                  'A historical reviewer Finding remains readable.',
-                  'Historical evidence.', '[]', '[]', ${now}, ${now}
-                )
-              `,
-            );
-          }),
-        );
         const findings = yield* validation.listFindings(result.validationRunId);
-        expect(findings).toHaveLength(3);
-        expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
-          evidence: "Historical evidence.",
-        });
+        expect(findings).toHaveLength(2);
         expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
@@ -206,14 +166,14 @@ layer(acceptanceTemplateLayer)(
             operationName: "run_reviewer_process",
           }),
         ]);
-        expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
-          { producer: "quality", status: "passed" },
-          { producer: "acceptance", status: "failed" },
+        expect(yield* ready.validation.listPhaseResults(result.validationRunId)).toEqual([
+          { producer: "quality", outcome: "passed" },
+          { producer: "acceptance", outcome: "failed" },
         ]);
       }),
     );
 
-    it.scoped("preserves earlier Acceptance Findings through failure until a clean report", () =>
+    it.scoped("does not carry Acceptance Findings across an intermediate Candidate", () =>
       Effect.gen(function* () {
         const earlierFinding = reviewerFinding("Earlier acceptance Finding");
         const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -272,7 +232,7 @@ layer(acceptanceTemplateLayer)(
         );
         const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
         expect(clean).toMatchObject({ ok: true, outcome: "passed" });
-        expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+        expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
 
         git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
         const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
@@ -320,12 +280,15 @@ const runReviewPhases = (
       if ("blocked" in started) {
         throw new Error("Unexpected active Blocker in Acceptance Review fixture");
       }
+      yield* persistence.execution.recordWorkspaceCleanup({
+        validationRunId: started.validationRunId,
+        cleanupWorkspace: "not_created",
+      });
 
-      yield* persistence.execution.recordCheckRound({
+      yield* persistence.execution.recordCheckResult({
         validationRunId: started.validationRunId,
         producer: "quality",
-        roundNumber: 1,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [
           {
             ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
@@ -369,9 +332,9 @@ const runReviewPhases = (
         resourceRoot: ready.repo,
         sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         agentPersistence: persistence.agentPersistence,
-        getAgentSession: persistence.reviewerSessions.getAgentSession,
-        linkAgentInvocation: persistence.reviewerSessions.linkAgentInvocation,
-        settleAgentInvocationRound: persistence.execution.settleAgentInvocationRound,
+        getAgentSession: persistence.agentSessions.getAgentSession,
+        linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+        settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
         allowedUntrackedFiles: [],
         now,
         listArtifacts: persistence.reads.listArtifacts,

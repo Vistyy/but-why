@@ -10,19 +10,17 @@ import type {
 import type { ValidationRunAbandonmentPort } from "../../src/change/validation/changeValidationPorts.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
-const validationRunId = "run-1";
+const validationRunId = 1;
 const changeId = "change-1";
 const worktreePath = "/linked-main-worktrees/but-why/validation-runs/run-1";
 
 const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
-  candidateId: "candidate-1",
+  candidateId: 1,
   policy: { checks: [], copyFiles: [] },
   implementationDecisions: [],
   state: "running",
   outcome: null,
-  createdAt: "2026-07-31T10:00:00.000Z",
-  updatedAt: "2026-07-31T10:00:00.000Z",
 };
 
 const abandonmentContext: CandidateValidationRunAbandonmentContext = {

@@ -58,8 +58,8 @@ export type ChangeSubmitResult =
       readonly ok: true;
       readonly status: "published";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
       readonly reviewerEvidence?: ReviewerExecutionEvidence;
@@ -74,8 +74,8 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: "validation_findings";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly findings: readonly CandidateValidationFinding[];
       readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
@@ -84,8 +84,8 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: "validation_tooling_failed";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
       readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
@@ -94,7 +94,7 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: "submission_in_progress" | "active_validation_run";
       readonly changeId: string;
-      readonly validationRunId: string | null;
+      readonly validationRunId: number | null;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | {
@@ -283,13 +283,6 @@ const submitChange = (
           : { details: configFailureDetails(baselineRepoConfig) }),
       } as const;
     }
-    if (change.reviewerConfiguration === null || change.reviewerConfiguration === undefined) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      } as const;
-    }
     if (
       change.acceptanceContext !== null &&
       change.reviewerConfiguration.acceptanceReview === null
@@ -343,7 +336,7 @@ const applyChangeReviewerConfiguration = (
   persistence: ChangeSubmissionPort,
   changeId: string,
   resolved: ResolvedCandidateValidationPolicy,
-  configuration: ChangeReviewerConfiguration | null | undefined,
+  configuration: ChangeReviewerConfiguration,
   resolveCurrentPolicy: () => CandidateValidationPolicyResolution,
 ): Effect.Effect<
   | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
@@ -355,13 +348,6 @@ const applyChangeReviewerConfiguration = (
   RepositoryStorageError
 > =>
   Effect.gen(function* () {
-    if (configuration === null || configuration === undefined) {
-      return {
-        ok: false as const,
-        code: "validation_policy_invalid" as const,
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      };
-    }
     let currentPolicy: ResolvedCandidateValidationPolicy | undefined;
     let currentPolicyLoaded = false;
     const current = () => {
@@ -672,7 +658,7 @@ const blockedValidationResult = (
   candidate: CapturedCandidate,
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   },

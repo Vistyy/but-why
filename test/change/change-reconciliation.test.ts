@@ -28,17 +28,15 @@ const installPublicationIdentity = (changeId: string) =>
     yield* repository.operation("install reconciliation publication identity", (sql) =>
       Effect.gen(function* () {
         yield* sql`
-          INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-          VALUES ('candidate-1', ${internalChangeId(changeId, "BY")}, 'base', 'head', ${now})
+          INSERT INTO candidates (id, change_id, base_commit, head_commit)
+          VALUES (1, ${internalChangeId(changeId, "BY")}, 'base', 'head')
         `;
         yield* sql`
-          INSERT INTO candidate_validation_runs (
-            id, candidate_id, policy_snapshot, implementation_decisions,
-            latest_resolved_blocker_id, state, outcome, created_at, updated_at
+          INSERT INTO validation_runs (
+            id, candidate_id, policy_snapshot, highest_decision_id,
+            highest_blocker_id, outcome, cleanup_pending
           ) VALUES (
-            'validation-run-1', 'candidate-1',
-            '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
-            'complete', 'passed', ${now}, ${now}
+            2, 1, '{"checks":[],"copyFiles":[]}', NULL, NULL, 'passed', 0
           )
         `;
       }),
@@ -56,8 +54,8 @@ describe("by change reconcile", () => {
             id: "change-1",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/change-1",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/widgets.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
@@ -68,10 +66,10 @@ describe("by change reconcile", () => {
           const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             target: publicationTarget,
-            headBranch: "change-1",
+            headBranch: "but-why/BY-C1",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -99,7 +97,7 @@ describe("by change reconcile", () => {
                   state: "closed",
                   merged: false,
                   baseBranch: publicationTarget.baseBranch,
-                  headBranch: "change-1",
+                  headBranch: "but-why/BY-C1",
                   headSha: "head",
                 }),
             },
@@ -152,8 +150,8 @@ describe("by change reconcile", () => {
             id: "change-1",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/change-1",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/widgets.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
@@ -164,10 +162,10 @@ describe("by change reconcile", () => {
           const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             target: publicationTarget,
-            headBranch: "change-1",
+            headBranch: "but-why/BY-C1",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -187,7 +185,7 @@ describe("by change reconcile", () => {
             state: "open",
             merged: false,
             baseBranch: publicationTarget.baseBranch,
-            headBranch: "change-1",
+            headBranch: "but-why/BY-C1",
             headSha: "head",
           };
           const unexpected: readonly GitHubPullRequest[] = [
@@ -263,8 +261,8 @@ describe("by change reconcile", () => {
           id: "change-1",
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/but-why/change-1",
-          baseRef: "refs/heads/main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
+          baseRef: "refs/remotes/origin/main",
+          baseRemoteUrl: "https://github.com/acme/widgets.git",
           startingCommit: "head",
           worktreePath: join(input.commonDirectory, "uncreated-worktree"),
           taskId,
@@ -277,10 +275,10 @@ describe("by change reconcile", () => {
         const changes = yield* openSqliteChangeTestDependencies();
         const publication = {
           changeId: created.change.id,
-          candidateId: "candidate-1",
-          validationRunId: "validation-run-1",
+          candidateId: 1,
+          validationRunId: 2,
           target: publicationTarget,
-          headBranch: "but-why/change-1",
+          headBranch: "but-why/BY-C1",
           expectedHeadSha: "head",
           changeBaseSha: "base",
           now,
@@ -315,7 +313,7 @@ describe("by change reconcile", () => {
                 state: "closed",
                 merged: true,
                 baseBranch: publicationTarget.baseBranch,
-                headBranch: "but-why/change-1",
+                headBranch: "but-why/BY-C1",
                 headSha: mergedHead,
               }),
           },
@@ -397,8 +395,8 @@ describe("by change reconcile", () => {
             id: "change-without-task",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/but-why/change-without-task",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/widgets.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
@@ -409,10 +407,10 @@ describe("by change reconcile", () => {
           const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             target: publicationTarget,
-            headBranch: "but-why/change-without-task",
+            headBranch: "but-why/BY-C1",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -440,7 +438,7 @@ describe("by change reconcile", () => {
                   state: "closed",
                   merged: true,
                   baseBranch: publicationTarget.baseBranch,
-                  headBranch: "but-why/change-without-task",
+                  headBranch: "but-why/BY-C1",
                   headSha: "head",
                 }),
             },
@@ -501,8 +499,8 @@ describe("by change reconcile", () => {
             id: "change-blocked-merged",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/but-why/change-blocked-merged",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/widgets.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "uncreated-worktree"),
             taskId,
@@ -520,10 +518,10 @@ describe("by change reconcile", () => {
           if (!raised.ok) throw new Error(raised.code);
           const publication = {
             changeId: created.change.id,
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             target: publicationTarget,
-            headBranch: "but-why/change-blocked-merged",
+            headBranch: "but-why/BY-C1",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -551,7 +549,7 @@ describe("by change reconcile", () => {
                   state: "closed",
                   merged: true,
                   baseBranch: publicationTarget.baseBranch,
-                  headBranch: "but-why/change-blocked-merged",
+                  headBranch: "but-why/BY-C1",
                   headSha: "head",
                 }),
             },
@@ -619,8 +617,8 @@ describe("by change reconcile", () => {
             id: "change-single-observation",
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/but-why/change-single-observation",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
+            baseRef: "refs/remotes/origin/main",
+            baseRemoteUrl: "https://github.com/acme/widgets.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             taskId,
@@ -632,10 +630,10 @@ describe("by change reconcile", () => {
           const changes = yield* openSqliteChangeTestDependencies();
           const publication = {
             changeId: created.change.id,
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             target: publicationTarget,
-            headBranch: "but-why/change-single-observation",
+            headBranch: "but-why/BY-C1",
             expectedHeadSha: "head",
             changeBaseSha: "base",
             now,
@@ -671,7 +669,7 @@ describe("by change reconcile", () => {
                   state: "closed",
                   merged: true,
                   baseBranch: publicationTarget.baseBranch,
-                  headBranch: "but-why/change-single-observation",
+                  headBranch: "but-why/BY-C1",
                   headSha: "head",
                 });
               },
@@ -701,10 +699,10 @@ describe("by change reconcile", () => {
             repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
             pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
             baseBranch: publicationTarget.baseBranch,
-            headBranch: "but-why/change-single-observation",
+            headBranch: "but-why/BY-C1",
             mergedHeadSha: "head",
-            candidateId: "candidate-1",
-            validationRunId: "validation-run-1",
+            candidateId: 1,
+            validationRunId: 2,
             expectedHeadSha: "head",
           });
           expect("taskId" in (capturedInput ?? {})).toBe(false);

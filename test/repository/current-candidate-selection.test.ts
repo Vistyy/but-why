@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
@@ -10,9 +11,23 @@ import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChang
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 describe("Current Candidate selection", () => {
-  it.scoped("keeps A current after the supported A to B to A capture sequence", () =>
+  it.scoped("records a new current occurrence after an A to B to A capture sequence", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "create Candidate-owning Change",
+          (sql) => sql`
+          INSERT INTO changes (
+            branch_ref, base_ref, base_remote_url, worktree_path,
+            reviewer_configuration, cleanup_pending
+          ) VALUES (
+            'refs/heads/feature', 'refs/remotes/origin/main',
+            'https://example.com/acme/repo.git', '/tmp/feature',
+            '{"acceptanceReview":null,"specialistReviews":[]}', 0
+          )
+        `,
+        );
         const capture = yield* openSqliteCandidateCapturePersistence();
         const validation = yield* openSqliteCandidateValidationExecutionPort();
         const reads = yield* openSqliteChangeValidationReadPort();
@@ -33,12 +48,18 @@ describe("Current Candidate selection", () => {
           headSha: "head-a",
           changeBaseSha: "base-a",
           policy,
-          validationRunId: "run-a",
           now: "2026-08-12T10:01:00.000Z",
         });
-        expect(admitted).toMatchObject({ reused: false, validationRunId: "run-a" });
+        expect(admitted).toMatchObject({ reused: false, validationRunId: 1 });
+        if (admitted.reused || "blocked" in admitted || "active" in admitted) {
+          throw new Error("Expected a new Validation Run");
+        }
+        yield* validation.recordWorkspaceCleanup({
+          validationRunId: admitted.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
         yield* validation.complete({
-          validationRunId: "run-a",
+          validationRunId: admitted.validationRunId,
           outcome: "passed",
           now: "2026-08-12T10:02:00.000Z",
         });
@@ -66,20 +87,15 @@ describe("Current Candidate selection", () => {
         });
         if (!selectedAgain.ok) throw new Error(selectedAgain.code);
         expect(selectedAgain).toMatchObject({
-          candidateId: first.candidateId,
-          reused: true,
+          candidateId: 3,
+          reused: false,
         });
 
         expect(yield* reads.getCurrentCandidateForChange(first.changeId)).toMatchObject({
-          id: first.candidateId,
+          id: 3,
           headSha: "head-a",
         });
-        expect(yield* authority.getCurrentPassingEvidence(first.changeId)).toEqual({
-          candidateId: first.candidateId,
-          validationRunId: "run-a",
-          changeBaseSha: "base-a",
-          headSha: "head-a",
-        });
+        expect(yield* authority.getCurrentPassingEvidence(first.changeId)).toBeUndefined();
 
         const historicalAdmission = yield* validation
           .startOrReuse({
@@ -87,7 +103,6 @@ describe("Current Candidate selection", () => {
             headSha: "head-b",
             changeBaseSha: "base-a",
             policy,
-            validationRunId: "run-b",
             now: "2026-08-12T10:05:00.000Z",
           })
           .pipe(Effect.flip);

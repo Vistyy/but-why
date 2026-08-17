@@ -15,7 +15,7 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     Effect.gen(function* () {
       const repository = initializedRepository();
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const validationRunId = "run-1";
+      const validationRunId = 1;
       const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
       createSnapshotWorkspace(repository, worktreePath, commitSha);
       const cleanup = snapshotWorkspaceCleanupGit(repository);
@@ -35,13 +35,13 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     Effect.gen(function* () {
       const repository = initializedRepository();
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const selectedPath = expectedSnapshotWorkspacePath(repository, "selected");
-      const unrelatedPath = expectedSnapshotWorkspacePath(repository, "unrelated");
+      const selectedPath = expectedSnapshotWorkspacePath(repository, 130);
+      const unrelatedPath = expectedSnapshotWorkspacePath(repository, 131);
       createSnapshotWorkspace(repository, selectedPath, commitSha);
       createSnapshotWorkspace(repository, unrelatedPath, commitSha);
 
       const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "selected",
+        validationRunId: 130,
         submittedSha: commitSha,
         recordedWorktreePath: unrelatedPath,
       });
@@ -56,24 +56,6 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     }),
   );
 
-  it.effect("rejects a Validation Run identity that escapes the owned namespace", () =>
-    Effect.gen(function* () {
-      const repository = initializedRepository();
-      const commitSha = git(repository, "rev-parse", "HEAD");
-      const escapedPath = expectedSnapshotWorkspacePath(repository, "../outside");
-      createSnapshotWorkspace(repository, escapedPath, commitSha);
-
-      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "../outside",
-        submittedSha: commitSha,
-        recordedWorktreePath: escapedPath,
-      });
-
-      expect(result).toMatchObject({ workspace: "failed" });
-      expect(existsSync(escapedPath)).toBe(true);
-    }),
-  );
-
   it.effect("leaves a registered worktree with an unrelated HEAD untouched", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
@@ -82,11 +64,11 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       git(repository, "add", "tracked");
       git(repository, "commit", "-m", "Successor");
       const unrelatedSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, "selected");
+      const worktreePath = expectedSnapshotWorkspacePath(repository, 130);
       createSnapshotWorkspace(repository, worktreePath, unrelatedSha);
 
       const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "selected",
+        validationRunId: 130,
         submittedSha: submittedSha,
         recordedWorktreePath: worktreePath,
       });

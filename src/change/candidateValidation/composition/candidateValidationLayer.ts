@@ -28,7 +28,7 @@ export const candidateValidationLayer = (input: {
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
@@ -37,7 +37,7 @@ export const candidateValidationLayer = (input: {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
   }) => AgentSessionSqlLink;
 }): Layer.Layer<CandidateValidation, never, never> =>
@@ -48,7 +48,7 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateValidationPaths, {
           localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
           artifactsRoot: input.artifactsRoot,
-          reviewerSessionsRoot: input.reviewerSessionsRoot,
+          agentSessionsRoot: input.agentSessionsRoot,
           agentPersistence: input.agentPersistence,
           getAgentSession: input.getAgentSession,
           linkAgentInvocation: input.linkAgentInvocation,

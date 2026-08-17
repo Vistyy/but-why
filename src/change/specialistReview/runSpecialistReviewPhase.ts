@@ -42,10 +42,10 @@ import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 
 export type RunSpecialistReviewPhaseInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly changeId: string;
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -68,21 +68,21 @@ export type RunSpecialistReviewPhaseInput = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
   }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationRound: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationRound"]
+  readonly settleAgentInvocationResult: NonNullable<
+    CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
   readonly listArtifacts: (
-    validationRunId: string,
+    validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly phase: "specialist_review";
     readonly producer: string;
   }) => Effect.Effect<
@@ -121,7 +121,7 @@ export const runSpecialistReviewPhase = (
     const toolingFailures: ValidationToolingFailure[] = [];
     const reviewerEvidence: SpecialistReviewerContinuityEvidence[] = [];
 
-    for (const [index, policy] of input.policies.entries()) {
+    for (const policy of input.policies) {
       const result = yield* runWithSubmitProgress({
         progress: input.progress,
         phase: {
@@ -129,7 +129,7 @@ export const runSpecialistReviewPhase = (
           id: policy.id,
           profile: progressProfile(policy.profile),
         },
-        run: runSpecialist(input, policy, index + 1),
+        run: runSpecialist(input, policy),
         outcome: (review) =>
           review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
         details: (review) => ({
@@ -166,7 +166,6 @@ export const runSpecialistReviewPhase = (
 const runSpecialist = (
   input: RunSpecialistReviewPhaseInput,
   policy: SpecialistReviewPolicy,
-  roundNumber: number,
 ): Effect.Effect<
   {
     readonly hasFindings: boolean;
@@ -222,7 +221,6 @@ const runSpecialist = (
       validationRunId: input.validationRunId,
       phase: validationPhase.specialistReview,
       producer: policy.id,
-      roundNumber,
       reviewer: policy.id,
       configuration: agentConfiguration(policy.profile),
       agentPersistence: input.agentPersistence,
@@ -285,7 +283,7 @@ const runSpecialist = (
               ...finding,
             }))
           : [],
-      settleAgentInvocationRound: input.settleAgentInvocationRound,
+      settleAgentInvocationResult: input.settleAgentInvocationResult,
     });
     const specialistEvidence: SpecialistReviewerContinuityEvidence = {
       producer: policy.id,

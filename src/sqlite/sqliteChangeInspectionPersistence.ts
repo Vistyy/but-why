@@ -24,9 +24,11 @@ export const openSqliteChangeReadPort = () =>
       getChangeById: (changeId) =>
         repository.transaction("read Change", (sql) => getById(sql, changeId, repository.idPrefix)),
       listChanges: (input) =>
-        repository.transaction("list Changes", (sql) =>
-          listChanges(sql, input, repository.idPrefix),
-        ),
+        input.repositoryCommonDirectory !== repository.commonDirectory
+          ? Effect.succeed([])
+          : repository.transaction("list Changes", (sql) =>
+              listChanges(sql, input, repository.idPrefix),
+            ),
     }),
   );
 const getById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
@@ -39,9 +41,10 @@ const getById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
     sql<StoredImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, sequence,
-        recorded_at AS recordedAt, choice, rationale
-      FROM implementation_decisions WHERE change_id = ${internalChangeId(changeId, idPrefix)}
+      SELECT id, change_id AS changeId, choice, rationale
+      FROM implementation_decisions
+      WHERE change_id = ${internalChangeId(changeId, idPrefix)}
+      ORDER BY id
     `,
     (rows) =>
       decodePersisted("list Implementation Decisions", () =>
@@ -52,18 +55,18 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput, idPrefix
   Effect.flatMap(
     sql.unsafe<StoredChangeListRow>(
       `SELECT id,
-        state, branch_ref AS branchRef,
-        worktree_path AS worktreePath, created_at AS createdAt
+        CASE WHEN close_reason IS NULL THEN 'open' ELSE 'closed' END AS state,
+        branch_ref AS branchRef, worktree_path AS worktreePath
        FROM changes
-       WHERE repository_common_directory = ?${input.includeClosed ? "" : " AND state = 'open'"}`,
-      [input.repositoryCommonDirectory],
+       ${input.includeClosed ? "" : "WHERE close_reason IS NULL"}
+       ORDER BY id`,
     ),
     (rows) =>
       Effect.map(
         Effect.forEach(rows, (row) =>
           decodePersisted("list Changes", () => decodeChangeListRecord(row, idPrefix)),
         ),
-        (changes) => changes.sort(compareChanges),
+        (changes) => changes,
       ),
   );
 const decodeChangeListRecord = (row: StoredChangeListRow, idPrefix: string): ChangeListRecord => ({
@@ -71,15 +74,7 @@ const decodeChangeListRecord = (row: StoredChangeListRow, idPrefix: string): Cha
   state: row.state,
   branchRef: row.branchRef,
   worktreePath: row.worktreePath,
-  createdAt: row.createdAt,
 });
-const compareChanges = (
-  left: Pick<ChangeListRecord, "createdAt" | "id">,
-  right: Pick<ChangeListRecord, "createdAt" | "id">,
-): number =>
-  compareStoredStrings(left.createdAt, right.createdAt) || compareStoredStrings(left.id, right.id);
-const compareStoredStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
 const mapRow = (
   row: StoredChangeRow | undefined,
   operationName: string,
@@ -134,6 +129,5 @@ type StoredChangeListRow = {
   readonly id: number;
   readonly state: ChangeState;
   readonly branchRef: string;
-  readonly worktreePath: string | null;
-  readonly createdAt: string;
+  readonly worktreePath: string;
 };

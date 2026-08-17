@@ -11,7 +11,7 @@ import type {
   CandidateValidationAgentInvocation,
   CandidateValidationArtifact,
   CandidateValidationFinding,
-  CandidateValidationRound,
+  CandidateValidationPhaseResult,
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
 } from "./candidateValidationRunStore.js";
@@ -24,10 +24,10 @@ export type CandidateValidationRunInspection = {
   readonly validationRun: CandidateValidationRunRecord;
   readonly change: ChangeRecord;
   readonly candidate: CandidateRecord;
-  readonly prepareRounds: readonly CandidateValidationRound[];
-  readonly checkRounds: readonly CandidateValidationRound[];
-  readonly acceptanceRounds: readonly CandidateValidationRound[];
-  readonly specialistRounds: readonly CandidateValidationRound[];
+  readonly prepareResults: readonly CandidateValidationPhaseResult[];
+  readonly checkResults: readonly CandidateValidationPhaseResult[];
+  readonly acceptanceResults: readonly CandidateValidationPhaseResult[];
+  readonly specialistResults: readonly CandidateValidationPhaseResult[];
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
   readonly artifacts: readonly CandidateValidationArtifactInspection[];
@@ -60,10 +60,10 @@ export type CandidateValidationArtifactContentResult =
 
 export type CandidateValidationRunInspectionUseCases<R = never> = {
   readonly inspectRun: (
-    validationRunId: string,
+    validationRunId: number,
   ) => Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError, R>;
   readonly readArtifact: (
-    validationRunId: string,
+    validationRunId: number,
     artifactRef: string,
   ) => Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError, R>;
 };
@@ -83,7 +83,7 @@ const inspectRun = (
     readonly changePersistence: ChangeReadPort;
     readonly artifactsRoot: string;
   },
-  validationRunId: string,
+  validationRunId: number,
 ): Effect.Effect<
   CandidateValidationRunInspection | undefined,
   RepositoryStorageError,
@@ -97,7 +97,7 @@ const inspectRun = (
     if (candidate === undefined) throw new Error("Candidate-owned Validation Run has no Candidate");
     const change = yield* dependencies.changePersistence.getChangeById(candidate.changeId);
     if (change === undefined) throw new Error("Candidate-owned Validation Run has no Change");
-    const rounds = yield* dependencies.persistence.listRounds(validationRunId);
+    const phaseResults = yield* dependencies.persistence.listPhaseResults(validationRunId);
     const findings = yield* dependencies.persistence.listFindings(validationRunId);
     const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
     const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
@@ -123,10 +123,14 @@ const inspectRun = (
       validationRun,
       change,
       candidate,
-      prepareRounds: rounds.filter((round) => round.phase === validationPhase.prepare),
-      checkRounds: rounds.filter((round) => round.phase === validationPhase.checks),
-      acceptanceRounds: rounds.filter((round) => round.phase === validationPhase.acceptanceReview),
-      specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
+      prepareResults: phaseResults.filter((result) => result.phase === validationPhase.prepare),
+      checkResults: phaseResults.filter((result) => result.phase === validationPhase.checks),
+      acceptanceResults: phaseResults.filter(
+        (result) => result.phase === validationPhase.acceptanceReview,
+      ),
+      specialistResults: phaseResults.filter(
+        (result) => result.phase === validationPhase.specialistReview,
+      ),
       findings,
       toolingFailures,
       artifacts: inspectedArtifacts,
@@ -139,7 +143,7 @@ const readArtifact = (
     readonly persistence: ChangeValidationReadPort;
     readonly artifactsRoot: string;
   },
-  validationRunId: string,
+  validationRunId: number,
   artifactRef: string,
 ): Effect.Effect<
   CandidateValidationArtifactContentResult,

@@ -92,7 +92,6 @@ const isLinkedChangeStartResult = (
 const changeDetails = (change: ChangeStartRecord) => ({
   branch: change.branchRef,
   baseRef: change.baseRef,
-  startingCommit: change.startingCommit,
   worktreePath: change.worktreePath,
   ...(change.prepareFailure === null
     ? {}
@@ -145,7 +144,6 @@ const operationalError = (
       : {
           changeId: change.id,
           branch: change.branchRef,
-          startingCommit: change.startingCommit,
           worktreePath: change.worktreePath,
         };
   if (code === "managed_branch_attached") {

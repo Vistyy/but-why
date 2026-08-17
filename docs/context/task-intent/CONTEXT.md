@@ -65,11 +65,6 @@ An Agent Session owned by one Task under one compatible resolved Task Review pol
 It can continue across changed proposals so the reviewer can reuse repository orientation, but it does not reuse an earlier judgment.
 _Avoid_: Task Review, cross-Task Agent Session, reusable judgment
 
-**Legacy Task Reviewer Session**:
-A historical Reviewer Session record retained for read-only Task Review evidence.
-Current Task Review execution does not write this record.
-_Avoid_: Task Agent Session, current execution
-
 **Task Agent Transcript**:
 The complete Pi session conversation observed while executing a Task Agent Session.
 The Agent Continuation stores its relative transcript path when the transcript is available.
@@ -104,11 +99,6 @@ Todo means approved and unfinished, even while a linked Change reports Change Ac
 A Task without a link cannot transition to Done.
 Coordination records the Done transition for a linked Task only after exact merged Change evidence.
 _Avoid_: Validation Run state, Change Activity, generic pipeline
-
-**Transient Task State**:
-A retired persisted Task-state value other than New, Todo, Done, or Cancelled.
-It has no current lifecycle meaning and a migration stops rather than mapping it to a supported state.
-_Avoid_: Change Activity, active Task state
 
 **Task Dependency**:
 A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.

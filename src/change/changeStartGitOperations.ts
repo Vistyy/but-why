@@ -44,7 +44,6 @@ export type ProvisionChangeWorktreeResult =
       readonly code: "managed_branch_missing";
       readonly branch: string;
       readonly path: string;
-      readonly startingCommit: string;
     }
   | {
       readonly ok: false;
@@ -67,5 +66,6 @@ export type ChangeStartGitOperations = {
   readonly provisionWorktree: (
     start: ChangeStartRecord,
     recovering: boolean,
+    startingCommit?: string,
   ) => ProvisionChangeWorktreeResult;
 };

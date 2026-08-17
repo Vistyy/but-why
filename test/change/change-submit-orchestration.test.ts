@@ -29,7 +29,7 @@ const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
   ok: true,
   changeId: "change-1",
-  candidateId: "candidate-1",
+  candidateId: 1,
   branchRef: "refs/heads/change-1",
   changeBaseSha: "base",
   headSha: "head",
@@ -73,12 +73,12 @@ describe("Change Submit orchestration", () => {
           Effect.succeed({
             ok: false as const,
             code: "active_validation_run" as const,
-            validationRunId: "run-active",
+            validationRunId: 102,
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -89,34 +89,9 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "active_validation_run",
         changeId: "change-1",
-        validationRunId: "run-active",
+        validationRunId: 102,
       });
       expect(events).toEqual(["capture", "detect_target"]);
-    }),
-  );
-
-  it.effect("rejects a legacy Change without stored reviewer configuration", () =>
-    Effect.gen(function* () {
-      const submit = openChangeSubmit(
-        dependencies({ change: readyChange({ reviewerConfiguration: null }) }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Current reviewer configuration must not be used"),
-        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toEqual({
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      });
     }),
   );
 
@@ -146,7 +121,7 @@ describe("Change Submit orchestration", () => {
             validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
             listFindings: () => Effect.succeed([]),
             listToolingFailures: () => Effect.succeed([]),
-            listRounds: () => Effect.succeed([]),
+            listPhaseResults: () => Effect.succeed([]),
           }),
         ),
       );
@@ -191,7 +166,7 @@ describe("Change Submit orchestration", () => {
               return {
                 ok: true,
                 reused: false,
-                validationRunId: "run-1",
+                validationRunId: 1,
                 outcome: "passed",
               } as const;
             }),
@@ -199,7 +174,7 @@ describe("Change Submit orchestration", () => {
             Effect.die("Acceptance Review was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -210,8 +185,8 @@ describe("Change Submit orchestration", () => {
           ok: true,
           status: "published",
           changeId: "change-1",
-          candidateId: "candidate-1",
-          validationRunId: "run-1",
+          candidateId: 1,
+          validationRunId: 1,
           created: true,
           pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
         });
@@ -259,14 +234,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -281,23 +256,20 @@ describe("Change Submit orchestration", () => {
 
   it.effect("retries a pending publication for a newer Candidate through Submit", () =>
     Effect.gen(function* () {
-      const publishedCandidates: string[] = [];
+      const publishedCandidates: number[] = [];
       const submit = openChangeSubmit(
         dependencies({
           change: readyChange({
             publication: {
-              candidateId: "candidate-0",
-              validationRunId: "run-0",
+              candidateId: 102,
+              validationRunId: 105,
               target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
               headBranch: "change-1",
               expectedHeadSha: "old-head",
               pullRequest: null,
             },
           }),
-          captureResults: [
-            candidate,
-            { ...candidate, candidateId: "candidate-2", headSha: "head-2" },
-          ],
+          captureResults: [candidate, { ...candidate, candidateId: 2, headSha: "head-2" }],
           publication: {
             publish: (input) => {
               publishedCandidates.push(input.candidateId);
@@ -320,14 +292,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: `run-${validationRuns}`,
+              validationRunId: validationRuns,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -343,7 +315,7 @@ describe("Change Submit orchestration", () => {
         status: "published",
         created: false,
       });
-      expect(publishedCandidates).toEqual(["candidate-1", "candidate-2"]);
+      expect(publishedCandidates).toEqual([1, 2]);
     }),
   );
 
@@ -385,14 +357,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -427,7 +399,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -462,7 +434,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -504,7 +476,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -548,20 +520,20 @@ describe("Change Submit orchestration", () => {
           captureResults: [
             {
               ...candidate,
-              candidateId: "candidate-old-target",
+              candidateId: 104,
               changeBaseSha: oldTargetSha,
               headSha,
             },
             {
               ...candidate,
-              candidateId: "candidate-new-target",
+              candidateId: 105,
               changeBaseSha: newTargetSha,
               headSha,
             },
           ],
         }),
       );
-      const validatedCandidates: string[] = [];
+      const validatedCandidates: number[] = [];
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: (input) =>
           Effect.sync(() => {
@@ -570,15 +542,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId:
-                input.candidateId === "candidate-old-target" ? "run-old-target" : "run-new-target",
+              validationRunId: input.candidateId === 104 ? 202 : 201,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const oldTarget = yield* submit
@@ -590,15 +561,15 @@ describe("Change Submit orchestration", () => {
 
       expect(oldTarget).toMatchObject({
         ok: true,
-        candidateId: "candidate-old-target",
-        validationRunId: "run-old-target",
+        candidateId: 104,
+        validationRunId: 202,
       });
       expect(newTarget).toMatchObject({
         ok: true,
-        candidateId: "candidate-new-target",
-        validationRunId: "run-new-target",
+        candidateId: 105,
+        validationRunId: 201,
       });
-      expect(validatedCandidates).toEqual(["candidate-old-target", "candidate-new-target"]);
+      expect(validatedCandidates).toEqual([104, 105]);
       expect(events).toEqual([
         "refresh_base",
         "capture",
@@ -627,17 +598,15 @@ describe("Change Submit orchestration", () => {
         },
         implementationDecisions: [
           {
-            id: "decision-1",
+            id: 1,
             changeId: "change-1",
-            sequence: 1,
-            recordedAt: now,
             choice: "Keep the same owned pull request",
             rationale: "Preserve the existing owned pull request.",
           },
         ],
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -678,13 +647,13 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -693,12 +662,12 @@ describe("Change Submit orchestration", () => {
 
       expect(result).toMatchObject({ ok: true, status: "published", pullRequest: { number: 42 } });
       expect(seenPublishInput).toMatchObject({
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
       });
       expect(seenValidationInput).toMatchObject({
         changeId: change.id,
-        candidateId: "candidate-1",
+        candidateId: 1,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -715,8 +684,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -752,14 +721,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "revised-run",
+              validationRunId: 109,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -767,8 +736,8 @@ describe("Change Submit orchestration", () => {
       ).toMatchObject({
         ok: true,
         status: "published",
-        candidateId: "candidate-1",
-        validationRunId: "revised-run",
+        candidateId: 1,
+        validationRunId: 109,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -804,13 +773,13 @@ describe("Change Submit orchestration", () => {
               return {
                 ok: true,
                 reused: false,
-                validationRunId: "run-1",
+                validationRunId: 1,
                 outcome: "passed",
               } as const;
             }),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -834,8 +803,8 @@ describe("Change Submit orchestration", () => {
         [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -855,7 +824,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -876,8 +845,8 @@ describe("Change Submit orchestration", () => {
             baseBranch: "main",
             headBranch: "change-1",
             mergedHeadSha: "published-head",
-            candidateId: "published-candidate",
-            validationRunId: "published-run",
+            candidateId: 106,
+            validationRunId: 108,
             expectedHeadSha: "published-head",
           },
         },
@@ -890,8 +859,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -922,14 +891,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -955,8 +924,8 @@ describe("Change Submit orchestration", () => {
           description: "Deliver it",
         },
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -984,7 +953,7 @@ describe("Change Submit orchestration", () => {
             { ...candidate, trackedTreeMatchesChangeBase: false },
             {
               ...candidate,
-              candidateId: "candidate-2",
+              candidateId: 2,
               headSha: "revised-head",
               trackedTreeMatchesChangeBase: false,
             },
@@ -999,13 +968,13 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-revised",
+              validationRunId: 110,
               outcome: "passed",
             } as const;
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const first = yield* submit
@@ -1028,7 +997,7 @@ describe("Change Submit orchestration", () => {
         pullRequest: { number: 42 },
       });
       expect(change.publication).toMatchObject({
-        candidateId: "published-candidate",
+        candidateId: 106,
         expectedHeadSha: "published-head",
       });
       expect(events).toEqual([
@@ -1036,12 +1005,12 @@ describe("Change Submit orchestration", () => {
         "capture",
         "detect_target",
         "validate_change_linked_to_task",
-        "publish:candidate-1",
+        "publish:1",
         "observe_pull_request",
         "capture",
         "detect_target",
         "validate_change_linked_to_task",
-        "publish:candidate-2",
+        "publish:2",
       ]);
     }),
   );
@@ -1051,8 +1020,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -1080,7 +1049,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1099,8 +1068,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -1119,7 +1088,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1139,17 +1108,14 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         activeBlocker: {
-          id: "blocker-1",
+          id: 1,
           changeId: "change-1",
-          sequence: 1,
-          reportedAt: now,
           content: "Need an external decision.",
-          resolvedAt: null,
           resolution: null,
         },
         publication: {
-          candidateId: "candidate-1",
-          validationRunId: "run-1",
+          candidateId: 1,
+          validationRunId: 1,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "head",
@@ -1163,7 +1129,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Blocked Submission must not validate"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1182,8 +1148,8 @@ describe("Change Submit orchestration", () => {
         const events: string[] = [];
         const change = readyChange({
           publication: {
-            candidateId: "candidate-1",
-            validationRunId: "run-1",
+            candidateId: 1,
+            validationRunId: 1,
             target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
             headBranch: "change-1",
             expectedHeadSha: "head",
@@ -1213,7 +1179,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -1230,8 +1196,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "other-candidate",
-          validationRunId: "other-run",
+          candidateId: 107,
+          validationRunId: 111,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "head",
@@ -1252,14 +1218,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "new-run",
+              validationRunId: 112,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1269,8 +1235,8 @@ describe("Change Submit orchestration", () => {
       expect(result).toMatchObject({
         ok: true,
         status: "published",
-        candidateId: "candidate-1",
-        validationRunId: "new-run",
+        candidateId: 1,
+        validationRunId: 112,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -1311,7 +1277,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         expect(
@@ -1353,7 +1319,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         expect(
@@ -1389,7 +1355,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1419,7 +1385,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Validation must not start without a GitHub target"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1449,12 +1415,12 @@ describe("Change Submit orchestration", () => {
           Effect.succeed({
             ok: true,
             reused: false,
-            validationRunId: "run-1",
+            validationRunId: 1,
             outcome: "blocked",
           }),
         listFindings: () => Effect.succeed([finding]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1465,8 +1431,8 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "validation_findings",
         changeId: change.id,
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
         findings: [finding],
       });
     }),
@@ -1493,12 +1459,12 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: false,
-            validationRunId: "run-1",
+            validationRunId: 1,
             outcome: "tooling_failed",
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([toolingFailure]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1508,7 +1474,7 @@ describe("Change Submit orchestration", () => {
       expect(result).toMatchObject({
         ok: false,
         code: "validation_tooling_failed",
-        validationRunId: "run-1",
+        validationRunId: 1,
         toolingFailures: [toolingFailure],
       });
     }),
@@ -1550,8 +1516,8 @@ const dependencies = (input: {
   readonly refreshResult?: RemoteChangeBaseResult;
   readonly branchHeadSha?: string;
   readonly publicationEvidence?: {
-    readonly candidateId: string;
-    readonly validationRunId: string;
+    readonly candidateId: number;
+    readonly validationRunId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   } | null;
@@ -1589,8 +1555,7 @@ const dependencies = (input: {
           return (
             input.publicationEvidence ?? {
               candidateId: input.change.publication?.candidateId ?? candidate.candidateId,
-              validationRunId:
-                input.change.publication?.validationRunId ?? "published-validation-run",
+              validationRunId: input.change.publication?.validationRunId ?? 999,
               changeBaseSha: candidate.changeBaseSha,
               headSha: input.change.publication?.expectedHeadSha ?? candidate.headSha,
             }
@@ -1765,7 +1730,6 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.test/acme/repo.git",
-  startingCommit: "base",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
   reviewerConfiguration: {
@@ -1781,9 +1745,6 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   state: "open",
   closeReason: null,
   cancelReason: null,
-  createdAt: now,
-  updatedAt: now,
-  closedAt: null,
   ...overrides,
 });
 
@@ -1797,16 +1758,14 @@ const refreshedBase = {
 
 const toolingFailure = {
   sequence: 1,
-  validationRunId: "run-1",
+  validationRunId: 1,
   errorKind: "workspace_setup_failed",
   operationName: "create_workspace",
   errorMessage: "Workspace unavailable",
-  createdAt: now,
 } as const;
 
 const finding = {
-  id: "finding-1",
-  validationRunId: "run-1",
+  validationRunId: 1,
   phase: "checks",
   producer: "quality",
   title: "Quality failed",
@@ -1814,6 +1773,4 @@ const finding = {
   evidence: "quality exited with code 1",
   files: [],
   artifactRefs: [],
-  createdAt: now,
-  updatedAt: now,
 } as const;

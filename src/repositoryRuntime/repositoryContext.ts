@@ -7,16 +7,11 @@ import type { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { isIdPrefix } from "../contracts/idPrefix.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
-  type PredecessorReconciliationBlockedConditions,
   RepositoryIdentityConflict,
   RepositoryIdPrefixConflict,
   RepositoryMigrationFailed,
-  RepositoryPredecessorReconciliationRequired,
-  RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-  type RestoredTransientChangeFact,
-  type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
 import { findCurrentWorktreeFacts, findGitRoot } from "../init/adapters/git.js";
 import { readRepoConfig, writeRepoConfig } from "../init/adapters/repoConfig.js";
@@ -91,15 +86,6 @@ export type InitRepoError =
     }
   | {
       readonly code: "state_store_unavailable";
-    }
-  | {
-      readonly code: "predecessor_reconciliation_required";
-      readonly blocked: PredecessorReconciliationBlockedConditions;
-    }
-  | {
-      readonly code: "restored_transient_state";
-      readonly tasks: readonly RestoredTransientTaskFact[];
-      readonly changes: readonly RestoredTransientChangeFact[];
     };
 
 export type LocalRepositorySubmissionContext = Omit<LocalRepositoryContext, "config">;
@@ -287,31 +273,14 @@ export const initializeRepositoryRuntime = (
                   requestedIdPrefix: error.configuredIdPrefix,
                 },
               })
-            : error instanceof RepositoryPredecessorReconciliationRequired
+            : error instanceof RepositoryStateUnavailable ||
+                error instanceof RepositoryMigrationFailed ||
+                error instanceof RepositorySqlOperationFailed
               ? Effect.succeed<InitRepoResult>({
                   ok: false,
-                  error: {
-                    code: "predecessor_reconciliation_required",
-                    blocked: error.blocked,
-                  },
+                  error: { code: "state_store_unavailable" },
                 })
-              : error instanceof RepositoryRestoredTransientState
-                ? Effect.succeed<InitRepoResult>({
-                    ok: false,
-                    error: {
-                      code: "restored_transient_state",
-                      tasks: error.tasks,
-                      changes: error.changes,
-                    },
-                  })
-                : error instanceof RepositoryStateUnavailable ||
-                    error instanceof RepositoryMigrationFailed ||
-                    error instanceof RepositorySqlOperationFailed
-                  ? Effect.succeed<InitRepoResult>({
-                      ok: false,
-                      error: { code: "state_store_unavailable" },
-                    })
-                  : Effect.die(error),
+              : Effect.die(error),
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );

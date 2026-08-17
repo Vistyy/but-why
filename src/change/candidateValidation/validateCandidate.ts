@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
@@ -21,10 +20,9 @@ import type { SpecialistReviewPolicy } from "../specialistReview/specialistRevie
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
-import { runCheckPhase } from "../validation/runCheckRound.js";
+import { runCheckPhase } from "../validation/runCheckPhase.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
-import { expectedSnapshotWorkspacePath } from "../validation/snapshotWorkspacePath.js";
 import {
   SnapshotWorkspaceSetupFailed,
   type ValidationToolingFailure,
@@ -52,7 +50,7 @@ export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPoli
 
 export type ValidateCandidateInput = {
   readonly changeId: string;
-  readonly candidateId: string;
+  readonly candidateId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
   readonly resourceRoot?: string;
@@ -63,7 +61,7 @@ export type ValidateCandidateInput = {
 
 type ValidateAcceptanceContextCandidateInput = {
   readonly changeId: string;
-  readonly candidateId: string;
+  readonly candidateId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
   readonly resourceRoot?: string;
@@ -76,7 +74,7 @@ type ValidateCandidateResult =
   | {
       readonly ok: true;
       readonly reused: boolean;
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly outcome: CandidateValidationOutcome;
       readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
@@ -84,12 +82,12 @@ type ValidateCandidateResult =
   | {
       readonly ok: false;
       readonly code: "active_validation_run";
-      readonly validationRunId: string;
+      readonly validationRunId: number;
     }
   | { readonly ok: false; readonly code: "blocked" }
   | {
       readonly ok: false;
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly outcome: "tooling_failed";
       readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
@@ -98,7 +96,7 @@ type ValidateCandidateResult =
 type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
@@ -107,7 +105,7 @@ type CandidateValidationPathsValue = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
   }) => AgentSessionSqlLink;
 };
@@ -146,10 +144,10 @@ export type CandidateValidationService = {
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
-  readonly listRounds: (validationRunId: string) => Effect.Effect<
+  readonly listPhaseResults: (validationRunId: number) => Effect.Effect<
     readonly {
       readonly producer: string;
-      readonly status: "passed" | "failed";
+      readonly outcome: "passed" | "failed";
     }[],
     RepositoryStorageError
   >;
@@ -185,7 +183,7 @@ const makeCandidateValidation = (dependencies: {
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
   readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
@@ -193,19 +191,11 @@ const makeCandidateValidation = (dependencies: {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   ) {
-    const validationRunId = randomUUID();
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
       policy: input.policy,
-      validationRunId,
-      workspaceSetup: {
-        worktreePath: expectedSnapshotWorkspacePath(
-          dependencies.localRepositoryMainCheckoutRoot,
-          validationRunId,
-        ),
-      },
       now: input.now,
     });
     if ("blocked" in started) {
@@ -335,9 +325,9 @@ const makeCandidateValidation = (dependencies: {
     validateAcceptanceContextCandidate: (input) => validate(input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
-    listRounds: (validationRunId) =>
-      Effect.map(dependencies.persistence.listRounds(validationRunId), (rounds) =>
-        rounds.map(({ producer, status }) => ({ producer, status })),
+    listPhaseResults: (validationRunId) =>
+      Effect.map(dependencies.persistence.listPhaseResults(validationRunId), (results) =>
+        results.map(({ producer, outcome }) => ({ producer, outcome })),
       ),
   };
 };
@@ -348,14 +338,14 @@ const runCandidatePhases = (
     readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
-    readonly reviewerSessionsRoot: string;
+    readonly agentSessionsRoot: string;
     readonly agentPersistence: AgentSessionPersistence;
     readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
     readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   },
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
-  validationRunId: string,
+  validationRunId: number,
   activeWorkspace: ActiveSnapshotWorkspace,
 ): Effect.Effect<
   {
@@ -388,11 +378,11 @@ const runCandidatePhases = (
           };
     const acceptanceReview = policy.acceptanceReview;
     const sessionOptions = {
-      sessionStorageRoot: dependencies.reviewerSessionsRoot,
+      sessionStorageRoot: dependencies.agentSessionsRoot,
       agentPersistence: dependencies.agentPersistence,
       getAgentSession: dependencies.getAgentSession,
       linkAgentInvocation: dependencies.linkAgentInvocation,
-      settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
+      settleAgentInvocationResult: dependencies.persistence.settleAgentInvocationResult,
     };
     return yield* runCandidateValidationGate({
       ...(prepare === undefined
@@ -410,7 +400,7 @@ const runCandidatePhases = (
                 allowedUntrackedFiles: policy.copyFiles,
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
                 now: input.now,
-                recordPrepareRound: dependencies.persistence.recordPrepareRound,
+                recordPrepareResult: dependencies.persistence.recordPrepareResult,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
       checks: () =>
@@ -426,7 +416,7 @@ const runCandidatePhases = (
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           now: input.now,
           continueAfterFinding: true,
-          recordCheckRound: dependencies.persistence.recordCheckRound,
+          recordCheckResult: dependencies.persistence.recordCheckResult,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
       ...(acceptanceContext === undefined || acceptanceReview === undefined
         ? {}

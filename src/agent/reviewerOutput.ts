@@ -38,7 +38,7 @@ export type ReviewerOutput = Schema.Schema.Type<typeof reviewerOutputSchema>;
 export type ValidateReviewerArtifactRefsInput = {
   readonly reviewer: string;
   readonly attempts: number;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly output: ReviewerOutput;
   readonly availableArtifactRefs: readonly string[];
 };

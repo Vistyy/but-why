@@ -38,7 +38,7 @@ const unusedReviewerExecutor: ReviewerProcessExecutor = {
 
 const now = "2026-07-15T10:00:00.000Z";
 const candidate = {
-  candidateId: "candidate-1",
+  candidateId: 1,
   changeBaseSha: "1".repeat(40),
   headSha: "2".repeat(40),
 };
@@ -131,8 +131,8 @@ const runSpecialistReviewPhase = (input: RunSpecialistReviewPhaseInput) =>
   runSpecialistReviewPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 type PhaseHarness = {
-  readonly rounds: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+  readonly results: Parameters<
+    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][];
   readonly run: (
     runtime: ReviewerAgentRuntime<ReviewerOutput>,
@@ -143,8 +143,8 @@ type PhaseHarness = {
 
 const phaseHarness = (): PhaseHarness => {
   const artifactsRoot = createTestWorkspace();
-  const rounds: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+  const results: Parameters<
+    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
   const commandExecutor = () =>
     Effect.succeed({
@@ -154,10 +154,10 @@ const phaseHarness = (): PhaseHarness => {
     });
 
   return {
-    rounds,
+    results,
     run: (runtime, overrides = {}, includeAcceptanceContext = true) =>
       runSpecialistReviewPhase({
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        validationRunId: 426614174000,
         changeId: "change-1",
         candidate,
         policies: [policy("standards")],
@@ -173,8 +173,8 @@ const phaseHarness = (): PhaseHarness => {
         agentPersistence: defaultAgentPersistence(),
         getAgentSession: () => Effect.succeed(undefined),
         linkAgentInvocation: () => () => Effect.void,
-        settleAgentInvocationRound: (round) => {
-          rounds.push(round);
+        settleAgentInvocationResult: (result) => {
+          results.push(result);
           return () => Effect.void;
         },
         allowedUntrackedFiles: [],
@@ -238,7 +238,7 @@ describe("Candidate Specialist Review phase", () => {
           );
           expect(input.prompt).toContain(acceptanceContext.description);
           expect(input.prompt).not.toContain("reviewer-output");
-          expect(input.prompt).not.toContain(candidate.candidateId);
+          expect(input.prompt).toContain(candidate.candidateId);
           for (const other of ["zeta", "broken", "alpha"].filter(
             (producer) => producer !== input.reviewer,
           )) {
@@ -251,26 +251,24 @@ describe("Candidate Specialist Review phase", () => {
         });
         expect(result.toolingFailures).toHaveLength(1);
         expect(
-          harness.rounds.map(({ producer, roundNumber, roundStatus, findings }) => ({
+          harness.results.map(({ producer, outcome, findings }) => ({
             producer,
-            roundNumber,
-            roundStatus,
+            outcome,
             findingTitles: findings.map((item) => item.title),
           })),
         ).toEqual([
           {
             producer: "zeta",
-            roundNumber: 1,
-            roundStatus: "failed",
+            outcome: "failed",
             findingTitles: ["Zeta Finding"],
           },
-          { producer: "broken", roundNumber: 2, roundStatus: "failed", findingTitles: [] },
-          { producer: "alpha", roundNumber: 3, roundStatus: "passed", findingTitles: [] },
+          { producer: "broken", outcome: "failed", findingTitles: [] },
+          { producer: "alpha", outcome: "passed", findingTitles: [] },
         ]);
-        for (const round of harness.rounds) {
-          expect(round.artifactRecords).toEqual(
+        for (const result of harness.results) {
+          expect(result.artifactRecords).toEqual(
             expect.arrayContaining([
-              expect.objectContaining({ phase: "specialist_review", producer: round.producer }),
+              expect.objectContaining({ phase: "specialist_review", producer: result.producer }),
             ]),
           );
         }
@@ -353,12 +351,12 @@ describe("Candidate Specialist Review phase", () => {
       expect(review).toHaveBeenCalledOnce();
       expect(review.mock.calls[0]?.[0].prompt).toContain(earlier.title);
       expect(review.mock.calls[0]?.[0].resumeSession).toBeUndefined();
-      expect(harness.rounds[0]?.roundStatus).toBe("passed");
+      expect(harness.results[0]?.outcome).toBe("passed");
     }),
   );
 
   it.scoped(
-    "persists producer-specific rounds, Findings, Tooling Failures, and Artifacts across a clean successor",
+    "persists producer-specific results, Findings, Tooling Failures, and Artifacts across a clean successor",
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
@@ -422,14 +420,18 @@ describe("Candidate Specialist Review phase", () => {
                 resourceRoot: repo,
                 sessionStorageRoot: artifactsRoot,
                 agentPersistence: persistence.agentPersistence,
-                getAgentSession: persistence.reviewerSessions.getAgentSession,
-                linkAgentInvocation: persistence.reviewerSessions.linkAgentInvocation,
-                settleAgentInvocationRound: persistence.execution.settleAgentInvocationRound,
+                getAgentSession: persistence.agentSessions.getAgentSession,
+                linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+                settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
                 allowedUntrackedFiles: [],
                 now: runNow,
                 listArtifacts: persistence.reads.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   persistence.execution.listPreviousCandidateReviewerFindings,
+              });
+              yield* persistence.execution.recordWorkspaceCleanup({
+                validationRunId: started.validationRunId,
+                cleanupWorkspace: "not_created",
               });
               for (const toolingFailure of result.toolingFailures) {
                 yield* persistence.execution.recordToolingFailure({
@@ -456,12 +458,12 @@ describe("Candidate Specialist Review phase", () => {
             now,
           ),
         );
-        expect(yield* Effect.suspend(() => validation.listRounds(durable.validationRunId))).toEqual(
-          [
-            { producer: "standards", status: "failed" },
-            { producer: "broken", status: "failed" },
-          ],
-        );
+        expect(
+          yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
+        ).toEqual([
+          { producer: "broken", outcome: "failed" },
+          { producer: "standards", outcome: "failed" },
+        ]);
         expect(
           (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
             (item) => item.title,
@@ -527,7 +529,9 @@ describe("Candidate Specialist Review phase", () => {
           ),
         );
         expect(successorReview).toHaveBeenCalledOnce();
-        expect(successorReview.mock.calls[0]?.[0].prompt).toContain("Durable Specialist Finding");
+        expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
+          "Durable Specialist Finding",
+        );
         expect(yield* Effect.suspend(() => validation.listFindings(clean.validationRunId))).toEqual(
           [],
         );
@@ -584,7 +588,7 @@ describe("Candidate Specialist Review phase", () => {
         findings: 0,
         toolingFailures: [{ message: "Reviewer launch failed." }],
       });
-      expect(runtimeHarness.rounds[0]?.roundStatus).toBe("failed");
+      expect(runtimeHarness.results[0]?.outcome).toBe("failed");
 
       const artifactHarness = phaseHarness();
       const nonDirectory = join(createTestWorkspace(), "not-a-directory");
@@ -600,9 +604,9 @@ describe("Candidate Specialist Review phase", () => {
           { _tag: "InfrastructureToolingFailed", operationName: "record_reviewer_artifacts" },
         ],
       });
-      expect(artifactHarness.rounds).toMatchObject([
+      expect(artifactHarness.results).toMatchObject([
         {
-          roundStatus: "failed",
+          outcome: "failed",
           artifactRecords: [],
           toolingFailure: { operationName: "record_reviewer_artifacts" },
         },
@@ -617,8 +621,8 @@ describe("Candidate Specialist Review phase", () => {
         const repo = candidateReadyRepo();
         const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-        const rounds: Parameters<
-          NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+        const results: Parameters<
+          NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
         >[0][] = [];
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
           Effect.sync(() => {
@@ -633,7 +637,7 @@ describe("Candidate Specialist Review phase", () => {
           });
         const integrityFailure = yield* Effect.suspend(() =>
           runSpecialistReviewPhase({
-            validationRunId: "323e4567-e89b-42d3-a456-426614174000",
+            validationRunId: 426614174001,
             changeId: captured.changeId,
             candidate: captured,
             policies: [policy("standards")],
@@ -653,8 +657,8 @@ describe("Candidate Specialist Review phase", () => {
             agentPersistence: defaultAgentPersistence(),
             getAgentSession: () => Effect.succeed(undefined),
             linkAgentInvocation: () => () => Effect.void,
-            settleAgentInvocationRound: (round) => {
-              rounds.push(round);
+            settleAgentInvocationResult: (result) => {
+              results.push(result);
               return () => Effect.void;
             },
             allowedUntrackedFiles: [],
@@ -668,9 +672,9 @@ describe("Candidate Specialist Review phase", () => {
           findings: 0,
           toolingFailures: [{ _tag: "GitToolingFailed", operationName: "verify_candidate_head" }],
         });
-        expect(rounds).toMatchObject([
+        expect(results).toMatchObject([
           {
-            roundStatus: "failed",
+            outcome: "failed",
             findings: [],
             artifactRecords: [],
             toolingFailure: { operationName: "verify_candidate_head" },

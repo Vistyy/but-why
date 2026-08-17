@@ -38,8 +38,8 @@ export type ObservedMergedChangeEvidence = {
   readonly baseBranch: string;
   readonly headBranch: string;
   readonly mergedHeadSha: string;
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly expectedHeadSha: string;
 };
 

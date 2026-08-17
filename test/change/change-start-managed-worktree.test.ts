@@ -48,7 +48,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           change: { id: expect.any(String), taskId: null },
           branch: expect.stringMatching(/^refs\/heads\/but-why\/BY-C[1-9][0-9]*$/u),
           baseRef: "refs/remotes/origin/main",
-          startingCommit,
           worktreePath: expect.any(String),
         });
         expect(output.worktreePath).toMatch(
@@ -98,7 +97,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       expect(started.status).toBe(0);
       const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output.startingCommit).toBe(remoteCommit);
+      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(remoteCommit);
       expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(remoteCommit);
       expect(git(root, "rev-parse", "refs/heads/main^{commit}")).toBe(localCommit);
       expect(existsSync(join(output.worktreePath, "local-only.txt"))).toBe(false);
@@ -111,8 +110,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       const remote = yield* repositoryCopy();
       git(remote, "branch", "release", "main");
       configurePublicationRemote(root, remote);
-      const releaseCommit = git(remote, "rev-parse", "refs/heads/release^{commit}");
-
       const started = yield* runByInProcessEffect(
         root,
         ["change", "start", "--base", "release"],
@@ -122,7 +119,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(started.status).toBe(0);
       expect(JSON.parse(started.stdout)).toMatchObject({
         baseRef: "refs/remotes/origin/release",
-        startingCommit: releaseCommit,
       });
     }),
   );
@@ -301,14 +297,11 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(fromLinked.status).toBe(0);
       const mainOutput = JSON.parse(fromMain.stdout) as ChangeOutput;
       const linkedOutput = JSON.parse(fromLinked.stdout) as ChangeOutput;
-      const upstreamCommit = git(root, "rev-parse", "refs/remotes/upstream/main^{commit}");
       expect(mainOutput).toMatchObject({
         baseRef: "refs/remotes/upstream/main",
-        startingCommit: upstreamCommit,
       });
       expect(linkedOutput).toMatchObject({
         baseRef: "refs/remotes/upstream/main",
-        startingCommit: upstreamCommit,
       });
       expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),
@@ -342,7 +335,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           expect.stringContaining("Move the repository to a writable parent"),
         ],
       });
-      expect(git(root, "rev-parse", failure.error.branch)).toBe(failure.error.startingCommit);
 
       rmSync(siblingRoot);
       const retried = yield* runByInProcessEffect(
@@ -366,7 +358,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(output.worktreePath, "add", "advanced.txt");
       git(output.worktreePath, "commit", "-m", "Advanced commit");
       const advancedCommit = git(output.worktreePath, "rev-parse", "HEAD^{commit}");
-      expect(advancedCommit).not.toBe(output.startingCommit);
+      expect(advancedCommit).not.toBe(git(root, "rev-parse", "refs/remotes/origin/main"));
 
       git(root, "worktree", "remove", output.worktreePath);
 
@@ -553,7 +545,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(siblingRoot, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_unavailable",
         path: start.worktreePath,
@@ -575,7 +567,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(siblingRoot, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_unavailable",
         path: start.worktreePath,
@@ -596,7 +588,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(dirname(root), `${basename(root)}-worktrees`, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "git_tooling_error",
       });
@@ -607,13 +599,17 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
+        ok: true,
+      });
       git(root, "worktree", "remove", start.worktreePath);
       const emptyTree = git(root, "mktree");
       const currentCommit = git(root, "commit-tree", emptyTree, "-m", "Current branch commit");
       git(root, "update-ref", start.branchRef, currentCommit);
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
+        ok: true,
+      });
       expect(git(start.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(currentCommit);
     }),
   );
@@ -622,14 +618,16 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
+        ok: true,
+      });
       git(root, "worktree", "remove", start.worktreePath);
       const blobPath = join(root, "not-a-commit.txt");
       writeFileSync(blobPath, "not a commit\n");
       const blob = git(root, "hash-object", "-w", blobPath);
       writeFileSync(join(start.repositoryCommonDirectory, start.branchRef), `${blob}\n`);
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
         ok: false,
         code: "git_tooling_error",
       });
@@ -643,7 +641,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const start = changeStartRecord(root);
       git(root, "branch", start.branchRef.slice("refs/heads/".length), start.startingCommit);
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "change_start_conflict",
       });
@@ -651,7 +649,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(root, "branch", "-D", start.branchRef.slice("refs/heads/".length));
       mkdirSync(start.worktreePath, { recursive: true });
       writeFileSync(join(start.worktreePath, "keep.txt"), "do not overwrite\n");
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_conflict",
         branch: start.branchRef,
@@ -660,7 +658,9 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(existsSync(join(start.worktreePath, "keep.txt"))).toBe(true);
 
       rmSync(start.worktreePath, { recursive: true });
-      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
+        ok: true,
+      });
       expect(git(start.worktreePath, "symbolic-ref", "HEAD")).toBe(start.branchRef);
     }),
   );
@@ -673,7 +673,6 @@ type ChangeOutput = {
   };
   readonly branch: string;
   readonly baseRef: string;
-  readonly startingCommit: string;
   readonly worktreePath: string;
   readonly prepareFailure?: {
     readonly command: string;
@@ -718,7 +717,9 @@ const configurePublicationRemote = (
   else git(root, "remote", "add", remoteName, url);
 };
 
-const changeStartRecord = (root: string): ChangeStartRecord => {
+const changeStartRecord = (
+  root: string,
+): ChangeStartRecord & { readonly startingCommit: string } => {
   const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
   return {
     id: "change-1",
@@ -729,7 +730,7 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
-    reviewerConfiguration: null,
+    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
     prepare: null,
     prepareFailure: null,
     state: "open",

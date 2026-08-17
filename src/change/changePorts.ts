@@ -1,6 +1,5 @@
 import type { Effect } from "effect";
 import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
-import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   ChangeCleanup,
@@ -29,14 +28,13 @@ import type {
   ImplementationBlockerHistory,
 } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 
 export type ChangePublicationEvidence = {
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
 };
@@ -86,8 +84,8 @@ type ImplementationBlockerPersistenceResult =
   | Extract<ImplementationBlockerMutationResult, { readonly ok: false }>;
 
 export type CurrentChangeEvidenceQuery = {
-  readonly candidateId?: string;
-  readonly validationRunId?: string;
+  readonly candidateId?: number;
+  readonly validationRunId?: number;
   readonly changeBaseSha?: string;
 };
 
@@ -117,8 +115,7 @@ export type ChangeListRecord = {
   readonly id: string;
   readonly state: ChangeState;
   readonly branchRef: string;
-  readonly worktreePath: string | null;
-  readonly createdAt: string;
+  readonly worktreePath: string;
 };
 
 export type ChangeReadPort = {
@@ -126,10 +123,7 @@ export type ChangeReadPort = {
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeListRecord[]>;
 };
 
-export type ChangeReviewerSessionPort = {
-  readonly listReviewerSessions: (
-    changeId: string,
-  ) => StorageEffect<readonly ReviewerSessionRecord[]>;
+export type ChangeAgentSessionPort = {
   readonly getAgentSession: (
     changeId: string,
     producer: string,
@@ -137,16 +131,10 @@ export type ChangeReviewerSessionPort = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
     readonly configurationSnapshot?: unknown;
   }) => AgentSessionSqlLink;
-};
-
-export type ChangeReviewerTranscriptPort = {
-  readonly listReviewerTranscripts: (
-    changeId: string,
-  ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
 export type SubmissionChange = {
@@ -154,11 +142,11 @@ export type SubmissionChange = {
   readonly state: ChangeState;
   readonly activeBlocker: ImplementationBlocker | null;
   readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly worktreePath: string | null;
+  readonly baseRef: string;
+  readonly baseRemoteUrl: string;
+  readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly publication: ChangePublication | null;
 };
 
@@ -188,8 +176,8 @@ export type ChangeSubmissionPort = {
   readonly getChangeForOutputById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getCompletedPublicationEvidence: (
     changeId: string,
-    candidateId: string,
-    validationRunId: string,
+    candidateId: number,
+    validationRunId: number,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
   readonly completeMergedChange: (
     input: CompleteMergedChangeInput,
@@ -250,7 +238,6 @@ type CandidatePublicationChangeBase = {
   readonly id: string;
   readonly state: ChangeState;
   readonly branchRef: string;
-  readonly startingCommit: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions: readonly ImplementationDecision[];
 };

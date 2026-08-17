@@ -52,13 +52,13 @@ describe("Change Implement continuation policy", () => {
       decideContinuation(
         {
           change: { state: "open", closeReason: null, acceptanceContext: null },
-          currentCandidate: { id: "candidate-1", headSha: "head-1" },
+          currentCandidate: { id: 1, headSha: "head-1" },
           currentValidationRun: null,
           findingCount: 0,
           toolingFailureCount: 0,
           pullRequest: { number: 4 },
           publication: {
-            candidateId: "candidate-1",
+            candidateId: 1,
             expectedHeadSha: "head-1",
             pullRequest: { number: 4 },
           },
@@ -73,13 +73,13 @@ describe("Change Implement continuation policy", () => {
       decideContinuation(
         {
           change: { state: "open", closeReason: null, acceptanceContext: null },
-          currentCandidate: { id: "candidate-1", headSha: "old-head" },
+          currentCandidate: { id: 1, headSha: "old-head" },
           currentValidationRun: null,
           findingCount: 0,
           toolingFailureCount: 0,
           pullRequest: { number: 4 },
           publication: {
-            candidateId: "candidate-1",
+            candidateId: 1,
             expectedHeadSha: "old-head",
             pullRequest: { number: 4 },
           },

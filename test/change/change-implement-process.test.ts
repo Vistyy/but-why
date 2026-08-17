@@ -119,10 +119,14 @@ exit 1
               "create process Change fixture",
               (sql) => sql`
               INSERT INTO changes (
-                id, repository_common_directory, branch_ref, state,
-                close_reason, created_at, updated_at, closed_at
-              ) VALUES
-                (${internalChangeId(changeId, "BY")}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+                id, branch_ref, base_ref, base_remote_url, worktree_path,
+                reviewer_configuration, cleanup_pending
+              ) VALUES (
+                ${internalChangeId(changeId, "BY")}, 'refs/heads/process',
+                'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
+                ${join(root, "process-worktree")},
+                '{"acceptanceReview":null,"specialistReviews":[]}', 0
+              )
             `,
             );
           }),

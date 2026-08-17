@@ -20,7 +20,7 @@ export type CaptureLocalCandidateResult =
   | {
       readonly ok: true;
       readonly changeId: string;
-      readonly candidateId: string;
+      readonly candidateId: number;
       readonly branchRef: string;
       readonly changeBaseSha: string;
       readonly headSha: string;

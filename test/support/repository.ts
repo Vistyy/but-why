@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,18 +23,16 @@ const taskReviewPolicyFixture = {
 export const passTaskReviewFixture = (taskId: PublicTaskId, now: string) =>
   Effect.gen(function* () {
     const reviews = yield* openSqliteTaskReviewPersistence();
-    const reviewId = randomUUID();
     const admitted = yield* reviews.admit({
-      reviewId,
       taskId,
       policy: taskReviewPolicyFixture,
       baseRef: "refs/heads/main",
       baseCommit: "a".repeat(40),
-      workspacePath: `/tmp/task-review-${reviewId}`,
       now,
     });
     if (!admitted.ok)
       throw new Error(`Could not admit passing Task Review fixture: ${admitted.code}`);
+    const reviewId = admitted.review.id;
     yield* reviews.recordCleanup(reviewId, "removed", now);
     const completed = yield* reviews.complete({ reviewId, findings: [], now });
     if (!completed.ok || completed.outcome !== "passed") {
@@ -47,7 +44,7 @@ export const passTaskReviewFixture = (taskId: PublicTaskId, now: string) =>
 export const setTerminalTaskStateFixture = (
   taskId: PublicTaskId,
   state: "done" | "cancelled",
-  updatedAt: string,
+  _updatedAt: string,
   cancelReason: string | null = state === "cancelled" ? "Cancelled fixture" : null,
 ) =>
   Effect.flatMap(RepositorySql, (repository) =>
@@ -55,7 +52,7 @@ export const setTerminalTaskStateFixture = (
       "set terminal Task fixture state",
       (sql) => sql`
         UPDATE tasks
-        SET state = ${state}, cancel_reason = ${cancelReason}, updated_at = ${updatedAt}
+        SET state = ${state}, cancel_reason = ${cancelReason}
         WHERE id = ${internalTaskId(taskId, repository.idPrefix)}
       `,
     ),

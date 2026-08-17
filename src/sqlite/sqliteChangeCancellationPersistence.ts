@@ -134,10 +134,9 @@ export const cancelChange = (
       return { ok: true as const, changed: false };
     }
     yield* sql`UPDATE changes
-      SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${input.reason},
-          cleanup_state = 'pending', cleanup_blocking_reason = NULL,
-          updated_at = ${input.now}, closed_at = ${input.now}
-      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND state = 'open'`;
+      SET close_reason = 'cancelled', cancel_reason = ${input.reason},
+          cleanup_pending = 1, cleanup_blocking_reason = NULL
+      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND close_reason IS NULL`;
     return { ok: true as const, changed: true };
   });
 

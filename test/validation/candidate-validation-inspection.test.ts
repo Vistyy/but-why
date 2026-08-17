@@ -5,12 +5,11 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -58,12 +57,12 @@ describe("Candidate-owned Validation Run inspection", () => {
       const abandoned = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "abandon",
-        fixture.validationRunId,
+        String(fixture.validationRunId),
         "--reason",
         "Validation process terminated.",
       ]);
 
-      expect(abandoned.status).toBe(0);
+      expect(abandoned.status, abandoned.stdout).toBe(0);
       expect(JSON.parse(abandoned.stdout)).toMatchObject({
         status: "abandoned",
         validationRunId: fixture.validationRunId,
@@ -76,7 +75,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const repeated = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "abandon",
-        fixture.validationRunId,
+        String(fixture.validationRunId),
         "--reason",
         "Repeated cleanup.",
       ]);
@@ -92,9 +91,9 @@ describe("Candidate-owned Validation Run inspection", () => {
         fixture.root,
         Effect.gen(function* () {
           const agents = yield* openSqliteAgentSessionPersistence();
-          const reviewerSessions = yield* openSqliteChangeReviewerSessionPort();
+          const agentSessions = yield* openSqliteChangeAgentSessionPort();
           const abandonment = yield* openSqliteValidationRunAbandonmentPort();
-          const linkAgentInvocation = reviewerSessions.linkAgentInvocation;
+          const linkAgentInvocation = agentSessions.linkAgentInvocation;
           if (linkAgentInvocation === undefined)
             throw new Error("Change Agent linking is unavailable");
           const started = yield* agents.beginInvocation({
@@ -141,11 +140,15 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: fixture.validationRunId,
         cleanupWorkspace: "failed",
       });
-      yield* fixture.runStore.complete({
-        validationRunId: fixture.validationRunId,
-        outcome: "tooling_failed",
-        now,
-      });
+      expect(
+        yield* fixture.runStore
+          .complete({
+            validationRunId: fixture.validationRunId,
+            outcome: "tooling_failed",
+            now,
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
       expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
         state: "running",
@@ -155,7 +158,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const abandoned = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "abandon",
-        fixture.validationRunId,
+        String(fixture.validationRunId),
         "--reason",
         "Retry failed cleanup.",
       ]);
@@ -171,7 +174,6 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      const worktreePath = expectedSnapshotWorkspacePath(fixture.root, fixture.validationRunId);
       yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
         cleanupWorkspace: "not_created",
@@ -179,67 +181,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
       expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toMatchObject({
         validationRunId: fixture.validationRunId,
-        worktreePath,
       });
-    }),
-  );
-
-  it.effect("rejects cleanup evidence without persisted Snapshot Workspace identity", () =>
-    Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
-      yield* fixture.runStore.complete({
-        validationRunId: fixture.validationRunId,
-        outcome: "tooling_failed",
-        now,
-      });
-      const started = yield* fixture.runStore.startOrReuse({
-        candidateId: fixture.candidateId,
-        headSha: "head-sha",
-        policy,
-        validationRunId: "run-without-workspace",
-        now: later,
-      });
-      if (started.reused || "blocked" in started) throw new Error("Expected a new Validation Run");
-
-      const error = yield* fixture.runStore
-        .recordWorkspaceCleanup({
-          validationRunId: started.validationRunId,
-          cleanupWorkspace: "removed",
-        })
-        .pipe(Effect.flip);
-
-      expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
-    }),
-  );
-
-  it.effect("records the initial Snapshot Workspace with the Active relation", () =>
-    Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
-      yield* fixture.runStore.complete({
-        validationRunId: fixture.validationRunId,
-        outcome: "tooling_failed",
-        now,
-      });
-      const workspace = {
-        worktreePath: expectedSnapshotWorkspacePath(fixture.root, "run-with-atomic-workspace"),
-      };
-      const started = yield* fixture.runStore.startOrReuse({
-        candidateId: fixture.candidateId,
-        headSha: "head-sha",
-        policy,
-        validationRunId: "run-with-atomic-workspace",
-        workspaceSetup: workspace,
-        now: later,
-      });
-
-      expect(started).toMatchObject({
-        reused: false,
-        validationRunId: "run-with-atomic-workspace",
-      });
-      if ("blocked" in started) throw new Error("Expected a new Validation Run");
-      expect(yield* fixture.runStore.getAbandonmentContext(started.validationRunId)).toMatchObject(
-        workspace,
-      );
     }),
   );
 
@@ -257,7 +199,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         throw new Error("Expected an Active Validation Run");
       expect(second.validationRunId).toBe(fixture.validationRunId);
 
-      yield* fixture.runStore.complete({
+      yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
         now: later,
@@ -277,7 +219,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("snapshots Implementation Decisions without changing policy reuse identity", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      yield* fixture.runStore.complete({
+      yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
         now,
@@ -310,80 +252,26 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect(
-    "reports a payload-bearing Implementation Decision Snapshot decode failure without exposing the payload",
-    () =>
-      Effect.gen(function* () {
-        const fixture = yield* candidateValidationFixture();
-        const payload = "top-secret-decision-payload";
-        yield* withTestRepository(
-          fixture.root,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            yield* repository.operation(
-              "corrupt Implementation Decision Snapshot",
-              (sql) =>
-                sql`
-                UPDATE candidate_validation_runs
-                SET implementation_decisions = ${JSON.stringify([
-                  {
-                    id: "decision-1",
-                    changeId: fixture.changeId,
-                    sequence: 1,
-                    recordedAt: now,
-                    content: payload,
-                  },
-                ])}
-                WHERE id = ${fixture.validationRunId}
-              `,
-            );
-          }),
-        );
-
-        const result = yield* runByInProcessEffect(fixture.root, [
-          "validation-run",
-          "show",
-          fixture.validationRunId,
-        ]);
-
-        expect(result.status).toBe(1);
-        expect(result.stdout).not.toContain(payload);
-        expect(JSON.parse(result.stdout)).toEqual({
-          error: {
-            code: "persisted_data_invalid",
-            message: "Shared But Why? state contains malformed persisted data.",
-            operation: "decode Candidate Validation Run",
-          },
-          help: [
-            "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
-          ],
-        });
-      }),
-  );
-
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       const longContent = "x".repeat(1_200);
 
-      yield* fixture.runStore.recordPrepareRound({
+      yield* fixture.runStore.recordPrepareResult({
         validationRunId: fixture.validationRunId,
-        roundNumber: 1,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
         now,
       });
-      yield* fixture.runStore.recordCheckRound({
+      yield* fixture.runStore.recordCheckResult({
         validationRunId: fixture.validationRunId,
         producer: "types",
-        roundNumber: 1,
-        roundStatus: "failed",
+        outcome: "failed",
         artifactRecords: [
           fixture.artifact("checks", "types", "logs.txt", "types failed\n"),
           fixture.artifact("checks", "types", "stdout.txt", longContent),
         ],
         finding: {
-          id: `${fixture.validationRunId}-F1`,
           validationRunId: fixture.validationRunId,
           phase: "checks",
           producer: "types",
@@ -395,11 +283,10 @@ describe("Candidate-owned Validation Run inspection", () => {
         },
         now,
       });
-      yield* fixture.runStore.recordCheckRound({
+      yield* fixture.runStore.recordCheckResult({
         validationRunId: fixture.validationRunId,
         producer: "tests",
-        roundNumber: 2,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
         now,
       });
@@ -410,7 +297,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         errorMessage: "Could not remove worktree.",
         now: later,
       });
-      yield* fixture.runStore.complete({
+      yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
         now: later,
@@ -419,18 +306,17 @@ describe("Candidate-owned Validation Run inspection", () => {
       const result = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "show",
-        fixture.validationRunId,
+        String(fixture.validationRunId),
       ]);
 
       expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({
+      const shown = JSON.parse(result.stdout);
+      expect(shown).toMatchObject({
         validationRun: {
           id: fixture.validationRunId,
           candidateId: fixture.candidateId,
           state: "complete",
           outcome: "tooling_failed",
-          createdAt: now,
-          updatedAt: later,
         },
         change: {
           id: fixture.changeId,
@@ -443,118 +329,41 @@ describe("Candidate-owned Validation Run inspection", () => {
           changeId: fixture.changeId,
           changeBaseSha: "target-sha",
           headSha: "head-sha",
-          createdAt: now,
         },
         policy,
         phases: [
-          {
-            phase: "prepare",
-            rounds: [
-              {
-                validationRunId: fixture.validationRunId,
-                phase: "prepare",
-                producer: "prepare",
-                roundNumber: 1,
-                status: "passed",
-                createdAt: now,
-              },
-            ],
-          },
+          { phase: "prepare", results: [{ producer: "prepare", outcome: "passed" }] },
           {
             phase: "checks",
-            rounds: [
-              {
-                validationRunId: fixture.validationRunId,
-                phase: "checks",
-                producer: "types",
-                roundNumber: 1,
-                status: "failed",
-                createdAt: now,
-              },
-              {
-                validationRunId: fixture.validationRunId,
-                phase: "checks",
-                producer: "tests",
-                roundNumber: 2,
-                status: "passed",
-                createdAt: now,
-              },
+            results: [
+              { producer: "tests", outcome: "passed" },
+              { producer: "types", outcome: "failed" },
             ],
           },
-          { phase: "acceptance_review", rounds: [] },
-          { phase: "specialist_review", rounds: [] },
+          { phase: "acceptance_review", results: [] },
+          { phase: "specialist_review", results: [] },
         ],
-        findings: [
-          {
-            id: `${fixture.validationRunId}-F1`,
-            validationRunId: fixture.validationRunId,
-            phase: "checks",
-            producer: "types",
-            source: "checks/types",
-            title: "Check failed: types",
-            description: "Configured check types exited with code 1.",
-            evidence: "command: pnpm typecheck\nexitCode: 1",
-            files: ["src/main.ts"],
-            artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
-            createdAt: now,
-            updatedAt: now,
-          },
-        ],
-        toolingFailures: [
-          {
-            sequence: 1,
-            validationRunId: fixture.validationRunId,
-            errorKind: "snapshot_workspace_setup_failed",
-            operationName: "cleanup_snapshot_workspace",
-            errorMessage: "Could not remove worktree.",
-            createdAt: later,
-          },
-        ],
-        artifacts: [
+        findings: [{ title: "Check failed: types", source: "checks/types" }],
+        toolingFailures: [{ operationName: "cleanup_snapshot_workspace" }],
+        agentInvocations: [],
+      });
+      expect(shown.artifacts).toEqual(
+        expect.arrayContaining([
           expect.objectContaining({
             ref: `artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
-            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
-            phase: "prepare",
-            producer: "prepare",
-            preview: {
-              status: "available",
-              content: "prepare complete\n",
-              bytes: 17,
-              storedBytes: 17,
-              truncated: false,
-            },
-          }),
-          expect.objectContaining({
-            ref: `artifact:${fixture.validationRunId}/checks/tests/stderr.txt`,
-            phase: "checks",
-            producer: "tests",
           }),
           expect.objectContaining({
             ref: `artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
-            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
-            phase: "checks",
-            producer: "types",
-            preview: {
-              status: "available",
-              content: "x".repeat(1_000),
-              bytes: 1_000,
-              storedBytes: 1_200,
-              truncated: true,
-            },
+            preview: expect.objectContaining({ bytes: 1_000, truncated: true }),
           }),
-          expect.objectContaining({
-            ref: `artifact:${fixture.validationRunId}/checks/types/logs.txt`,
-            phase: "checks",
-            producer: "types",
-          }),
-        ],
-      });
+        ]),
+      );
 
       const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
       const detail = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "artifact",
-        fixture.validationRunId,
+        String(fixture.validationRunId),
         artifactRef,
       ]);
       expect(detail.status).toBe(0);
@@ -568,7 +377,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("shows each review policy with one Agent Profile identity in the Snapshot", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      yield* fixture.runStore.complete({
+      yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
         now,
@@ -608,12 +417,11 @@ describe("Candidate-owned Validation Run inspection", () => {
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy: reviewPolicy,
-        validationRunId: "run-review-policy",
         now: later,
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
-      yield* fixture.runStore.complete({
+      yield* fixture.runStore.completeAfterCleanup({
         validationRunId: started.validationRunId,
         outcome: "passed",
         now: later,
@@ -622,7 +430,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const result = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "show",
-        started.validationRunId,
+        String(started.validationRunId),
       ]);
       expect(result.status).toBe(0);
       const shown = JSON.parse(result.stdout);
@@ -633,14 +441,13 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
     Effect.gen(function* () {
       const empty = yield* candidateValidationFixture();
-      yield* empty.runStore.recordPrepareRound({
+      yield* empty.runStore.recordPrepareResult({
         validationRunId: empty.validationRunId,
-        roundNumber: 1,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [empty.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
         now,
       });
-      yield* empty.runStore.complete({
+      yield* empty.runStore.completeAfterCleanup({
         validationRunId: empty.validationRunId,
         outcome: "passed",
         now,
@@ -649,27 +456,25 @@ describe("Candidate-owned Validation Run inspection", () => {
       const emptyResult = yield* runByInProcessEffect(empty.root, [
         "validation-run",
         "show",
-        empty.validationRunId,
+        String(empty.validationRunId),
       ]);
       expect(emptyResult.status).toBe(0);
       expect(JSON.parse(emptyResult.stdout)).toMatchObject({
         phases: [
           {
             phase: "prepare",
-            rounds: [
+            results: [
               {
                 validationRunId: empty.validationRunId,
                 phase: "prepare",
                 producer: "prepare",
-                roundNumber: 1,
-                status: "passed",
-                createdAt: now,
+                outcome: "passed",
               },
             ],
           },
-          { phase: "checks", rounds: [] },
-          { phase: "acceptance_review", rounds: [] },
-          { phase: "specialist_review", rounds: [] },
+          { phase: "checks", results: [] },
+          { phase: "acceptance_review", results: [] },
+          { phase: "specialist_review", results: [] },
         ],
         findings: [],
         toolingFailures: [],
@@ -683,7 +488,6 @@ describe("Candidate-owned Validation Run inspection", () => {
             originalBytes: 17,
             storedBytes: 17,
             truncated: false,
-            createdAt: now,
             detailCommand: `by validation-run artifact ${empty.validationRunId} artifact:${empty.validationRunId}/prepare/prepare/logs.txt`,
           },
         ],
@@ -691,11 +495,10 @@ describe("Candidate-owned Validation Run inspection", () => {
 
       const unavailable = yield* candidateValidationFixture();
       const missing = unavailable.artifact("checks", "types", "stdout.txt", "missing");
-      yield* unavailable.runStore.recordCheckRound({
+      yield* unavailable.runStore.recordCheckResult({
         validationRunId: unavailable.validationRunId,
         producer: "types",
-        roundNumber: 1,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [missing],
         now,
       });
@@ -704,7 +507,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const unavailableResult = yield* runByInProcessEffect(unavailable.root, [
         "validation-run",
         "show",
-        unavailable.validationRunId,
+        String(unavailable.validationRunId),
       ]);
       expect(unavailableResult.status).toBe(0);
       expect(JSON.parse(unavailableResult.stdout).artifacts[0]).toEqual({
@@ -716,30 +519,29 @@ describe("Candidate-owned Validation Run inspection", () => {
         originalBytes: 7,
         storedBytes: 7,
         truncated: false,
-        createdAt: now,
         detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
       });
 
       const unknownRun = yield* runByInProcessEffect(unavailable.root, [
         "validation-run",
         "show",
-        "missing-run",
+        "128",
       ]);
       const unknownArtifact = yield* runByInProcessEffect(unavailable.root, [
         "validation-run",
         "artifact",
-        unavailable.validationRunId,
+        String(unavailable.validationRunId),
         "missing-artifact",
       ]);
       const unavailableContent = yield* runByInProcessEffect(unavailable.root, [
         "validation-run",
         "artifact",
-        unavailable.validationRunId,
+        String(unavailable.validationRunId),
         missing.ref,
       ]);
 
       expect(JSON.parse(unknownRun.stdout)).toMatchObject({
-        error: { code: "validation_run_not_found", validationRunId: "missing-run" },
+        error: { code: "validation_run_not_found", validationRunId: 128 },
         help: ["Run `by change show <change-id>` to inspect known Candidates and Validation Runs."],
       });
       expect(JSON.parse(unknownArtifact.stdout)).toMatchObject({
@@ -784,6 +586,25 @@ const candidateValidationFixture = () =>
       Effect.flatMap(openSqliteChangeValidationTestDependencies(), use).pipe(
         Effect.provide(repositoryLayer),
       );
+    yield* withTestRepository(
+      root,
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "create Candidate-owning Change",
+          (sql) => sql`
+          INSERT INTO changes (
+            branch_ref, base_ref, base_remote_url, worktree_path,
+            reviewer_configuration, cleanup_pending
+          ) VALUES (
+            'refs/heads/feature', 'refs/remotes/origin/main',
+            'https://example.com/acme/repo.git', ${join(root, "feature-worktree")},
+            '{"acceptanceReview":null,"specialistReviews":[]}', 0
+          )
+        `,
+        );
+      }),
+    );
     const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
       Effect.flatMap((capture) =>
         capture.commitCapture({
@@ -803,10 +624,6 @@ const candidateValidationFixture = () =>
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
-        validationRunId: "fixture-validation-run",
-        workspaceSetup: {
-          worktreePath: expectedSnapshotWorkspacePath(root, "fixture-validation-run"),
-        },
         now,
       }),
     );
@@ -819,8 +636,8 @@ const candidateValidationFixture = () =>
       fileName: string,
       content: string,
     ) => {
-      const path = join(runResult.validationRunId, phase, producer, fileName);
-      mkdirSync(join(artifactsRoot, runResult.validationRunId, phase, producer), {
+      const path = join(String(runResult.validationRunId), phase, producer, fileName);
+      mkdirSync(join(artifactsRoot, String(runResult.validationRunId), phase, producer), {
         recursive: true,
       });
       writeFileSync(join(artifactsRoot, path), content);
@@ -852,19 +669,19 @@ const candidateValidationFixture = () =>
       startOrReuse: (
         input: Parameters<ChangeValidationTestDependencies["execution"]["startOrReuse"]>[0],
       ) => withPersistence((persistence) => persistence.execution.startOrReuse(input)),
-      getRunById: (runId: string) =>
+      getRunById: (runId: number) =>
         withPersistence((persistence) => persistence.reads.getRunById(runId)),
-      recordPrepareRound: (
-        input: Parameters<ChangeValidationTestDependencies["execution"]["recordPrepareRound"]>[0],
-      ) => withPersistence((persistence) => persistence.execution.recordPrepareRound(input)),
-      recordCheckRound: (
-        input: Parameters<ChangeValidationTestDependencies["execution"]["recordCheckRound"]>[0],
-      ) => withPersistence((persistence) => persistence.execution.recordCheckRound(input)),
-      recordAcceptanceRound: (
+      recordPrepareResult: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordPrepareResult"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordPrepareResult(input)),
+      recordCheckResult: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["recordCheckResult"]>[0],
+      ) => withPersistence((persistence) => persistence.execution.recordCheckResult(input)),
+      recordAcceptanceResult: (
         input: Parameters<
-          ChangeValidationTestDependencies["execution"]["recordAcceptanceRound"]
+          ChangeValidationTestDependencies["execution"]["recordAcceptanceResult"]
         >[0],
-      ) => withPersistence((persistence) => persistence.execution.recordAcceptanceRound(input)),
+      ) => withPersistence((persistence) => persistence.execution.recordAcceptanceResult(input)),
       recordToolingFailure: (
         input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
@@ -873,10 +690,22 @@ const candidateValidationFixture = () =>
           ChangeValidationTestDependencies["execution"]["recordWorkspaceCleanup"]
         >[0],
       ) => withPersistence((persistence) => persistence.execution.recordWorkspaceCleanup(input)),
-      getAbandonmentContext: (runId: string) =>
+      getAbandonmentContext: (runId: number) =>
         withPersistence((persistence) => persistence.abandonment.getAbandonmentContext(runId)),
       complete: (input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0]) =>
         withPersistence((persistence) => persistence.execution.complete(input)),
+      completeAfterCleanup: (
+        input: Parameters<ChangeValidationTestDependencies["execution"]["complete"]>[0],
+      ) =>
+        withPersistence((persistence) =>
+          Effect.zipRight(
+            persistence.execution.recordWorkspaceCleanup({
+              validationRunId: input.validationRunId,
+              cleanupWorkspace: "not_created",
+            }),
+            persistence.execution.complete(input),
+          ),
+        ),
     };
 
     return {

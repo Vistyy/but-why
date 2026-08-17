@@ -5,18 +5,17 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export type StoredCandidateRow = {
-  readonly id: string;
+  readonly id: number;
   readonly changeId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
-  readonly createdAt: string;
 };
 
 type CandidateOwnerRow = StoredCandidateRow & { readonly storedChangeId: number | null };
 
 export const candidateReadColumns = `
-  candidate.id, candidate.change_id AS changeId, candidate.change_base_sha AS changeBaseSha,
-  candidate.head_sha AS headSha, candidate.created_at AS createdAt
+  candidate.id, candidate.change_id AS changeId, candidate.base_commit AS changeBaseSha,
+  candidate.head_commit AS headSha
 `;
 
 export const decodeCandidate = (row: StoredCandidateRow, idPrefix: string): CandidateRecord => ({
@@ -24,12 +23,11 @@ export const decodeCandidate = (row: StoredCandidateRow, idPrefix: string): Cand
   changeId: publicChangeId(idPrefix, row.changeId),
   changeBaseSha: row.changeBaseSha,
   headSha: row.headSha,
-  createdAt: row.createdAt,
 });
 
 export const readCandidateById = (
   sql: SqlClient.SqlClient,
-  candidateId: string,
+  candidateId: number,
   operationName: string,
   idPrefix: string,
 ) =>
@@ -59,10 +57,11 @@ export const readCurrentCandidateForChange = (
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<CandidateOwnerRow>(
       `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
-       FROM current_candidates AS selection
-       JOIN candidates AS candidate ON candidate.id = selection.candidate_id
+       FROM candidates AS candidate
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE selection.change_id = ?`,
+       WHERE candidate.change_id = ?
+       ORDER BY candidate.id DESC
+       LIMIT 1`,
       [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
@@ -82,18 +81,17 @@ export const readCandidatesForChange = (
       `SELECT ${candidateReadColumns}, change_row.id AS storedChangeId
        FROM candidates AS candidate
        LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-       WHERE candidate.change_id = ?`,
+       WHERE candidate.change_id = ?
+       ORDER BY candidate.id`,
       [internalChangeId(changeId, idPrefix)],
     );
     return yield* decodePersisted(operationName, () =>
-      rows
-        .map((row) => decodeOwnedCandidate(row, idPrefix, changeId))
-        .sort(compareCandidatesAscending),
+      rows.map((row) => decodeOwnedCandidate(row, idPrefix, changeId)),
     );
   });
 
 export const compareCandidatesAscending = (left: CandidateRecord, right: CandidateRecord): number =>
-  compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id);
+  left.id - right.id;
 
 const decodeOwnedCandidate = (
   row: CandidateOwnerRow,
@@ -110,6 +108,3 @@ const decodeOwnedCandidate = (
   }
   return candidate;
 };
-
-const compareStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;

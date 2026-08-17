@@ -11,7 +11,7 @@ import {
 } from "../../cliResults.js";
 import { notFound, type ValidationRunCommandEnvironment } from "./validationRunSupport.js";
 export const runAbandonCommand = (
-  command: { readonly validationRunId: string; readonly reason: string },
+  command: { readonly validationRunId: number; readonly reason: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   if (command.reason.trim().length === 0)

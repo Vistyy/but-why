@@ -41,7 +41,7 @@ const removeChangeArtifactContent = (
 const removeValidationRunContent = (
   fileSystem: FileSystem.FileSystem,
   artifactsRoot: string,
-  validationRunId: string,
+  validationRunId: number,
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const target = yield* Effect.try(() => safeArtifactDirectory(artifactsRoot, validationRunId));
@@ -49,9 +49,9 @@ const removeValidationRunContent = (
     return true;
   }).pipe(Effect.orElseSucceed(() => false));
 
-const safeArtifactDirectory = (artifactsRoot: string, validationRunId: string): string => {
+const safeArtifactDirectory = (artifactsRoot: string, validationRunId: number): string => {
   const root = resolve(artifactsRoot);
-  const resolved = resolve(root, validationRunId);
+  const resolved = resolve(root, String(validationRunId));
   const fromRoot = relative(root, resolved);
   if (
     fromRoot.length === 0 ||

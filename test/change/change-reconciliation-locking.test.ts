@@ -18,7 +18,7 @@ const terminalChange = (
   state: "closed",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: `refs/heads/${id}`,
-  worktreePath: null,
+  worktreePath: `/repo/${id}`,
   publication: null,
   cleanup,
   remoteChangeBranch: null,

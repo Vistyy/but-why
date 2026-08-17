@@ -11,14 +11,13 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   branchRef: "refs/heads/but-why/by-197-change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
-  startingCommit: "1111111111111111111111111111111111111111",
   worktreePath: "/repo-worktrees/but-why/by-197-change-1",
   acceptanceContext: {
     version: 1,
     title: "Accepted title",
     description: "Accepted description",
   },
-  reviewerConfiguration: null,
+  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
   prepare: { command: "prepare repository", timeoutSeconds: 17 },
   prepareFailure,
   state: "open",
@@ -32,7 +31,6 @@ describe("Change lifecycle CLI results", () => {
         change: { id: "change-1", taskId: "BY-197" },
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
-        startingCommit: "1111111111111111111111111111111111111111",
         worktreePath: "/repo-worktrees/but-why/by-197-change-1",
       },
     });
@@ -45,7 +43,6 @@ describe("Change lifecycle CLI results", () => {
         change: { id: "change-1", taskId: null },
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
-        startingCommit: "1111111111111111111111111111111111111111",
         worktreePath: "/repo-worktrees/but-why/by-197-change-1",
       },
     });

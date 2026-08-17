@@ -28,8 +28,6 @@ const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValu
     id: task.id,
     title: task.title,
     state: task.state,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
   }));
 
 const createTaskHelp = 'Run `by task create --title "..." --file <path|->` to create a task.';

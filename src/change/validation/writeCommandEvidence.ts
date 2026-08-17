@@ -1,12 +1,12 @@
 import type { PlatformError } from "@effect/platform/Error";
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
-import type { RecordCandidateValidationCommandRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { RecordCandidateValidationPhaseResultInput } from "../candidateValidation/candidateValidationRunStore.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import type { ValidationPhase } from "../validationRun/validationRun.js";
 
 export type ValidationCommandArtifacts = {
-  readonly artifactRecords: readonly RecordCandidateValidationCommandRoundInput["artifactRecords"][number][];
+  readonly artifactRecords: readonly RecordCandidateValidationPhaseResultInput["artifactRecords"][number][];
   readonly artifactRefs: readonly string[];
 };
 
@@ -26,7 +26,7 @@ const artifactFileNames = [
 ] as const;
 
 export const writeCommandEvidence = (input: {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly commandResult: ValidationCommandEvidence;
@@ -93,7 +93,7 @@ export const writeCommandEvidence = (input: {
   });
 
 const artifactRef = (
-  validationRunId: string,
+  validationRunId: number,
   phase: ValidationPhase,
   producer: string,
   fileName: string,

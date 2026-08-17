@@ -192,7 +192,7 @@ const submitFreshTaskReview = <A, E, R>(
       Effect.flatMap(({ admission, persistence, agentPersistence }) =>
         openTaskReviewUseCases({
           mainCheckoutRoot: context.mainCheckoutRoot,
-          reviewerSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
+          agentSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
           loadRepoConfig: (commit) => {
             const source = readRepositoryFileAtCommit(
               context.mainCheckoutRoot,

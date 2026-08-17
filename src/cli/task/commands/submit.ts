@@ -128,6 +128,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               path: result.review.workspacePath,
               cleanup: result.review.workspaceCleanup,
             },
+            toolingFailure: result.review.toolingFailure,
           },
         },
         help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],

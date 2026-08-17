@@ -177,13 +177,13 @@ const preparePiSession = (input: ReviewerProcessInput): void => {
   const lines = content.split("\n");
   const firstLine = lines[0];
   if (firstLine === undefined || firstLine === "") {
-    throw new Error("Reviewer Session header is missing.");
+    throw new Error("Agent Session header is missing.");
   }
-  const entry = decodeJsonlObject(firstLine, "Reviewer Session JSONL is corrupt.");
-  if (!isPiSessionRecord(entry)) throw new Error("Reviewer Session header is missing.");
+  const entry = decodeJsonlObject(firstLine, "Agent Session JSONL is corrupt.");
+  if (!isPiSessionRecord(entry)) throw new Error("Agent Session header is missing.");
   const header = decodePiSessionHeader(entry);
   if (header?.id !== input.resumeSession) {
-    throw new Error("Reviewer Session header is incompatible.");
+    throw new Error("Agent Session header is incompatible.");
   }
   lines[0] = JSON.stringify({ ...header, cwd: input.commandCwd });
   const rewritten = lines.join("\n");
@@ -302,7 +302,7 @@ const requiredResumeSessionFilePath = (input: ReviewerProcessInput): string => {
 const validateContainedSessionFile = (root: string, path: string): void => {
   const rootStat = statSync(root);
   if (!rootStat.isDirectory()) {
-    throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
+    throw new Error(`Agent Session storage root "${root}" is not a directory.`);
   }
   const canonicalRoot = realpathSync(root);
   let canonicalPath: string;
@@ -394,11 +394,9 @@ const reviewerProcessExecutionFailed = (
     sessionUsability:
       /^resumeSession ".+" (?:has no persisted transcript path|not found)/m.test(message) ||
       /^resumeSession transcript ".+" (?:is outside |not found\.)/m.test(message) ||
-      /^Multiple Reviewer Session transcripts have id /m.test(message) ||
+      /^Multiple Agent Session transcripts have id /m.test(message) ||
       /^Session resume failed:/m.test(message) ||
-      /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
-        message,
-      ) ||
+      /^Agent Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(message) ||
       /No session found matching/m.test(message)
         ? "unusable"
         : "unknown",

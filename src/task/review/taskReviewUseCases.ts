@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
@@ -23,7 +22,6 @@ import type {
   ExactDisposableWorkspaceCleanupInput,
   ExactDisposableWorkspaceCleanupResult,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import {
@@ -59,7 +57,7 @@ export type TaskReviewSubmitResult =
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
+  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: number }
   | { readonly ok: false; readonly code: "review_base_unavailable"; readonly message: string }
   | { readonly ok: false; readonly code: "task_review_config_invalid"; readonly message: string }
   | {
@@ -92,7 +90,7 @@ export type TaskReviewIdentityInspection =
 
 export type TaskReviewInspectionUseCases = {
   readonly getById: (
-    reviewId: string,
+    reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
   readonly getLatestForTask: (
     taskId: PublicTaskId,
@@ -110,7 +108,7 @@ export type TaskReviewInspectionUseCases = {
 
 export type TaskReviewRecoveryUseCases = {
   readonly abandon: (
-    reviewId: string,
+    reviewId: number,
     reason: string,
     now: string,
   ) => Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError>;
@@ -155,7 +153,7 @@ export const openTaskReviewUseCases = (input: {
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly admission?: TaskReviewAdmissionPersistence;
-  readonly reviewerSessionStorageRoot: string;
+  readonly agentSessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
@@ -230,18 +228,15 @@ const submitTaskReview = (
         message: resolvedPolicy.message,
       } as const;
     }
-    const reviewId = randomUUID();
-    const workspacePath = expectedDisposableWorkspacePath(input.mainCheckoutRoot, reviewId);
     const admitted = yield* admission.admit({
-      reviewId,
       taskId,
       policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
-      workspacePath,
       now,
     });
     if (!admitted.ok) return admitted;
+    const reviewId = admitted.review.id;
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
     let taskReviewEvidence: ReviewerExecutionEvidence | undefined;
@@ -251,7 +246,7 @@ const submitTaskReview = (
       run: Effect.gen(function* () {
         const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
           repoRoot: input.mainCheckoutRoot,
-          workspaceId: reviewId,
+          workspaceId: String(reviewId),
           commitSha: base.base.commit,
           copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
           runInWorkspace: (active) =>
@@ -317,9 +312,9 @@ const submitTaskReview = (
                       }),
                   ),
                 );
-              const reviewerSessionId = yield* input.persistence.getReviewerAgentSession(taskId);
+              const agentSessionId = yield* input.persistence.getReviewerAgentSession(taskId);
               const execution = yield* executeAgentSession({
-                ...(reviewerSessionId === undefined ? {} : { agentSessionId: reviewerSessionId }),
+                ...(agentSessionId === undefined ? {} : { agentSessionId }),
                 configuration: agentConfiguration(resolvedPolicy.policy.profile),
                 agentPersistence: input.agentPersistence,
                 linkInvocation: input.persistence.linkAgentInvocation({
@@ -342,7 +337,7 @@ const submitTaskReview = (
                 resourceRoot: active.worktreePath,
                 profile: resolvedPolicy.policy.profile,
                 reviewer: "task",
-                sessionStorageRoot: input.reviewerSessionStorageRoot,
+                sessionStorageRoot: input.agentSessionStorageRoot,
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {
@@ -514,7 +509,7 @@ export const inspectTaskReviewIdentity = (
     if (!base.ok) return { verified: false, message: base.message } as const;
     const workspace = yield* input.inspectWorkspace(
       input.mainCheckoutRoot,
-      review.id,
+      String(review.id),
       review.baseCommit,
       review.workspacePath,
     );
@@ -536,7 +531,7 @@ export const abandonTaskReview = (
       cleanup: ExactDisposableWorkspaceCleanupInput,
     ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },
-  reviewId: string,
+  reviewId: number,
   reason: string,
   now: string,
 ): Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError> =>
@@ -570,7 +565,7 @@ const buildTaskReviewContinuationPrompt = (input: {
   readonly currentPrompt: string;
 }): string =>
   [
-    "Continue the compatible Task Reviewer Session with the complete current proposal below.",
+    "Continue the compatible Task Agent Session with the complete current proposal below.",
     "Deterministic proposal diff from the most recent prior Review:",
     JSON.stringify({
       previous: input.previousProposal ?? null,

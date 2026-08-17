@@ -85,8 +85,8 @@ export const withChangeStart = <A, E, R>(
             const git: ChangeStartGitOperations = {
               resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(context.root, change, recovering),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(context.root, change, recovering, startingCommit),
             };
             if (command.taskId !== undefined) {
               return yield* taskStart(command);
@@ -137,8 +137,8 @@ export const withChangePrepare = <A, E, R>(
             {
               resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(context.root, change, recovering),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(context.root, change, recovering, startingCommit),
             },
             executeLocalRepositoryPreparation,
             changeId,

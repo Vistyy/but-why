@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { AgentSessionPersistence } from "../../src/agent/agentSession/agentSession.js";
-import type { ChangeReviewerSessionPort } from "../../src/change/changePorts.js";
+import type { ChangeAgentSessionPort } from "../../src/change/changePorts.js";
 import type {
   ActiveValidationRunPort,
   CandidateValidationExecutionPort,
@@ -11,7 +11,7 @@ import type {
 import { openSqliteActiveValidationRunPort } from "../../src/sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateValidationExecutionPort } from "../../src/sqlite/sqliteCandidateValidationExecutionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../src/sqlite/sqliteChangeReviewerSessionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../src/sqlite/sqliteChangeValidationReadPersistence.js";
 import { openSqliteValidationArtifactLifecyclePort } from "../../src/sqlite/sqliteValidationArtifactLifecyclePersistence.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
@@ -19,7 +19,7 @@ import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteV
 export const openSqliteChangeValidationTestDependencies = () =>
   Effect.all({
     agentPersistence: openSqliteAgentSessionPersistence(),
-    reviewerSessions: openSqliteChangeReviewerSessionPort(),
+    agentSessions: openSqliteChangeAgentSessionPort(),
     active: openSqliteActiveValidationRunPort(),
     execution: openSqliteCandidateValidationExecutionPort(),
     reads: openSqliteChangeValidationReadPort(),
@@ -29,7 +29,7 @@ export const openSqliteChangeValidationTestDependencies = () =>
 
 export type ChangeValidationTestDependencies = {
   readonly agentPersistence: AgentSessionPersistence;
-  readonly reviewerSessions: ChangeReviewerSessionPort;
+  readonly agentSessions: ChangeAgentSessionPort;
   readonly active: ActiveValidationRunPort;
   readonly execution: CandidateValidationExecutionPort;
   readonly reads: ChangeValidationReadPort;

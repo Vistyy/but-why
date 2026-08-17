@@ -54,7 +54,7 @@ export const settleTaskReviewEvidence = (
     }
 
     const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: review.id,
+      workspaceId: String(review.id),
       expectedCommitSha: review.baseCommit,
       recordedWorktreePath: review.workspacePath,
     });
@@ -101,7 +101,7 @@ const settlementFailed = (
     const current = yield* persistence.getById(review.id);
     return {
       ok: false,
-      review: current ?? { ...review, toolingFailure: failure, updatedAt: now },
+      review: current ?? { ...review, toolingFailure: failure },
       message: failure.message,
     } as const;
   });

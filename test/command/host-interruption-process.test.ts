@@ -20,7 +20,7 @@ describe("host interruption process boundary", () => {
     const childPidPath = join(root, "child-pid");
     const sessionsRoot = join(root, "sessions");
     mkdirSync(sessionsRoot);
-    const sessionPath = join(sessionsRoot, "reviewer-session.jsonl");
+    const sessionPath = join(sessionsRoot, "pi-session.jsonl");
     const executable = startTestProcess(process.execPath, ["--import", tsxLoader, helper], {
       cwd: root,
       env: {

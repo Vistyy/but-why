@@ -34,7 +34,7 @@ describe("Change Candidate capture orchestration", () => {
             return {
               ok: true as const,
               changeId: "change-1",
-              candidateId: "candidate-1",
+              candidateId: 1,
               reused: false,
             };
           }),
@@ -70,7 +70,7 @@ describe("Change Candidate capture orchestration", () => {
       expect(result).toEqual({
         ok: true,
         changeId: "change-1",
-        candidateId: "candidate-1",
+        candidateId: 1,
         branchRef: "refs/heads/feature",
         changeBaseSha: "fetched-target",
         headSha: "head",
@@ -86,7 +86,7 @@ describe("Change Candidate capture orchestration", () => {
         id: "change-1",
         repositoryCommonDirectory: "/repo/.git",
         branchRef: "refs/heads/original",
-        baseRef: null,
+        baseRef: "refs/remotes/origin/main",
         state: "open",
       };
       const destination: CandidateCaptureChange = {
@@ -147,7 +147,7 @@ describe("Change Candidate capture orchestration", () => {
             return Effect.succeed({
               ok: true,
               changeId: "change-1",
-              candidateId: "candidate-1",
+              candidateId: 1,
               reused: false,
             } as const);
           },

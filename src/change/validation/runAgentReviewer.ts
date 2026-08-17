@@ -43,10 +43,9 @@ export type TranslatedReviewerResult<Output> =
     });
 
 export type RunAgentReviewerInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
-  readonly roundNumber: number;
   readonly reviewer: string;
   readonly agentSessionId?: number;
   readonly configuration: AgentSessionConfiguration;
@@ -74,9 +73,9 @@ export type RunAgentReviewerInput = {
   readonly now: string;
   readonly makeFindings: (
     result: TranslatedReviewerResult<ReviewerOutput>,
-  ) => readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
-  readonly settleAgentInvocationRound: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationRound"]
+  ) => readonly ValidationRunFindingRecord[];
+  readonly settleAgentInvocationResult: NonNullable<
+    CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
 };
 
@@ -128,12 +127,11 @@ export const runAgentReviewer = (
           );
           if (integrity._tag === "Left") {
             persistedToolingFailure = integrity.left;
-            return input.settleAgentInvocationRound({
+            return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              roundNumber: input.roundNumber,
-              roundStatus: "failed",
+              outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
@@ -161,12 +159,11 @@ export const runAgentReviewer = (
           );
           if (!artifacts.ok) {
             persistedToolingFailure = artifacts.failure;
-            return input.settleAgentInvocationRound({
+            return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
               producer: input.producer,
-              roundNumber: input.roundNumber,
-              roundStatus: "failed",
+              outcome: "failed",
               findings: [],
               artifactRecords: [],
               toolingFailure: {
@@ -177,12 +174,11 @@ export const runAgentReviewer = (
             });
           }
 
-          return input.settleAgentInvocationRound({
+          return input.settleAgentInvocationResult({
             validationRunId: input.validationRunId,
             phase: input.phase,
             producer: input.producer,
-            roundNumber: input.roundNumber,
-            roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+            outcome: result.ok && findings.length === 0 ? "passed" : "failed",
             findings,
             artifactRecords: artifacts.artifactRecords,
             now: input.now,

@@ -1,6 +1,5 @@
 import type { PiAgentProfileConfig, PiRuntimeConfig } from "../../../contracts/agentConfig.js";
 import type {
-  TaskReviewExecution,
   TaskReviewPolicySnapshot,
   TaskReviewRecord,
 } from "../../../task/review/taskReview.js";
@@ -14,11 +13,7 @@ export const taskReviewHistoryView = (review: TaskReviewRecord) => ({
   toolingFailure:
     review.toolingFailure === null ? null : { operation: review.toolingFailure.operation },
   workspaceCleanup: review.workspaceCleanup,
-  ...(hasAgentEvidence(review)
-    ? { agentInvocationCount: review.agentInvocations?.length ?? 0 }
-    : { sessionCount: review.sessions.length, transcriptCount: review.transcripts.length }),
-  createdAt: review.createdAt,
-  updatedAt: review.updatedAt,
+  agentInvocationCount: review.agentInvocations?.length ?? 0,
   nextActions: [`Run \`by task-review show ${review.id}\` to inspect this Review.`],
 });
 
@@ -34,16 +29,18 @@ export const taskReviewView = (
   proposal: review.proposal,
   proposalCurrent: proposalCurrent ?? null,
   dependencyEvidence: review.dependencyEvidence,
-  ...(hasAgentEvidence(review)
-    ? {
-        reviewerConfiguration:
-          review.reviewerConfiguration === undefined
-            ? null
-            : taskReviewPolicyView(review.reviewerConfiguration),
-      }
-    : { policy: taskReviewPolicyView(review.policy) }),
+  reviewerConfiguration:
+    review.reviewerConfiguration === undefined
+      ? review.policy === undefined
+        ? null
+        : taskReviewPolicyView(review.policy)
+      : taskReviewPolicyView(review.reviewerConfiguration),
   reviewBase: { ref: review.baseRef, commit: review.baseCommit },
-  workspace: { path: review.workspacePath, cleanup: review.workspaceCleanup },
+  workspace: {
+    path: review.workspacePath,
+    cleanup: review.workspaceCleanup,
+    blockingReason: review.cleanupBlockingReason,
+  },
   ...(identity === undefined ? {} : { identity }),
   findings: review.findings,
   findingCount: review.findings.length,
@@ -56,6 +53,7 @@ export const taskReviewView = (
         },
   recovery: {
     workspaceCleanup: review.workspaceCleanup,
+    blockingReason: review.cleanupBlockingReason,
     failedOperation: review.toolingFailure?.operation ?? null,
     nextActions: taskReviewRecoveryActions(review, identity),
   },
@@ -63,30 +61,7 @@ export const taskReviewView = (
     id: review.agentSessionId ?? null,
     invocations: review.agentInvocations ?? [],
   },
-  ...(hasAgentEvidence(review)
-    ? {}
-    : { sessions: review.sessions, transcripts: review.transcripts }),
-  legacyReviewerEvidence: {
-    classification: "legacy",
-    legacyTaskReviewerSession: review.legacyTaskReviewerSession ?? null,
-    sessions: review.sessions,
-    transcripts: review.transcripts,
-    ...legacyPendingExecutions(review.toolingFailure),
-  },
-  abandonReason: review.abandonReason,
-  createdAt: review.createdAt,
-  updatedAt: review.updatedAt,
 });
-
-const hasAgentEvidence = (review: TaskReviewRecord): boolean =>
-  review.agentSessionId !== undefined || review.agentInvocations !== undefined;
-
-const legacyPendingExecutions = (
-  failure: TaskReviewRecord["toolingFailure"],
-): { readonly pendingExecutions?: readonly TaskReviewExecution[] } =>
-  failure !== null && "pendingExecution" in failure
-    ? { pendingExecutions: [failure.pendingExecution] }
-    : {};
 
 const taskReviewRecoveryActions = (
   review: TaskReviewRecord,

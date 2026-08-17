@@ -268,7 +268,7 @@ const taskReviewsCommand = withCliHandler(
 );
 const taskReviewShowCommand = withCliHandler(
   leaf("show", "Inspect one exact Task Review and its recovery state.", {
-    reviewId: Args.text({ name: "review-id" }),
+    reviewId: Args.integer({ name: "review-id" }),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/review.js")).pipe(
@@ -279,7 +279,7 @@ const taskReviewShowCommand = withCliHandler(
 );
 const taskReviewAbandonCommand = withCliHandler(
   leaf("abandon", "Clean and abandon one exact Active Task Review.", {
-    reviewId: Args.text({ name: "review-id" }),
+    reviewId: Args.integer({ name: "review-id" }),
     reason: Options.text("reason"),
   }),
   (values, environment) =>
@@ -634,7 +634,7 @@ changeCommand = group(
 
 const validationRunShowCommand = withCliHandler(
   leaf("show", "Show Validation Run policy and recorded evidence.", {
-    validationRunId: Args.text({ name: "validation-run-id" }),
+    validationRunId: Args.integer({ name: "validation-run-id" }),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/validationRun/show.js")).pipe(
@@ -645,7 +645,7 @@ const validationRunShowCommand = withCliHandler(
 );
 const validationRunAbandonCommand = withCliHandler(
   leaf("abandon", "Explicitly abandon an interrupted Validation Run.", {
-    validationRunId: Args.text({ name: "validation-run-id" }),
+    validationRunId: Args.integer({ name: "validation-run-id" }),
     reason: Options.text("reason"),
   }),
   (values, environment) =>
@@ -663,7 +663,7 @@ const validationRunAbandonCommand = withCliHandler(
 );
 const validationRunArtifactCommand = withCliHandler(
   leaf("artifact", "Show complete stored Artifact content.", {
-    validationRunId: Args.text({ name: "validation-run-id" }),
+    validationRunId: Args.integer({ name: "validation-run-id" }),
     artifactRef: Args.text({ name: "artifact-ref" }),
   }),
   (values, environment) =>

@@ -61,21 +61,21 @@ const currentPolicy = {
   ],
 };
 
-const malformedPolicyRuns: readonly { readonly id: string; readonly policyJson: string }[] = [
-  { id: "run-bad-syntax", policyJson: '{"checks":' },
-  { id: "run-missing-checks", policyJson: '{"copyFiles":[]}' },
-  { id: "run-bad-container", policyJson: '{"checks":{},"copyFiles":[]}' },
+const malformedPolicyRuns: readonly { readonly id: number; readonly policyJson: string }[] = [
+  { id: 101, policyJson: '{"checks":' },
+  { id: 102, policyJson: '{"copyFiles":[]}' },
+  { id: 103, policyJson: '{"checks":{},"copyFiles":[]}' },
   {
-    id: "run-bad-nested-type",
+    id: 104,
     policyJson: '{"checks":[{"id":"types","command":"true","timeoutSeconds":"30"}],"copyFiles":[]}',
   },
   {
-    id: "run-bad-choice",
+    id: 105,
     policyJson:
       '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"bogus","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}',
   },
   {
-    id: "run-pre-current-fields",
+    id: 106,
     policyJson:
       '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"repo","agentProfile":"a","profileScope":"repo","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}',
   },
@@ -83,23 +83,38 @@ const malformedPolicyRuns: readonly { readonly id: string; readonly policyJson: 
 
 const insertPolicyRun = (
   sql: SqlClient.SqlClient,
-  candidateId: string,
-  id: string,
+  candidateId: number,
+  id: number,
   policyJson: string,
 ) => sql`
-  INSERT INTO candidate_validation_runs (
-    id, candidate_id, policy_snapshot, implementation_decisions,
-    latest_resolved_blocker_id, state, outcome, created_at, updated_at
-  ) VALUES (
-    ${id}, ${candidateId}, ${policyJson}, '[]', NULL, 'complete', 'passed',
-    '2026-07-25T16:00:00.000Z', '2026-07-25T16:00:00.000Z'
-  )
+  INSERT INTO validation_runs (
+    id, candidate_id, policy_snapshot, outcome, cleanup_pending
+  ) VALUES (${id}, ${candidateId}, ${policyJson}, 'passed', 0)
 `;
+
+const createCandidateOwningChange = (branchRef: string) =>
+  Effect.gen(function* () {
+    const repository = yield* RepositorySql;
+    yield* repository.operation(
+      "create Candidate-owning Change",
+      (sql) => sql`
+      INSERT INTO changes (
+        branch_ref, base_ref, base_remote_url, worktree_path,
+        reviewer_configuration, cleanup_pending
+      ) VALUES (
+        ${branchRef}, 'refs/remotes/origin/main',
+        'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
+        '{"acceptanceReview":null,"specialistReviews":[]}', 0
+      )
+    `,
+    );
+  });
 
 describe("SQLite Candidate Validation Policy Snapshot decode", () => {
   it.scoped("decodes a current Validation Policy Snapshot written by But Why", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
+        yield* createCandidateOwningChange("refs/heads/feature");
         const capture = yield* openSqliteCandidateCapturePersistence();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const captured = yield* capture.commitCapture({
@@ -131,7 +146,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           "read stored Validation Policy Snapshot text",
           (sql) => sql<{ readonly policySnapshot: string }>`
             SELECT policy_snapshot AS policySnapshot
-            FROM candidate_validation_runs
+            FROM validation_runs
             WHERE id = ${started.validationRunId}
           `,
         );
@@ -145,6 +160,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
   it.scoped("rejects an excess policy field before inserting any Validation Run", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
+        yield* createCandidateOwningChange("refs/heads/feature");
         const capture = yield* openSqliteCandidateCapturePersistence();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;
@@ -182,13 +198,13 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
         const runs = yield* repository.operation(
           "count Validation Runs after rejected excess-field policy",
           (sql) => sql<{ readonly count: number }>`
-            SELECT COUNT(*) AS count FROM candidate_validation_runs
+            SELECT COUNT(*) AS count FROM validation_runs
           `,
         );
         const activeRuns = yield* repository.operation(
           "count Active Validation Runs after rejected excess-field policy",
           (sql) => sql<{ readonly count: number }>`
-            SELECT COUNT(*) AS count FROM active_validation_runs
+            SELECT COUNT(*) AS count FROM validation_runs WHERE outcome IS NULL
           `,
         );
         expect(runs[0]?.count ?? -1).toBe(0);
@@ -200,6 +216,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
   it.scoped("rejects malformed persisted Validation Policy Snapshots at the SQLite boundary", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
+        yield* createCandidateOwningChange("refs/heads/feature");
         const capture = yield* openSqliteCandidateCapturePersistence();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         const repository = yield* RepositorySql;

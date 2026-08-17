@@ -256,7 +256,7 @@ describe("packaged Change Implement continuation extension", () => {
       snapshot({
         currentCandidate: { id: "candidate-2", headSha: "head" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -768,7 +768,7 @@ describe("packaged Change Implement continuation extension", () => {
         currentCandidate: { id: "candidate-1", headSha: "head" },
         currentValidationRun: { id: "run-1", state: "complete" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -796,7 +796,7 @@ describe("packaged Change Implement continuation extension", () => {
       snapshot({
         currentCandidate: { id: "candidate-2", headSha: "head" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -813,7 +813,7 @@ describe("packaged Change Implement continuation extension", () => {
         currentCandidate: { id: "candidate-2", headSha: "head" },
         currentValidationRun: { id: "run-2", state: "running" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -947,7 +947,7 @@ describe("packaged Change Implement continuation extension", () => {
     ["integer Tooling Failure count", snapshot({ toolingFailureCount: 0.5 }), undefined],
     [
       "publication identity",
-      snapshot({ publication: { candidateId: "candidate-1", pullRequest: null } }),
+      snapshot({ publication: { candidateId: 1, pullRequest: null } }),
       undefined,
     ],
     ["JSON object", undefined, { blockers: [], resolutions: [], active: [] }],

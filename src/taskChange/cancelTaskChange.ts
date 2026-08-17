@@ -73,7 +73,7 @@ export type TaskCancellationResult =
         | "submission_in_progress"
         | "active_validation_run";
       readonly taskId: PublicTaskId;
-      readonly validationRunId?: string;
+      readonly validationRunId?: number;
       readonly evidence?: PublicationFailureEvidence;
       readonly recoveryEvidence?: PublicationFailureEvidence;
     };
@@ -97,7 +97,7 @@ export type ChangeCancellationResult =
         | "submission_in_progress"
         | "active_validation_run";
       readonly changeId: string;
-      readonly validationRunId?: string;
+      readonly validationRunId?: number;
       readonly evidence?: PublicationFailureEvidence;
       readonly recoveryEvidence?: PublicationFailureEvidence;
     };

@@ -20,6 +20,7 @@ import {
   candidateRepositoryConfig,
   commonDirectory,
   git,
+  registerCandidateChange,
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { withTestRepository } from "../support/repository.js";
@@ -44,6 +45,7 @@ describe("Candidate validation", () => {
           candidateCheckout,
           "HEAD",
         );
+        registerCandidateChange(mainCheckout, "refs/heads/linked-candidate", candidateCheckout);
         const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
@@ -76,8 +78,8 @@ describe("Candidate validation", () => {
 
         expect(result).toMatchObject({ ok: true, outcome: "passed" });
         if (!result.ok) return;
-        expect(yield* validation.listRounds(result.validationRunId)).toEqual([
-          { producer: "reads-main-env", status: "passed" },
+        expect(yield* validation.listPhaseResults(result.validationRunId)).toEqual([
+          { producer: "reads-main-env", outcome: "passed" },
         ]);
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
       }),
@@ -100,6 +102,7 @@ describe("Candidate validation", () => {
           candidateCheckout,
           "HEAD",
         );
+        registerCandidateChange(mainCheckout, "refs/heads/linked-candidate", candidateCheckout);
         writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "candidate");
@@ -161,6 +164,7 @@ describe("Candidate validation", () => {
           candidateCheckout,
           "HEAD",
         );
+        registerCandidateChange(mainCheckout, "refs/heads/linked-candidate", candidateCheckout);
         writeFileSync(join(candidateCheckout, "candidate.txt"), "first\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "first candidate");
@@ -244,40 +248,6 @@ describe("Candidate validation", () => {
         expect(historicalCandidateError).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
 
-        const workspaces = yield* withTestRepository(
-          mainCheckout,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            return yield* repository.operation(
-              "inspect Snapshot Workspaces",
-              (sql) =>
-                sql<{
-                  readonly validationRunId: string;
-                  readonly submittedSha: string;
-                  readonly worktreePath: string;
-                }>`
-                SELECT validation_run_id AS validationRunId,
-                  expected_commit_sha AS submittedSha,
-                  workspace_path AS worktreePath
-                FROM candidate_snapshot_workspaces
-                ORDER BY created_at ASC, validation_run_id ASC
-              `,
-            );
-          }),
-        );
-        expect(workspaces).toHaveLength(2);
-        expect(workspaces.map(({ validationRunId }) => validationRunId)).toEqual(
-          expect.arrayContaining([firstResult.validationRunId, secondResult.validationRunId]),
-        );
-        const firstWorkspace = workspaces.find(
-          ({ submittedSha }) => submittedSha === first.headSha,
-        );
-        const secondWorkspace = workspaces.find(
-          ({ submittedSha }) => submittedSha === second.headSha,
-        );
-        expect(firstWorkspace?.validationRunId).toBe(firstResult.validationRunId);
-        expect(secondWorkspace?.validationRunId).toBe(secondResult.validationRunId);
-        expect(firstWorkspace?.worktreePath).not.toBe(secondWorkspace?.worktreePath);
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(second.headSha);
         expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
       }),
@@ -298,17 +268,16 @@ describe("Candidate validation", () => {
             repository.operation("install current Acceptance Context", (sql) =>
               Effect.gen(function* () {
                 yield* sql`
-                  INSERT INTO tasks (id, title, description, state, created_at, updated_at)
+                  INSERT INTO tasks (id, title, description, state)
                   VALUES (1, 'Validate the fixed Gate',
-                    'Run each eligible phase in its fixed order.', 'todo', ${now}, ${now})
+                    'Run each eligible phase in its fixed order.', 'todo')
                 `;
                 yield* sql`
-                  UPDATE changes SET acceptance_context = ${JSON.stringify({
+                  UPDATE changes SET initial_acceptance_context = ${JSON.stringify({
                     version: 1,
                     title: "Validate the fixed Gate",
                     description: "Run each eligible phase in its fixed order.",
-                  })}, base_remote_url = 'https://github.com/acme/repo.git',
-                    starting_commit = ${captured.changeBaseSha}, worktree_path = ${mainCheckout}
+                  })}, base_remote_url = 'https://github.com/acme/repo.git'
                   WHERE id = ${internalChangeId(captured.changeId, "BY")}
                 `;
                 yield* sql`
@@ -407,11 +376,11 @@ describe("Candidate validation", () => {
         expect(yield* validation.listFindings(result.validationRunId)).toEqual([
           expect.objectContaining({ producer: "standards", title: "Specialist Finding" }),
         ]);
-        expect(yield* validation.listRounds(result.validationRunId)).toEqual([
-          { producer: "prepare", status: "passed" },
-          { producer: "gate-check", status: "passed" },
-          { producer: "acceptance", status: "passed" },
-          { producer: "standards", status: "failed" },
+        expect(yield* validation.listPhaseResults(result.validationRunId)).toEqual([
+          { producer: "prepare", outcome: "passed" },
+          { producer: "gate-check", outcome: "passed" },
+          { producer: "acceptance", outcome: "passed" },
+          { producer: "standards", outcome: "failed" },
         ]);
         expect(git(mainCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
         expect(git(mainCheckout, "status", "--porcelain")).toBe("");

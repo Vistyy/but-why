@@ -36,7 +36,7 @@ Task inspection obtains its Change activity through the joined coordination proj
 The first supported relationship remains one Task to one Change and stores only their internal integer identities.
 Public Task and Change IDs derive from the immutable repository ID Prefix.
 
-The prerelease schema change is an immutable forward migration that copies existing valid links and rejects a linked Change without Acceptance Context.
+The release baseline stores only current links and does not convert prerelease relationship representations.
 
 Repository Runtime continues to provide transaction capability without knowing Task or Change behavior.
 

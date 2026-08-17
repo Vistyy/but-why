@@ -61,11 +61,12 @@ export const provisionChangeWorktree = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
+  startingCommit?: string,
 ): ProvisionChangeWorktreeResult => {
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
-  const branch = ensureRecordedBranch(cwd, start, recovering);
+  const branch = ensureRecordedBranch(cwd, start, recovering, startingCommit);
   if (!branch.ok) return branch;
 
   const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
@@ -136,6 +137,7 @@ const ensureRecordedBranch = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
+  startingCommit: string | undefined,
 ): ProvisionChangeWorktreeResult => {
   const branch = inspectRecordedBranch(cwd, start.branchRef);
   if (branch === "present") {
@@ -148,11 +150,11 @@ const ensureRecordedBranch = (
       code: "managed_branch_missing",
       branch: start.branchRef,
       path: start.worktreePath,
-      startingCommit: start.startingCommit,
     };
   }
+  if (startingCommit === undefined) return { ok: false, code: "git_tooling_error" };
   const branchName = start.branchRef.slice("refs/heads/".length);
-  const create = git(cwd, "branch", branchName, start.startingCommit);
+  const create = git(cwd, "branch", branchName, startingCommit);
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 

@@ -451,7 +451,7 @@ describe("Change cancellation", () => {
       task,
       change,
       pullRequest: pullRequest("closed", false),
-      activeValidationRunId: "run-active",
+      activeValidationRunId: 102,
       events,
     });
 
@@ -463,7 +463,7 @@ describe("Change cancellation", () => {
             ok: false,
             code: "active_validation_run",
             taskId: publicTaskId(task.id),
-            validationRunId: "run-active",
+            validationRunId: 102,
           });
           expect(events).toEqual(["read-task", "read-change"]);
           return result;
@@ -479,7 +479,7 @@ describe("Change cancellation", () => {
       task,
       change,
       pullRequest: pullRequest("closed", false),
-      activeValidationRunId: "run-active",
+      activeValidationRunId: 102,
       events,
     });
 
@@ -491,7 +491,7 @@ describe("Change cancellation", () => {
             ok: false,
             code: "active_validation_run",
             changeId: change.id,
-            validationRunId: "run-active",
+            validationRunId: 102,
           });
           expect(events).toEqual([]);
           return result;
@@ -715,8 +715,6 @@ const taskRecord = (state: TaskRecord["state"]): TaskRecord => ({
   title: "Cancel me",
   description: "Description",
   state,
-  createdAt: now,
-  updatedAt: now,
   startable: false,
   blockedBy: [],
   cancelReason: state === "cancelled" ? "Stop" : null,
@@ -731,9 +729,9 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationC
   baseRef: "refs/heads/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
   taskId,
-  startingCommit: "base",
-  worktreePath: null,
+  worktreePath: "/repo/worktree",
   acceptanceContext: null,
+  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
   prepare: null,
   prepareFailure: null,
   implementationDecisions: [],
@@ -748,8 +746,8 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationC
     expectedHeadSha: "head",
   },
   publication: {
-    candidateId: "candidate-1",
-    validationRunId: "run-1",
+    candidateId: 1,
+    validationRunId: 1,
     target,
     headBranch: "change-1",
     expectedHeadSha: "head",
@@ -759,9 +757,6 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord & CancellationC
   state: "open",
   closeReason: null,
   cancelReason: null,
-  createdAt: now,
-  updatedAt: now,
-  closedAt: null,
 });
 
 const pullRequest = (state: "open" | "closed", merged: boolean): GitHubPullRequest => ({
@@ -784,7 +779,7 @@ const cancellationDependencies = (input: {
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
   readonly cleanupRemoteBranches?: (object | null)[];
-  readonly activeValidationRunId?: string;
+  readonly activeValidationRunId?: number;
   readonly events: string[];
 }): CancellationDependencies & { readonly closePullRequestInputs: unknown[] } => {
   let currentTask = input.task;

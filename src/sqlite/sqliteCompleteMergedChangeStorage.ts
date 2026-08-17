@@ -1,32 +1,21 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { type ChangePublication, changeState } from "../change/change.js";
+import type { ChangePublication } from "../change/change.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { SqliteChangePublicationRow } from "./sqliteChangePublication.js";
 import {
   decodeChangePublication,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import { decodeChangeLifecycle } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import {
+  type StoredTerminalChangeRow,
+  terminalChangeSelectionColumns,
+} from "./sqliteTerminalChangeStorage.js";
 
 const operationName = "complete merged Change";
-const completeChangeSelectionColumns = `
-  id, state,
-  publication_candidate_id AS publicationCandidateId,
-  publication_validation_run_id AS publicationValidationRunId,
-  publication_owner AS publicationOwner, publication_repo AS publicationRepo,
-  publication_base_branch AS publicationBaseBranch,
-  publication_remote_name AS publicationRemoteName,
-  publication_head_branch AS publicationHeadBranch,
-  publication_expected_head_sha AS publicationExpectedHeadSha,
-  publication_pr_number AS publicationPrNumber,
-  publication_pr_url AS publicationPrUrl,
-  close_reason AS closeReason
-`;
 
 export const completeMergedChange = (
   sql: SqlClient.SqlClient,
@@ -36,7 +25,7 @@ export const completeMergedChange = (
   Effect.gen(function* () {
     const lifecycle = yield* readChangeLifecycle(sql, input.changeId, operationName, idPrefix);
     if (lifecycle === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (lifecycle.state === changeState.closed) {
+    if (lifecycle.state === "closed") {
       if (lifecycle.closeReason !== "completed") {
         return { ok: false as const, code: "change_already_closed" as const };
       }
@@ -47,7 +36,11 @@ export const completeMergedChange = (
     if (!matchesExactMergedEvidence(change, input.observed)) {
       return { ok: false as const, code: "publication_mismatch" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND state = 'open'`;
+    yield* sql`
+      UPDATE changes
+      SET close_reason = 'completed', cleanup_pending = 1, cleanup_blocking_reason = NULL
+      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND close_reason IS NULL
+    `;
     return { ok: true as const, changed: true };
   });
 
@@ -57,37 +50,44 @@ export const readChangeLifecycle = (
   selectedOperationName: string,
   idPrefix: string,
 ) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredChangeLifecycleRow>`
-      SELECT id, state, close_reason AS closeReason
+  Effect.flatMap(
+    sql<{ readonly id: number; readonly closeReason: string | null }>`
+      SELECT id, close_reason AS closeReason
       FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    return yield* decodePersisted(selectedOperationName, () => {
-      const id = publicChangeId(idPrefix, row.id);
-      if (id !== changeId) throw new Error("Change identity does not match lookup");
-      return { id, ...decodeChangeLifecycle(row) };
-    });
-  });
+    `,
+    (rows) =>
+      decodePersisted(selectedOperationName, () => {
+        const row = rows[0];
+        if (row === undefined) return undefined;
+        const id = publicChangeId(idPrefix, row.id);
+        if (id !== changeId) throw new Error("Change identity does not match lookup");
+        if (
+          row.closeReason !== null &&
+          row.closeReason !== "completed" &&
+          row.closeReason !== "cancelled"
+        ) {
+          throw new Error("Change close reason is unsupported");
+        }
+        return {
+          id,
+          state: row.closeReason === null ? ("open" as const) : ("closed" as const),
+          closeReason: row.closeReason,
+        };
+      }),
+  );
 
 const readCompleteChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {
-    const rows = yield* sql.unsafe<StoredCompleteChangeRow>(
-      `SELECT ${completeChangeSelectionColumns} FROM changes WHERE id = ?`,
+    const rows = yield* sql.unsafe<StoredTerminalChangeRow>(
+      `SELECT ${terminalChangeSelectionColumns} FROM changes WHERE id = ?`,
       [internalChangeId(changeId, idPrefix)],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
-    const selected = yield* decodePersisted(operationName, () => {
-      const id = publicChangeId(idPrefix, row.id);
-      if (id !== changeId) throw new Error("Change identity does not match lookup");
-      return {
-        id,
-        ...decodeChangeLifecycle(row),
-        publication: decodeChangePublication(row),
-      };
-    });
+    const selected = yield* decodePersisted(operationName, () => ({
+      id: publicChangeId(idPrefix, row.id),
+      publication: decodeChangePublication(row),
+    }));
     yield* validateChangePublicationRelationships(
       sql,
       selected.id,
@@ -120,10 +120,3 @@ const matchesExactMergedEvidence = (
 
 const invalidData = (message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-type StoredChangeLifecycleRow = {
-  readonly id: number;
-  readonly state: unknown;
-  readonly closeReason: unknown;
-};
-type StoredCompleteChangeRow = StoredChangeLifecycleRow & SqliteChangePublicationRow;

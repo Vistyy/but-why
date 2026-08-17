@@ -66,7 +66,11 @@ export const startChange = <CreationFailure extends object = never>(
     if (!("ok" in created)) return created;
     if (!created.ok) return created;
 
-    const provisioned = git.provisionWorktree(created.change, false);
+    const provisioned = git.provisionWorktree(
+      created.change,
+      false,
+      gitIntent.intent.startingCommit,
+    );
     if (!provisioned.ok) return { ...provisioned, change: created.change };
     return yield* prepareExistingChange(store, executor, created.change, input.now);
   });

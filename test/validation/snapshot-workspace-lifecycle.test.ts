@@ -19,7 +19,7 @@ import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const validationRunId = "run-1";
+const validationRunId = 1;
 const createSnapshotWorkspace = makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace);
 
 describe("Snapshot Workspace lifecycle", () => {

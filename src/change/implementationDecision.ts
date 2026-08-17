@@ -1,10 +1,8 @@
 import { Schema } from "effect";
 
 const implementationDecisionSchema = Schema.Struct({
-  id: Schema.String,
+  id: Schema.Number.pipe(Schema.int(), Schema.positive()),
   changeId: Schema.String,
-  sequence: Schema.Number,
-  recordedAt: Schema.String,
   choice: Schema.String,
   rationale: Schema.String,
 });
