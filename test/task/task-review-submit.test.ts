@@ -75,7 +75,7 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       taskId,
       proposal: { title: "Review me", description: "Exact", dependencyIds: [] },
       dependencyEvidence: [],
-      policy: {
+      reviewerConfiguration: {
         profile: {
           agentProfile: "review",
           scope: "global",

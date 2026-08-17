@@ -1,6 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
-import type { RepositorySql as RepositorySqlService } from "../../src/sqlite/repositorySql.js";
+import { type Context, Effect } from "effect";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
@@ -257,7 +256,7 @@ const expectedIndexes = {
 } as const;
 
 const expectStatementRejected = (
-  repository: RepositorySqlService,
+  repository: Context.Tag.Service<typeof RepositorySql>,
   operationName: string,
   statement: string,
 ) =>
