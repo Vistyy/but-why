@@ -72,16 +72,22 @@ export const publicTaskId = (value: string): PublicTaskId => {
   return parsed.taskId;
 };
 
-export const storedPublicTaskId = (value: string | number, idPrefix?: string): PublicTaskId => {
-  const source = typeof value === "number" ? `${idPrefix ?? "BY"}-${value}` : value;
-  const parsed = parsePublicTaskId(source);
-
-  if (!parsed.ok) {
-    throw new Error("Invalid stored Task ID");
+export const publicTaskIdFromInternal = (internalId: number, idPrefix: string): PublicTaskId => {
+  if (!Number.isSafeInteger(internalId) || internalId < 1) {
+    throw new Error("Invalid internal Task identity");
   }
-
-  return parsed.taskId;
+  return brandPublicTaskId(`${idPrefix}-${internalId}`);
 };
+
+export type TaskIdentityCodec = {
+  readonly toInternal: (taskId: PublicTaskId | string) => number;
+  readonly toPublic: (internalId: number) => PublicTaskId;
+};
+
+export const taskIdentityCodec = (idPrefix: string): TaskIdentityCodec => ({
+  toInternal: (taskId) => internalTaskId(taskId, idPrefix),
+  toPublic: (internalId) => publicTaskIdFromInternal(internalId, idPrefix),
+});
 
 export const internalTaskId = (value: PublicTaskId | string, idPrefix: string): number => {
   const match = new RegExp(`^${idPrefix}-([1-9][0-9]*)$`, "u").exec(value);

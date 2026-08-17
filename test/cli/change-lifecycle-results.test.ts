@@ -91,29 +91,6 @@ describe("Change lifecycle CLI results", () => {
     });
   });
 
-  it("identifies resources retained after Change Start rollback fails", () => {
-    expect(
-      startResult({ ok: false, code: "change_start_rollback_failed", change: change() }),
-    ).toEqual({
-      exitCode: 1,
-      stdout: {
-        error: {
-          code: "change_start_rollback_failed",
-          message:
-            "Shared Repository State did not record the Change, and its provisioned Git resources could not be removed safely.",
-          changeId: "change-1",
-          branch: "refs/heads/but-why/by-197-change-1",
-          startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: "/repo-worktrees/but-why/by-197-change-1",
-        },
-        help: [
-          "Inspect the reported branch and worktree, preserve any work, and remove only the exact unowned resources when safe.",
-          "Run Change Start again after the reported branch and worktree path are available.",
-        ],
-      },
-    });
-  });
-
   it("renders and clears Repository Preparation failure from Change Prepare", () => {
     const failure = {
       command: "prepare repository",

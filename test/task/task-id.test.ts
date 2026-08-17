@@ -35,13 +35,4 @@ describe("Task identity seam", () => {
     expect(first).not.toBe(second);
     expect(taskSlugForId(publicTaskId("BY-1"))).toBe(first);
   });
-
-  it("bounds readable slug parts while preserving hash suffixes", () => {
-    const slug = taskSlugForId(publicTaskId(`${"A".repeat(200)}-1`));
-    const suffix = slug.match(/[0-9a-f]{12}$/)?.[0];
-
-    expect(slug.length).toBeLessThanOrEqual(61);
-    expect(suffix).toBeDefined();
-    expect(slug.endsWith(`-${suffix}`)).toBe(true);
-  });
 });

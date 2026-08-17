@@ -27,7 +27,7 @@ const policy = {
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Dependency", description: "Required", now });
       yield* tasks.createTask({
@@ -82,7 +82,7 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
 it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       yield* tasks.createTask({ title: "New proposal", description: "Editable", now });
 
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toMatchObject({
@@ -99,7 +99,7 @@ it.scoped(
   () =>
     withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
         const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;

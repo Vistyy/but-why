@@ -117,7 +117,7 @@ it.scoped(
 it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Linked");
@@ -157,7 +157,7 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
 it.scoped("continues to reject direct Task dependency edits for terminal Tasks", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "First");
       yield* createTask(tasks, "Dependent", ["BY-1"]);
@@ -189,7 +189,7 @@ it.scoped("continues to reject direct Task dependency edits for terminal Tasks",
 it.scoped("returns direct Task dependency facts and start eligibility", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Done prerequisite");
       yield* createTask(tasks, "Open prerequisite");
@@ -227,7 +227,7 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
 
 const withTasks = <A, E>(use: (tasks: TaskPersistence) => Effect.Effect<A, E, RepositorySql>) => {
   return withTemporaryRepositoryState(() =>
-    Effect.flatMap(openSqliteTaskPersistence("BY"), (tasks) => use(tasks)),
+    Effect.flatMap(openSqliteTaskPersistence(), (tasks) => use(tasks)),
   );
 };
 

@@ -10,7 +10,11 @@ import {
   readCancellationChange,
 } from "../../../sqlite/sqliteChangeCancellationPersistence.js";
 import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
-import { internalTaskId, storedPublicTaskId } from "../../../task/taskId.js";
+import {
+  internalTaskId,
+  type PublicTaskId,
+  publicTaskIdFromInternal,
+} from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {
   TaskChangeCancellationChange,
@@ -74,7 +78,11 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPref
 
     const link = yield* linkedTask(sql, input.changeId, idPrefix);
     if (link !== undefined) {
-      const task = yield* getTaskById(sql, storedPublicTaskId(link.taskId, idPrefix), idPrefix);
+      const task = yield* getTaskById(
+        sql,
+        publicTaskIdFromInternal(link.taskId, idPrefix),
+        idPrefix,
+      );
       if (task === undefined) {
         return yield* invalidData("cancel Change", "Linked Task was not found");
       }
@@ -88,7 +96,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput, idPref
     if (result.changed && link !== undefined) {
       yield* cancelTaskState(
         sql,
-        storedPublicTaskId(link.taskId, idPrefix),
+        publicTaskIdFromInternal(link.taskId, idPrefix),
         input.reason,
         input.now,
         idPrefix,
@@ -111,7 +119,7 @@ const readTaskChangeCancellation = (
     const link = yield* linkedTask(sql, changeId, idPrefix);
     return {
       ...change,
-      taskId: link === undefined ? null : storedPublicTaskId(link.taskId, idPrefix),
+      taskId: link === undefined ? null : publicTaskIdFromInternal(link.taskId, idPrefix),
     } satisfies TaskChangeCancellationChange;
   });
 
@@ -157,7 +165,7 @@ const readTaskForCancellation = (
 ) =>
   taskId === null
     ? Effect.succeed(null)
-    : Effect.flatMap(getTaskById(sql, storedPublicTaskId(taskId, idPrefix), idPrefix), (task) =>
+    : Effect.flatMap(getTaskById(sql, taskId as PublicTaskId, idPrefix), (task) =>
         task === undefined
           ? invalidData("read committed cancellation", "Linked Task was not found")
           : Effect.succeed(task),

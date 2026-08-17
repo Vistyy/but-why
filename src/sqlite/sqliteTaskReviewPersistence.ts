@@ -27,7 +27,7 @@ import type {
   TaskReviewAdmissionRejection,
   TaskReviewPersistence,
 } from "../task/review/taskReviewPersistence.js";
-import { internalTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
@@ -616,7 +616,7 @@ const directDependencyIds = (sql: SqlClient.SqlClient, taskId: string, idPrefix:
       WHERE dependent_task_id = ${internalTaskId(taskId, idPrefix)} ORDER BY prerequisite_task_id ASC
     `,
     (dependencies) =>
-      dependencies.map((dependency) => storedPublicTaskId(dependency.taskId, idPrefix)),
+      dependencies.map((dependency) => publicTaskIdFromInternal(dependency.taskId, idPrefix)),
   );
 
 const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>
@@ -631,7 +631,7 @@ const dependencyEvidence = (sql: SqlClient.SqlClient, taskId: string, idPrefix: 
     (dependencies) =>
       dependencies.map((dependency) => ({
         ...dependency,
-        id: storedPublicTaskId(dependency.id, idPrefix),
+        id: publicTaskIdFromInternal(dependency.id, idPrefix),
       })),
   );
 
@@ -918,13 +918,13 @@ const decodeReview = (sql: SqlClient.SqlClient, row: ReviewRow, idPrefix: string
     `;
     const legacyTaskReviewerSession = yield* readLegacyTaskReviewerSession(
       sql,
-      storedPublicTaskId(row.taskId, idPrefix),
+      publicTaskIdFromInternal(row.taskId, idPrefix),
       idPrefix,
     );
     return yield* Effect.try({
       try: (): TaskReviewRecord => ({
         id: row.id,
-        taskId: storedPublicTaskId(row.taskId, idPrefix),
+        taskId: publicTaskIdFromInternal(row.taskId, idPrefix),
         proposal: parseProposal(row.proposalSnapshot),
         dependencyEvidence: parseDependencies(row.dependencyEvidence),
         policy: parsePolicy(row.policySnapshot),

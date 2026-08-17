@@ -31,7 +31,7 @@ export const withTaskUseCases = <A, E, R>(
   const { context } = loaded.runtime;
 
   return loaded.runtime.provide(
-    openSqliteTaskPersistence(context.idPrefix).pipe(
+    openSqliteTaskPersistence().pipe(
       Effect.flatMap((persistence) => use(openTaskUseCases(context, persistence))),
       Effect.map((value) => ({ ok: true as const, value })),
     ),

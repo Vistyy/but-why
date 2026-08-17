@@ -11,10 +11,7 @@ import type {
   ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
-import type {
-  ChangeStartPersistence,
-  ChangeStartRollbackFailure,
-} from "./changeStartPersistence.js";
+import type { ChangeStartPersistence } from "./changeStartPersistence.js";
 import type { ChangeReviewerConfiguration, ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
@@ -31,7 +28,6 @@ export type ChangeStartResult =
       readonly message: string;
     }
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
-  | ChangeStartRollbackFailure
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangePrepareResult =
@@ -61,19 +57,17 @@ export const startChange = <CreationFailure extends object = never>(
 
     const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
-    const created = yield* store.create(
-      {
-        id: "pending-change-start",
-        ...gitIntent.intent,
-        reviewerConfiguration: input.reviewerConfiguration,
-        now: input.now,
-      },
-      (change) => git.provisionWorktree(change, false),
-      (change) => git.rollbackProvisionedWorktree(change),
-    );
+    const created = yield* store.create({
+      id: "pending-change-start",
+      ...gitIntent.intent,
+      reviewerConfiguration: input.reviewerConfiguration,
+      now: input.now,
+    });
     if (!("ok" in created)) return created;
     if (!created.ok) return created;
 
+    const provisioned = git.provisionWorktree(created.change, false);
+    if (!provisioned.ok) return { ...provisioned, change: created.change };
     return yield* prepareExistingChange(store, executor, created.change, input.now);
   });
 

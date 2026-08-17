@@ -148,18 +148,6 @@ const operationalError = (
           startingCommit: change.startingCommit,
           worktreePath: change.worktreePath,
         };
-  if (code === "change_start_rollback_failed") {
-    return runtimeError({
-      code,
-      message:
-        "Shared Repository State did not record the Change, and its provisioned Git resources could not be removed safely.",
-      details: identityDetails,
-      help: [
-        "Inspect the reported branch and worktree, preserve any work, and remove only the exact unowned resources when safe.",
-        "Run Change Start again after the reported branch and worktree path are available.",
-      ],
-    });
-  }
   if (code === "managed_branch_missing") {
     return runtimeError({
       code,

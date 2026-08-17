@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
-import { internalTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import { internalTaskId, type PublicTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   CancelTaskInput,
@@ -31,10 +31,9 @@ import {
   type StoredTaskSummaryRow,
 } from "./sqliteTaskReadModel.js";
 
-export const openSqliteTaskPersistence = (
-  idPrefix: string,
-): Effect.Effect<TaskPersistence, never, RepositorySql> =>
+export const openSqliteTaskPersistence = (): Effect.Effect<TaskPersistence, never, RepositorySql> =>
   Effect.map(RepositorySql, (repository) => {
+    const idPrefix = repository.idPrefix;
     return {
       createTask: (input) =>
         repository.transactionImmediate("create Task", (sql) => createTask(sql, idPrefix, input)),
@@ -75,7 +74,7 @@ const createTask = (sql: SqlClient.SqlClient, idPrefix: string, input: CreateTas
     const allocatedId = inserted[0]?.id;
     if (allocatedId === undefined)
       return yield* invalidData("create Task", "Task identity was not allocated");
-    const taskId = storedPublicTaskId(allocatedId, idPrefix);
+    const taskId = publicTaskIdFromInternal(allocatedId, idPrefix);
     const prerequisiteTaskIds = input.dependsOn ?? [];
     const dependencyError = yield* validateDependencies(
       sql,
@@ -112,15 +111,17 @@ export const editTaskDependencies = (
         : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true, idPrefix);
     if (dependencyError !== undefined) return dependencyError;
 
-    const currentIds = yield* Effect.forEach(target.task.prerequisites, (dependency) =>
-      Effect.try({
-        try: () => storedPublicTaskId(dependency.id, idPrefix),
-        catch: (cause) =>
-          new RepositoryPersistedDataInvalid({
-            operationName: "edit Task dependencies",
-            cause,
-          }),
-      }),
+    const currentIds: readonly PublicTaskId[] = yield* Effect.forEach(
+      target.task.prerequisites,
+      (dependency) =>
+        Effect.try({
+          try: () => dependency.id as PublicTaskId,
+          catch: (cause) =>
+            new RepositoryPersistedDataInvalid({
+              operationName: "edit Task dependencies",
+              cause,
+            }),
+        }),
     );
     const requestedIds = input.prerequisiteTaskIds;
     const currentSet = new Set(currentIds);
@@ -514,7 +515,7 @@ const dependencyPathExists = (
     const reachableTaskIds = yield* decodePersisted("validate Task dependencies", () =>
       rows.map((row) => {
         if (row.taskId === null) throw new Error("Task dependency references an unknown Task");
-        return storedPublicTaskId(row.taskId, idPrefix);
+        return publicTaskIdFromInternal(row.taskId, idPrefix);
       }),
     );
     return reachableTaskIds.includes(targetTaskId);

@@ -10,7 +10,6 @@ import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
-  RollbackProvisionedWorktreeResult,
 } from "../changeStartGitOperations.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 
@@ -83,64 +82,6 @@ export const provisionChangeWorktree = (
     if (!removed.ok) return removed;
   }
   return addRecordedWorktree(cwd, start);
-};
-
-export const rollbackProvisionedChangeWorktree = (
-  cwd: string,
-  start: ChangeStartRecord,
-): RollbackProvisionedWorktreeResult => {
-  const listed = git(cwd, "worktree", "list", "--porcelain");
-  if (!listed.ok) return { ok: false, code: "git_tooling_error" };
-  const worktrees = parseWorktrees(listed.stdout);
-  const expectedPath = canonicalPathIfPresent(start.worktreePath);
-  const atPath = worktrees.find((entry) => entry.path === expectedPath);
-  const forBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
-
-  if (atPath !== undefined || forBranch !== undefined || pathEntryExists(start.worktreePath)) {
-    if (
-      atPath === undefined ||
-      atPath !== forBranch ||
-      atPath.branchRef !== start.branchRef ||
-      !pathEntryExists(start.worktreePath) ||
-      lstatSync(start.worktreePath).isSymbolicLink()
-    ) {
-      return { ok: false, code: "git_tooling_error" };
-    }
-    const branch = git(start.worktreePath, "symbolic-ref", "HEAD");
-    const head = git(start.worktreePath, "rev-parse", "HEAD^{commit}");
-    const status = git(start.worktreePath, "status", "--porcelain=v1", "--untracked-files=normal");
-    if (
-      !branch.ok ||
-      branch.stdout !== start.branchRef ||
-      !head.ok ||
-      head.stdout !== start.startingCommit ||
-      !status.ok ||
-      status.stdout.length > 0
-    ) {
-      return { ok: false, code: "git_tooling_error" };
-    }
-    const removed = git(cwd, "worktree", "remove", "--", start.worktreePath);
-    if (!removed.ok) return { ok: false, code: "git_tooling_error" };
-    const afterRemoval = git(cwd, "worktree", "list", "--porcelain");
-    if (!afterRemoval.ok || pathEntryExists(start.worktreePath)) {
-      return { ok: false, code: "git_tooling_error" };
-    }
-    const remaining = parseWorktrees(afterRemoval.stdout);
-    if (
-      remaining.some((entry) => entry.path === expectedPath || entry.branchRef === start.branchRef)
-    ) {
-      return { ok: false, code: "git_tooling_error" };
-    }
-  }
-
-  const branchCommit = resolveLocalBranch(cwd, start.branchRef);
-  if (branchCommit === undefined) return { ok: true };
-  if (branchCommit !== start.startingCommit) return { ok: false, code: "git_tooling_error" };
-  const deleted = git(cwd, "update-ref", "--no-deref", "-d", start.branchRef, branchCommit);
-  if (!deleted.ok || resolveLocalBranch(cwd, start.branchRef) !== undefined) {
-    return { ok: false, code: "git_tooling_error" };
-  }
-  return { ok: true };
 };
 
 const inspectRecordedWorktree = (

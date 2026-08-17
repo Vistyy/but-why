@@ -26,7 +26,7 @@ it.scoped(
   () =>
     withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
         yield* tasks.createTask({ title: "Dependency", description: "Observed dependency", now });
         yield* tasks.createTask({
@@ -73,7 +73,7 @@ it.scoped(
 it.scoped("selects the latest Review deterministically when creation times match", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       yield* reviews.admit({
@@ -119,7 +119,7 @@ it.scoped("selects the latest Review deterministically when creation times match
 it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence();
       const repository = yield* RepositorySql;
@@ -164,7 +164,7 @@ it.scoped("rejects Task Review admission for a Change-linked New Task", () =>
 it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an earlier pass", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Dependency", description: "Original", now });
@@ -302,7 +302,7 @@ it.scoped("does not reuse Finding-blocked or tooling-failed Reviews after an ear
 it.scoped("atomically applies a reused passing judgment and rejects malformed evidence", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
@@ -351,7 +351,7 @@ it.scoped("atomically applies a reused passing judgment and rejects malformed ev
 it.scoped("atomically moves a Task to Todo only for a passing exact Task Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Approved", description: "Exact", now });
       yield* reviews.admit({
@@ -388,7 +388,7 @@ it.scoped("atomically moves a Task to Todo only for a passing exact Task Review"
 it.scoped("leaves Finding-blocked and tooling-failed Tasks New", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       for (const [sequence, completion] of [
         {
@@ -435,7 +435,7 @@ it.scoped(
   () =>
     withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
         yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
         yield* reviews.admit({
@@ -474,7 +474,7 @@ it.scoped(
 it.scoped("returns the exact abandonment reason to a stale Task Submission completion", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       yield* reviews.admit({
@@ -535,7 +535,7 @@ it.scoped("returns the exact abandonment reason to a stale Task Submission compl
 it.scoped("recovers an unsettled Agent Invocation when a Task Review is abandoned", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
@@ -595,7 +595,7 @@ it.scoped("recovers an unsettled Agent Invocation when a Task Review is abandone
 it.scoped("finalizes a concurrently changed proposal as tooling failed and retains Findings", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Before", now });
       const admitted = yield* reviews.admit({

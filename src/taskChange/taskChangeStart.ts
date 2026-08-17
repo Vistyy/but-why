@@ -6,11 +6,7 @@ import {
   startChange,
 } from "../change/changeLifecycle.js";
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
-import type {
-  ChangeStartPersistence,
-  ChangeStartProvisioner,
-  ChangeStartProvisionRollback,
-} from "../change/changeStartPersistence.js";
+import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
   ChangeStartRecord,
@@ -54,16 +50,12 @@ export type TaskChangeStartCreateInput = CreateChangeStartInput & {
 export type TaskChangeStartPersistence = {
   readonly create: (
     input: TaskChangeStartCreateInput,
-    provision?: ChangeStartProvisioner,
-    rollback?: ChangeStartProvisionRollback,
   ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly prepareTask: (
     taskId: string,
   ) => Effect.Effect<TaskChangeStartPreparation, RepositoryStorageError>;
   readonly createLinked: (
     input: TaskChangeStartCreationInput,
-    provision?: ChangeStartProvisioner,
-    rollback?: ChangeStartProvisionRollback,
   ) => ReturnType<ChangeStartPersistence<TaskChangeStartEligibilityError>["create"]>;
   readonly getById: ChangeStartPersistence["getById"];
   readonly recordPrepareOutcome: ChangeStartPersistence["recordPrepareOutcome"];
@@ -128,15 +120,11 @@ export const startTaskChange = (
     }
 
     const ownerStore: ChangeStartPersistence<TaskChangeStartEligibilityError> = {
-      create: (createInput, provision, rollback) =>
-        store.createLinked(
-          {
-            ...createInput,
-            taskId: input.taskId,
-          },
-          provision,
-          rollback,
-        ),
+      create: (createInput) =>
+        store.createLinked({
+          ...createInput,
+          taskId: input.taskId,
+        }),
       getById: store.getById,
       recordPrepareOutcome: store.recordPrepareOutcome,
     };

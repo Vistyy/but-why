@@ -16,8 +16,8 @@ import {
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
-  rollbackProvisionedChangeWorktree,
 } from "../adapters/changeStartGit.js";
+import type { ChangeStartGitOperations } from "../changeStartGitOperations.js";
 import {
   type ChangeImplementResult,
   type ChangePrepareResult,
@@ -82,16 +82,11 @@ export const withChangeStart = <A, E, R>(
       Effect.flatMap(({ changes, taskStart }) =>
         use((command) =>
           Effect.gen(function* () {
-            const git = {
-              resolveIntent: (slug: string, requestedBaseBranch: string | undefined) =>
+            const git: ChangeStartGitOperations = {
+              resolveIntent: (slug, requestedBaseBranch) =>
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (
-                change: Parameters<typeof provisionChangeWorktree>[1],
-                recovering: boolean,
-              ) => provisionChangeWorktree(context.root, change, recovering),
-              rollbackProvisionedWorktree: (
-                change: Parameters<typeof provisionChangeWorktree>[1],
-              ) => rollbackProvisionedChangeWorktree(context.root, change),
+              provisionWorktree: (change, recovering) =>
+                provisionChangeWorktree(context.root, change, recovering),
             };
             if (command.taskId !== undefined) {
               return yield* taskStart(command);
@@ -144,8 +139,6 @@ export const withChangePrepare = <A, E, R>(
                 resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
               provisionWorktree: (change, recovering) =>
                 provisionChangeWorktree(context.root, change, recovering),
-              rollbackProvisionedWorktree: (change) =>
-                rollbackProvisionedChangeWorktree(context.root, change),
             },
             executeLocalRepositoryPreparation,
             changeId,

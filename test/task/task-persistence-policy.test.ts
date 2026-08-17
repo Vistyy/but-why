@@ -17,7 +17,7 @@ const terminalStates = ["done", "cancelled"] as const;
 it.scoped("preserves ID-shaped freeform Task Context text", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const created = yield* tasks.createTask({
         title: "BY-C1",
         description: "BY-1",
@@ -36,7 +36,7 @@ it.scoped("preserves ID-shaped freeform Task Context text", () =>
 it.scoped("preserves terminal Task policy", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
 
       for (const [index, state] of terminalStates.entries()) {
         const created = yield* tasks.createTask({
@@ -72,7 +72,7 @@ it.scoped(
   () => {
     return withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const approved = yield* tasks.createTask({
           title: "Approved title",
           description: "Approved description",
@@ -127,7 +127,7 @@ it.scoped(
   () => {
     return withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const repository = yield* RepositorySql;
 
         yield* tasks.createTask({
@@ -183,7 +183,7 @@ it.scoped(
 it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       yield* tasks.createTask({ title: "First", description: "First", now: firstNow });
       yield* tasks.createTask({ title: "Second", description: "Second", now: firstNow });
       yield* tasks.createTask({ title: "Third", description: "Third", now: firstNow });

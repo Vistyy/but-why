@@ -16,7 +16,7 @@ const secondNow = "2026-08-09T12:05:00.000Z";
 it.scoped("decodes valid current Task states, relationships, Context, and Change Start facts", () =>
   withTemporaryRepositoryState(({ commonDirectory }) =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const links = yield* openSqliteTaskChangeLinkPort();
       const authority = yield* openSqliteChangeAuthorityPort();
       const starts = yield* openSqliteChangeStartPersistence();
@@ -102,7 +102,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
 it.scoped("rejects malformed Task states selected by Change Start", () =>
   withTemporaryRepositoryState(({ commonDirectory }) =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Prerequisite");
@@ -148,7 +148,7 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
 it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
+      const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Self-dependent Task");

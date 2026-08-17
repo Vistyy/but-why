@@ -3,16 +3,12 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { prepareChange, startChange } from "../../src/change/changeLifecycle.js";
 import type { ChangeStartGitOperations } from "../../src/change/changeStartGitOperations.js";
-import {
-  type ChangeStartPersistence,
-  recoverProvisionedChangeCreation,
-} from "../../src/change/changeStartPersistence.js";
+import { type ChangeStartPersistence } from "../../src/change/changeStartPersistence.js";
 import type {
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../../src/change/changeStartStore.js";
 import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceCommand.js";
-import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -52,17 +48,12 @@ const fixture = (options: FixtureOptions = {}) => {
   const events: string[] = [];
   let current = options.existing;
   const store: ChangeStartPersistence = {
-    create: (input, provision) => {
+    create: (input) => {
       events.push("create");
       const change = recordFrom({
         ...input,
         ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
       });
-      const provisioned = provision?.(change) ?? { ok: true as const };
-      if (!provisioned.ok) {
-        if (provisioned.code !== "change_start_conflict") current = change;
-        return Effect.succeed({ ...provisioned, change });
-      }
       current = change;
       return Effect.succeed({ ok: true as const, change });
     },
@@ -87,10 +78,6 @@ const fixture = (options: FixtureOptions = {}) => {
     provisionWorktree: (_change, recovering) => {
       events.push(`provisionWorktree:${recovering ? "recover" : "create"}`);
       return options.provision ?? { ok: true };
-    },
-    rollbackProvisionedWorktree: () => {
-      events.push("rollbackProvisionedWorktree");
-      return { ok: true };
     },
   };
   const executor: RepositoryPreparationEffectExecutor =
@@ -146,86 +133,6 @@ describe("Change Start orchestration", () => {
       });
       if (!("change" in result)) return;
       expect(result.change).toBe(captured.current());
-      expect(captured.events).toEqual([
-        "resolveIntent:pending-change-start:default",
-        "create",
-        "provisionWorktree:create",
-      ]);
-    }),
-  );
-
-  it.effect("retains provisioned resources when reconciliation finds the committed Change", () =>
-    Effect.gen(function* () {
-      const committed = recordFrom({
-        id: "BY-C1",
-        ...intent,
-        reviewerConfiguration,
-        now,
-      });
-      let rolledBack = false;
-      const result = yield* recoverProvisionedChangeCreation({
-        create: (provision) => {
-          expect(provision?.(committed)).toEqual({ ok: true });
-          return Effect.fail(
-            new RepositoryPersistedDataInvalid({
-              operationName: "report uncertain commit",
-              cause: new Error("commit result unavailable"),
-            }),
-          );
-        },
-        getById: () => Effect.succeed(committed),
-        provision: () => ({ ok: true }),
-        rollback: () => {
-          rolledBack = true;
-          return { ok: true };
-        },
-      });
-
-      expect(result).toEqual({ ok: true, change: committed });
-      expect(rolledBack).toBe(false);
-    }),
-  );
-
-  it.effect("reports retained resources when failed creation cannot roll back provisioning", () =>
-    Effect.gen(function* () {
-      const prospective = recordFrom({
-        id: "BY-C1",
-        ...intent,
-        reviewerConfiguration,
-        now,
-      });
-      const result = yield* recoverProvisionedChangeCreation({
-        create: (provision) => {
-          expect(provision?.(prospective)).toEqual({ ok: true });
-          return Effect.fail(
-            new RepositoryPersistedDataInvalid({
-              operationName: "roll back Change Start",
-              cause: new Error("transaction rolled back"),
-            }),
-          );
-        },
-        getById: () => Effect.succeed(undefined),
-        provision: () => ({ ok: true }),
-        rollback: () => ({ ok: false, code: "git_tooling_error" }),
-      });
-
-      expect(result).toEqual({
-        ok: false,
-        code: "change_start_rollback_failed",
-        change: prospective,
-      });
-    }),
-  );
-
-  it.effect("does not retain a prospective Change when its exact branch conflicts", () =>
-    Effect.gen(function* () {
-      const captured = fixture({ provision: { ok: false, code: "change_start_conflict" } });
-      expect(yield* captured.operations.start({ now })).toMatchObject({
-        ok: false,
-        code: "change_start_conflict",
-        change: { id: expect.any(String) },
-      });
-      expect(captured.current()).toBeUndefined();
       expect(captured.events).toEqual([
         "resolveIntent:pending-change-start:default",
         "create",

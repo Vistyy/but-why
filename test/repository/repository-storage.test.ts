@@ -17,7 +17,7 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { storedPublicTaskId } from "../../src/task/taskId.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { repoRoot } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -132,14 +132,14 @@ describe("repository SQL storage", () => {
   it.scoped("persists, replaces, and clears Repository Preparation failure", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const task = yield* tasks.createTask({
           title: "Persist exact accepted intent",
           description: "Capture this approved Task description.",
           now: "2026-07-17T22:48:00.000Z",
         });
         if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
-        const taskId = storedPublicTaskId(task.task.id);
+        const taskId = publicTaskId(task.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:49:00.000Z");
 
         const starts = yield* openSqliteChangeStartPersistence();
@@ -210,7 +210,7 @@ describe("repository SQL storage", () => {
   it.scoped("raises a Blocker without writing blocked Change or Task lifecycle state", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -219,7 +219,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-raise-blocker",
@@ -264,7 +264,7 @@ describe("repository SQL storage", () => {
   it.scoped("rejects a duplicate Blocker while one is unresolved", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -273,7 +273,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-duplicate-blocker",
@@ -319,7 +319,7 @@ describe("repository SQL storage", () => {
   it.scoped("raises a Blocker after publication or a passing Candidate", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -328,7 +328,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:54:00.000Z");
         const started = yield* starts.create({
           id: "change-published-blocker",
@@ -401,7 +401,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -410,7 +410,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T23:02:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T23:03:00.000Z");
         const started = yield* starts.create({
           id: "change-resolve-blocker",
@@ -571,7 +571,7 @@ describe("repository SQL storage", () => {
     () =>
       withTemporaryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const starts = yield* openSqliteChangeStartPersistence();
           const changes = yield* openSqliteChangeTestDependencies();
           const created = yield* tasks.createTask({
@@ -580,7 +580,7 @@ describe("repository SQL storage", () => {
             now: "2026-07-17T22:55:00.000Z",
           });
           if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-          const taskId = storedPublicTaskId(created.task.id);
+          const taskId = publicTaskId(created.task.id);
           yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
           const started = yield* starts.create({
             id: "change-cancel-atomic",
@@ -630,7 +630,7 @@ describe("repository SQL storage", () => {
   it.scoped("preserves an open Change when observed merge evidence is stale", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -639,7 +639,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-stale-evidence",
@@ -741,7 +741,7 @@ describe("repository SQL storage", () => {
   it.scoped("rejects an older merged Candidate after a newer publication", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -750,7 +750,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-newer-publication",
@@ -865,7 +865,7 @@ describe("repository SQL storage", () => {
   it.scoped("rolls back terminal completion when the linked Task transition fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangeTestDependencies();
         const created = yield* tasks.createTask({
@@ -874,7 +874,7 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
-        const taskId = storedPublicTaskId(created.task.id);
+        const taskId = publicTaskId(created.task.id);
         yield* passTaskReviewFixture(taskId, "2026-07-17T22:56:00.000Z");
         const started = yield* starts.create({
           id: "change-atomic-completion",
@@ -2405,7 +2405,7 @@ describe("repository SQL storage", () => {
               );
               expect(identities).toEqual([{ common_directory: directory }]);
 
-              const tasks = yield* openSqliteTaskPersistence("BY");
+              const tasks = yield* openSqliteTaskPersistence();
               const created = yield* tasks.createTask({
                 title: "After concurrent initialization",
                 description: "Read and write after concurrent startup.",

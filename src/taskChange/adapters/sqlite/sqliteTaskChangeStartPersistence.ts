@@ -2,14 +2,12 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
-import { recoverProvisionedChangeCreation } from "../../../change/changeStartPersistence.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../../sqlite/repositorySql.js";
 import {
   createChange,
   insertLinkedChange,
-  provisionCreatedChange,
   readChangeStartById,
   recordPrepareOutcome as recordChangePrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
@@ -21,7 +19,7 @@ import {
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
 } from "../../../sqlite/sqliteTaskReadModel.js";
-import { internalTaskId, storedPublicTaskId } from "../../../task/taskId.js";
+import { internalTaskId, type PublicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,
   TaskChangeStartCreationInput,
@@ -34,43 +32,20 @@ export const openSqliteTaskChangeStartPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    create: (input: TaskChangeStartCreateInput, provision, rollback) =>
-      recoverProvisionedChangeCreation({
-        create: (trackedProvision) =>
-          repository.transactionImmediate("create Change Start", (sql) =>
-            input.taskId === undefined
-              ? createChange(sql, input, repository.idPrefix, trackedProvision)
-              : createLinked(
-                  sql,
-                  { ...input, taskId: input.taskId },
-                  repository.idPrefix,
-                  trackedProvision,
-                ),
-          ),
-        getById: (changeId) =>
-          repository.transaction("reconcile Change Start creation", (sql) =>
-            readTaskChangeStartById(sql, changeId, repository.idPrefix),
-          ),
-        ...(provision === undefined ? {} : { provision }),
-        ...(rollback === undefined ? {} : { rollback }),
-      }),
+    create: (input: TaskChangeStartCreateInput) =>
+      repository.transactionImmediate("create Change Start", (sql) =>
+        input.taskId === undefined
+          ? createChange(sql, input, repository.idPrefix)
+          : createLinked(sql, { ...input, taskId: input.taskId }, repository.idPrefix),
+      ),
     prepareTask: (taskId) =>
       repository.transaction("prepare Change Start linked to a Task", (sql) =>
         prepareTask(sql, taskId, repository.idPrefix),
       ),
-    createLinked: (input, provision, rollback) =>
-      recoverProvisionedChangeCreation({
-        create: (trackedProvision) =>
-          repository.transactionImmediate("create linked Change Start", (sql) =>
-            createLinked(sql, input, repository.idPrefix, trackedProvision),
-          ),
-        getById: (changeId) =>
-          repository.transaction("reconcile linked Change Start creation", (sql) =>
-            readTaskChangeStartById(sql, changeId, repository.idPrefix),
-          ),
-        ...(provision === undefined ? {} : { provision }),
-        ...(rollback === undefined ? {} : { rollback }),
-      }),
+    createLinked: (input) =>
+      repository.transactionImmediate("create linked Change Start", (sql) =>
+        createLinked(sql, input, repository.idPrefix),
+      ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) =>
         readTaskChangeStartById(sql, changeId, repository.idPrefix),
@@ -101,7 +76,7 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string)
       ORDER BY tasks.id ASC
     `;
     const blockedBy = (yield* decodePersisted("prepare Change Start linked to a Task", () =>
-      decodeTaskDependencyFacts(dependencyRows, storedPublicTaskId(taskId), idPrefix),
+      decodeTaskDependencyFacts(dependencyRows, taskId as PublicTaskId, idPrefix),
     )).filter((dependency) => dependency.state !== "done");
     return blockedBy.length === 0
       ? { ok: true as const, existing: undefined, task }
@@ -112,7 +87,6 @@ const createLinked = (
   sql: SqlClient.SqlClient,
   input: TaskChangeStartCreationInput,
   idPrefix: string,
-  provision?: Parameters<TaskChangeStartPersistence["createLinked"]>[1],
 ) =>
   Effect.gen(function* () {
     const prepared = yield* prepareTask(sql, input.taskId, idPrefix);
@@ -139,7 +113,7 @@ const createLinked = (
     if (change === undefined) {
       return yield* invalidData("create linked Change Start", "Change disappeared");
     }
-    return yield* provisionCreatedChange(sql, change, idPrefix, provision);
+    return { ok: true as const, change };
   });
 
 const readExistingByTaskId = (sql: SqlClient.SqlClient, taskId: string, idPrefix: string) =>

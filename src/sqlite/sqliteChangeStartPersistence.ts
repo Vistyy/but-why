@@ -5,11 +5,7 @@ import { Effect } from "effect";
 import type { ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import {
-  type ChangeStartPersistence,
-  type ChangeStartProvisioner,
-  recoverProvisionedChangeCreation,
-} from "../change/changeStartPersistence.js";
+import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type {
   ChangeReviewerConfiguration,
   ChangeStartRecord,
@@ -40,19 +36,10 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    create: (input, provision, rollback) =>
-      recoverProvisionedChangeCreation({
-        create: (trackedProvision) =>
-          repository.transactionImmediate("create Change Start", (sql) =>
-            createChange(sql, input, repository.idPrefix, trackedProvision),
-          ),
-        getById: (changeId) =>
-          repository.transaction("reconcile Change Start creation", (sql) =>
-            readChangeStartById(sql, changeId, repository.idPrefix),
-          ),
-        ...(provision === undefined ? {} : { provision }),
-        ...(rollback === undefined ? {} : { rollback }),
-      }),
+    create: (input) =>
+      repository.transactionImmediate("create Change Start", (sql) =>
+        createChange(sql, input, repository.idPrefix),
+      ),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) =>
         readChangeStartById(sql, changeId, repository.idPrefix),
@@ -67,15 +54,14 @@ export const createChange = (
   sql: SqlClient.SqlClient,
   input: CreateChangeStartInput,
   idPrefix: string,
-  provision?: ChangeStartProvisioner,
 ) =>
   Effect.gen(function* () {
     const inserted = yield* insertChange(sql, input, idPrefix);
     if (!inserted.ok) return inserted;
     const change = yield* readChangeStartById(sql, inserted.changeId, idPrefix);
-    if (change === undefined)
-      return yield* invalidData("create Change Start", "Change disappeared");
-    return yield* provisionCreatedChange(sql, change, idPrefix, provision);
+    return change === undefined
+      ? yield* invalidData("create Change Start", "Change disappeared")
+      : { ok: true as const, change };
   });
 
 const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput, idPrefix: string) =>
@@ -137,7 +123,7 @@ const insertChangeRow = (
       LIMIT 1
     `;
     if (finalConflicts.length > 0) {
-      yield* deleteChangeStart(sql, changeId, idPrefix);
+      yield* sql`DELETE FROM changes WHERE id = ${allocatedId}`;
       return { ok: false as const, code: "change_start_conflict" as const };
     }
     yield* sql`
@@ -145,31 +131,6 @@ const insertChangeRow = (
       WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     return { ok: true as const, changeId };
-  });
-
-export const provisionCreatedChange = (
-  sql: SqlClient.SqlClient,
-  change: ChangeStartRecord,
-  idPrefix: string,
-  provision?: ChangeStartProvisioner,
-) =>
-  Effect.gen(function* () {
-    const provisioned = provision?.(change) ?? { ok: true as const };
-    if (!provisioned.ok) {
-      if (provisioned.code === "change_start_conflict") {
-        yield* deleteChangeStart(sql, change.id, idPrefix);
-      }
-      return { ...provisioned, change };
-    }
-    return { ok: true as const, change };
-  });
-
-const deleteChangeStart = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
-  Effect.gen(function* () {
-    yield* sql`
-      DELETE FROM task_change_links WHERE change_id = ${internalChangeId(changeId, idPrefix)}
-    `;
-    yield* sql`DELETE FROM changes WHERE id = ${internalChangeId(changeId, idPrefix)}`;
   });
 
 export const recordPrepareOutcome = (

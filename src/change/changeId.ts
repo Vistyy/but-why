@@ -17,6 +17,16 @@ export const publicChangeId = (idPrefix: string, internalId: number): string => 
   return `${idPrefix}-C${internalId}`;
 };
 
+export type ChangeIdentityCodec = {
+  readonly toInternal: (changeId: string) => number;
+  readonly toPublic: (internalId: number) => string;
+};
+
+export const changeIdentityCodec = (idPrefix: string): ChangeIdentityCodec => ({
+  toInternal: (changeId) => internalChangeId(changeId, idPrefix),
+  toPublic: (internalId) => publicChangeId(idPrefix, internalId),
+});
+
 export const internalChangeId = (value: string, idPrefix: string): number => {
   const match = new RegExp(`^${idPrefix}-C([1-9][0-9]*)$`, "u").exec(value);
   const id = match?.[1] === undefined ? Number.NaN : Number(match[1]);

@@ -28,7 +28,7 @@ export const withCancellationUseCases = <A, E, R>(
   return loaded.runtime.provide(
     Effect.all({
       changes: openSqliteTaskChangeCancellationPort(),
-      tasks: openSqliteTaskPersistence(context.idPrefix),
+      tasks: openSqliteTaskPersistence(),
       activeValidation: openSqliteActiveValidationRunPort(),
       cleanupTerminal: composeTerminalCleanup(context),
     }).pipe(

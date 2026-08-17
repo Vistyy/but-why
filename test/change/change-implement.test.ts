@@ -153,7 +153,7 @@ describe("by change implement", () => {
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
         changeId: fixture.id,
-        hostSessionName: fixture.id,
+        hostSessionName: fixture.id.toLowerCase(),
         agentSessionName: `Change ${fixture.id}`,
         repositoryPath: root,
         worktreePath: fixture.worktreePath,
@@ -228,7 +228,7 @@ describe("by change implement", () => {
         expect(result.status).toBe(0);
         expect(launchInput).toMatchObject({
           changeId: fixture.id,
-          hostSessionName: fixture.id,
+          hostSessionName: fixture.id.toLowerCase(),
           agentSessionName: `${fixture.id} Record cancellation reasons`,
         });
       }),

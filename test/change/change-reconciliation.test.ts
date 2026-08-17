@@ -246,7 +246,7 @@ describe("by change reconcile", () => {
   it.effect("atomically completes a merged Change and its linked Task before cleanup", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
+        const tasks = yield* openSqliteTaskPersistence();
         const createdTask = yield* tasks.createTask({
           title: "Merged Change",
           description: "Complete me",
@@ -484,7 +484,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const createdTask = yield* tasks.createTask({
             title: "Merged blocked Change",
             description: "Exact merge evidence outranks the historical Blocker.",
@@ -602,7 +602,7 @@ describe("by change reconcile", () => {
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
-          const tasks = yield* openSqliteTaskPersistence("BY");
+          const tasks = yield* openSqliteTaskPersistence();
           const createdTask = yield* tasks.createTask({
             title: "Single observation",
             description: "Completion derives the linked Task from durable Change state.",

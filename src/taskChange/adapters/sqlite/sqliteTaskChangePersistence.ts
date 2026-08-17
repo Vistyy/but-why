@@ -16,7 +16,7 @@ import {
   validateTaskDependencyEditTarget,
   validateTaskRevisionTarget,
 } from "../../../sqlite/sqliteTaskPersistence.js";
-import { internalTaskId, storedPublicTaskId } from "../../../task/taskId.js";
+import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
@@ -145,7 +145,7 @@ export const readTaskChangeLinkByTaskId = (
         rows[0] === undefined
           ? undefined
           : {
-              taskId: storedPublicTaskId(rows[0].taskId, idPrefix),
+              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
               changeId: publicChangeId(idPrefix, rows[0].changeId),
             },
       ),
@@ -167,7 +167,7 @@ const readTaskChangeLinkByChangeId = (
         rows[0] === undefined
           ? undefined
           : {
-              taskId: storedPublicTaskId(rows[0].taskId, idPrefix),
+              taskId: publicTaskIdFromInternal(rows[0].taskId, idPrefix),
               changeId: publicChangeId(idPrefix, rows[0].changeId),
             },
       ),

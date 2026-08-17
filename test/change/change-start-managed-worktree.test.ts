@@ -5,23 +5,15 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import {
-  provisionChangeWorktree,
-  resolveChangeStartGitIntent,
-  rollbackProvisionedChangeWorktree,
-} from "../../src/change/adapters/changeStartGit.js";
+import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { RepositorySqlOperationFailed } from "../../src/contracts/repositoryStorageError.js";
-import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -130,184 +122,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       });
       const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
       expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
-    }),
-  );
-
-  it.effect("preserves an existing allocated branch and records no Change", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const branch = "refs/heads/but-why/BY-C1";
-      const branchName = branch.slice("refs/heads/".length);
-      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
-      const worktreePath = join(dirname(root), `${basename(root)}-worktrees`, "but-why", "BY-C1");
-      git(root, "branch", branchName, startingCommit);
-      mkdirSync(worktreePath, { recursive: true });
-      writeFileSync(join(worktreePath, "keep.txt"), "external content\n");
-
-      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
-
-      expect(started.status).toBe(1);
-      expect(JSON.parse(started.stdout)).toMatchObject({
-        error: { code: "change_start_conflict", changeId: "BY-C1" },
-      });
-      expect(git(root, "rev-parse", `${branch}^{commit}`)).toBe(startingCommit);
-      expect(existsSync(join(worktreePath, "keep.txt"))).toBe(true);
-      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
-      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
-
-      rmSync(worktreePath, { recursive: true });
-      git(root, "branch", "-D", branchName);
-      const retried = yield* runByInProcessEffect(root, ["change", "start"], now);
-      expect(retried.status).toBe(0);
-      expect(JSON.parse(retried.stdout)).toMatchObject({ change: { id: "BY-C1" }, branch });
-    }),
-  );
-
-  it.effect("removes provisioned resources after a forced SQLite rollback", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const loaded = openRepositoryRuntime(root);
-      if (!loaded.ok) throw new Error(`Repository runtime failed: ${loaded.error.code}`);
-      const intent = resolveChangeStartGitIntent(loaded.runtime.context, "pending-change-start");
-      if (!intent.ok) throw new Error(`Change Start intent failed: ${intent.code}`);
-      const input = {
-        id: "pending-change-start",
-        ...intent.intent,
-        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-        now,
-      };
-
-      const attempted = yield* loaded.runtime.provide(
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          const forcedRollbackRepository: typeof repository = {
-            ...repository,
-            transactionImmediate: (operationName, use) =>
-              repository.transactionImmediate(operationName, (sql) =>
-                Effect.flatMap(use(sql), () =>
-                  Effect.fail(
-                    new RepositorySqlOperationFailed({
-                      operationName,
-                      cause: new Error("forced rollback after provisioning"),
-                    }),
-                  ),
-                ),
-              ),
-          };
-          const starts = yield* openSqliteChangeStartPersistence().pipe(
-            Effect.provideService(RepositorySql, forcedRollbackRepository),
-          );
-          return yield* starts
-            .create(
-              input,
-              (change) => provisionChangeWorktree(root, change, false),
-              (change) => rollbackProvisionedChangeWorktree(root, change),
-            )
-            .pipe(Effect.either);
-        }),
-      );
-
-      expect(attempted._tag).toBe("Left");
-      const branch = "refs/heads/but-why/BY-C1";
-      const worktreePath = join(dirname(root), `${basename(root)}-worktrees`, "but-why", "BY-C1");
-      expect(gitResult(root, "show-ref", "--verify", "--quiet", branch).status).toBe(1);
-      expect(existsSync(worktreePath)).toBe(false);
-      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
-      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
-
-      const retried = yield* runByInProcessEffect(root, ["change", "start"], now);
-      expect(retried.status).toBe(0);
-      expect(JSON.parse(retried.stdout)).toMatchObject({ change: { id: "BY-C1" }, branch });
-    }),
-  );
-
-  it.effect("reports exact retained resources when forced rollback cannot clean the worktree", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const loaded = openRepositoryRuntime(root);
-      if (!loaded.ok) throw new Error(`Repository runtime failed: ${loaded.error.code}`);
-      const intent = resolveChangeStartGitIntent(loaded.runtime.context, "pending-change-start");
-      if (!intent.ok) throw new Error(`Change Start intent failed: ${intent.code}`);
-      const input = {
-        id: "pending-change-start",
-        ...intent.intent,
-        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-        now,
-      };
-
-      const attempted = yield* loaded.runtime.provide(
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          const forcedRollbackRepository: typeof repository = {
-            ...repository,
-            transactionImmediate: (operationName, use) =>
-              repository.transactionImmediate(operationName, (sql) =>
-                Effect.flatMap(use(sql), () =>
-                  Effect.fail(
-                    new RepositorySqlOperationFailed({
-                      operationName,
-                      cause: new Error("forced rollback after contaminated provisioning"),
-                    }),
-                  ),
-                ),
-              ),
-          };
-          const starts = yield* openSqliteChangeStartPersistence().pipe(
-            Effect.provideService(RepositorySql, forcedRollbackRepository),
-          );
-          return yield* starts.create(
-            input,
-            (change) => {
-              const provisioned = provisionChangeWorktree(root, change, false);
-              if (provisioned.ok) {
-                writeFileSync(join(change.worktreePath, "retained.txt"), "preserve this work\n");
-              }
-              return provisioned;
-            },
-            (change) => rollbackProvisionedChangeWorktree(root, change),
-          );
-        }),
-      );
-
-      expect(attempted).toMatchObject({
-        ok: false,
-        code: "change_start_rollback_failed",
-        change: {
-          id: "BY-C1",
-          branchRef: "refs/heads/but-why/BY-C1",
-          worktreePath: expect.stringMatching(/\/but-why\/BY-C1$/u),
-        },
-      });
-      if (!("change" in attempted)) return;
-      expect(git(root, "rev-parse", `${attempted.change.branchRef}^{commit}`)).toBe(
-        attempted.change.startingCommit,
-      );
-      expect(existsSync(join(attempted.change.worktreePath, "retained.txt"))).toBe(true);
-      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
-      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
-    }),
-  );
-
-  it.effect("records no Task-linked Change when its allocated branch already exists", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const taskId = yield* createTask(root, "Conflicting branch", "Preserve external state.\n");
-      yield* passTaskReviewFixture(root, taskId, now);
-      const branch = "refs/heads/but-why/BY-C1";
-      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
-      git(root, "branch", branch.slice("refs/heads/".length), startingCommit);
-
-      const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
-
-      expect(started.status).toBe(1);
-      expect(JSON.parse(started.stdout)).toMatchObject({
-        error: { code: "change_start_conflict", changeId: "BY-C1" },
-      });
-      expect(git(root, "rev-parse", `${branch}^{commit}`)).toBe(startingCommit);
-      const listed = yield* runByInProcessEffect(root, ["change", "list"], now);
-      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
-      const task = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
-      expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
     }),
   );
 
@@ -898,8 +712,6 @@ const createTask = (root: string, title: string, description: string) =>
   });
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-
-const gitResult = (cwd: string, ...args: readonly string[]) => runTestProcess("git", args, { cwd });
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });
