@@ -7,7 +7,20 @@ import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCa
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
-const policy = { checks: [], copyFiles: [], specialistReviews: [] } as const;
+const policy = {
+  checks: [],
+  copyFiles: [],
+  acceptanceReview: {
+    instructions: "Review acceptance.",
+    instructionsSource: "repo",
+    profile: {
+      agentProfile: "acceptance",
+      scope: "repo",
+      profile: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } },
+    },
+  },
+  specialistReviews: [],
+} as const;
 const now = "2026-08-10T00:00:00.000Z";
 
 const createCandidateOwningChange = (branchRef: string) =>

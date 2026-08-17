@@ -461,8 +461,8 @@ describe("Candidate Specialist Review phase", () => {
         expect(
           yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
         ).toEqual([
-          { producer: "broken", outcome: "failed" },
           { producer: "standards", outcome: "failed" },
+          { producer: "broken", outcome: "failed" },
         ]);
         expect(
           (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
