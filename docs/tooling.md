@@ -54,19 +54,21 @@ Use this ordered procedure for the one-time live cutover.
 2. Before the live cutover, verify the exact old executable against its manifest, verify the manifest integrity, and rehearse the exact `change reconcile <merged-change-id>` command on a disposable repository.
 3. After the merged baseline Change is available, pause all But Why opens and writes.
 4. Verify the merged `idPrefix` Repo Config against the merged commit, and verify that no `taskPrefix` compatibility overlay is installed.
-5. Run the old bundle directly from canonical `main`, as its trusted root, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID and unchanged merged `idPrefix`.
+5. Run the old bundle directly from canonical `main`, with canonical `main` assigned as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID and unchanged merged `idPrefix`.
    Do not use the merged executable, a Candidate executable, or a source-checkout dispatcher for old-state reconciliation.
    If reconciliation fails, verify the merged `idPrefix` against the merged commit again before any retry or new-runtime open.
    If the reconciliation result is uncertain, determine whether the exact Change and cleanup mutations committed before retrying.
    Do not retry while the old-state result is unknown.
 6. After successful reconciliation, archive the complete Git Common Directory But Why state and repository reviewer files under an operator-selected unique path.
-   Include repository and executable identity, the old bundle manifest, archive integrity metadata, and instructions for inspecting a copy with the old bundle.
-   Verify archive checksums and old-state SQLite readability before initializing new state.
-   Do not overwrite or delete the archive.
+   Include the archive timestamp, repository and executable identity, the old bundle manifest, archive integrity metadata, and instructions for inspecting a copy with the old bundle.
+   Keep existing loose SQLite backups until the archive checksums and old-state SQLite readability verify.
+   Do not overwrite or delete the verified archive.
 7. Remove the temporary old bundle and manifest after successful reconciliation unless the archive procedure requires them.
    If the archive requires them, remove only the temporary copies after archive verification.
 8. Initialize fresh Shared Repository State with the merged executable and the unchanged merged `idPrefix` Repo Config.
    Verify the baseline ledger, the supported product table inventory, repository identity, and a normal read-only command before resuming operations.
+9. After fresh-state verification, remove the loose SQLite backups.
+   Retain only the active new `state.sqlite` and the single verified final prerelease archive.
 
 If interruption leaves the old operational state in place, continue with the old bundle or finish the archive move before initialization.
 If interruption occurs after the archive move, rerun fresh initialization with the merged executable.
