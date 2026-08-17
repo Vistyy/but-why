@@ -17,7 +17,6 @@ import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
 } from "../adapters/changeStartGit.js";
-import type { ChangeStartGitOperations } from "../changeStartGitOperations.js";
 import {
   type ChangeImplementResult,
   type ChangePrepareResult,
@@ -27,6 +26,7 @@ import {
   startChange,
 } from "../changeLifecycle.js";
 import type { ChangeReconciliationPort } from "../changePorts.js";
+import type { ChangeStartGitOperations } from "../changeStartGitOperations.js";
 import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";

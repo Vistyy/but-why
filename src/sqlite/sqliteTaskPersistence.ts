@@ -6,8 +6,8 @@ import type { TaskState } from "../task/lifecycle.js";
 import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
 import {
   internalTaskId,
-  publicTaskId,
   type PublicTaskId,
+  publicTaskId,
   publicTaskIdFromInternal,
 } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";

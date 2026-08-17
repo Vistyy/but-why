@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 import { prepareChange, startChange } from "../../src/change/changeLifecycle.js";
 import type { ChangeStartGitOperations } from "../../src/change/changeStartGitOperations.js";
-import { type ChangeStartPersistence } from "../../src/change/changeStartPersistence.js";
+import type { ChangeStartPersistence } from "../../src/change/changeStartPersistence.js";
 import type {
   ChangeStartRecord,
   CreateChangeStartInput,
