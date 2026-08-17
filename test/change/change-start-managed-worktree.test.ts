@@ -345,6 +345,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(advancedCommit).not.toBe(output.startingCommit);
 
       git(root, "worktree", "remove", output.worktreePath);
+      git(root, "reflog", "expire", "--expire=now", "--all");
 
       const recovered = yield* runByInProcessEffect(
         root,

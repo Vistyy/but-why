@@ -150,28 +150,31 @@ const ensureRecordedBranch = (
       ? { ok: true }
       : { ok: false, code: "change_start_conflict" };
   }
-  const create = git(
-    cwd,
-    "update-ref",
-    "--create-reflog",
-    "-m",
-    branchOwnershipMessage(start),
-    start.branchRef,
-    start.startingCommit,
-    "0000000000000000000000000000000000000000",
-  );
+  const markerRef = branchOwnershipRef(start);
+  const markerCommit = resolveLocalBranch(cwd, markerRef);
+  const create =
+    recovering && markerCommit === start.startingCommit
+      ? git(
+          cwd,
+          "update-ref",
+          start.branchRef,
+          start.startingCommit,
+          "0000000000000000000000000000000000000000",
+        )
+      : gitWithInput(
+          cwd,
+          `create ${start.branchRef} ${start.startingCommit}\ncreate ${markerRef} ${start.startingCommit}\n`,
+          "update-ref",
+          "--stdin",
+        );
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 
-const branchOwnershipMessage = (start: ChangeStartRecord): string => `but-why Change ${start.id}`;
+const branchOwnershipRef = (start: ChangeStartRecord): string =>
+  `refs/but-why/change-ownership/${start.id}`;
 
-const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean => {
-  const reflog = git(cwd, "reflog", "show", "--format=%H%x09%gs", start.branchRef);
-  return (
-    reflog.ok &&
-    reflog.stdout.split("\n").at(-1) === `${start.startingCommit}\t${branchOwnershipMessage(start)}`
-  );
-};
+const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean =>
+  resolveLocalBranch(cwd, branchOwnershipRef(start)) === start.startingCommit;
 
 const removeStaleWorktreeRegistration = (
   cwd: string,
@@ -284,11 +287,18 @@ type GitResult =
   | { readonly ok: true; readonly stdout: string }
   | { readonly ok: false; readonly stderr: string };
 
-const git = (cwd: string, ...args: readonly string[]): GitResult => {
+const git = (cwd: string, ...args: readonly string[]): GitResult =>
+  gitWithInput(cwd, undefined, ...args);
+
+const gitWithInput = (
+  cwd: string,
+  input: string | undefined,
+  ...args: readonly string[]
+): GitResult => {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    ...(input === undefined ? { stdio: ["ignore", "pipe", "pipe"] } : { input }),
   });
   return result.status === 0
     ? { ok: true, stdout: result.stdout.trim() }
