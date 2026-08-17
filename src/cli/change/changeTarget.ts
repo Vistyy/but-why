@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { hasPublicChangeIdShape } from "../../change/changeId.js";
+import { hasPublicChangeIdShape, isPublicChangeIdForPrefix } from "../../change/changeId.js";
 import { loadChangeList } from "../../change/composition/loadChangeInspection.js";
 import {
   type CliResult,
@@ -8,19 +8,29 @@ import {
   runtimeError,
 } from "../../cliResults.js";
 import { findCurrentRepositoryWorktreeFacts } from "../../repositoryRuntime/repositoryContext.js";
+import { resolveRepositoryIdPrefix } from "../../repositoryRuntime/repositoryRuntime.js";
 
 type ChangeTargetResolution =
   | { readonly ok: true; readonly changeId: string }
   | { readonly ok: false; readonly result: CliResult };
 
-export const rejectedExplicitChangeId = (changeId: string): CliResult | undefined =>
-  hasPublicChangeIdShape(changeId)
+export const rejectedExplicitChangeId = (
+  changeId: string,
+  cwd: string,
+  operationalRepoRoot?: string,
+): CliResult | undefined => {
+  const idPrefix = hasPublicChangeIdShape(changeId)
+    ? resolveRepositoryIdPrefix(cwd, operationalRepoRoot)
+    : undefined;
+  if (idPrefix === undefined && hasPublicChangeIdShape(changeId)) return undefined;
+  return idPrefix !== undefined && isPublicChangeIdForPrefix(changeId, idPrefix)
     ? undefined
     : runtimeError({
         code: "change_not_found",
         message: "Change was not found.",
         help: ["Use a Change ID returned by `by change list --all`."],
       });
+};
 
 export const resolveChangeId = (
   changeId: string | undefined,
@@ -29,7 +39,7 @@ export const resolveChangeId = (
   operationalRepoRoot?: string,
 ): Effect.Effect<ChangeTargetResolution> => {
   if (changeId !== undefined) {
-    const rejected = rejectedExplicitChangeId(changeId);
+    const rejected = rejectedExplicitChangeId(changeId, cwd, operationalRepoRoot);
     return Effect.succeed(
       rejected === undefined ? { ok: true, changeId } : { ok: false, result: rejected },
     );

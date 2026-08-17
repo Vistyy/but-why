@@ -109,12 +109,14 @@ describe("Change inspection CLI", () => {
       commitButWhyConfigAndRecordDefault(root);
 
       const results = yield* Effect.all(
-        [
-          ["change", "show", "change-1"],
-          ["change", "decision", "list", "change-1"],
-          ["change", "blocker", "list", "change-1"],
-          ["change", "reconcile", "change-1"],
-        ].map((args) => runByInProcessEffect(root, args)),
+        ["change-1", "ZZ-C1"]
+          .flatMap((changeId) => [
+            ["change", "show", changeId],
+            ["change", "decision", "list", changeId],
+            ["change", "blocker", "list", changeId],
+            ["change", "reconcile", changeId],
+          ])
+          .map((args) => runByInProcessEffect(root, args)),
       );
 
       for (const result of results) {

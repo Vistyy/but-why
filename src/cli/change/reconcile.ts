@@ -15,7 +15,11 @@ export const runReconcile = (
 ): Effect.Effect<CliResult> => {
   const changeId = command.changeId;
   if (changeId !== undefined) {
-    const rejected = support.rejectedExplicitChangeId(changeId);
+    const rejected = support.rejectedExplicitChangeId(
+      changeId,
+      environment.cwd,
+      environment.operationalRepoRoot,
+    );
     if (rejected !== undefined) return Effect.succeed(rejected);
   }
   if (command.discardWork && changeId === undefined) {

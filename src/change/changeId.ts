@@ -3,6 +3,9 @@ const publicChangeIdShapePattern = /^[A-Z][A-Z0-9]*-C[1-9][0-9]*$/u;
 export const hasPublicChangeIdShape = (value: string): boolean =>
   publicChangeIdShapePattern.test(value);
 
+export const isPublicChangeIdForPrefix = (value: string, idPrefix: string): boolean =>
+  value.startsWith(`${idPrefix}-C`) && hasPublicChangeIdShape(value);
+
 export const publicChangeId = (idPrefix: string, internalId: number): string => {
   if (!Number.isSafeInteger(internalId) || internalId < 1) {
     throw new Error("Invalid internal Change identity");
