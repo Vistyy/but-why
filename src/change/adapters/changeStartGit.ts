@@ -141,10 +141,11 @@ const ensureRecordedBranch = (
   start: ChangeStartRecord,
   recovering: boolean,
 ): ProvisionChangeWorktreeResult => {
-  const branchCommit = resolveLocalBranch(cwd, start.branchRef);
-  if (branchCommit !== undefined) {
+  const branch = inspectRecordedBranch(cwd, start.branchRef);
+  if (branch === "present") {
     return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
   }
+  if (branch === "tooling_error") return { ok: false, code: "git_tooling_error" };
   if (recovering) {
     return {
       ok: false,
@@ -157,6 +158,17 @@ const ensureRecordedBranch = (
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+};
+
+const inspectRecordedBranch = (
+  cwd: string,
+  branchRef: string,
+): "present" | "missing" | "tooling_error" => {
+  const exists = git(cwd, "show-ref", "--verify", "--quiet", branchRef);
+  if (!exists.ok) return exists.status === 1 ? "missing" : "tooling_error";
+  return git(cwd, "rev-parse", "--verify", `${branchRef}^{commit}`).ok
+    ? "present"
+    : "tooling_error";
 };
 
 const removeStaleWorktreeRegistration = (
@@ -268,7 +280,7 @@ const pathEntryExists = (path: string): boolean => {
 
 type GitResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly stderr: string };
+  | { readonly ok: false; readonly status: number | null; readonly stderr: string };
 
 const git = (cwd: string, ...args: readonly string[]): GitResult => {
   const result = spawnSync("git", args, {
@@ -278,5 +290,5 @@ const git = (cwd: string, ...args: readonly string[]): GitResult => {
   });
   return result.status === 0
     ? { ok: true, stdout: result.stdout.trim() }
-    : { ok: false, stderr: result.stderr.trim() };
+    : { ok: false, status: result.status, stderr: result.stderr.trim() };
 };

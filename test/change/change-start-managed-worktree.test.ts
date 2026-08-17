@@ -596,6 +596,25 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("reports a recorded branch observation failure as a tooling error", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const start = changeStartRecord(root);
+      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      git(root, "worktree", "remove", start.worktreePath);
+      const blobPath = join(root, "not-a-commit.txt");
+      writeFileSync(blobPath, "not a commit\n");
+      const blob = git(root, "hash-object", "-w", blobPath);
+      writeFileSync(join(start.repositoryCommonDirectory, start.branchRef), `${blob}\n`);
+
+      expect(provisionChangeWorktree(root, start, true)).toEqual({
+        ok: false,
+        code: "git_tooling_error",
+      });
+      expect(existsSync(start.worktreePath)).toBe(false);
+    }),
+  );
+
   it.effect("preserves unexpected branches and occupied Managed Worktree paths", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
