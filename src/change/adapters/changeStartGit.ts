@@ -147,7 +147,7 @@ const ensureRecordedBranch = (
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
     if (!recovering) return { ok: false, code: "change_start_conflict" };
-    const ownership = recordedBranchOwnership(cwd, start);
+    const ownership = recordedBranchOwnership(cwd, start, branchCommit);
     return ownership === "owned"
       ? { ok: true }
       : {
@@ -184,6 +184,7 @@ const branchOwnershipRef = (start: ChangeStartRecord): string => {
 const recordedBranchOwnership = (
   cwd: string,
   start: ChangeStartRecord,
+  branchCommit: string,
 ): "owned" | "foreign" | "tooling_error" => {
   const ownershipRef = branchOwnershipRef(start);
   const markerExists = git(cwd, "show-ref", "--verify", "--quiet", ownershipRef);
@@ -191,8 +192,6 @@ const recordedBranchOwnership = (
   const marker = git(cwd, "rev-parse", "--verify", `${ownershipRef}^{commit}`);
   if (!marker.ok) return "tooling_error";
   if (marker.stdout !== start.startingCommit) return "foreign";
-  const branchCommit = resolveLocalBranch(cwd, start.branchRef);
-  if (branchCommit === undefined) return "foreign";
   const lineage = git(cwd, "merge-base", "--is-ancestor", start.startingCommit, branchCommit);
   return lineage.ok ? "owned" : lineage.status === 1 ? "foreign" : "tooling_error";
 };
