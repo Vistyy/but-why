@@ -19,7 +19,7 @@ import {
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
 } from "../../../sqlite/sqliteTaskReadModel.js";
-import { internalTaskId, type PublicTaskId } from "../../../task/taskId.js";
+import { internalTaskId, publicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,
   TaskChangeStartCreationInput,
