@@ -22,11 +22,15 @@
     ]
   },
   "review": {
-    "specialists": ["standards"]
+    "specialists": ["standards", "verification"]
   },
   "reviewers": {
     "standards": {
       "instructionsFile": ".but-why/reviewers/standards.md",
+      "agentProfile": { "scope": "global", "name": "reviewer" }
+    },
+    "verification": {
+      "instructionsFile": ".but-why/reviewers/verification.md",
       "agentProfile": { "scope": "global", "name": "reviewer" }
     }
   }
