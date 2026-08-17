@@ -1,5 +1,6 @@
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
@@ -119,29 +120,88 @@ describe("shared repository state", () => {
     }),
   );
 
-  it.effect("rejects migration gaps and unknown newer Shared Repository State schemas", () =>
+  it.effect("applies the baseline from an empty migration ledger", () =>
     Effect.gen(function* () {
-      for (const corruptLedger of [
-        (sql: SqlClient.SqlClient) => sql`DELETE FROM effect_sql_migrations WHERE migration_id = 2`,
-        (sql: SqlClient.SqlClient) =>
-          sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (99, 'unknown')`,
-      ]) {
+      const directory = createTestWorkspace();
+      const statePath = join(directory, "state.sqlite");
+      const database = new DatabaseSync(statePath);
+      database.exec(`
+        CREATE TABLE effect_sql_migrations (
+          migration_id INTEGER PRIMARY KEY NOT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          name VARCHAR(255) NOT NULL
+        )
+      `);
+      database.close();
+
+      const migrations = yield* Effect.scoped(
+        Effect.flatMap(RepositorySql, (repository) =>
+          repository.operation(
+            "read initialized migration ledger",
+            (sql) => sql<{ readonly migrationId: number }>`
+              SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id
+            `,
+          ),
+        ).pipe(
+          Effect.provide(
+            repositorySqlLayer({
+              statePath,
+              commonDirectory: directory,
+              idPrefix: "BY",
+              lifecycle: "initialize",
+            }),
+          ),
+        ),
+      );
+
+      expect(migrations).toEqual([{ migrationId: 1 }]);
+    }),
+  );
+
+  it.effect("rejects incomplete and unknown migration ledgers without changing them", () =>
+    Effect.gen(function* () {
+      const cases = [
+        {
+          corrupt: (sql: SqlClient.SqlClient) =>
+            sql`DELETE FROM effect_sql_migrations WHERE migration_id = 1`,
+          expected: [],
+        },
+        {
+          corrupt: (sql: SqlClient.SqlClient) =>
+            sql`UPDATE effect_sql_migrations SET migration_id = 0 WHERE migration_id = 1`,
+          expected: [0],
+        },
+        {
+          corrupt: (sql: SqlClient.SqlClient) =>
+            sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (99, 'unknown')`,
+          expected: [1, 99],
+        },
+      ] as const;
+      for (const scenario of cases) {
         const root = yield* initializedRepo();
-        const config = {
-          statePath: sharedStatePath(root),
-          commonDirectory: join(root, ".git"),
-        };
+        const statePath = sharedStatePath(root);
+        const config = { statePath, commonDirectory: join(root, ".git") };
         yield* Effect.scoped(
           Effect.flatMap(RepositorySql, (repository) =>
-            repository.operation("corrupt migration ledger", corruptLedger),
+            repository.operation("corrupt migration ledger", scenario.corrupt),
           ).pipe(Effect.provide(repositorySqlLayer(config))),
         );
 
         const error = yield* Effect.scoped(
           RepositorySql.pipe(Effect.provide(repositorySqlLayer(config))),
         ).pipe(Effect.flip);
-
         expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+
+        const database = new DatabaseSync(statePath, { readOnly: true });
+        const migrations = database
+          .prepare(
+            "SELECT migration_id AS migrationId FROM effect_sql_migrations ORDER BY migration_id",
+          )
+          .all()
+          // biome-ignore lint/complexity/useLiteralKeys: DatabaseSync rows have an index signature.
+          .map((row) => row["migrationId"]);
+        database.close();
+        expect(migrations).toEqual(scenario.expected);
       }
     }),
   );
