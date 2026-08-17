@@ -576,6 +576,9 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
+      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      git(root, "worktree", "remove", start.worktreePath);
+      git(root, "update-ref", "-d", start.branchRef);
       const emptyTree = git(root, "mktree");
       const foreignCommit = git(root, "commit-tree", emptyTree, "-m", "Foreign history");
       git(root, "update-ref", start.branchRef, foreignCommit);

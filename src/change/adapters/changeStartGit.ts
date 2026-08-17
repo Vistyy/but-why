@@ -176,8 +176,14 @@ const branchOwnershipRef = (start: ChangeStartRecord): string => {
   return ownershipRef;
 };
 
-const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean =>
-  resolveLocalBranch(cwd, branchOwnershipRef(start)) === start.startingCommit;
+const recordedBranchIsOwned = (cwd: string, start: ChangeStartRecord): boolean => {
+  if (resolveLocalBranch(cwd, branchOwnershipRef(start)) !== start.startingCommit) return false;
+  const branchCommit = resolveLocalBranch(cwd, start.branchRef);
+  return (
+    branchCommit !== undefined &&
+    git(cwd, "merge-base", "--is-ancestor", start.startingCommit, branchCommit).ok
+  );
+};
 
 const removeStaleWorktreeRegistration = (
   cwd: string,
