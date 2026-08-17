@@ -53,14 +53,9 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation("insert resolved Blocker fixture", (sql) =>
         sql.unsafe(`
-        INSERT INTO implementation_blockers (
-          id, change_id, reported_at, content, resolved_at,
-          resolution_id, resolution_recorded_at, resolution_content
-        ) VALUES (
-          'blocker-1', 1, '${secondNow}', 'Question', '${secondNow}',
-          'resolution-1', '${secondNow}', 'Approved resolution'
-        )
-      `),
+          INSERT INTO implementation_blockers (change_id, content, resolution_content)
+          VALUES (1, 'Question', 'Approved resolution')
+        `),
       );
 
       expect(yield* tasks.listTasks({ includeDone: true })).toMatchObject({

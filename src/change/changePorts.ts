@@ -16,7 +16,6 @@ export type { TerminalCleanupChange } from "./change.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
-  CancelChangeInput,
   CompleteMergedChangeInput,
   ListChangesInput,
   RecordChangeCleanupInput,
@@ -207,22 +206,6 @@ type CompleteMergedFailure = {
     | "change_already_closed"
     | "publication_mismatch"
     | "task_completion_rejected";
-};
-
-export type ChangeCancellationOwnerPort = {
-  readonly getChangeById: (changeId: string) => StorageEffect<ChangeCancellationRecord | undefined>;
-  readonly completeMergedChange: (
-    input: CompleteMergedChangeInput,
-  ) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
-    | ChangeCancellationCompletionFailure
-  >;
-  readonly cancelChange: (
-    input: CancelChangeInput,
-  ) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
-    | ChangeCancellationMutationFailure
-  >;
 };
 
 export type TerminalChangeCleanupPort = {

@@ -6,7 +6,6 @@ import type {
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
@@ -31,7 +30,7 @@ export const validationRunReadColumns = `
   outcome
 `;
 
-export type DecodedValidationRun = {
+type DecodedValidationRun = {
   readonly record: CandidateValidationRunRecord;
   readonly policySnapshot: string;
   readonly highestDecisionId: number | null;
@@ -64,9 +63,6 @@ const decodeValidationRunRow = (
     highestBlockerId: row.highestBlockerId,
   };
 };
-
-export const decodeValidationRun = (row: StoredValidationRunRow): DecodedValidationRun =>
-  decodeValidationRunRow(row, []);
 
 export const readValidationRunById = (
   sql: SqlClient.SqlClient,
@@ -132,51 +128,6 @@ export const readActiveValidationRunForChange = (
       changeId,
     } satisfies ActiveCandidateValidationRun;
   });
-
-export const validateValidationRunAuthorityRelationships = (
-  run: DecodedValidationRun,
-  changeId: string,
-  blockers: ImplementationBlockerHistory,
-): void => {
-  const highestBlockerId = blockers.blockers.at(-1)?.id ?? null;
-  if (run.highestBlockerId !== highestBlockerId) {
-    throw new Error("Validation Run Blocker high-water identity is inconsistent");
-  }
-  for (const decision of run.record.implementationDecisions) {
-    if (decision.changeId !== changeId) {
-      throw new Error("Validation Run Implementation Decision belongs to another Change");
-    }
-  }
-  const highestDecisionId = run.record.implementationDecisions.at(-1)?.id ?? null;
-  if (run.highestDecisionId !== highestDecisionId) {
-    throw new Error("Validation Run Decision high-water identity is inconsistent");
-  }
-};
-
-export const validateValidationRunLatestResolvedBlockerRelationship = (
-  run: DecodedValidationRun,
-  expectedHighestBlockerId: number | null,
-): void => {
-  if (run.highestBlockerId !== expectedHighestBlockerId) {
-    throw new Error("Validation Run Blocker high-water identity is inconsistent");
-  }
-};
-
-export const validateValidationRunImplementationDecisionRelationships = (
-  run: DecodedValidationRun,
-  changeId: string,
-): void => {
-  let previousId = 0;
-  for (const decision of run.record.implementationDecisions) {
-    if (decision.changeId !== changeId || decision.id <= previousId) {
-      throw new Error("Validation Run Implementation Decision ordering is inconsistent");
-    }
-    previousId = decision.id;
-  }
-  if ((run.record.implementationDecisions.at(-1)?.id ?? null) !== run.highestDecisionId) {
-    throw new Error("Validation Run Decision high-water identity is inconsistent");
-  }
-};
 
 const readDecisionSnapshot = (
   sql: SqlClient.SqlClient,

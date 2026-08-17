@@ -1,11 +1,7 @@
 import type { ChangePublication } from "../change/change.js";
 import { parseGitHubRemoteUrl } from "../submissionEnvironment/adapters/githubTarget.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
-import {
-  decodeStoredNullableString,
-  decodeStoredPositiveInteger,
-  decodeStoredString,
-} from "./sqliteChangeValueDecoders.js";
+import { decodeStoredPositiveInteger, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 
 export type SqliteChangePublicationRow = {
   readonly publicationCandidateId: unknown;
@@ -16,16 +12,6 @@ export type SqliteChangePublicationRow = {
   readonly publicationBranchRef: unknown;
   readonly publicationExpectedHeadSha: unknown;
 };
-
-export const sqliteChangePublicationColumns = `
-  publication.candidate_id AS publicationCandidateId,
-  publication.validation_run_id AS publicationValidationRunId,
-  publication.pull_request_number AS publicationPrNumber,
-  change_row.base_ref AS publicationBaseRef,
-  change_row.base_remote_url AS publicationBaseRemoteUrl,
-  change_row.branch_ref AS publicationBranchRef,
-  publication_candidate.head_commit AS publicationExpectedHeadSha
-`;
 
 export const decodeSqliteChangePublication = (
   row: SqliteChangePublicationRow,
@@ -87,6 +73,3 @@ export const decodeSqliteChangePublication = (
           },
   };
 };
-
-export const decodeNullablePublicationHead = (value: unknown): string | null =>
-  decodeStoredNullableString(value, "Publication expected head");

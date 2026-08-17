@@ -211,9 +211,9 @@ const cases = {
     result: { ok: false, code: "active_validation_run", changeId, validationRunId: 1 },
     expected: errorResult(
       "active_validation_run",
-      "Validation Run run-1 remains active for this Change.",
+      "Validation Run 1 remains active for this Change.",
       [
-        "After stopping every process from the run, execute `by validation-run abandon run-1 --reason <reason>`.",
+        "After stopping every process from the run, execute `by validation-run abandon 1 --reason <reason>`.",
       ],
       { changeId, validationRunId: 1 },
     ),

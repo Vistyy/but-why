@@ -254,7 +254,7 @@ describe("packaged Change Implement continuation extension", () => {
     });
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
+        currentCandidate: { id: 2, headSha: "head" },
         publication: {
           candidateId: 1,
           expectedHeadSha: "old-head",
@@ -732,7 +732,7 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(
       snapshot({
         toolingFailureCount: 1,
-        currentValidationRun: { id: "validation-run-1", state: "complete" },
+        currentValidationRun: { id: 1, state: "complete" },
       }),
     );
 
@@ -742,7 +742,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.runCommand("continue-change");
     expect(harness.sent).toHaveLength(1);
-    expect(harness.sent[0]).toContain("by validation-run show validation-run-1");
+    expect(harness.sent[0]).toContain("by validation-run show 1");
   });
 
   it("keeps the first Change identity bound to the Pi session", async () => {
@@ -765,8 +765,8 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-1", headSha: "head" },
-        currentValidationRun: { id: "run-1", state: "complete" },
+        currentCandidate: { id: 1, headSha: "head" },
+        currentValidationRun: { id: 1, state: "complete" },
         publication: {
           candidateId: 1,
           expectedHeadSha: "head",
@@ -794,7 +794,7 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
+        currentCandidate: { id: 2, headSha: "head" },
         publication: {
           candidateId: 1,
           expectedHeadSha: "old-head",
@@ -810,8 +810,8 @@ describe("packaged Change Implement continuation extension", () => {
 
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
-        currentValidationRun: { id: "run-2", state: "running" },
+        currentCandidate: { id: 2, headSha: "head" },
+        currentValidationRun: { id: 2, state: "running" },
         publication: {
           candidateId: 1,
           expectedHeadSha: "old-head",

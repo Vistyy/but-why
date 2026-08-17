@@ -48,8 +48,7 @@ describe("Snapshot Workspace Git cleanup verification", () => {
 
       expect(result).toEqual({
         workspace: "failed",
-        errorMessage:
-          "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
+        errorMessage: `Recorded Snapshot Workspace identity does not match the expected workspace identity. Expected ${selectedPath}; received ${unrelatedPath}.`,
       });
       expect(existsSync(selectedPath)).toBe(true);
       expect(existsSync(unrelatedPath)).toBe(true);

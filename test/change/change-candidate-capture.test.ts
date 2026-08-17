@@ -10,6 +10,7 @@ import {
 } from "../../src/change/candidateCapture/adapters/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
+import { registerCandidateChange } from "../support/candidateReadyRepo.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -57,7 +58,7 @@ describe("Change Candidate capture boundaries", () => {
       expect(result).toEqual({
         ok: true,
         changeId: expect.any(String),
-        candidateId: expect.any(String),
+        candidateId: expect.any(Number),
         branchRef: "refs/heads/feature",
         changeBaseSha: mainSha,
         headSha,
@@ -254,6 +255,7 @@ const captureReadyRepo = (workspace?: string): string => {
   git(root, "checkout", "-b", "feature");
   writeFileSync(join(root, "tracked.txt"), "feature\n");
   git(root, "commit", "-am", "feature");
+  registerCandidateChange(root, "refs/heads/feature", root);
   return root;
 };
 

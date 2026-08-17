@@ -159,44 +159,6 @@ export const listValidationArtifacts = (
     ),
   );
 
-export const assertRunOwner = <A extends { readonly validationRunId: number }>(
-  record: A,
-  validationRunId: number,
-): A => {
-  assertRunId(record.validationRunId, validationRunId);
-  return record;
-};
-
-export const validatePhaseResultPolicyRelationships = (
-  results: readonly CandidateValidationPhaseResult[],
-  runs: ReadonlyMap<number, CandidateValidationRunRecord>,
-): void => {
-  for (const result of results) {
-    const run = runs.get(result.validationRunId);
-    if (run === undefined) throw new Error("Validation Phase Result belongs to an unknown Run");
-    configuredPosition(result.phase, result.producer, run);
-  }
-};
-
-export const validateFindingPhaseResultRelationships = (
-  findings: readonly CandidateValidationFinding[],
-  results: readonly CandidateValidationPhaseResult[],
-): void => {
-  for (const finding of findings) {
-    if (
-      !results.some(
-        (result) =>
-          result.validationRunId === finding.validationRunId &&
-          result.phase === finding.phase &&
-          result.producer === finding.producer &&
-          result.outcome === "failed",
-      )
-    ) {
-      throw new Error("Finding has no failed Validation Phase Result");
-    }
-  }
-};
-
 const readPhaseResults = (sql: SqlClient.SqlClient, validationRunId: number) =>
   sql<StoredPhaseResultRow>`
     SELECT validation_run_id AS validationRunId, phase, producer, outcome,

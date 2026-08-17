@@ -7,8 +7,6 @@ const implementationDecisionSchema = Schema.Struct({
   rationale: Schema.String,
 });
 
-export const implementationDecisionSnapshotSchema = Schema.Array(implementationDecisionSchema);
-
 export type ImplementationDecision = Schema.Schema.Type<typeof implementationDecisionSchema>;
 
 const escapeHtml = (value: string): string => {
