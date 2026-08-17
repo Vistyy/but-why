@@ -61,11 +61,11 @@ Use this ordered procedure for the one-time live cutover.
    If the reconciliation result is uncertain, determine whether the exact Change and cleanup mutations committed before retrying.
    Do not retry while the old-state result is unknown.
 6. After successful reconciliation, archive the complete Git Common Directory But Why state and repository reviewer files under an operator-selected unique path.
-   Include the archive timestamp, repository and executable identity, the old bundle manifest, archive integrity metadata, and instructions for inspecting a copy with the old bundle.
+   Include the archive timestamp, repository and executable identity, the complete manifest-covered old runtime, archive integrity metadata, and instructions that invoke that archived runtime directly when inspecting a state copy.
+   Include every archived runtime and reviewer file in the archive integrity manifest.
    Keep existing loose SQLite backups until the archive checksums and old-state SQLite readability verify.
    Do not overwrite or delete the verified archive.
-7. Remove the temporary old bundle and manifest after successful reconciliation unless the archive procedure requires them.
-   If the archive requires them, remove only the temporary copies after archive verification.
+7. Remove the external temporary old bundle and manifest after the self-contained archive verifies.
 8. Initialize fresh Shared Repository State with the merged executable and the unchanged merged `idPrefix` Repo Config.
    Verify the baseline ledger, the supported product table inventory, repository identity, and a normal read-only command before resuming operations.
 9. After fresh-state verification, remove the loose SQLite backups.

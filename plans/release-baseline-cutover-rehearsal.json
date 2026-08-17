@@ -1,20 +1,36 @@
 {
-  "version": 2,
+  "version": 3,
   "rehearsal": {
-    "repository": "/tmp/by-cutover-linked-rehearsal.18526",
-    "completedAtUtc": "2026-08-17T22:10:00Z",
+    "repository": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y",
+    "evidenceDirectory": "/tmp/by-cutover-ordered-evidence.YiSRON",
+    "completedAtUtc": "2026-08-17T22:14:30Z",
+    "orderedSequence": [
+      ["2026-08-17T22:14:28Z", "old_runtime_verified"],
+      ["2026-08-17T22:14:28Z", "old_runtime_reconciliation_completed"],
+      ["2026-08-17T22:14:28Z", "complete_archive_verified"],
+      ["2026-08-17T22:14:29Z", "fresh_baseline_initialized_and_verified"],
+      ["2026-08-17T22:14:29Z", "before_new_work_failure_observed"],
+      ["2026-08-17T22:14:29Z", "complete_old_state_restored_with_archived_runtime"],
+      ["2026-08-17T22:14:29Z", "fresh_baseline_reinitialized"],
+      ["2026-08-17T22:14:29Z", "post_cutover_new_work_recorded"],
+      ["2026-08-17T22:14:30Z", "after_new_work_failure_observed"],
+      ["2026-08-17T22:14:30Z", "new_state_repaired_forward_and_verified"],
+      ["2026-08-17T22:14:30Z", "final_archive_verified"]
+    ],
     "oldExecutable": {
       "sourceCommit": "10bdce30c94c1d3510b061c7d75f0206328a2494",
       "entrypoint": "/tmp/by-old-bundle.4saLDf/dist/main.js",
       "invocation": "node /tmp/by-old-bundle.4saLDf/dist/main.js",
       "entrypointSha256": "33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc",
       "runtimeManifest": "/tmp/by-old-bundle.4saLDf/runtime-SHA256SUMS",
-      "runtimeManifestSha256": "e2544b7e5d5f83cb66caa36425913f021bde7ced9826ddc3863fc8e6fe923ca3",
-      "runtimeManifestFileCount": 129,
+      "runtimeManifestSha256": "448a9f75d0ee261a1d192fafd2eea993c70bb5fc056617150ebf59968db9e93e",
+      "runtimeManifestFileCount": 130,
+      "runtimeManifestContents": "The complete dist tree, package.json required by the runtime, and source-commit.txt.",
       "verification": {
         "command": "cd /tmp/by-old-bundle.4saLDf && sha256sum -c runtime-SHA256SUMS",
         "exitCode": 0,
-        "result": "All 129 manifest entries, including the complete dist tree and source-commit.txt, verified OK."
+        "completedBeforeReconciliation": true,
+        "result": "All 130 runtime manifest entries verified OK before the old runtime was invoked."
       },
       "dispatcherExclusion": "The rehearsal did not invoke bin/by. That Source Checkout Guard dispatcher can select the canonical checkout executable, so it is not the verified old runtime entrypoint."
     },
@@ -24,17 +40,21 @@
       "entrypointSha256": "0279c5a2f6e6f97f6c55d9527a503413db71cb84e6abfa69804bf4f0c92dda99"
     },
     "fixturePreparation": {
-      "description": "A disposable copy of verified prerelease Shared Repository State was prepared as a representative pre-reconciliation fixture. BY-C1 retained exact Candidate, passing Validation, GitHub Publication, and cleanup facts. Task 1 was set to Todo and linked one-to-one to the reopened BY-C1. The disposable gh executable returned the exact merged pull request facts for that publication.",
+      "description": "A disposable copy of verified prerelease Shared Repository State was prepared as a representative pre-reconciliation fixture. BY-C1 retained exact Candidate, passing Validation, GitHub Publication, and cleanup facts. Task 1 was set to Todo and linked one-to-one to the reopened BY-C1. The disposable gh executable returned the exact merged pull request facts for that publication. Representative standards.md and verification.md reviewer files were installed before the measured sequence.",
       "persistedBefore": {
         "tasks": [[1, "todo"]],
         "taskChangeLinks": [[1, 1]],
         "changes": [[1, "open", null, "complete", null]]
-      }
+      },
+      "reviewerFiles": [
+        ["standards.md", "258c0077b59adad1c5e36ccd526f82782b25efeb901fe43c0ae6210dfba627f6"],
+        ["verification.md", "85d61921b3b070e34db1adebf33d395368a36550e6d4cf95e5f8d2a775f5d939"]
+      ]
     },
     "steps": [
       {
         "name": "verified direct old-runtime reconciliation",
-        "command": "cd /tmp/by-cutover-linked-rehearsal.18526 && PATH=/tmp/by-cutover-linked-fakebin:$PATH BUT_WHY_EXECUTABLE_PATH=/tmp/by-old-bundle.4saLDf/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /tmp/by-old-bundle.4saLDf/dist/main.js change reconcile BY-C1",
+        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && PATH=/tmp/by-cutover-ordered-fakebin.lI6Dsz:$PATH BUT_WHY_EXECUTABLE_PATH=/tmp/by-old-bundle.4saLDf/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /tmp/by-old-bundle.4saLDf/dist/main.js change reconcile BY-C1",
         "exitCode": 0,
         "stdout": "{\"changes\":[{\"changeId\":\"BY-C1\",\"status\":\"completed\",\"cleanup\":{\"state\":\"complete\",\"blockingReason\":null},\"pullRequest\":{\"number\":1,\"url\":\"https://github.com/acme/by-cutover-rehearsal/pull/1\"}}]}",
         "persistedAfter": {
@@ -45,25 +65,23 @@
         "result": "The actual manifest-covered old runtime completed linked BY-C1, retained complete cleanup, and changed its linked Task from Todo to Done."
       },
       {
-        "name": "complete prerelease archive",
-        "archive": "/tmp/by-cutover-linked-rehearsal.18526/.git/but-why-prerelease-archive-linked",
-        "command": "cd /tmp/by-cutover-linked-rehearsal.18526/.git/but-why-prerelease-archive-linked && sha256sum -c SHA256SUMS",
+        "name": "complete self-contained prerelease archive",
+        "archive": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive",
+        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
         "exitCode": 0,
-        "manifestSha256": "fa5e35ff4ddbc0cb6114970536ad4b4e8a6a3dd39611975c1410626a3f2e9a48",
-        "stateSha256": "a8e275a6a782bb264d0304d98083287b66407b30d5ffae1c7d863bdf449eb1a0",
-        "verifiedFiles": [
-          "archive-metadata.txt",
-          "git-common-but-why/execution-locks/change_submission/BY-C1.sqlite",
-          "git-common-but-why/state.sqlite",
-          "INSPECTING.md",
-          "old-runtime/runtime-SHA256SUMS",
-          "old-runtime/source-commit.txt",
-          "reconciliation-output.json",
-          "repository/config.json"
-        ],
+        "archiveTimeUtc": "2026-08-17T22:14:28Z",
+        "archiveManifestFileCount": 139,
+        "archiveManifestSha256": "e5b177b84fccaa008ad1f9cb79007ecacff973db55f9b583440b23a82ffa768a",
+        "stateSha256": "3dd0a9da48a91f9f6d5890e407dfe2bb34b9f9ba6ba5dab8c54d2e0beb059dde",
+        "contents": {
+          "oldOperationalState": "Complete Git Common Directory but-why directory, including its Change Execution Lock.",
+          "repositoryPolicy": "config.json plus representative standards.md and verification.md reviewer files.",
+          "oldRuntime": "The complete 130-file manifest-covered runtime, including dist, package.json, source-commit.txt, and runtime-SHA256SUMS.",
+          "inspection": "INSPECTING.md uses the archive-relative old-runtime/dist/main.js entrypoint and requires runtime manifest verification.",
+          "reconciliation": "The exact structured reconciliation output."
+        },
         "persistedVerification": {
-          "archiveTimeUtc": "2026-08-17T22:10:00Z",
-          "repositoryCommonDirectory": "/tmp/by-cutover-linked-rehearsal.18526/.git",
+          "repositoryCommonDirectory": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git",
           "migrationIds": {
             "minimum": 1,
             "maximum": 43,
@@ -76,17 +94,23 @@
       },
       {
         "name": "fresh release initialization",
-        "command": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js init --id-prefix BY",
+        "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js init --id-prefix BY",
         "exitCode": 0,
         "committedResult": {
           "status": "repaired",
-          "root": "/tmp/by-cutover-linked-rehearsal.18526",
+          "root": "/tmp/by-cutover-ordered-rehearsal.vIOs2Y",
           "idPrefix": "BY",
           "created": ["<git-common-dir>/but-why/state.sqlite"]
+        },
+        "readVerification": {
+          "command": "task list",
+          "exitCode": 0,
+          "count": 0
         },
         "persistedVerification": {
           "productTableCount": 18,
           "migrationIds": [1],
+          "repositoryIdentity": ["/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git", "BY"],
           "taskCount": 0,
           "changeCount": 0
         }
@@ -94,12 +118,7 @@
       {
         "name": "failure before new work and old-state restoration",
         "failureSetup": "Migration ID 99 named unknown_forward_migration was inserted into the otherwise empty fresh state.",
-        "persistedBeforeFailure": {
-          "migrationIds": [1, 99],
-          "taskCount": 0,
-          "changeCount": 0
-        },
-        "failureCommand": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
+        "failureCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
         "failureExitCode": 1,
         "failureStdout": "{\"error\":{\"code\":\"state_store_unavailable\",\"message\":\"Shared But Why? state is unavailable.\"},\"help\":[\"Restore <git-common-dir>/but-why/state.sqlite, then run `by init --id-prefix BY`.\"]}",
         "persistedAfterFailure": {
@@ -107,18 +126,20 @@
           "taskCount": 0,
           "changeCount": 0
         },
-        "restorationVerificationCommand": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/tmp/by-old-bundle.4saLDf/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /tmp/by-old-bundle.4saLDf/dist/main.js change show BY-C1",
+        "restorationVerificationCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive/old-runtime/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive/old-runtime/dist/main.js change show BY-C1",
         "restorationVerificationExitCode": 0,
+        "archivedRuntimeManifestVerificationExitCode": 0,
         "restoredPersistedState": {
           "tasks": [[1, "done"]],
           "taskChangeLinks": [[1, 1]],
           "changes": [[1, "closed", "completed", "complete", null]]
         },
-        "result": "The failed new-runtime read left the unsupported state unchanged. Restoring the complete archive made the linked completed Change and Done Task readable through the verified direct old runtime. Fresh release initialization then succeeded again."
+        "result": "The failed new-runtime read left the unsupported state unchanged. Restoring the complete archive made the linked completed Change and Done Task readable through the archive-contained runtime without the external temporary bundle."
       },
       {
         "name": "failure after new work and forward repair",
-        "newWorkCommand": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task create --title 'Post-cutover recovery task' --file /tmp/by-linked-post-cutover-task.txt",
+        "precondition": "Fresh baseline initialization succeeded again after the old-state restoration exercise.",
+        "newWorkCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task create --title 'Post-cutover recovery task' --file /tmp/by-cutover-ordered-evidence.YiSRON/post-cutover-task.txt",
         "newWorkExitCode": 0,
         "newWorkCommittedResult": {
           "id": "BY-1",
@@ -127,14 +148,20 @@
           "description": "Exercise forward repair after release-baseline initialization.\n"
         },
         "failureSetup": "The disposable new state's common-directory identity was changed from the exact repository Git Common Directory to /incorrect/common-directory.",
-        "failureCommand": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
+        "failureCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task list",
         "failureExitCode": 1,
         "failureStdout": "{\"error\":{\"code\":\"shared_state_identity_conflict\",\"message\":\"Shared But Why? state belongs to a different Git repository.\"},\"help\":[\"Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.\"]}",
+        "persistedAfterFailure": {
+          "repositoryIdentity": ["/incorrect/common-directory", "BY"],
+          "migrationIds": [1],
+          "task": [1, "Post-cutover recovery task", "new"],
+          "changeCount": 0
+        },
         "repair": "The disposable new state's identity was repaired forward to the exact derived Git Common Directory. No old state was restored or merged.",
-        "repairVerificationCommand": "cd /tmp/by-cutover-linked-rehearsal.18526 && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-linked-rehearsal.18526 node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task show BY-1",
+        "repairVerificationCommand": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y && BUT_WHY_EXECUTABLE_PATH=/home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js BUT_WHY_SOURCE_TRUSTED_ROOT=/tmp/by-cutover-ordered-rehearsal.vIOs2Y node /home/syzom/projects/but-why-worktrees/but-why/BY-C262/dist/main.js task show BY-1",
         "repairVerificationExitCode": 0,
         "persistedVerification": {
-          "repositoryIdentity": ["/tmp/by-cutover-linked-rehearsal.18526/.git", "BY"],
+          "repositoryIdentity": ["/tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git", "BY"],
           "task": [1, "Post-cutover recovery task", "new"],
           "productTableCount": 18,
           "migrationIds": [1],
@@ -142,10 +169,19 @@
         }
       }
     ],
+    "finalState": {
+      "activeState": "Fresh release baseline repaired forward after new work.",
+      "activeMigrationIds": [1],
+      "activeTask": [1, "Post-cutover recovery task", "new"],
+      "activeChangeCount": 0,
+      "archiveDirectories": ["but-why-prerelease-archive"],
+      "archiveCount": 1
+    },
     "finalArchiveIntegrity": {
-      "command": "cd /tmp/by-cutover-linked-rehearsal.18526/.git/but-why-prerelease-archive-linked && sha256sum -c SHA256SUMS",
+      "command": "cd /tmp/by-cutover-ordered-rehearsal.vIOs2Y/.git/but-why-prerelease-archive && sha256sum -c SHA256SUMS",
       "exitCode": 0,
-      "result": "Every file in the final archive verified, including reconciled linked Task and Change state, exact reconciliation output, repository policy, and old-runtime identity evidence."
+      "verifiedFileCount": 139,
+      "result": "Every file in the single final archive verified after both recovery outcomes. The archive contains its directly invokable old runtime and representative repository reviewer files."
     }
   }
 }

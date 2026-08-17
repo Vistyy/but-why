@@ -461,13 +461,15 @@ The live operator cutover follows BY-274 acceptance as a separately authorized o
 
 The retained [rehearsal evidence](release-baseline-cutover-rehearsal.json) records the commands, exit statuses, executable identity, archive checks, and persisted observations from the completed disposable run.
 The completed disposable rehearsal used an exact old executable bundle built from canonical source commit `10bdce30c94c1d3510b061c7d75f0206328a2494`.
-The directly invoked `dist/main.js` entrypoint SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`, and all 129 files in the complete runtime manifest verified.
+The directly invoked `dist/main.js` entrypoint SHA-256 was `33a6634c750ebc32340463717f5e61b5ce21395633535668fc0a64b71ae6f1cc`, and all 130 files in its runtime manifest verified before reconciliation.
+The manifest included the complete `dist` tree, the runtime-required `package.json`, and the source commit record.
 The Source Checkout Guard in `bin/by` was not invoked because it can dispatch to a different checkout executable.
 The rehearsal reconciled the exact merged disposable Change `BY-C1` by invoking the manifest-covered old runtime directly.
 The reconciliation completed the Change, retained complete cleanup, and changed its linked Task from Todo to Done.
 
-The rehearsal archive contained the complete old Git Common Directory But Why state, repository reviewer files, repository and executable identity metadata, inspection instructions, the exact reconciliation output, and SHA-256 manifests.
-Every archived checksum verified.
+The rehearsal archive contained the complete old Git Common Directory But Why state, representative `standards.md` and `verification.md` repository reviewer files, repository and executable identity metadata, inspection instructions, the exact reconciliation output, and SHA-256 manifests.
+It also contained the complete manifest-covered old runtime, so its inspection procedure remained usable without the external temporary bundle.
+All 139 archived files verified.
 The archived SQLite database remained readable with migration ledger entries 1 through 43 and showed the linked Task as Done and the reconciled Change as closed, completed, and fully cleaned up.
 
 Fresh initialization with the release executable produced exactly the 18 approved product tables and migration ledger `[1]` without old Task or Change records.
@@ -476,7 +478,8 @@ Fresh initialization then succeeded again.
 
 The after-new-work recovery rehearsal recorded new Task `BY-1`, induced repository identity verification failure, and repaired the new state forward without restoring or merging old state.
 The repair preserved `BY-1`, retained exactly the 18 approved product tables and migration ledger `[1]`, and retained no old Change records.
-The archive checksums still verified after both recovery paths.
+The single archive's checksums still verified after both recovery paths.
+The retained active database ended in the repaired fresh baseline state with new Task `BY-1`, migration ledger `[1]`, and no old Change records.
 
 ## Prerelease archive
 
