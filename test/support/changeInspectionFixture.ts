@@ -7,8 +7,10 @@ import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import {
+  decodeImplementationBlockerHistory,
   deriveAcceptanceContext,
-  readImplementationBlockerHistory,
+  implementationBlockerReadColumns,
+  type StoredImplementationBlockerRow,
 } from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
@@ -261,10 +263,14 @@ export const createValidationRunFixture = (
               changeRows[0]?.acceptanceContext === null || changeRows[0] === undefined
                 ? null
                 : decodeSqliteAcceptanceContextSnapshot(changeRows[0].acceptanceContext);
-            const blockerHistory = yield* readImplementationBlockerHistory(
-              sql,
+            const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
+              `SELECT ${implementationBlockerReadColumns}
+               FROM implementation_blockers WHERE change_id = ? ORDER BY id`,
+              [internalChangeId(input.changeId, "BY")],
+            );
+            const blockerHistory = decodeImplementationBlockerHistory(
+              blockerRows,
               input.changeId,
-              "create Validation Run inspection fixture",
               "BY",
             );
             const acceptanceContext = deriveAcceptanceContext(initialContext, blockerHistory);
