@@ -429,6 +429,7 @@ const runCandidatePhases = (
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
+                recordAcceptanceResult: dependencies.persistence.recordAcceptanceResult,
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -453,6 +454,7 @@ const runCandidatePhases = (
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,
+          recordSpecialistResult: dependencies.persistence.recordSpecialistResult,
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

@@ -135,11 +135,39 @@ describe("Candidate validation", () => {
           state: "complete",
           outcome: "tooling_failed",
         });
-        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ operationName: "verify_candidate_head" }),
-          ]),
+        expect(yield* validation.listPhaseResults(result.validationRunId)).toEqual([
+          { producer: "prepare", outcome: "failed" },
+        ]);
+        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
+          expect.objectContaining({ operationName: "verify_candidate_head" }),
+        ]);
+        const failureScopes = yield* withTestRepository(
+          mainCheckout,
+          Effect.flatMap(RepositorySql, (repository) =>
+            repository.operation(
+              "inspect Validation Tooling Failure scope",
+              (sql) =>
+                sql<{
+                  readonly phaseToolingFailure: string | null;
+                  readonly runToolingFailure: string | null;
+                }>`
+                SELECT
+                  validation_phase_results.tooling_failure AS phaseToolingFailure,
+                  validation_runs.run_tooling_failure AS runToolingFailure
+                FROM validation_runs
+                JOIN validation_phase_results
+                  ON validation_phase_results.validation_run_id = validation_runs.id
+                WHERE validation_runs.id = ${result.validationRunId}
+              `,
+            ),
+          ),
         );
+        expect(failureScopes).toEqual([
+          {
+            phaseToolingFailure: expect.stringContaining("verify_candidate_head"),
+            runToolingFailure: null,
+          },
+        ]);
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
         expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
         expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");

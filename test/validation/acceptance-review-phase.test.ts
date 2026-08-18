@@ -314,14 +314,27 @@ describe("Acceptance Review phase", () => {
       );
       const fixture = acceptancePhaseFixture({ review }, { observedHeadSha: "different-head-sha" });
 
-      const failure = yield* Effect.flip(fixture.run());
+      const result = yield* fixture.run();
 
-      expect(failure).toMatchObject({
-        _tag: "GitToolingFailed",
-        operationName: "verify_candidate_head",
+      expect(result).toMatchObject({
+        findings: 0,
+        persistedToolingFailures: [
+          { _tag: "GitToolingFailed", operationName: "verify_candidate_head" },
+        ],
+        toolingFailure: {
+          _tag: "GitToolingFailed",
+          operationName: "verify_candidate_head",
+        },
       });
       expect(review).not.toHaveBeenCalled();
-      expect(fixture.results).toEqual([]);
+      expect(fixture.results).toMatchObject([
+        {
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "verify_candidate_head" },
+        },
+      ]);
     }),
   );
 
@@ -530,6 +543,7 @@ type FixtureOptions = {
   readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
   readonly linkAgentInvocation?: RunAcceptanceReviewPhaseInput["linkAgentInvocation"];
   readonly settleAgentInvocationResult?: RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"];
+  readonly recordAcceptanceResult?: RunAcceptanceReviewPhaseInput["recordAcceptanceResult"];
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
   readonly sessionStorageRoot?: string;
@@ -573,6 +587,16 @@ const acceptancePhaseFixture = (
       results.push(result);
       return () => Effect.void;
     });
+  const recordAcceptanceResult =
+    options.recordAcceptanceResult ??
+    ((result) =>
+      Effect.sync(() => {
+        results.push({
+          ...result,
+          phase: "acceptance_review",
+          producer: "acceptance",
+        });
+      }));
 
   return {
     results,
@@ -597,6 +621,7 @@ const acceptancePhaseFixture = (
         getAgentSession,
         linkAgentInvocation,
         settleAgentInvocationResult,
+        recordAcceptanceResult,
         allowedUntrackedFiles: [],
         now,
         listArtifacts: () =>

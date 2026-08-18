@@ -13,6 +13,7 @@ import {
   GitToolingFailed,
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
+  validationToolingFailureRecord,
 } from "./validationToolingFailures.js";
 import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
@@ -33,16 +34,13 @@ export type RunCheckPhaseInput = {
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
-export type RunCheckPhaseResult =
-  | {
-      readonly ok: true;
-      readonly findings: 0;
-    }
-  | {
-      readonly ok: true;
-      readonly findings: 1;
-      readonly validationRunId: number;
-    };
+export type RunCheckPhaseResult = {
+  readonly ok: boolean;
+  readonly findings: 0 | 1;
+  readonly validationRunId?: number;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
+  readonly toolingFailure?: ValidationToolingFailure;
+};
 
 type CommandResult = {
   readonly exitCode: number;
@@ -73,19 +71,49 @@ export const runCheckPhase = (
     let foundFailure = false;
 
     for (const check of input.checks) {
-      const checkResult: CheckResult = yield* runWithSubmitProgress({
+      const checkResult = yield* runWithSubmitProgress({
         progress: input.progress,
         phase: { kind: "check", id: check.id },
         run: Effect.gen(function* () {
-          const checkResult = yield* runSingleCheck(input, check);
-          yield* recordCheckResult(input, checkResult);
-          return checkResult;
-        }),
-        outcome: (result) => (result.failed ? "failed" : "passed"),
-        details: (result) => (result.failed ? { reason: "findings" } : undefined),
-      });
-      foundFailure ||= checkResult.failed;
+          const execution = yield* Effect.either(runSingleCheck(input, check));
+          if (execution._tag === "Left") {
+            yield* input.recordCheckResult({
+              validationRunId: input.validationRunId,
+              producer: check.id,
+              outcome: "failed",
+              artifactRecords: [],
+              toolingFailure: {
+                ...validationToolingFailureRecord(execution.left),
+                validationRunId: input.validationRunId,
+              },
+              now: input.now,
+            });
+            return { producer: check.id, failed: false, toolingFailure: execution.left };
+          }
 
+          yield* recordCheckResult(input, execution.right);
+          return { ...execution.right, toolingFailure: undefined };
+        }),
+        outcome: (result) =>
+          result.toolingFailure === undefined && !result.failed ? "passed" : "failed",
+        details: (result) =>
+          result.toolingFailure !== undefined
+            ? { reason: "tooling" as const }
+            : result.failed
+              ? { reason: "findings" as const }
+              : undefined,
+      });
+      if (checkResult.toolingFailure !== undefined) {
+        return {
+          ok: false,
+          findings: 0,
+          validationRunId: input.validationRunId,
+          persistedToolingFailures: [checkResult.toolingFailure],
+          toolingFailure: checkResult.toolingFailure,
+        };
+      }
+
+      foundFailure ||= checkResult.failed;
       if (checkResult.failed && input.continueAfterFinding !== true) {
         return { ok: true, findings: 1, validationRunId: input.validationRunId };
       }

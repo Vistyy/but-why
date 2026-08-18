@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -42,57 +42,74 @@ describe("Check Phase Results", () => {
           }).status,
         ).toBe(0);
 
-        const exit = yield* Effect.exit(
-          runCheckPhase({
-            validationRunId: 133,
-            checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
-            artifactsRoot: createTestWorkspace(),
-            now,
-            commandExecutor: (command, options) =>
-              Effect.sync(() => {
-                const result = runTestProcess(shPath, ["-c", command], {
-                  cwd: options?.cwd ?? workspace,
-                  env: { PATH: restrictedPath },
-                });
-                return {
-                  exitCode: result.status ?? 0,
-                  stdout: result.stdout,
-                  stderr: result.stderr,
-                };
-              }),
-            recordCheckResult: () => Effect.void,
-          }),
-        );
+        const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
+        const result = yield* runCheckPhase({
+          validationRunId: 133,
+          checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
+          artifactsRoot: createTestWorkspace(),
+          now,
+          commandExecutor: (command, options) =>
+            Effect.sync(() => {
+              const result = runTestProcess(shPath, ["-c", command], {
+                cwd: options?.cwd ?? workspace,
+                env: { PATH: restrictedPath },
+              });
+              return {
+                exitCode: result.status ?? 0,
+                stdout: result.stdout,
+                stderr: result.stderr,
+              };
+            }),
+          recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
+        });
 
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit)) {
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Could not find timeout command for check quality.",
-          );
-        }
+        expect(result).toMatchObject({
+          ok: false,
+          findings: 0,
+          toolingFailure: {
+            _tag: "CheckCommandExecutionToolingFailed",
+            message: "Could not find timeout command for check quality.",
+          },
+        });
+        expect(recordedResults).toMatchObject([
+          {
+            producer: "quality",
+            outcome: "failed",
+            artifactRecords: [],
+            toolingFailure: { operationName: "run_check_command" },
+          },
+        ]);
         expect(existsSync(marker)).toBe(false);
       }),
   );
 
   it.effect("translates expected command infrastructure failures", () =>
     Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        runCheckPhase({
-          validationRunId: 133,
-          checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
-          artifactsRoot: createTestWorkspace(),
-          now,
-          commandExecutor: () =>
-            Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
-          recordCheckResult: () => Effect.void,
-        }),
-      );
-
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isSuccess(exit)) return;
-      expect(Cause.failureOption(exit.cause)).toMatchObject({
-        value: { _tag: "CheckCommandExecutionToolingFailed", message: "executor unavailable" },
+      const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
+      const result = yield* runCheckPhase({
+        validationRunId: 133,
+        checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
+        artifactsRoot: createTestWorkspace(),
+        now,
+        commandExecutor: () =>
+          Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
+        recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
+
+      expect(result).toMatchObject({
+        ok: false,
+        toolingFailure: {
+          _tag: "CheckCommandExecutionToolingFailed",
+          message: "executor unavailable",
+        },
+      });
+      expect(recordedResults).toMatchObject([
+        {
+          producer: "quality",
+          outcome: "failed",
+          toolingFailure: { operationName: "run_check_command" },
+        },
+      ]);
     }),
   );
 
@@ -164,35 +181,88 @@ describe("Check Phase Results", () => {
     () =>
       Effect.gen(function* () {
         const commands: string[] = [];
-        const exit = yield* Effect.exit(
-          runCheckPhase({
-            validationRunId: 133,
-            checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
-            artifactsRoot: createTestWorkspace(),
-            expectedHeadSha: "abc123",
-            allowedUntrackedFiles: [".validation-env"],
-            now,
-            commandExecutor: (command) =>
-              Effect.sync(() => {
-                commands.push(command);
-                return {
-                  exitCode: 0,
-                  stdout: "abc123\n M .validation-env\n",
-                  stderr: "",
-                };
-              }),
-            recordCheckResult: () => Effect.void,
-          }),
-        );
+        const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
+        const result = yield* runCheckPhase({
+          validationRunId: 133,
+          checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
+          artifactsRoot: createTestWorkspace(),
+          expectedHeadSha: "abc123",
+          allowedUntrackedFiles: [".validation-env"],
+          now,
+          commandExecutor: (command) =>
+            Effect.sync(() => {
+              commands.push(command);
+              return {
+                exitCode: 0,
+                stdout: "abc123\n M .validation-env\n",
+                stderr: "",
+              };
+            }),
+          recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
+        });
 
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit)) {
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Snapshot Workspace no longer matches the Candidate.",
-          );
-        }
+        expect(result).toMatchObject({
+          ok: false,
+          toolingFailure: {
+            _tag: "GitToolingFailed",
+            message: "Snapshot Workspace no longer matches the Candidate.",
+          },
+        });
+        expect(recordedResults).toMatchObject([
+          {
+            producer: "quality",
+            outcome: "failed",
+            toolingFailure: { operationName: "verify_candidate_head" },
+          },
+        ]);
         expect(commands).toHaveLength(1);
       }),
+  );
+
+  it.effect("records Artifact failure on the Check producer", () =>
+    Effect.gen(function* () {
+      const recordedResults: RecordCandidateValidationCheckResultInput[] = [];
+      const nonDirectory = join(createTestWorkspace(), "not-a-directory");
+      writeFileSync(nonDirectory, "blocks Artifact directory creation");
+
+      const result = yield* runCheckPhase({
+        validationRunId: 133,
+        checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
+        artifactsRoot: nonDirectory,
+        now,
+        commandExecutor: (command) =>
+          Effect.succeed(
+            command === "command -v timeout >/dev/null 2>&1"
+              ? { exitCode: 0, stdout: "", stderr: "" }
+              : {
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "\n__BUTWHY_CHECK_COMPLETED_quality__:0\n",
+                },
+          ),
+        recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        findings: 0,
+        persistedToolingFailures: [
+          { _tag: "InfrastructureToolingFailed", operationName: "record_check_artifacts" },
+        ],
+        toolingFailure: {
+          _tag: "InfrastructureToolingFailed",
+          operationName: "record_check_artifacts",
+        },
+      });
+      expect(recordedResults).toMatchObject([
+        {
+          producer: "quality",
+          outcome: "failed",
+          artifactRecords: [],
+          toolingFailure: { operationName: "record_check_artifacts" },
+        },
+      ]);
+    }),
   );
 
   it.effect("records timed-out check Findings and execution evidence", () =>

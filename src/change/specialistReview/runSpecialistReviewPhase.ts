@@ -34,7 +34,10 @@ import {
 } from "../../submission/submissionProgress.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  type ValidationToolingFailure,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import { validationPhase } from "../validationRun/validationRun.js";
@@ -74,6 +77,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly settleAgentInvocationResult: NonNullable<
     CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
+  readonly recordSpecialistResult: CandidateValidationExecutionPort["recordSpecialistResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
@@ -159,7 +163,27 @@ const runSpecialist = (
   FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
-    yield* verifyIntegrity(input);
+    const integrity = yield* Effect.either(verifyIntegrity(input));
+    if (integrity._tag === "Left") {
+      yield* input.recordSpecialistResult({
+        validationRunId: input.validationRunId,
+        producer: policy.id,
+        outcome: "failed",
+        findings: [],
+        artifactRecords: [],
+        toolingFailure: {
+          ...validationToolingFailureRecord(integrity.left),
+          validationRunId: input.validationRunId,
+        },
+        now: input.now,
+      });
+      return {
+        hasFindings: false,
+        toolingFailure: integrity.left,
+        toolingFailurePersisted: true,
+      };
+    }
+
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );

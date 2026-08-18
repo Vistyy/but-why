@@ -56,6 +56,46 @@ describe("Candidate Validation Gate", () => {
     }),
   );
 
+  it.effect("stops after persisted Prepare or Check Tooling Failure", () =>
+    Effect.gen(function* () {
+      const failure = new ReviewerProcessToolingFailed({
+        operationName: "phase_tooling",
+        message: "Phase tooling failed.",
+      });
+      const calls: string[] = [];
+      const failed = {
+        findings: 0 as const,
+        persistedToolingFailures: [failure],
+        toolingFailure: failure,
+      };
+
+      const prepareResult = yield* runCandidateValidationGate({
+        prepare: () => record(calls, "prepare", failed),
+        checks: () => record(calls, "checks", passed),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
+      });
+      expect(prepareResult).toEqual({
+        outcome: "tooling_failed",
+        persistedToolingFailures: [failure],
+        toolingFailures: [failure],
+      });
+      expect(calls).toEqual(["prepare"]);
+
+      calls.length = 0;
+      const checkResult = yield* runCandidateValidationGate({
+        prepare: () => record(calls, "prepare", passed),
+        checks: () => record(calls, "checks", failed),
+        specialistReviews: () => record(calls, "specialists", specialistsPassed),
+      });
+      expect(checkResult).toEqual({
+        outcome: "tooling_failed",
+        persistedToolingFailures: [failure],
+        toolingFailures: [failure],
+      });
+      expect(calls).toEqual(["prepare", "checks"]);
+    }),
+  );
+
   it.effect("stops Specialists after blocking or failed Acceptance Review", () =>
     Effect.gen(function* () {
       const calls: string[] = [];

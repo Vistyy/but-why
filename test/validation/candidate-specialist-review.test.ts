@@ -177,6 +177,10 @@ const phaseHarness = (): PhaseHarness => {
           results.push(result);
           return () => Effect.void;
         },
+        recordSpecialistResult: (result) =>
+          Effect.sync(() => {
+            results.push({ ...result, phase: "specialist_review" });
+          }),
         allowedUntrackedFiles: [],
         now,
         listArtifacts: () =>
@@ -409,6 +413,7 @@ describe("Candidate Specialist Review phase", () => {
                 getAgentSession: persistence.agentSessions.getAgentSession,
                 linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
                 settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+                recordSpecialistResult: persistence.execution.recordSpecialistResult,
                 allowedUntrackedFiles: [],
                 now: runNow,
                 listArtifacts: persistence.reads.listArtifacts,
@@ -609,6 +614,41 @@ describe("Candidate Specialist Review phase", () => {
     }),
   );
 
+  it.scoped("records initial Candidate-integrity failure for its Specialist producer", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        Effect.succeed(success()),
+      );
+      const harness = phaseHarness();
+      const result = yield* harness.run(
+        { review },
+        {
+          commandExecutor: () =>
+            Effect.succeed({ exitCode: 0, stdout: "different-head-sha\n", stderr: "" }),
+        },
+      );
+
+      expect(result).toMatchObject({
+        findings: 0,
+        persistedToolingFailures: [
+          { _tag: "GitToolingFailed", operationName: "verify_candidate_head" },
+        ],
+        toolingFailures: [{ _tag: "GitToolingFailed", operationName: "verify_candidate_head" }],
+      });
+      expect(review).not.toHaveBeenCalled();
+      expect(harness.results).toMatchObject([
+        {
+          phase: "specialist_review",
+          producer: "standards",
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "verify_candidate_head" },
+        },
+      ]);
+    }),
+  );
+
   it.scoped(
     "rejects real Candidate mutation before recording a Specialist result",
     () =>
@@ -656,6 +696,10 @@ describe("Candidate Specialist Review phase", () => {
               results.push(result);
               return () => Effect.void;
             },
+            recordSpecialistResult: (result) =>
+              Effect.sync(() => {
+                results.push({ ...result, phase: "specialist_review" });
+              }),
             allowedUntrackedFiles: [],
             now,
             listArtifacts: () => Effect.succeed([]),

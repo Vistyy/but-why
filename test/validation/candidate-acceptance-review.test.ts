@@ -348,6 +348,7 @@ const runReviewPhases = (
         getAgentSession: persistence.agentSessions.getAgentSession,
         linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
         settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+        recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
         allowedUntrackedFiles: [],
         now,
         listArtifacts: persistence.reads.listArtifacts,

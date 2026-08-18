@@ -13,6 +13,7 @@ import {
   InfrastructureToolingFailed,
   PrepareCommandExecutionToolingFailed,
   type ValidationToolingFailure,
+  validationToolingFailureRecord,
 } from "./validationToolingFailures.js";
 import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
@@ -32,16 +33,13 @@ export type RunPreparePhaseInput = {
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
-export type RunPreparePhaseResult =
-  | {
-      readonly ok: true;
-      readonly findings: 0;
-    }
-  | {
-      readonly ok: true;
-      readonly findings: 1;
-      readonly validationRunId: number;
-    };
+export type RunPreparePhaseResult = {
+  readonly ok: boolean;
+  readonly findings: 0 | 1;
+  readonly validationRunId?: number;
+  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
+  readonly toolingFailure?: ValidationToolingFailure;
+};
 
 type CommandResult = {
   readonly exitCode: number;
@@ -67,28 +65,53 @@ export const runPreparePhase = (
     phase: { kind: "prepare" },
     run: Effect.gen(function* () {
       const startedAt = yield* Clock.currentTimeMillis;
-      const { commandResult, timedOut } = yield* runPrepareCommand(
-        input.commandExecutor,
-        input.prepare,
-        input.commandCwd,
-        input.expectedHeadSha,
-        input.allowedUntrackedFiles,
+      const execution = yield* Effect.either(
+        Effect.gen(function* () {
+          const { commandResult, timedOut } = yield* runPrepareCommand(
+            input.commandExecutor,
+            input.prepare,
+            input.commandCwd,
+            input.expectedHeadSha,
+            input.allowedUntrackedFiles,
+          );
+          const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
+          const artifacts = yield* writePrepareArtifacts({
+            validationRunId: input.validationRunId,
+            prepare: input.prepare,
+            commandResult,
+            timedOut,
+            durationMs,
+            artifactsRoot: input.artifactsRoot,
+            ...(input.artifactMaxBytes === undefined
+              ? {}
+              : { artifactMaxBytes: input.artifactMaxBytes }),
+            now: input.now,
+          });
+          return { commandResult, timedOut, ...artifacts };
+        }),
       );
-      const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
-      const { artifactRefs, artifactRecords } = yield* writePrepareArtifacts({
-        validationRunId: input.validationRunId,
-        prepare: input.prepare,
-        commandResult,
-        timedOut,
-        durationMs,
-        artifactsRoot: input.artifactsRoot,
-        ...(input.artifactMaxBytes === undefined
-          ? {}
-          : { artifactMaxBytes: input.artifactMaxBytes }),
-        now: input.now,
-      });
-      const failed = commandResult.exitCode !== 0;
+      if (execution._tag === "Left") {
+        yield* recordPrepareResult(input, {
+          validationRunId: input.validationRunId,
+          outcome: "failed",
+          artifactRecords: [],
+          toolingFailure: {
+            ...validationToolingFailureRecord(execution.left),
+            validationRunId: input.validationRunId,
+          },
+          now: input.now,
+        });
+        return {
+          ok: false,
+          findings: 0,
+          validationRunId: input.validationRunId,
+          persistedToolingFailures: [execution.left],
+          toolingFailure: execution.left,
+        };
+      }
 
+      const { commandResult, timedOut, artifactRefs, artifactRecords } = execution.right;
+      const failed = commandResult.exitCode !== 0;
       yield* recordPrepareResult(input, {
         validationRunId: input.validationRunId,
         outcome: failed ? "failed" : "passed",
@@ -113,8 +136,14 @@ export const runPreparePhase = (
 
       return { ok: true, findings: 0 };
     }),
-    outcome: (result) => (result.findings === 0 ? "passed" : "failed"),
-    details: (result) => (result.findings === 1 ? { reason: "findings" } : undefined),
+    outcome: (result) =>
+      result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
+    details: (result) =>
+      result.toolingFailure !== undefined
+        ? { reason: "tooling" as const }
+        : result.findings === 1
+          ? { reason: "findings" as const }
+          : undefined,
   });
 
 const runPrepareCommand = (

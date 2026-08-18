@@ -36,7 +36,10 @@ import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  type ValidationToolingFailure,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import { validationPhase } from "../validationRun/validationRun.js";
@@ -78,6 +81,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly settleAgentInvocationResult: NonNullable<
     CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
+  readonly recordAcceptanceResult: CandidateValidationExecutionPort["recordAcceptanceResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
   readonly now: string;
@@ -117,7 +121,26 @@ export const runAcceptanceReviewPhase = (
     progress: input.progress,
     phase: { kind: "acceptance", profile: progressProfile(input.policy.profile) },
     run: Effect.gen(function* () {
-      yield* verifyIntegrity(input);
+      const integrity = yield* Effect.either(verifyIntegrity(input));
+      if (integrity._tag === "Left") {
+        yield* input.recordAcceptanceResult({
+          validationRunId: input.validationRunId,
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: {
+            ...validationToolingFailureRecord(integrity.left),
+            validationRunId: input.validationRunId,
+          },
+          now: input.now,
+        });
+        return {
+          findings: 0,
+          persistedToolingFailures: [integrity.left],
+          toolingFailure: integrity.left,
+        };
+      }
+
       const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
         (artifact) => artifact.ref,
       );
