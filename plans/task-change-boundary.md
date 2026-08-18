@@ -130,6 +130,7 @@ After Change Start, Candidate selection, Submission, Validation, and Acceptance 
 They use the Acceptance Context captured on the Change.
 
 Candidate selection records the exact Change, fetched Change Base commit, and Repository Branch head commit.
+The Candidate Snapshot executes the exact Candidate with the stored Change policy.
 Validation start stores the current Change Acceptance Context in the immutable Validation Input Snapshot and records the exact Candidate, Implementation Decisions, Blocker history, and latest resolved Blocker identity required by current validation rules.
 The replacement baseline stores the highest included Decision and Blocker IDs; because Blockers cannot overlap and Validation cannot start with an unresolved Blocker, the highest included Blocker also identifies the latest Resolution.
 The Acceptance Reviewer receives that retained Acceptance Context with the Candidate, Decisions, Blocker history, prior Findings, and Artifact references.
@@ -280,6 +281,10 @@ The baseline cutover must preserve these supported independent and coordinated i
 Task and Change coordination asks Tasks for the exact approved Task Context and passes its complete title and description to Change Start through an internal typed operation.
 Change Start stores that content as the initial Acceptance Context while the same coordination transaction records the Task-to-Change link.
 
+Task Review resolves Repo Config and instruction text from the exact Review Base, current Global Config, and installed package resources.
+The first linked Task Review Invocation freezes the Task Reviewer policy before harness dispatch, and no later Invocation replaces it.
+A failed launch retries with the same frozen Task Reviewer policy.
+A permanently unusable Task Reviewer policy produces normal configuration or Tooling Failure until the Operator restores external resources or restarts the Task.
 Tasks own Task Review, approval, readiness, and the exact context eligible to start a Change.
 Changes do not independently review Task intent or reinterpret Task readiness.
 After Change Start, implementation and validation read the Change-owned Acceptance Context rather than mutable live Task Context.
@@ -297,8 +302,13 @@ This behavior needs no separate request identifier or retry protocol.
 
 The initial Acceptance Context and approved Change-owned Resolutions are authoritative for that Change.
 Change Base remains the Git target rather than a workspace or scratch tree.
-At Change Start, the workflow reads the Change Base Repo Config and configured policy text directly from that Git target once.
-The complete Change policy freezes for the short Change lifetime, and Submit does not reread policy.
+At Change Start, the workflow reads Repo Config and configured policy text directly from the exact starting Change Base once.
+The workflow also resolves current Global Config and installed package resources at Change Start.
+The complete Change policy freezes permanently for the Change lifetime, and Submit uses that stored policy without rereading it.
+Global resource paths are validated when policy freezes but remain live operator-owned files.
+Policy storage does not copy, hash, snapshot, or track Global resource files.
+A missing or unusable later resource produces normal configuration or Tooling Failure.
+The Operator restores the external resource or restarts the Change when its frozen policy is permanently unusable.
 Validation must use the exact current Acceptance Context version retained by Changes and must not read mutable live Task content.
 Validation skills and extensions resolve only from packaged resources or Global resources.
 Change Base and Candidate content do not supply Validation skills or extensions.
@@ -415,11 +425,12 @@ The current configurable Task Prefix becomes the repository ID Prefix used to de
 Repository initialization stores it in Shared Repository State, where it remains immutable for that repository.
 Because But Why is unreleased, the first-release configuration uses only `idPrefix`, rejects conflict with initialized state, and provides no `taskPrefix` compatibility behavior.
 Tasks and Changes select and store the resolved Agent Profile required by their reviewer policy.
-A Task stores its resolved Task Reviewer configuration when its Task Reviewer Agent Session first launches.
-A Change fixes its complete policy, reviewer roster, and all resolved role configurations at Change Start, even though its Agent Sessions are created lazily.
+A Task stores its frozen Task Reviewer policy when the first linked Task Review Invocation is created.
+A Change fixes its complete policy, reviewer roster, and all resolved role policy settings at Change Start, even though its Agent Sessions are created lazily.
 Validation skills and extensions come only from packaged resources or Global resources.
 A Change reviewer configuration has no post-Start replacement path.
-After Change Start, later Repo or Global Config changes do not alter the frozen Change policy or its stored owner-role configuration.
+After Change Start, later Repo or Global Config changes do not alter the frozen Change policy or its stored owner-role policy settings.
+A failed launch retries with the same frozen Change policy.
 Agent infrastructure applies the stored profile as the exact Pi model, tools, skills, extensions, and runtime settings.
 
 Tasks, Changes, and Task and Change operations define their own result data.

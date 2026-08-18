@@ -523,7 +523,9 @@ The following grouping is an investigation aid rather than an adoption decision.
 
 ## 6. Deferred resource and workspace investigations
 
-After the baseline, investigate whether a simpler Repo, Global, and package Agent resource model preserves the frozen Change policy, Agent Session continuity, and portable behavior without a generalized loader.
+After the baseline, investigate whether a simpler Repo, Global, and package Agent resource model preserves the frozen Task Reviewer and Change policies, Agent Session continuity, and portable behavior without a generalized loader.
+Global resource paths remain live operator-owned files after policy validation, and this investigation must not introduce copied, hashed, snapshotted, or tracked resource files.
+Missing later resources must remain normal configuration or Tooling Failure that requires operator restoration or Task or Change restart.
 Keep this investigation bounded to observed resource-resolution problems and do not implement a broader model without evidence.
 
 If evidence establishes a need for local untracked-file access, investigate an explicit local untracked-file injection boundary as the possible replacement for removed `copyFiles` behavior.

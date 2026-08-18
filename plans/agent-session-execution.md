@@ -38,22 +38,27 @@ It is resumable only when its transcript path is present and no unusable reason 
 When no continuation exists, dispatch creates one; when the current continuation is resumable, dispatch reuses it; otherwise dispatch appends a fresh continuation while preserving the logical Agent Session and its stored resolved configuration.
 Past Invocations and continuations remain history without separate replacement metadata.
 
-The owning domain resolves and stores the Agent Profile, role instructions, Agent Environment, tools, skills, and extensions once for the applicable owner lifecycle.
+A Task Review resolves Repo Config and instruction text from the exact Review Base, current Global Config, and installed package resources.
+The first linked Task Review Invocation freezes the Task Reviewer policy before harness dispatch, and no later Invocation replaces it.
+Change Start resolves the complete Change policy from the exact starting Change Base, current Global Config, and installed package resources.
+Change Start freezes the Change policy permanently, and Submit uses that stored policy without rereading it.
 Validation skills and extensions resolve only from packaged resources or Global resources.
 Change Base and Candidate content do not supply Validation skills or extensions.
-Change Start reads the Change Base Repo Config and configured policy text directly from the Git target once.
-A Change freezes its complete resolved policy for its short lifetime, and Submit does not reread policy.
-A Task stores its Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
-A Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
-These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
-Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
-Later Repo or Global Config changes do not alter those stored configurations, add or remove Change reviewers, or replace a usable continuation.
-The owning domain validates a resolved snapshot before storage.
-A Task Reviewer retry may replace only the Task owner-role configuration when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
-A Change reviewer configuration has no post-Start replacement path.
-Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
-Missing or unusable transcript recovery creates a replacement continuation with that same configuration rather than adopting later config.
-Every later Invocation and replacement continuation for that owner-role Agent Session uses the stored configuration.
+The owning domain stores the resolved policy references and settings for the applicable owner lifecycle.
+A Task stores its Task Reviewer policy as a nullable JSON value when the first linked Task Review Invocation is created.
+A Change stores its complete policy, fixed reviewer roster, and each role's resolved policy settings at Change Start, before individual Agent Sessions are created lazily.
+These stored policies have no independent relational lifecycle and do not require separate configuration tables.
+Task Reviews and Validation Runs use their owner's stored policy rather than duplicating reviewer policy into each Review or Run.
+Global resource paths are validated when policy freezes but remain live operator-owned files.
+Policy storage does not copy, hash, snapshot, or track Global resource files.
+A missing or unusable later resource produces the normal configuration or Tooling Failure and never causes policy replacement.
+A failed launch retries with the same frozen policy.
+A permanently unusable policy requires the Operator to restore the external resources or restart the Task or Change.
+Later Repo or Global Config changes do not alter stored policy settings, add or remove Change reviewers, or replace a usable continuation.
+The owning domain validates policy references and available resources before storage.
+Once the first linked Invocation exists, that owner-role policy remains fixed permanently.
+Missing or unusable transcript recovery creates a replacement continuation with the same stored policy rather than adopting later config.
+Every later Invocation and replacement continuation for that owner-role Agent Session uses the stored policy.
 Shared Agent infrastructure does not interpret domain policy or store a compatibility fingerprint.
 Candidate identity, prompt content, workspace path, and Review identity may change without replacing the continuation.
 
@@ -197,7 +202,7 @@ Adapter relocation, SQL ownership enforcement, and module cleanup remain post-ba
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
 It stores no compatibility fingerprint.
-The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
+The domain-owned Task or Change representation stores the frozen policy references and settings that Invocations and replacement continuations must use.
 
 Create an Agent Session only when its domain role first invokes an agent.
 The first dispatch transaction atomically creates the Agent Session, the domain-owned role link, and the first Invocation.

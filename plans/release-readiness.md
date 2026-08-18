@@ -31,6 +31,10 @@ A normal global package update updates the CLI, skill, instructions, and continu
 The But Why skill is a normal Pi resource for Operator sessions.
 The `continue-change` extension remains a packaged runtime asset owned by But Why.
 Validation skills and extensions resolve only from packaged resources or Global resources.
+Global resource paths are validated when policy freezes but remain live operator-owned files.
+Policy storage does not copy, hash, snapshot, or track Global resource files.
+A missing or unusable later resource produces normal configuration or Tooling Failure.
+The Operator restores the external resource or restarts the Task or Change when its frozen policy is permanently unusable.
 Change Base and Candidate content do not supply Validation skills or extensions.
 The `continue-change` extension must not be globally active in ordinary Operator or Reviewer sessions.
 The Interactive Session Host loads it explicitly only for an Implementer Interactive Session.

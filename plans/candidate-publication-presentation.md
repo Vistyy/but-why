@@ -198,7 +198,9 @@ Publication synthesis uses a Change-owned Agent Session for a distinct Publicati
 It does not share an Agent Session with an Acceptance Reviewer, Specialist Reviewer, or another agent role.
 A failed generation retry resumes the compatible session for the same Candidate when possible.
 A revised Candidate resumes the compatible session with the new lifecycle evidence and prior published presentation.
-The stored Change policy fixes the Agent Profile, instructions, environment, and resources for this role.
+The stored Change policy fixes the Agent Profile, instructions, environment, and resource references for this role.
+Global resource files remain live operator-owned files and are not copied, hashed, snapshotted, or tracked.
+A missing or unusable later resource produces normal configuration or Tooling Failure, and the Operator restores it or restarts the Change.
 An unusable session restarts according to those rules.
 When the Change closes, Publication Agent continuation ends and its transcript is retained through the shared Agent Session cleanup rules.
 
@@ -332,6 +334,7 @@ The existing validation-only Snapshot Workspace concept broadens to a **Submissi
 This is a provisional domain term and is not yet authorized for recording in `docs/context/change-delivery/CONTEXT.md`.
 
 A Submission Workspace is one disposable detached Git worktree for the exact Candidate during Submission.
+The Candidate Snapshot executes the exact Candidate with the stored Change policy.
 It is used by fresh Validation when needed and then reused by publication synthesis.
 When Validation evidence is reused, a Submission Workspace can be acquired for synthesis without running Validation.
 Version 1 does not support `copyFiles` or retain configured copied files between Validation and synthesis.

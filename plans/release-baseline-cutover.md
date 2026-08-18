@@ -74,8 +74,10 @@ Final physical schema and settled contracts:
 - Keep Task identity, title, description, lifecycle state, cancellation reason, nullable resolved Task Reviewer configuration, and nullable Task Reviewer Agent Session ID on `tasks`.
   An unlinked Task cannot become Done; exact merged completion of its linked Change is the only completion path.
   Keep direct Task Dependency relationships in `task_dependencies`.
-  Store each Task Review's exact proposal and dependency evidence as immutable JSON snapshots, with its Review Base ref and commit, nullable outcome, Findings, optional Tooling Failure, and cleanup obligation directly on `task_reviews`.
-  Task Reviews use their Task's stored reviewer configuration rather than duplicating it.
+  Store each Task Review's exact proposal and dependency evidence as immutable JSON snapshots, with its exact Review Base ref and commit, nullable outcome, Findings, optional Tooling Failure, and cleanup obligation directly on `task_reviews`.
+  Store the Task Reviewer policy once on `tasks` when the first linked Task Review Invocation is created.
+  Task Reviews use the Task-stored policy without copying it into each Review.
+  Task Review resolves Repo Config and instruction text from the exact Review Base, current Global Config, and installed package resources before its first linked Invocation.
   Do not add separate proposal, dependency-evidence, policy, Finding, or Tooling Failure tables.
 - Give `tasks` and `changes` independent SQLite-allocated table-local `INTEGER PRIMARY KEY` identities.
   Store the repository's immutable `id_prefix` once in `shared_state_identity` and derive public Task and Change IDs at the application boundary as `<id-prefix>-<task-number>` and `<id-prefix>-C<change-number>`.
@@ -96,6 +98,7 @@ Final physical schema and settled contracts:
 - Retain distinct Task Review and Candidate execution workspaces with real state, exact provenance, actual recovery identity, and owner-held cleanup obligations.
   Task Review workspace state remains with its Task Review evidence.
   Candidate execution workspace state remains in an owner-scoped recovery representation linked to its Validation Run.
+  Candidate Snapshot executes the exact Candidate with the stored Change policy.
   Derive and verify deterministic workspace paths only where the supported recovery contract guarantees derivation.
   Continue storing the Change Managed Worktree path because Change recovery preserves its originally recorded location.
   Do not collapse execution workspaces into the Change Managed Worktree or create a Change Base scratch or file tree.
@@ -105,15 +108,19 @@ Final physical schema and settled contracts:
   Do not add an Active Validation Run table, Change pointer, or per-Candidate partial uniqueness index.
 - Require every Change to be created through Change Start with a Repository Branch, Change Base ref and remote URL, and Managed Worktree path.
   Treat Change Base as the Git target for Change Start and later Candidate operations.
-  Read the Change Base Repo Config and configured policy text directly from that Git target once at Change Start.
-  Resolve and validate the complete Change policy from that input and allowed Global and packaged resources before creating the Change.
+  Read Repo Config and configured policy text directly from the exact starting Change Base once at Change Start.
+  Resolve current Global Config and installed package resources at Change Start.
+  Resolve and validate the complete Change policy from that input before creating the Change.
   Validation skills and extensions resolve only from packaged resources or Global resources.
   Change Base and Candidate content do not supply Validation skills or extensions.
+  Global resource paths are validated when policy freezes but remain live operator-owned files.
+  Policy storage does not copy, hash, snapshot, or track Global resource files.
+  A missing or unusable later resource produces normal configuration or Tooling Failure.
   Invalid Change policy rejects Start without creating a Change.
   After Git intent and Change policy resolve, Task and Change coordination atomically creates the Change, its frozen policy representation, and its optional Task link.
   Managed Worktree provisioning and Repository Preparation then run against the durable Open Change.
   Their failure preserves the Change and intended Managed Worktree path for supported retry.
-  The complete Change policy remains frozen for the short Change lifetime, and Submit does not reread policy.
+  The complete Change policy freezes permanently for the Change lifetime, and Submit uses that stored policy without rereading it.
   Candidate capture operates only on an existing Open Change and does not implicitly create one.
   This first-release requirement applies to the current local Managed Worktree model and does not define a future cloud Implementer contract.
 - Do not persist the Change starting commit after Change Start.
@@ -172,15 +179,18 @@ Final physical schema and settled contracts:
 - Remove Validation Round `round_number` and use the fixed phase and producer identity.
 - Shared Agent storage retains Agent Sessions, physical continuations, and Invocations.
   Store no compatibility fingerprint.
-  The Task stores its resolved Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
-  The Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
-  These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
+  The Task stores its frozen Task Reviewer policy reference as a nullable JSON value when the first linked Task Review Invocation is created.
+  The Change stores its fixed reviewer roster and each role's resolved policy settings as one JSON value at Change Start, before their Agent Sessions are created lazily.
+  These embedded policies have no independent relational lifecycle and do not require separate configuration tables.
   Validate the complete resolved Change policy before storage.
-  The frozen Change policy includes Repository Preparation, Checks, reviewer configuration, configured policy text, and allowed Agent resources.
+  The frozen Change policy includes Repository Preparation, Checks, reviewer policy settings, configured policy text, and permitted package or Global resource references.
+  Global resource paths are validated when policy freezes but remain live operator-owned files.
+  Policy storage does not copy, hash, snapshot, or track Global resource files.
   Later Repo or Global Config changes do not alter the frozen Change policy or its replacement continuations.
   A Change reviewer configuration has no post-Start replacement path.
-  Missing or unusable transcript recovery uses the stored Change configuration.
-  Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
+  A failed launch retries with the same frozen policy.
+  Missing or unusable transcript recovery uses the stored Change policy.
+  Task Reviews and Validation Runs use their owner's stored policy rather than duplicating reviewer policy into each Review or Run.
   Each Validation Run captures its exact Candidate, resulting Acceptance Context, Change evidence, and phase inputs without copying reviewer policy or rereading Change policy.
   For first-release Pi, store the nullable transcript-relative path and nullable unusable reason on its physical continuation and do not retain a separate transcript-reference table.
   A continuation is resumable only when its transcript path is present and no unusable reason is recorded.
@@ -250,7 +260,7 @@ The `changes` table contains:
 - Required `base_ref` and `base_remote_url`.
 - Required unique `worktree_path`, which records the intended location before provisioning so failure remains retryable.
 - Nullable `initial_acceptance_context` JSON.
-- Required `reviewer_configuration` JSON containing the fixed roster, each role's resolved configuration, configured policy text, and allowed Agent resources at Change Start.
+- Required `reviewer_configuration` JSON containing the fixed roster, each role's resolved policy settings, configured policy text, and permitted package or Global resource references at Change Start.
 - Nullable `prepare_definition` JSON that freezes the exact Repository Preparation command and timeout for retry.
 - Nullable `checks_definition` JSON that freezes the exact configured Checks for the Change lifetime.
 - Nullable `prepare_failure` JSON containing the latest retained preparation failure evidence.
@@ -268,7 +278,7 @@ The `tasks` table contains:
 - Required `title` and `description`.
 - Required `state` constrained to `new`, `todo`, `done`, or `cancelled`.
 - Nullable `cancel_reason` with the approved cancellation-state combination constraint.
-- Nullable `reviewer_configuration` JSON, fixed after its Task Reviewer conversation is established and subject only to the approved pre-conversation correction.
+- Nullable `reviewer_configuration` JSON, frozen with the first linked Task Review Invocation and never replaced.
 - Nullable unique `reviewer_agent_session_id` referencing `agent_sessions`.
 - The approved all-present or all-absent constraint across reviewer configuration and Agent Session ID.
 
