@@ -52,6 +52,8 @@ Use this ordered procedure for the one-time live cutover.
 1. Immediately before the baseline Change is merged, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
    Record the source commit, the actual runtime entrypoint, and every bundled runtime file in an integrity-checked SHA-256 manifest.
 2. Before the live cutover, verify every old runtime file against the manifest, verify the manifest integrity, and rehearse the exact direct `change reconcile <merged-change-id>` invocation on a disposable repository.
+   Use `scripts/rehearse-release-baseline-cutover.sh --help` for the reproducible rehearsal interface.
+   The script emits a compact pass/fail summary and keeps detailed observations in a temporary directory for Validation.
    Verify the entrypoint that the reconciliation command actually invokes rather than a dispatcher that can select another executable.
 3. After the merged baseline Change is available, pause all But Why opens and writes.
 4. Verify the merged `idPrefix` Repo Config against the merged commit, and verify that no `taskPrefix` compatibility overlay is installed.
