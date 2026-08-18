@@ -61,7 +61,7 @@ const expectedColumns = {
     "initial_acceptance_context:TEXT:0:0",
     "reviewer_configuration:TEXT:1:0",
     "prepare_definition:TEXT:0:0",
-    "checks_definition:TEXT:1:0",
+    "checks_definition:TEXT:0:0",
     "prepare_failure:TEXT:0:0",
     "close_reason:TEXT:0:0",
     "cancel_reason:TEXT:0:0",

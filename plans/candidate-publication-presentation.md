@@ -5,9 +5,8 @@ The prior provisional approval is not current planning direction because publica
 Do not use this plan as implementation authority.
 
 **Scheduling:** Reassess this plan after the first-release baseline.
-BY-275 completed the Agent Session and Agent Invocation prerequisite that this work consumes.
-This plan supplies no requirements to the first-release baseline.
-Any later accepted publication persistence change uses a normal post-baseline migration.
+It may consume the approved Agent Session and Agent Invocation direction, but it is not part of the initial Agent Session work and supplies no requirements to the first-release baseline.
+Any later accepted persistence change uses a normal post-baseline migration.
 
 **Removal condition:** Remove this file after the Operator approves the plan and every accepted requirement and qualifying decision is recorded in its applicable SQLite Task, current domain context, accepted ADR, or current documentation source.
 
@@ -23,8 +22,10 @@ But Why alone applies the exact persisted presentation to GitHub.
 
 ## Task boundary
 
-BY-275 completed the shared Agent Session and Agent Invocation prerequisite.
-This Candidate Publication presentation work consumes that completed capability.
+The work is split into independently reviewable deliverables.
+
+1. A separate prerequisite generalizes the current Reviewer Session infrastructure into a shared Agent Session capability while preserving existing review behavior.
+2. This Candidate Publication presentation work consumes the shared Agent Session capability.
 
 `agent-session-execution.md` owns shared Agent Session and Agent Invocation behavior.
 `release-baseline-cutover.md` owns the first-release physical schema without this deferred presentation behavior.
@@ -177,18 +178,19 @@ If a category is truncated, the prompt identifies the omitted category and amoun
 
 ## Agent configuration and continuity
 
-The PR presentation agent has its own optional Agent Profile selection under publication configuration.
-It resolves from Repo Config, then Global Config, then the Global default Agent Profile.
+The PR presentation agent has its own optional Agent Profile selection under the frozen Change policy.
+Change Start resolves that profile from the supported Repo, Global, and package resources before the Change is created.
 No separate profile is required when the Global default is available.
-Submission returns `publication_configuration_invalid` before Validation when no profile can resolve or selected publication guidance is invalid.
+Change Start returns `publication_configuration_invalid` when no profile can resolve or selected publication guidance is invalid.
 This early failure does not create or fail a Validation Run.
 
 But Why ships mandatory publication-synthesis instructions.
 The presentation agent receives the exact workspace and supplied lifecycle evidence.
 Presentation synthesis does not rely on GitHub or other network access, and the agent has no GitHub mutation capability.
 Repo Config may select one publication guidance file, and Global Config may supply fallback guidance.
-Repo guidance takes precedence and resolves from the exact Candidate.
-Global guidance resolves from the Global Config directory.
+Repo guidance takes precedence and resolves from the exact Change Base at Change Start.
+Global guidance resolves from the Global Config directory at Change Start.
+Submit does not reread publication policy or guidance.
 Guidance may shape terminology, reviewer audience, title conventions, diagrams, and explanation emphasis.
 It cannot alter Candidate provenance, Risk values, publication safety, or the structured output contract.
 
@@ -196,7 +198,9 @@ Publication synthesis uses a Change-owned Agent Session for a distinct Publicati
 It does not share an Agent Session with an Acceptance Reviewer, Specialist Reviewer, or another agent role.
 A failed generation retry resumes the compatible session for the same Candidate when possible.
 A revised Candidate resumes the compatible session with the new lifecycle evidence and prior published presentation.
-A changed Agent Profile, instructions, environment, or resources makes the prior session incompatible according to Agent Session rules.
+The stored Change policy fixes the Agent Profile, instructions, environment, and resource references for this role.
+Global resource files remain live operator-owned files and are not copied, hashed, snapshotted, or tracked.
+A missing or unusable later resource produces normal configuration or Tooling Failure, and the Operator restores it or restarts the Change.
 An unusable session restarts according to those rules.
 When the Change closes, Publication Agent continuation ends and its transcript is retained through the shared Agent Session cleanup rules.
 
@@ -276,17 +280,17 @@ Those inputs govern generation and Agent Session compatibility, not whether comp
 Version 1 extends current Change-owned Candidate Publication state rather than adding presentation history.
 The logical state distinguishes:
 
-- Active generation, which identifies the Change, Candidate, Validation Run, presentation source digest, and unsettled Agent Invocation before complete presentation content exists.
+- Active generation, which identifies the Change, Candidate, Validation Run, presentation source digest, and unsettled Agent Execution before complete presentation content exists.
 - A complete pending proposal awaiting publication mutation or reconciliation.
 - The last confirmed publication and presentation.
 
-Successful Agent Invocation settlement replaces active-generation state with the complete pending proposal rather than retaining generation history.
-The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, presentation source digest, and successful Agent Invocation ID.
+Successful Agent Execution settlement replaces active-generation state with the complete pending proposal rather than retaining generation history.
+The pending proposal includes the exact proposed title, complete rendered body, Risk, Candidate and Validation Run binding, presentation source digest, and successful Agent Execution ID.
 Exact head and Change Base are derived from the immutable Candidate rather than duplicated.
 Confirmed state requires pull request number and URL.
 Pending state omits those fields and uses confirmed state when updating an existing pull request.
-Confirmed state retains the successful Agent Invocation ID as generation evidence.
-The later publication implementation selects its physical storage through a normal post-baseline migration.
+Confirmed state retains the successful Agent Execution ID as generation evidence.
+The release-baseline review selects the physical table count and placement.
 
 The update flow is:
 
@@ -330,26 +334,20 @@ The existing validation-only Snapshot Workspace concept broadens to a **Submissi
 This is a provisional domain term and is not yet authorized for recording in `docs/context/change-delivery/CONTEXT.md`.
 
 A Submission Workspace is one disposable detached Git worktree for the exact Candidate during Submission.
+The Candidate Snapshot executes the exact Candidate with the stored Change policy.
 It is used by fresh Validation when needed and then reused by publication synthesis.
 When Validation evidence is reused, a Submission Workspace can be acquired for synthesis without running Validation.
-The workspace retains configured copied files unchanged between Validation and synthesis.
-But Why does not specially remove or generically clean those files.
-Existing allowed-file integrity semantics continue to apply.
+Version 1 does not support `copyFiles` or retain configured copied files between Validation and synthesis.
+But Why does not create a Change Base scratch or file tree for this purpose.
+Existing allowed-file integrity semantics continue to apply to the exact Candidate workspace.
 
-Each active Submission Workspace requires durable recovery facts:
-
-- Durable workspace identity.
-- Change and Candidate identity.
-- Exact expected commit.
-- Exact path.
-- Cleanup state.
-- Selected Validation Run reference when applicable.
-
+Submission Workspace identity and path are derived deterministically from the verified Git Common Directory and the applicable Candidate and Validation Run identity rather than persisted.
+Its expected commit derives from the exact Candidate.
+Recovery verifies Git registration, exact path, detached state, and Candidate commit before removal.
+An absent workspace and registration settle cleanup, while any mismatch retains the owner cleanup obligation and reason and blocks without deletion.
 Change Delivery's Submission operation owns Submission Workspace lifecycle and recovery across Validation and publication synthesis.
-The later publication implementation selects its physical persistence representation through a normal post-baseline migration.
-The durable recovery state exists only while setup, use, or cleanup remains active and is removed after successful cleanup.
+The operation does not add a Snapshot Workspace table or persist workspace identity, path, expected commit, or transient state.
 Validation and Publication retain their own evidence rather than permanent workspace history.
-The required behavior is that But Why records recovery facts before worktree creation and verifies exact identity, path, commit, and cleanliness before reuse or cleanup.
 
 The workspace is cleaned immediately after a valid presentation is persisted and before GitHub mutation.
 GitHub recovery then needs only durable pending publication state and no workspace.
@@ -392,7 +390,7 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 ## Resolved decisions
 
 - Use two Tasks rather than one oversized Task.
-- BY-275 completed the Agent Session and Agent Invocation prerequisite.
+- Agent Session generalization is the prerequisite Task.
 - But Why owns the complete PR title and body.
 - Presentation generation failure blocks Candidate Publication but does not fail Validation.
 - Publication has its own optional presentation Agent Profile selection and guidance file, with fallback to the Global default and early configuration failure before Validation.
@@ -410,8 +408,8 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 - Keep separate confirmed and pending publication state without adding chronology.
 - Keep generated content internal outside GitHub in version 1.
 - Broaden Snapshot Workspace into Submission Workspace behavior.
-- Retain configured copied files unchanged for synthesis.
-- Require durable workspace recovery facts while deferring physical schema design.
+- Exclude `copyFiles` from the first release and defer any local untracked-file injection replacement until evidence establishes a supported need.
+- Derive and verify workspace recovery facts without persisting a Snapshot Workspace record.
 - Clean the workspace after proposal persistence and before GitHub mutation.
 - Verify the actual Candidate before GitHub mutation without adding a separate post-synthesis workspace check.
 - Reconcile and withhold a stale pending proposal before allowing a later Submission to replace it for a newly selected Candidate.
@@ -422,10 +420,10 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 
 ## Unresolved decisions
 
-- Author the exact dependent Task only after the first-release baseline is complete, this plan is reassessed against the completed Agent Session boundary, and Task Recording is authorized.
+- Author the exact dependent Task only after the Agent Session and release-baseline plans establish the applicable execution and persistence direction, the prerequisite Agent Session Task is available, and Task Recording is authorized.
 - Evaluate implemented architectural decisions against the ADR gate after implementation.
 - Keep the accepted `Submission Workspace`, `Risk`, and `Publication Agent` definitions in this plan until the functionality is implemented, then record them in Change Delivery Context only with separate Operator authorization.
-- Select publication-specific physical storage through a normal post-baseline migration without changing this plan's required behavior.
+- Integrate the parallel schema design's physical representation without changing this plan's required behavior.
 
 ## Approval and authorization status
 

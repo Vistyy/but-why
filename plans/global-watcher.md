@@ -66,13 +66,13 @@ It does not grant Implementation Authorization.
 
 An enrollment stores only:
 
-- Canonical Git Common Directory.
-- Last known Local Repository worktree path.
-- Enrollment time.
+- The enrollment stores the canonical Git Common Directory.
+- The enrollment stores the enrollment time.
 - Last successful check time.
 - Latest error when present.
 
 Linked worktrees resolve to one enrollment through the Git Common Directory.
+The Watcher uses no checkout path as enrollment state or executable authority.
 A missing or inaccessible repository remains enrolled and is reported as unhealthy.
 The Watcher does not scan the filesystem, guess a moved location, or silently delete an enrollment.
 Repository relocation remains unsupported.

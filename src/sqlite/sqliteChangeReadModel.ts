@@ -78,7 +78,7 @@ export const decodeChangeRow = (
   );
   const prepare =
     encodedPrepareDefinition === null ? null : decodePrepareDefinition(encodedPrepareDefinition);
-  const encodedChecksDefinition = decodeStoredString(
+  const encodedChecksDefinition = decodeStoredNullableString(
     row.checksDefinition,
     "Change Checks definition",
   );
@@ -112,7 +112,8 @@ export const decodeChangeRow = (
       decodeStoredString(row.reviewerConfiguration, "Change Reviewer Configuration"),
     ),
     prepare,
-    checks: decodeSqliteChangeChecks(encodedChecksDefinition),
+    checks:
+      encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
     prepareFailure:
       encodedPrepareFailure === null
         ? null

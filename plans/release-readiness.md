@@ -1,8 +1,7 @@
 # First-release readiness plan
 
-**Status:** Paused pending the product and package boundary.
-Release operations may remain applicable after the Task Intent extraction is resolved.
-Do not use this plan as current planning direction, implementation authority, or publication authority.
+**Status:** Current release and package planning direction.
+This plan records the product and package boundary but is not implementation authority or publication authority.
 
 **Removal condition:** Remove this file after all repository outcomes are implemented and documented, all release operations are completed, and any remaining supported procedure is recorded in its authoritative documentation.
 
@@ -14,10 +13,13 @@ The package will use the normal `latest` distribution tag and will be published 
 
 ## Installation
 
-The normal installation path is global npm installation.
-Published operation resolves `by` from `PATH`.
+The supported plan uses only the built `by` executable from the globally installed package for published and live-state operations.
+Published operations resolve that executable from `PATH`.
 The public workflow does not use `pnpx`, `pnpm dlx`, or `npx`.
-Source-repository development uses an installed package build for live repository operations and disposable repositories for Candidate tests.
+Candidate source or package artifacts run only in disposable tests until their Change merges.
+The only source-repository route is the historical pre-transition implementation path before BY-C262 merges, when `just by` and its Source Checkout Guard are bootstrap-only.
+When BY-C262 merges, it removes that source path and guard from the product.
+No canonical-main executable or configuration authority, or root plumbing for one, is part of the product.
 
 The CLI will provide an explicit Pi integration setup operation, provisionally named `by setup pi`.
 Setup connects Pi to resources in the same globally installed But Why package rather than installing an independently updated resource package.
@@ -28,7 +30,13 @@ A normal global package update updates the CLI, skill, instructions, and continu
 
 The But Why skill is a normal Pi resource for Operator sessions.
 The `continue-change` extension remains a packaged runtime asset owned by But Why.
-It must not be globally active in ordinary Operator or Reviewer sessions.
+Validation skills and extensions resolve only from packaged resources or Global resources.
+Global resource paths are validated when policy freezes but remain live operator-owned files.
+Policy storage does not copy, hash, snapshot, or track Global resource files.
+A missing or unusable later resource produces normal configuration or Tooling Failure.
+The Operator restores the external resource or restarts the Task or Change when its frozen policy is permanently unusable.
+Change Base and Candidate content do not supply Validation skills or extensions.
+The `continue-change` extension must not be globally active in ordinary Operator or Reviewer sessions.
 The Interactive Session Host loads it explicitly only for an Implementer Interactive Session.
 The extension, CLI contracts, and packaged Implementer instructions remain version-aligned.
 
@@ -96,6 +104,8 @@ Do not publish from an unverified rebuild that differs from the inspected artifa
 
 The first npm publication and GitHub Release are manual external operations.
 Define npm authentication and ownership, exact tag creation, GitHub Release creation, and post-publication registry verification before performing them.
+Candidate source or package artifacts may be exercised only in disposable tests before merge.
+The live transition installs the exact merged package globally before new Shared Repository State is initialized.
 External GitHub settings, npm publication, tag creation, and GitHub Release creation are release operations rather than repository implementation Tasks unless they produce a repository Candidate.
 
 ## Candidate implementation outcomes
@@ -103,7 +113,7 @@ External GitHub settings, npm publication, tag creation, and GitHub Release crea
 The following remain candidates until their observable outcomes and dependencies are approved:
 
 - Install or repair Pi integration through `by`.
-- Use the installed `by` executable throughout published operation.
+- Use the globally installed built `by` executable throughout published and live operation.
 - Publish the public README and setup path.
 - Add MIT and minimal community metadata.
 - Run `just quality` in GitHub Actions.

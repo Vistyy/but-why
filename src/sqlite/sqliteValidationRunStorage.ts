@@ -137,7 +137,7 @@ export const readValidationRunById = (
       readonly acceptanceContext: string | null;
       readonly reviewerConfiguration: string;
       readonly prepareDefinition: string | null;
-      readonly checksDefinition: string;
+      readonly checksDefinition: string | null;
     }>`
       SELECT initial_acceptance_context AS acceptanceContext,
         reviewer_configuration AS reviewerConfiguration,
@@ -171,7 +171,8 @@ export const readValidationRunById = (
         change.prepareDefinition === null
           ? undefined
           : decodePrepareDefinition(change.prepareDefinition);
-      const checks = decodeSqliteChangeChecks(change.checksDefinition);
+      const checks =
+        change.checksDefinition === null ? [] : decodeSqliteChangeChecks(change.checksDefinition);
       const policy = {
         ...validationInput,
         ...(reviewerConfiguration.agentEnvironment === undefined

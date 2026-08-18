@@ -109,7 +109,7 @@ const baselineStatements = [
       initial_acceptance_context TEXT,
       reviewer_configuration TEXT NOT NULL,
       prepare_definition TEXT,
-      checks_definition TEXT NOT NULL,
+      checks_definition TEXT,
       prepare_failure TEXT,
       close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('completed', 'cancelled')),
       cancel_reason TEXT,

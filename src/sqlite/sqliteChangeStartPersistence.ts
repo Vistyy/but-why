@@ -204,7 +204,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.prepareDefinition,
     "Change prepare definition",
   );
-  const encodedChecksDefinition = decodeStoredString(
+  const encodedChecksDefinition = decodeStoredNullableString(
     row.checksDefinition,
     "Change Checks definition",
   );
@@ -233,7 +233,8 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
     reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
     prepare,
-    checks: decodeSqliteChangeChecks(encodedChecksDefinition),
+    checks:
+      encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
     prepareFailure:
       encodedPrepareFailure === null
         ? null
