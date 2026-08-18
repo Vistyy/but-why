@@ -1,6 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
+import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
   CandidateValidationFinding,
   RecordCandidateValidationPhaseResultInput,
@@ -8,7 +8,10 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
+import {
+  decodeSqliteChangeReviewerConfiguration,
+  sameChangeReviewerPolicy,
+} from "../change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
@@ -21,6 +24,7 @@ import {
   readCurrentCandidateForChange,
 } from "./sqliteCandidateStorage.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
+import { changeReviewerConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
@@ -84,23 +88,37 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       recordAcceptanceResult: (input) =>
         repository.transactionImmediate("record Candidate Acceptance Review Result", (sql) =>
-          recordPhaseResult(
-            sql,
-            {
-              ...input,
-              phase: validationPhase.acceptanceReview,
-              producer: "acceptance",
-            },
-            repository.idPrefix,
-          ),
+          Effect.gen(function* () {
+            yield* requirePreDispatchReviewerIntegrityFailure(
+              input,
+              validationPhase.acceptanceReview,
+              "record Candidate Acceptance Review Result",
+            );
+            yield* recordPhaseResult(
+              sql,
+              {
+                ...input,
+                phase: validationPhase.acceptanceReview,
+                producer: "acceptance",
+              },
+              repository.idPrefix,
+            );
+          }),
         ),
       recordSpecialistResult: (input) =>
         repository.transactionImmediate("record Candidate Specialist Review Result", (sql) =>
-          recordPhaseResult(
-            sql,
-            { ...input, phase: validationPhase.specialistReview },
-            repository.idPrefix,
-          ),
+          Effect.gen(function* () {
+            yield* requirePreDispatchReviewerIntegrityFailure(
+              input,
+              validationPhase.specialistReview,
+              "record Candidate Specialist Review Result",
+            );
+            yield* recordPhaseResult(
+              sql,
+              { ...input, phase: validationPhase.specialistReview },
+              repository.idPrefix,
+            );
+          }),
         ),
       settleAgentInvocationResult: (input) => (sql, invocationId) =>
         Effect.gen(function* () {
@@ -283,12 +301,17 @@ const startOrReuse = (
       ...(acceptanceContext === null ? {} : { acceptanceContext }),
     };
     const policySnapshot = yield* Effect.try({
-      try: () => {
-        requireMatchingReviewerRoster(policy, changeAuthority.reviewerConfiguration);
-        return encodeSqliteCandidateValidationPolicy(policy);
-      },
+      try: () => encodeSqliteCandidateValidationPolicy(policy),
       catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
     });
+    yield* requireMatchingReviewerConfiguration(
+      sql,
+      policy,
+      changeAuthority.reviewerConfiguration,
+      candidate.changeId,
+      operationName,
+      idPrefix,
+    );
     const authority = {
       candidate,
       policy,
@@ -417,6 +440,36 @@ const recordPhaseResult = (
     `;
   }).pipe(Effect.asVoid);
 
+const requirePreDispatchReviewerIntegrityFailure = (
+  input: Pick<
+    RecordCandidateValidationPhaseResultInput,
+    "outcome" | "findings" | "artifactRecords" | "toolingFailure"
+  >,
+  phase: typeof validationPhase.acceptanceReview | typeof validationPhase.specialistReview,
+  operationName: string,
+) => {
+  const failure = input.toolingFailure;
+  const expectedInfrastructureOperation =
+    phase === validationPhase.acceptanceReview
+      ? "verify_acceptance_candidate"
+      : "verify_specialist_candidate";
+  const isIntegrityFailure =
+    failure !== undefined &&
+    ((failure.errorKind === "git_tooling_failed" &&
+      failure.operationName === "verify_candidate_head") ||
+      (failure.errorKind === "infrastructure_tooling_failed" &&
+        failure.operationName === expectedInfrastructureOperation));
+  return input.outcome === "failed" &&
+    (input.findings ?? []).length === 0 &&
+    input.artifactRecords.length === 0 &&
+    isIntegrityFailure
+    ? Effect.void
+    : invalidData(
+        operationName,
+        "A direct reviewer Result requires pre-dispatch Candidate integrity failure evidence",
+      );
+};
+
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,
   input: {
@@ -491,25 +544,58 @@ const listPreviousCandidateReviewerFindings = (
     });
   });
 
-const requireMatchingReviewerRoster = (
-  policy: {
-    readonly acceptanceReview?: unknown;
-    readonly specialistReviews?: readonly { readonly id: string }[] | undefined;
-  },
+const requireMatchingReviewerConfiguration = (
+  sql: SqlClient.SqlClient,
+  policy: CandidateValidationPolicySnapshot,
   configuration: ChangeReviewerConfiguration,
-): void => {
-  if ((policy.acceptanceReview !== undefined) !== (configuration.acceptanceReview !== null)) {
-    throw new Error("Validation Acceptance Reviewer does not match the Change reviewer roster");
-  }
-  const policySpecialists = (policy.specialistReviews ?? []).map((review) => review.id);
-  const configuredSpecialists = configuration.specialistReviews.map((review) => review.id);
-  if (
-    policySpecialists.length !== configuredSpecialists.length ||
-    policySpecialists.some((id, index) => id !== configuredSpecialists[index])
-  ) {
-    throw new Error("Validation Specialists do not match the Change reviewer roster");
-  }
-};
+  changeId: string,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const acceptance = policy.acceptanceReview;
+    if ((acceptance !== undefined) !== (configuration.acceptanceReview !== null)) {
+      return yield* invalidData(
+        operationName,
+        "Validation Acceptance Reviewer does not match the Change reviewer roster",
+      );
+    }
+    const specialists = policy.specialistReviews ?? [];
+    if (
+      specialists.length !== configuration.specialistReviews.length ||
+      specialists.some((review, index) => review.id !== configuration.specialistReviews[index]?.id)
+    ) {
+      return yield* invalidData(
+        operationName,
+        "Validation Specialists do not match the Change reviewer roster",
+      );
+    }
+
+    if (
+      acceptance !== undefined &&
+      configuration.acceptanceReview !== null &&
+      !sameChangeReviewerPolicy("acceptance", acceptance, configuration.acceptanceReview) &&
+      !(yield* changeReviewerConfigurationCanBeCorrected(sql, changeId, "acceptance", idPrefix))
+    ) {
+      return yield* invalidData(
+        operationName,
+        "Validation Acceptance Reviewer configuration does not match the Change",
+      );
+    }
+    for (const [index, review] of specialists.entries()) {
+      const configured = configuration.specialistReviews[index];
+      if (
+        configured !== undefined &&
+        !sameChangeReviewerPolicy(review.id, review, configured) &&
+        !(yield* changeReviewerConfigurationCanBeCorrected(sql, changeId, review.id, idPrefix))
+      ) {
+        return yield* invalidData(
+          operationName,
+          `Validation Specialist ${review.id} configuration does not match the Change`,
+        );
+      }
+    }
+  }).pipe(Effect.asVoid);
 
 const findingValue = (finding: CandidateValidationFinding) => ({
   title: finding.title,

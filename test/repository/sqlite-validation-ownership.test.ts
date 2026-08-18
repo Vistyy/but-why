@@ -87,13 +87,19 @@ const beginInvocation = (
 ) =>
   validation.agentPersistence.beginInvocation({
     ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
-    configuration,
+    configuration: {
+      harness: "pi",
+      provider: null,
+      model: `${input.producer}-model`,
+      thinking: null,
+    },
     createdAt: "2026-10-02T10:00:00.000Z",
     linkInvocation: validation.agentSessions.linkAgentInvocation({
       validationRunId: input.validationRunId,
       changeId: input.changeId,
       phase: "specialist_review",
       producer: input.producer,
+      configurationSnapshot: specialist(input.producer),
     }),
   });
 
@@ -112,6 +118,17 @@ describe("SQLite Validation ownership", () => {
               validationRunId: started.validationRunId,
               producer: "unconfigured",
               outcome: "passed",
+              artifactRecords: [],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* validation.execution
+            .recordSpecialistResult({
+              validationRunId: started.validationRunId,
+              producer: "first",
+              outcome: "passed",
+              findings: [],
               artifactRecords: [],
             })
             .pipe(Effect.flip),
@@ -164,12 +181,27 @@ describe("SQLite Validation ownership", () => {
           outcome: "passed",
           artifactRecords: [],
         });
-        yield* validation.execution.recordSpecialistResult({
+        const secondInvocation = yield* beginInvocation(validation, {
           validationRunId: started.validationRunId,
+          changeId: captured.changeId,
           producer: "second",
-          outcome: "passed",
-          findings: [],
-          artifactRecords: [],
+        });
+        if (!secondInvocation.ok) throw new Error(secondInvocation.code);
+        yield* validation.agentPersistence.settleInvocation({
+          invocationId: secondInvocation.dispatch.invocation.id,
+          continuationId: secondInvocation.dispatch.continuation.id,
+          settlement: {
+            settledAt: "2026-10-02T10:00:02.000Z",
+            kind: "returned",
+          },
+          settleDomain: validation.execution.settleAgentInvocationResult({
+            validationRunId: started.validationRunId,
+            phase: "specialist_review",
+            producer: "second",
+            outcome: "passed",
+            findings: [],
+            artifactRecords: [],
+          }),
         });
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
@@ -224,6 +256,21 @@ describe("SQLite Validation ownership", () => {
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.agentPersistence
+            .beginInvocation({
+              configuration,
+              createdAt: "2026-10-02T10:00:11.000Z",
+              linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+                validationRunId: fixture.started.validationRunId,
+                changeId: fixture.captured.changeId,
+                phase: "specialist_review",
+                producer: "first",
+                configurationSnapshot: specialist("first"),
+              }),
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
         yield* fixture.validation.execution.recordToolingFailure({
           validationRunId: fixture.started.validationRunId,
@@ -240,6 +287,32 @@ describe("SQLite Validation ownership", () => {
           outcome: "tooling_failed",
         });
 
+        expect(
+          yield* fixture.validation.execution
+            .startOrReuse({
+              candidateId: fixture.captured.candidateId,
+              changeBaseSha: "base",
+              headSha: "reviewer-roster-head",
+              policy: {
+                ...policy,
+                specialistReviews: policy.specialistReviews.map((review, index) =>
+                  index === 0
+                    ? {
+                        ...review,
+                        profile: {
+                          ...review.profile,
+                          profile: {
+                            ...review.profile.profile,
+                            runtimeConfig: { model: "rogue-model" },
+                          },
+                        },
+                      }
+                    : review,
+                ),
+              },
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(
           yield* fixture.validation.execution
             .startOrReuse({
@@ -332,6 +405,102 @@ describe("SQLite Validation ownership", () => {
             agentSessionId: changeOwned.dispatch.agentSessionId,
           }).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      }),
+    ),
+  );
+
+  it.scoped("applies an eligible reviewer correction only from the immutable Run policy", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const fixture = yield* createRun(input.commonDirectory, "valid-correction");
+        const initial = yield* beginInvocation(fixture.validation, {
+          validationRunId: fixture.started.validationRunId,
+          changeId: fixture.captured.changeId,
+          producer: "first",
+        });
+        if (!initial.ok) throw new Error(initial.code);
+        yield* fixture.validation.agentPersistence.settleInvocation({
+          invocationId: initial.dispatch.invocation.id,
+          continuationId: initial.dispatch.continuation.id,
+          settlement: {
+            settledAt: "2026-10-02T10:01:11.000Z",
+            kind: "launch_failed",
+            unusableReason: "Correct the Specialist model.",
+          },
+        });
+        yield* fixture.validation.execution.recordToolingFailure({
+          validationRunId: fixture.started.validationRunId,
+          errorKind: "reviewer_process_execution_failed",
+          operationName: "run_specialist_reviewer",
+          errorMessage: "The configured model was unavailable.",
+        });
+        yield* fixture.validation.execution.recordWorkspaceCleanup({
+          validationRunId: fixture.started.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        yield* fixture.validation.execution.complete({
+          validationRunId: fixture.started.validationRunId,
+          outcome: "tooling_failed",
+        });
+
+        const correctedFirst = {
+          ...specialist("first"),
+          profile: {
+            ...specialist("first").profile,
+            profile: {
+              ...specialist("first").profile.profile,
+              runtimeConfig: { model: "corrected-model" },
+            },
+          },
+        };
+        const correctedPolicy = {
+          ...policy,
+          specialistReviews: [correctedFirst, specialist("second")],
+        };
+        const correctedRun = yield* fixture.validation.execution.startOrReuse({
+          candidateId: fixture.captured.candidateId,
+          changeBaseSha: "base",
+          headSha: "valid-correction-head",
+          policy: correctedPolicy,
+        });
+        if (correctedRun.reused || "blocked" in correctedRun || "active" in correctedRun) {
+          throw new Error("Expected a corrected Validation Run");
+        }
+        const correctedInvocation = yield* fixture.validation.agentPersistence.beginInvocation({
+          agentSessionId: initial.dispatch.agentSessionId,
+          configuration: {
+            harness: "pi",
+            provider: null,
+            model: "corrected-model",
+            thinking: null,
+          },
+          createdAt: "2026-10-02T10:01:12.000Z",
+          linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+            validationRunId: correctedRun.validationRunId,
+            changeId: fixture.captured.changeId,
+            phase: "specialist_review",
+            producer: "first",
+            configurationSnapshot: correctedFirst,
+          }),
+        });
+        expect(correctedInvocation).toMatchObject({ ok: true });
+
+        const repository = yield* RepositorySql;
+        const stored = yield* repository.operation(
+          "read corrected reviewer configuration",
+          (sql) => sql<{ readonly reviewerConfiguration: string }>`
+            SELECT reviewer_configuration AS reviewerConfiguration
+            FROM changes
+            WHERE id = ${internalChangeId(fixture.captured.changeId, repository.idPrefix)}
+          `,
+        );
+        const correctedConfiguration = JSON.parse(stored[0]?.reviewerConfiguration ?? "null") as {
+          readonly specialistReviews?: readonly unknown[];
+        };
+        expect(correctedConfiguration.specialistReviews?.[0]).toMatchObject({
+          id: "first",
+          profile: { profile: { runtimeConfig: { model: "corrected-model" } } },
+        });
       }),
     ),
   );

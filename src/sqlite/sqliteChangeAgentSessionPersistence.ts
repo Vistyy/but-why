@@ -1,17 +1,20 @@
-import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
+import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import { internalChangeId } from "../change/changeId.js";
 import type { ChangeAgentSessionPort } from "../change/changePorts.js";
 import {
+  type ChangeReviewerPolicy,
   decodeChangeReviewerConfiguration,
   decodeSqliteChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
+  sameChangeReviewerPolicy,
 } from "../change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { agentSessionConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 
 export const openSqliteChangeAgentSessionPort = () =>
@@ -31,11 +34,12 @@ export const openSqliteChangeAgentSessionPort = () =>
         ),
       linkAgentInvocation: (input) => (sql, invocationId) =>
         Effect.gen(function* () {
-          yield* requireValidationPosition(sql, {
+          const operationName = "link Change Agent Invocation";
+          const run = yield* requireValidationPosition(sql, {
             validationRunId: input.validationRunId,
             phase: input.phase,
             producer: input.producer,
-            operationName: "link Change Agent Invocation",
+            operationName,
             idPrefix: repository.idPrefix,
             active: true,
           });
@@ -59,29 +63,59 @@ export const openSqliteChangeAgentSessionPort = () =>
               "Validation position does not belong to the open Change",
             );
           }
-          const reviewerConfiguration = yield* Effect.try({
+          const reviewerEvidence = yield* Effect.try({
             try: () => {
               const configuration = decodeSqliteChangeReviewerConfiguration(
                 owner.reviewerConfiguration,
               );
-              requireChangeReviewerRole(configuration, input.phase, input.producer);
-              return configuration;
+              const expected = reviewerPolicyForPosition(run.policy, input.phase, input.producer);
+              const stored = changeReviewerPolicy(configuration, input.phase, input.producer);
+              if (input.configurationSnapshot === undefined) {
+                throw new Error("Change reviewer Invocation requires a configuration Snapshot");
+              }
+              const snapshot = decodeReviewerPolicySnapshot(
+                input.configurationSnapshot,
+                input.phase,
+                input.producer,
+              );
+              if (!sameChangeReviewerPolicy(input.producer, snapshot, expected)) {
+                throw new Error(
+                  "Reviewer configuration Snapshot does not match the Validation Run policy",
+                );
+              }
+              return { configuration, expected, stored, snapshot };
             },
-            catch: (cause) =>
-              new RepositoryPersistedDataInvalid({
-                operationName: "link Change Agent Invocation",
-                cause,
-              }),
+            catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
           });
-          const sessions = yield* sql<{ readonly agentSessionId: number }>`
-          SELECT continuation.agent_session_id AS agentSessionId
-          FROM agent_invocations AS invocation
-          JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-          WHERE invocation.id = ${invocationId}
-        `;
-          const sessionId = sessions[0]?.agentSessionId;
-          if (sessionId === undefined) {
-            return yield* invalid("link Change Agent Invocation", "Invocation Session is missing");
+          const sessions = yield* sql<{
+            readonly agentSessionId: number;
+            readonly harness: string;
+            readonly provider: string | null;
+            readonly model: string;
+            readonly thinking: string | null;
+          }>`
+            SELECT continuation.agent_session_id AS agentSessionId, continuation.harness,
+              continuation.provider, continuation.model, continuation.thinking
+            FROM agent_invocations AS invocation
+            JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+            WHERE invocation.id = ${invocationId}
+          `;
+          const session = sessions[0];
+          if (session === undefined) {
+            return yield* invalid(operationName, "Invocation Session is missing");
+          }
+          const sessionId = session.agentSessionId;
+          const runtimeConfig = reviewerEvidence.expected.profile.profile.runtimeConfig;
+          if (
+            session.harness !== "pi" ||
+            session.provider !== null ||
+            session.model !== runtimeConfig.model ||
+            session.thinking !== (runtimeConfig.thinking ?? null)
+          ) {
+            return yield* invalid(
+              operationName,
+              "Agent Continuation configuration does not match the Validation reviewer",
+            );
           }
           const taskOwners = yield* sql<{ readonly count: number }>`
             SELECT COUNT(*) AS count FROM tasks WHERE reviewer_agent_session_id = ${sessionId}
@@ -107,24 +141,29 @@ export const openSqliteChangeAgentSessionPort = () =>
               "Change role already has another Agent Session",
             );
           }
-          const canCorrect =
-            input.configurationSnapshot === undefined
-              ? false
-              : yield* changeAgentConfigurationCanBeCorrected(sql, sessionId, invocationId);
-          if (canCorrect) {
-            const replacement = yield* Effect.try({
-              try: () =>
-                replaceChangeRoleConfiguration(
-                  reviewerConfiguration,
-                  input.producer,
-                  input.configurationSnapshot,
-                ),
-              catch: (cause) =>
-                new RepositoryPersistedDataInvalid({
-                  operationName: "correct Change Agent configuration",
-                  cause,
-                }),
-            });
+          if (
+            !sameChangeReviewerPolicy(
+              input.producer,
+              reviewerEvidence.stored,
+              reviewerEvidence.expected,
+            )
+          ) {
+            const canCorrect = yield* agentSessionConfigurationCanBeCorrected(
+              sql,
+              sessionId,
+              invocationId,
+            );
+            if (!canCorrect) {
+              return yield* invalid(
+                operationName,
+                "Validation reviewer configuration cannot correct the Change",
+              );
+            }
+            const replacement = replaceChangeRoleConfiguration(
+              reviewerEvidence.configuration,
+              input.producer,
+              reviewerEvidence.snapshot,
+            );
             yield* sql`
               UPDATE changes SET reviewer_configuration = ${encodeSqliteChangeReviewerConfiguration(replacement)}
               WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
@@ -144,67 +183,68 @@ export const openSqliteChangeAgentSessionPort = () =>
     }),
   );
 
-const changeAgentConfigurationCanBeCorrected = (
-  sql: SqlClient.SqlClient,
-  sessionId: number,
-  invocationId: number,
-) =>
-  Effect.gen(function* () {
-    const latest = yield* sql<{
-      readonly settlementKind: string | null;
-      readonly transcriptPath: string | null;
-    }>`
-      SELECT invocation.settlement_kind AS settlementKind,
-        continuation.transcript_path AS transcriptPath
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation
-        ON continuation.id = invocation.continuation_id
-      WHERE continuation.agent_session_id = ${sessionId}
-        AND invocation.id <> ${invocationId}
-      ORDER BY invocation.id DESC LIMIT 1
-    `;
-    const transcript = yield* sql<{ readonly count: number }>`
-      SELECT COUNT(*) AS count FROM agent_continuations
-      WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
-    `;
-    const returned = yield* sql<{ readonly count: number }>`
-      SELECT COUNT(*) AS count
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation
-        ON continuation.id = invocation.continuation_id
-      WHERE continuation.agent_session_id = ${sessionId}
-        AND invocation.id <> ${invocationId}
-        AND invocation.settlement_kind = 'returned'
-    `;
-    return (
-      latest[0]?.settlementKind === "launch_failed" &&
-      latest[0]?.transcriptPath === null &&
-      (transcript[0]?.count ?? 0) === 0 &&
-      (returned[0]?.count ?? 0) === 0
-    );
-  });
-
 const invalid = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
-const requireChangeReviewerRole = (
+const reviewerPolicyForPosition = (
+  policy: CandidateValidationPolicySnapshot,
+  phase: string,
+  producer: string,
+): ChangeReviewerPolicy => {
+  if (phase === validationPhase.acceptanceReview && producer === "acceptance") {
+    if (policy.acceptanceReview === undefined) {
+      throw new Error("Validation Run has no Acceptance Reviewer");
+    }
+    return policy.acceptanceReview;
+  }
+  if (phase === validationPhase.specialistReview) {
+    const specialist = (policy.specialistReviews ?? []).find((review) => review.id === producer);
+    if (specialist !== undefined) return specialist;
+  }
+  throw new Error("Validation position is not a reviewer role");
+};
+
+const changeReviewerPolicy = (
   configuration: ChangeReviewerConfiguration,
   phase: string,
   producer: string,
-): void => {
+): ChangeReviewerPolicy => {
   if (phase === validationPhase.acceptanceReview && producer === "acceptance") {
     if (configuration.acceptanceReview === null) {
       throw new Error("Change reviewer roster does not contain the Acceptance Reviewer");
     }
-    return;
+    return configuration.acceptanceReview;
   }
-  if (
-    phase === validationPhase.specialistReview &&
-    configuration.specialistReviews.some((review) => review.id === producer)
-  ) {
-    return;
+  if (phase === validationPhase.specialistReview) {
+    const specialist = configuration.specialistReviews.find((review) => review.id === producer);
+    if (specialist !== undefined) return specialist;
   }
   throw new Error("Validation position is not a Change reviewer role");
+};
+
+const decodeReviewerPolicySnapshot = (
+  snapshot: unknown,
+  phase: string,
+  producer: string,
+): ChangeReviewerPolicy => {
+  if (phase === validationPhase.acceptanceReview && producer === "acceptance") {
+    const policy = decodeChangeReviewerConfiguration({
+      acceptanceReview: snapshot,
+      specialistReviews: [],
+    }).acceptanceReview;
+    if (policy === null) throw new Error("Acceptance Reviewer Snapshot is missing");
+    return policy;
+  }
+  if (phase === validationPhase.specialistReview) {
+    const policies = decodeChangeReviewerConfiguration({
+      acceptanceReview: null,
+      specialistReviews: [snapshot],
+    }).specialistReviews;
+    const policy = policies[0];
+    if (policy?.id === producer) return policy;
+    throw new Error("Specialist Reviewer Snapshot does not match its producer");
+  }
+  throw new Error("Validation position is not a reviewer role");
 };
 
 const replaceChangeRoleConfiguration = (

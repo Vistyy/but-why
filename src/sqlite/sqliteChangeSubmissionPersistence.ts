@@ -5,6 +5,7 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { changeReviewerConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import {
   decodeImplementationDecisions,
   deriveAcceptanceContext,
@@ -33,7 +34,7 @@ export const openSqliteChangeSubmissionPort = () =>
         ),
       agentSessionConfigurationCanBeCorrected: (changeId, producer) =>
         repository.transaction("check Change Agent configuration correction", (sql) =>
-          agentSessionConfigurationCanBeCorrected(sql, changeId, producer, repository.idPrefix),
+          changeReviewerConfigurationCanBeCorrected(sql, changeId, producer, repository.idPrefix),
         ),
       getChangeForOutputById: (changeId) =>
         repository.transaction("read Change for Submit output", (sql) =>
@@ -122,50 +123,6 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string, idPrefix: str
         decodeImplementationDecisions(rows, changeId, idPrefix),
       ),
   );
-
-const agentSessionConfigurationCanBeCorrected = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  producer: string,
-  idPrefix: string,
-) =>
-  Effect.gen(function* () {
-    const sessions = yield* sql<{ readonly agentSessionId: number }>`
-      SELECT agent_session_id AS agentSessionId
-      FROM change_agent_sessions
-      WHERE change_id = ${internalChangeId(changeId, idPrefix)} AND producer = ${producer}
-    `;
-    const sessionId = sessions[0]?.agentSessionId;
-    if (sessionId === undefined) return false;
-    const latest = yield* sql<{
-      readonly settlementKind: string | null;
-      readonly transcriptPath: string | null;
-    }>`
-      SELECT invocation.settlement_kind AS settlementKind,
-        continuation.transcript_path AS transcriptPath
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE continuation.agent_session_id = ${sessionId}
-      ORDER BY invocation.id DESC LIMIT 1
-    `;
-    const transcript = yield* sql<{ readonly count: number }>`
-      SELECT COUNT(*) AS count FROM agent_continuations
-      WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
-    `;
-    const returned = yield* sql<{ readonly count: number }>`
-      SELECT COUNT(*) AS count
-      FROM agent_invocations AS invocation
-      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-      WHERE continuation.agent_session_id = ${sessionId}
-        AND invocation.settlement_kind = 'returned'
-    `;
-    return (
-      latest[0]?.settlementKind === "launch_failed" &&
-      latest[0]?.transcriptPath === null &&
-      (transcript[0]?.count ?? 0) === 0 &&
-      (returned[0]?.count ?? 0) === 0
-    );
-  });
 
 const readCommittedCompletionId = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.gen(function* () {

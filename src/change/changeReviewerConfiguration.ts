@@ -32,3 +32,24 @@ export const decodeSqliteChangeReviewerConfiguration = (
 export const encodeSqliteChangeReviewerConfiguration = (
   configuration: ChangeReviewerConfiguration,
 ): string => JSON.stringify(decodeChangeReviewerConfiguration(configuration));
+
+export type ChangeReviewerPolicy =
+  | NonNullable<ChangeReviewerConfiguration["acceptanceReview"]>
+  | ChangeReviewerConfiguration["specialistReviews"][number];
+
+export const sameChangeReviewerPolicy = (
+  producer: string,
+  left: ChangeReviewerPolicy,
+  right: ChangeReviewerPolicy,
+): boolean => reviewerPolicyValue(producer, left) === reviewerPolicyValue(producer, right);
+
+const reviewerPolicyValue = (producer: string, policy: ChangeReviewerPolicy): string =>
+  producer === "acceptance"
+    ? encodeSqliteChangeReviewerConfiguration({
+        acceptanceReview: policy as NonNullable<ChangeReviewerConfiguration["acceptanceReview"]>,
+        specialistReviews: [],
+      })
+    : encodeSqliteChangeReviewerConfiguration({
+        acceptanceReview: null,
+        specialistReviews: [policy as ChangeReviewerConfiguration["specialistReviews"][number]],
+      });

@@ -15,7 +15,16 @@ import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 type PhaseResultEvidenceRow = {
   readonly phase: string;
   readonly producer: string;
+  readonly findings: string;
+  readonly artifacts: string;
   readonly toolingFailure: string | null;
+};
+
+type ReviewerInvocationEvidenceRow = {
+  readonly phase: string;
+  readonly producer: string;
+  readonly settledCount: number;
+  readonly returnedCount: number;
 };
 
 type ExpectedPhase = {
@@ -39,9 +48,24 @@ export const requireCoherentValidationCompletion = (
     const findings = yield* listValidationFindings(sql, validationRunId, idPrefix);
     const toolingFailures = yield* listValidationToolingFailures(sql, validationRunId, idPrefix);
     const evidenceRows = yield* sql<PhaseResultEvidenceRow>`
-      SELECT phase, producer, tooling_failure AS toolingFailure
+      SELECT phase, producer, findings, artifacts, tooling_failure AS toolingFailure
       FROM validation_phase_results
       WHERE validation_run_id = ${validationRunId}
+    `;
+    const reviewerInvocationRows = yield* sql<ReviewerInvocationEvidenceRow>`
+      SELECT link.phase, link.producer, COUNT(*) AS settledCount,
+        SUM(CASE WHEN invocation.settlement_kind = 'returned' THEN 1 ELSE 0 END) AS returnedCount
+      FROM validation_phase_agent_invocations AS link
+      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+      JOIN validation_runs AS run ON run.id = link.validation_run_id
+      JOIN candidates AS candidate ON candidate.id = run.candidate_id
+      JOIN change_agent_sessions AS change_session
+        ON change_session.change_id = candidate.change_id
+        AND change_session.producer = link.producer
+        AND change_session.agent_session_id = continuation.agent_session_id
+      WHERE link.validation_run_id = ${validationRunId} AND invocation.settled_at IS NOT NULL
+      GROUP BY link.phase, link.producer
     `;
     const runRows = yield* sql<{ readonly toolingFailure: string | null }>`
       SELECT run_tooling_failure AS toolingFailure
@@ -62,6 +86,15 @@ export const requireCoherentValidationCompletion = (
           .filter((row) => row.toolingFailure !== null)
           .map((row) => positionKey(row.phase as ValidationPhase, row.producer)),
       );
+      const evidenceByPosition = new Map(
+        evidenceRows.map((row) => [positionKey(row.phase as ValidationPhase, row.producer), row]),
+      );
+      const reviewerInvocations = new Map(
+        reviewerInvocationRows.map((row) => [
+          positionKey(row.phase as ValidationPhase, row.producer),
+          row,
+        ]),
+      );
       if (toolingFailures.length !== toolingPositions.size + (runToolingFailure === null ? 0 : 1)) {
         throw new Error("Validation Tooling Failure evidence is inconsistent");
       }
@@ -75,6 +108,22 @@ export const requireCoherentValidationCompletion = (
         }
         if (result.outcome === "failed" && !hasFinding && !hasToolingFailure) {
           throw new Error("A failed Validation Phase Result has no failure evidence");
+        }
+        if (
+          result.phase === validationPhase.acceptanceReview ||
+          result.phase === validationPhase.specialistReview
+        ) {
+          const invocation = reviewerInvocations.get(key);
+          if (result.outcome === "passed" && (invocation?.returnedCount ?? 0) === 0) {
+            throw new Error("A passing reviewer Result has no returned Agent Invocation evidence");
+          }
+          if (
+            result.outcome === "failed" &&
+            (invocation?.settledCount ?? 0) === 0 &&
+            !isPreDispatchReviewerIntegrityFailure(result.phase, evidenceByPosition.get(key))
+          ) {
+            throw new Error("A failed reviewer Result has no Agent Invocation evidence");
+          }
         }
       }
 
@@ -132,6 +181,36 @@ export const requireCoherentValidationCompletion = (
       }
     });
   }).pipe(Effect.asVoid);
+
+const isPreDispatchReviewerIntegrityFailure = (
+  phase: ValidationPhase,
+  evidence: PhaseResultEvidenceRow | undefined,
+): boolean => {
+  if (evidence?.toolingFailure === null || evidence === undefined) return false;
+  const findings: unknown = JSON.parse(evidence.findings) as unknown;
+  const artifacts: unknown = JSON.parse(evidence.artifacts) as unknown;
+  const failure: unknown = JSON.parse(evidence.toolingFailure) as unknown;
+  if (
+    !Array.isArray(findings) ||
+    findings.length !== 0 ||
+    !Array.isArray(artifacts) ||
+    artifacts.length !== 0 ||
+    typeof failure !== "object" ||
+    failure === null ||
+    Array.isArray(failure)
+  ) {
+    return false;
+  }
+  const value = failure as { readonly errorKind?: unknown; readonly operationName?: unknown };
+  return (
+    (value.errorKind === "git_tooling_failed" && value.operationName === "verify_candidate_head") ||
+    (value.errorKind === "infrastructure_tooling_failed" &&
+      value.operationName ===
+        (phase === validationPhase.acceptanceReview
+          ? "verify_acceptance_candidate"
+          : "verify_specialist_candidate"))
+  );
+};
 
 const expectedPhases = (policy: {
   readonly prepare?: unknown;

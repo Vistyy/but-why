@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
+import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
@@ -107,14 +108,14 @@ describe("Candidate-owned Validation Run inspection", () => {
           if (linkAgentInvocation === undefined)
             throw new Error("Change Agent linking is unavailable");
           const started = yield* agents.beginInvocation({
-            configuration: { harness: "pi", model: "test-model", thinking: "off" },
+            configuration: { harness: "pi", model: "test-model", thinking: null },
             createdAt: now,
             linkInvocation: linkAgentInvocation({
               changeId: fixture.changeId,
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
-              configurationSnapshot: {},
+              configurationSnapshot: policy.acceptanceReview,
             }),
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -155,14 +156,14 @@ describe("Candidate-owned Validation Run inspection", () => {
           if (linkAgentInvocation === undefined)
             throw new Error("Change Agent linking is unavailable");
           const started = yield* agents.beginInvocation({
-            configuration: { harness: "pi", model: "test-model", thinking: "off" },
+            configuration: { harness: "pi", model: "test-model", thinking: null },
             createdAt: now,
             linkInvocation: linkAgentInvocation({
               changeId: fixture.changeId,
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
-              configurationSnapshot: {},
+              configurationSnapshot: policy.acceptanceReview,
             }),
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -213,7 +214,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             harness: "pi",
             provider: null,
             model: "test-model",
-            thinking: "off",
+            thinking: null,
             transcriptPath: null,
             unusableReason: null,
           },
@@ -300,6 +301,51 @@ describe("Candidate-owned Validation Run inspection", () => {
         state: "complete",
         outcome: "tooling_failed",
       });
+    }),
+  );
+
+  it.effect("rejects reviewer passing evidence without an Agent Invocation", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.recordPrepareResult({
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+        artifactRecords: [],
+      });
+      for (const check of policy.checks) {
+        yield* fixture.runStore.recordCheckResult({
+          validationRunId: fixture.validationRunId,
+          producer: check.id,
+          outcome: "passed",
+          artifactRecords: [],
+        });
+      }
+      expect(
+        yield* fixture.runStore
+          .recordAcceptanceResult({
+            validationRunId: fixture.validationRunId,
+            outcome: "passed",
+            findings: [],
+            artifactRecords: [],
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+      yield* fixture.setPassingAcceptanceResultWithoutInvocation();
+      yield* fixture.runStore.recordWorkspaceCleanup({
+        validationRunId: fixture.validationRunId,
+        cleanupWorkspace: "not_created",
+      });
+      expect(
+        yield* fixture.runStore
+          .complete({ validationRunId: fixture.validationRunId, outcome: "passed" })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+      yield* fixture.setValidationRunPassedWithoutEvidence();
+      expect(yield* fixture.getCurrentPassingEvidence().pipe(Effect.flip)).toBeInstanceOf(
+        RepositoryPersistedDataInvalid,
+      );
     }),
   );
 
@@ -619,19 +665,18 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
-      yield* fixture.runStore.recordAcceptanceResult({
-        validationRunId: started.validationRunId,
-        outcome: "passed",
-        findings: [],
-        artifactRecords: [],
-      });
-      yield* fixture.runStore.recordSpecialistResult({
-        validationRunId: started.validationRunId,
-        producer: "standards",
-        outcome: "passed",
-        findings: [],
-        artifactRecords: [],
-      });
+      yield* fixture.recordReviewerResult(
+        started.validationRunId,
+        "acceptance_review",
+        "acceptance",
+        reviewPolicy.acceptanceReview,
+      );
+      yield* fixture.recordReviewerResult(
+        started.validationRunId,
+        "specialist_review",
+        "standards",
+        reviewPolicy.specialistReviews[0],
+      );
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: started.validationRunId,
         outcome: "passed",
@@ -919,6 +964,48 @@ const candidateValidationFixture = () =>
         ),
     };
 
+    const recordReviewerResult = (
+      validationRunId: number,
+      phase: "acceptance_review" | "specialist_review",
+      producer: string,
+      reviewer:
+        | NonNullable<CandidateValidationPolicySnapshot["acceptanceReview"]>
+        | NonNullable<CandidateValidationPolicySnapshot["specialistReviews"]>[number],
+    ) =>
+      withPersistence((persistence) =>
+        Effect.gen(function* () {
+          const started = yield* persistence.agentPersistence.beginInvocation({
+            configuration: {
+              harness: "pi",
+              provider: null,
+              model: reviewer.profile.profile.runtimeConfig.model,
+              thinking: reviewer.profile.profile.runtimeConfig.thinking ?? null,
+            },
+            createdAt: now,
+            linkInvocation: persistence.agentSessions.linkAgentInvocation({
+              changeId: candidateResult.changeId,
+              producer,
+              validationRunId,
+              phase,
+              configurationSnapshot: reviewer,
+            }),
+          });
+          if (!started.ok) throw new Error(started.code);
+          yield* persistence.agentPersistence.settleInvocation({
+            invocationId: started.dispatch.invocation.id,
+            continuationId: started.dispatch.continuation.id,
+            settlement: { settledAt: later, kind: "returned" },
+            settleDomain: persistence.execution.settleAgentInvocationResult({
+              validationRunId,
+              phase,
+              producer,
+              outcome: "passed",
+              findings: [],
+              artifactRecords: [],
+            }),
+          });
+        }),
+      );
     const recordRunToolingFailure = (errorMessage: string) =>
       runStore.recordToolingFailure({
         validationRunId: runResult.validationRunId,
@@ -942,12 +1029,12 @@ const candidateValidationFixture = () =>
               artifactRecords: [],
             });
           }
-          yield* persistence.execution.recordAcceptanceResult({
+          yield* recordReviewerResult(
             validationRunId,
-            outcome: "passed",
-            findings: [],
-            artifactRecords: [],
-          });
+            "acceptance_review",
+            "acceptance",
+            policy.acceptanceReview,
+          );
         }),
       );
     const getCurrentPassingEvidence = () =>
@@ -956,6 +1043,22 @@ const candidateValidationFixture = () =>
           changes.authority.getCurrentPassingEvidence(candidateResult.changeId),
         ),
         Effect.provide(repositoryLayer),
+      );
+    const setPassingAcceptanceResultWithoutInvocation = () =>
+      withRepository(
+        Effect.flatMap(RepositorySql, (repository) =>
+          repository.operation(
+            "manufacture Acceptance Review evidence fixture",
+            (sql) => sql`
+              INSERT INTO validation_phase_results (
+                validation_run_id, phase, producer, outcome, findings, artifacts, tooling_failure
+              ) VALUES (
+                ${runResult.validationRunId}, 'acceptance_review', 'acceptance',
+                'passed', '[]', '[]', NULL
+              )
+            `,
+          ),
+        ),
       );
     const setValidationRunPassedWithoutEvidence = () =>
       withRepository(
@@ -986,8 +1089,10 @@ const candidateValidationFixture = () =>
       root,
       runStore,
       recordRunToolingFailure,
+      recordReviewerResult,
       recordPassingResults,
       getCurrentPassingEvidence,
+      setPassingAcceptanceResultWithoutInvocation,
       setValidationRunPassedWithoutEvidence,
       setReviewerConfiguration,
       artifactsRoot,
