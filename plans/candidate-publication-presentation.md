@@ -341,20 +341,13 @@ Version 1 does not support `copyFiles` or retain configured copied files between
 But Why does not create a Change Base scratch or file tree for this purpose.
 Existing allowed-file integrity semantics continue to apply to the exact Candidate workspace.
 
-Each active Submission Workspace requires durable recovery facts:
-
-- Durable workspace identity.
-- Change and Candidate identity.
-- Exact expected commit.
-- Exact path.
-- Cleanup state.
-- Selected Validation Run reference when applicable.
-
+Submission Workspace identity and path are derived deterministically from the verified Git Common Directory and the applicable Candidate and Validation Run identity rather than persisted.
+Its expected commit derives from the exact Candidate.
+Recovery verifies Git registration, exact path, detached state, and Candidate commit before removal.
+An absent workspace and registration settle cleanup, while any mismatch retains the owner cleanup obligation and reason and blocks without deletion.
 Change Delivery's Submission operation owns Submission Workspace lifecycle and recovery across Validation and publication synthesis.
-The release-baseline plan selects its physical persistence representation.
-The durable recovery state exists only while setup, use, or cleanup remains active and is removed after successful cleanup.
+The operation does not add a Snapshot Workspace table or persist workspace identity, path, expected commit, or transient state.
 Validation and Publication retain their own evidence rather than permanent workspace history.
-The required behavior is that But Why records recovery facts before worktree creation and verifies exact identity, path, commit, and cleanliness before reuse or cleanup.
 
 The workspace is cleaned immediately after a valid presentation is persisted and before GitHub mutation.
 GitHub recovery then needs only durable pending publication state and no workspace.
@@ -416,7 +409,7 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 - Keep generated content internal outside GitHub in version 1.
 - Broaden Snapshot Workspace into Submission Workspace behavior.
 - Exclude `copyFiles` from the first release and defer any local untracked-file injection replacement until evidence establishes a supported need.
-- Require durable workspace recovery facts while deferring physical schema design.
+- Derive and verify workspace recovery facts without persisting a Snapshot Workspace record.
 - Clean the workspace after proposal persistence and before GitHub mutation.
 - Verify the actual Candidate before GitHub mutation without adding a separate post-synthesis workspace check.
 - Reconcile and withhold a stale pending proposal before allowing a later Submission to replace it for a newly selected Candidate.

@@ -415,9 +415,13 @@ Tasks and Changes retain ownership of agent roles, instructions, supplied author
 A Review remains a Task- or Change-owned use of Agent infrastructure rather than a shared Agent-infrastructure domain concept.
 The visible Implementer session remains separate from shared headless Agent Invocation.
 Changes own implementation behavior, and `InteractiveSessionHost` owns Herdr launching.
-Task Review and Candidate execution workspaces remain distinct disposable workspaces behind a narrow shared workspace interface.
+Task Review and Candidate execution workspaces remain distinct disposable workspaces behind a narrow shared workspace interface without persisted Snapshot Workspace path, identity, expected commit, or transient state.
+Task Review recovery derives identity and path deterministically from the verified Git Common Directory and Task Review ID and derives expected commit from the exact Review Base.
+Candidate Snapshot recovery derives identity and path deterministically from the verified Git Common Directory and Validation Run ID and derives expected commit from the immutable Candidate.
+Recovery verifies Git registration, exact path, detached state, and expected commit before removal.
+An absent workspace and registration settle cleanup, while any mismatch retains the owner cleanup obligation and reason and blocks without deletion.
+Task Review cleanup uses `task_reviews.cleanup_pending` and `task_reviews.cleanup_blocking_reason`, and Candidate Snapshot cleanup uses the corresponding fields on `validation_runs`.
 They remain separate from the Change-owned persistent Managed Worktree and any Change Base scratch or file tree.
-Their exact review or Candidate provenance and owner-held cleanup obligations remain real, inspectable boundaries.
 Repository Runtime reads repository and global configuration, including the configured Repository Preparation command.
 Shared Repository Preparation executes that command through a narrow interface.
 Tasks and Changes decide when preparation is required and how its failure affects their workflows.
@@ -439,7 +443,7 @@ CLI modules only map commands to supported operations and their results.
 Public output may retain lifecycle fields derived from authoritative owner data: Change derives `open` or `closed` from its close reason, and Task Review and Validation Run derive `active` or `complete` from nullable outcome.
 Public histories use immutable integer order and do not retain creation, update, closure, or age fields whose source timestamps are removed.
 Task Review and Validation Run inspection expose exact Agent Invocation evidence and join their owner's effective reviewer configuration without copying it into the Review or Run.
-Task Review and Candidate execution workspace inspection exposes exact path, state, provenance, cleanup obligation, and blocking reason for recovery.
+Task Review and Candidate Snapshot inspection derives exact path and provenance and reports cleanup obligation and blocking reason for recovery.
 
 The existing `by change start` command remains one command.
 With `--task`, it selects Task and Change coordination.

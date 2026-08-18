@@ -95,16 +95,19 @@ Final physical schema and settled contracts:
   Candidate therefore represents one selected committed-state occurrence, not the unique identity of a commit pair across the complete Change history.
   Do not add a uniqueness constraint across Change and commit pair.
   Index `(change_id, id DESC)` to find the Current Candidate and list Candidate history by immutable Candidate order.
-- Retain distinct Task Review and Candidate execution workspaces with real state, exact provenance, actual recovery identity, and owner-held cleanup obligations.
-  Task Review workspace state remains with its Task Review evidence.
-  Candidate execution workspace state remains in an owner-scoped recovery representation linked to its Validation Run.
+- Retain distinct Task Review and Candidate execution workspaces without persisting Snapshot Workspace path, identity, expected commit, or transient state.
+  Derive the Task Review Snapshot Workspace identity and path deterministically from the verified Git Common Directory and Task Review ID.
+  Derive its expected commit from the exact Review Base.
+  Derive the Candidate Snapshot identity and path deterministically from the verified Git Common Directory and Validation Run ID.
+  Derive its expected commit from the immutable Candidate.
   Candidate Snapshot executes the exact Candidate with the stored Change policy.
-  Derive and verify deterministic workspace paths only where the supported recovery contract guarantees derivation.
+  Keep `cleanup_pending` and `cleanup_blocking_reason` for Task Review cleanup on `task_reviews`.
+  Keep `cleanup_pending` and `cleanup_blocking_reason` for Candidate Snapshot cleanup on `validation_runs`.
   Continue storing the Change Managed Worktree path because Change recovery preserves its originally recorded location.
   Do not collapse execution workspaces into the Change Managed Worktree or create a Change Base scratch or file tree.
 
 - Derive an Active Validation Run by selecting a Validation Run with no outcome through its Candidate and Change.
-  The immediate SQLite start transaction checks the complete Change for any unfinished Run, confirms the selected Candidate is current, and creates the new Run atomically.
+  The immediate SQLite start transaction checks the complete Change for any unfinished Run, confirms the selected Candidate is current, creates the new Run with `cleanup_pending` before filesystem acquisition, and commits it atomically.
   Do not add an Active Validation Run table, Change pointer, or per-Candidate partial uniqueness index.
 - Require every Change to be created through Change Start with a Repository Branch, Change Base ref and remote URL, and Managed Worktree path.
   Treat Change Base as the Git target for Change Start and later Candidate operations.
@@ -158,9 +161,10 @@ Final physical schema and settled contracts:
   A partial unique index on `task_reviews.task_id` where `outcome IS NULL` enforces at most one Active Task Review per Task.
 - Remove Task and Change `created_at` and `updated_at`, and remove Change `closed_at`.
   Their repository-local numeric IDs already provide creation order, and no supported operation requires those event times.
-- Represent each Change, Task Review, Validation Run, and Candidate execution workspace cleanup obligation at its owning state boundary with actionable failure evidence.
+- Represent the Task Review cleanup obligation and reason directly on `task_reviews` and the Candidate Snapshot cleanup obligation and reason directly on `validation_runs`.
   Owner operations create, clear, or retain each obligation and its actionable failure reason.
-  Do not add cleanup timestamps or broad defensive constraints.
+  Do not add a Snapshot Workspace table, persisted workspace identity, or cleanup timestamps.
+  A separate Snapshot Workspace table would require real evidence of multiple, configurable, or independently managed workspace lifecycles, so it is deferred and not planned.
 - Store immutable Task Review Findings as an ordered JSON value and its optional Tooling Failure as one embedded value on the Task Review.
   Do not retain separate Task Review Findings or Tooling Failures tables.
 - Store a phase- or producer-specific Validation Tooling Failure on its `validation_phase_results` row.
@@ -245,7 +249,7 @@ Final physical schema and settled contracts:
   Do not expose compatibility fingerprint, continuity, review-call count, or aggregate reviewer duration.
   Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none input, `cacheRead`, `cacheWrite`, output, and total token usage; transcript-relative path; and unusable reason.
   Keep command-duration evidence when it describes an actual check execution.
-- Task Review and Candidate execution workspace inspection exposes its exact path, state, provenance, cleanup obligation, and blocking reason for recovery.
+- Task Review and Candidate Snapshot inspection derives exact path and provenance and reports cleanup obligation and blocking reason for recovery.
 - Retain only indexes justified by current predicates, ordering, uniqueness, or active-row invariants.
 
 The preceding physical choices are exact BY-274 schema contracts.
@@ -291,14 +295,17 @@ The `task_reviews` table contains:
 - Required integer `task_id` foreign key.
 - Required `proposal` and `dependency_evidence` JSON snapshots.
 - Required `base_ref` and `base_commit`.
-- Required Task Review execution workspace identity, path, state, and cleanup evidence.
 - Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
 - Required ordered `findings` JSON and nullable `tooling_failure` JSON.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
 
 A partial unique index on `task_reviews.task_id` where `outcome IS NULL` permits at most one Active Task Review per Task.
 The Task Review row does not store a separate lifecycle state, reviewer policy, reviewer aggregates, abandonment reason, or timestamps.
-Its execution workspace state remains part of its owner-held cleanup boundary.
+Its cleanup obligation and blocking reason remain part of its owner-held cleanup boundary.
+Task Review recovery derives the Snapshot Workspace identity and path deterministically from the verified Git Common Directory and Task Review ID and derives its expected commit from the exact Review Base.
+Recovery verifies Git registration, exact path, detached state, and Review Base commit before removing a registered workspace.
+If the workspace and registration are absent, recovery settles cleanup as complete.
+If any observed identity, path, detached-state, or commit fact mismatches, recovery retains the cleanup obligation and reason and blocks without deletion.
 `task_review_agent_invocations` contains required integer `task_review_id` and `agent_invocation_id` foreign keys with their pair as its primary key.
 Invocation ID supplies their order.
 
@@ -324,6 +331,11 @@ The `validation_runs` table contains:
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
 
 The Validation Run row does not store lifecycle state, Change ID, Active Run identity, latest-resolved-Blocker identity, or timestamps.
+Its `cleanup_pending` and `cleanup_blocking_reason` fields are persisted before filesystem acquisition.
+Candidate Snapshot recovery derives the workspace identity and path deterministically from the verified Git Common Directory and Validation Run ID and derives the expected commit from the immutable Candidate.
+Recovery verifies Git registration, exact path, detached state, and Candidate commit before removing a registered workspace.
+If the workspace and registration are absent, recovery settles cleanup as complete.
+If any observed identity, path, detached-state, or commit fact mismatches, recovery retains the cleanup obligation and reason and blocks without deletion.
 
 `validation_phase_results` contains required integer `validation_run_id`, required `phase` and `producer`, required `outcome` constrained to `passed` or `failed`, required ordered `findings` and `artifacts` JSON, and nullable `tooling_failure` JSON.
 Its primary key is `(validation_run_id, phase, producer)`.
@@ -332,9 +344,6 @@ It stores no round number, state, or timestamps.
 `validation_phase_agent_invocations` contains required integer `validation_run_id`, required `phase` and `producer`, and required integer `agent_invocation_id` foreign key.
 Its primary key is `(validation_run_id, phase, producer, agent_invocation_id)` so correction and recovery Invocations remain ordered by Invocation ID.
 It links before dispatch without requiring a Phase Result row.
-
-`candidate_snapshot_workspaces` contains the Validation Run, exact expected Candidate commit, workspace identity and path, workspace state, and cleanup evidence needed for recovery.
-The Candidate execution workspace record is removed only after successful cleanup.
 
 `agent_sessions` contains only a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`.
 Owner and role remain in domain-owned links.
@@ -426,7 +435,6 @@ Changes own:
 - `implementation_blockers`.
 - `candidates`.
 - `validation_runs`.
-- `candidate_snapshot_workspaces`.
 - `validation_phase_results`.
 - `validation_phase_agent_invocations`.
 - `change_agent_sessions`.
@@ -438,6 +446,7 @@ Shared Agent infrastructure owns:
 - `agent_continuations`.
 - `agent_invocations`.
 
+The approved inventory contains exactly 18 product-owned baseline tables.
 No other product-owned baseline table is planned.
 Effect SQL retains its dependency-owned migration ledger.
 
