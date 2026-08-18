@@ -29,6 +29,7 @@ import {
 } from "./sqliteChangeAuthorityHistory.js";
 import { latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { requireValidationPosition } from "./sqliteValidationPosition.js";
 import {
   listValidationArtifacts,
   listValidationFindings,
@@ -68,34 +69,68 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       recordPrepareResult: (input) =>
         repository.transactionImmediate("record Candidate validation Prepare Result", (sql) =>
-          recordPhaseResult(sql, { ...input, phase: validationPhase.prepare, producer: "prepare" }),
+          recordPhaseResult(
+            sql,
+            { ...input, phase: validationPhase.prepare, producer: "prepare" },
+            repository.idPrefix,
+          ),
         ),
       recordCheckResult: (input) =>
         repository.transactionImmediate("record Candidate validation Check Result", (sql) =>
-          recordPhaseResult(sql, { ...input, phase: validationPhase.checks }),
+          recordPhaseResult(sql, { ...input, phase: validationPhase.checks }, repository.idPrefix),
         ),
       recordAcceptanceResult: (input) =>
         repository.transactionImmediate("record Candidate Acceptance Review Result", (sql) =>
-          recordPhaseResult(sql, {
-            ...input,
-            phase: validationPhase.acceptanceReview,
-            producer: "acceptance",
-          }),
+          recordPhaseResult(
+            sql,
+            {
+              ...input,
+              phase: validationPhase.acceptanceReview,
+              producer: "acceptance",
+            },
+            repository.idPrefix,
+          ),
         ),
       recordSpecialistResult: (input) =>
         repository.transactionImmediate("record Candidate Specialist Review Result", (sql) =>
-          recordPhaseResult(sql, { ...input, phase: validationPhase.specialistReview }),
+          recordPhaseResult(
+            sql,
+            { ...input, phase: validationPhase.specialistReview },
+            repository.idPrefix,
+          ),
         ),
-      settleAgentInvocationResult: (input) => (sql) =>
-        recordPhaseResult(sql, {
-          validationRunId: input.validationRunId,
-          phase: input.phase,
-          producer: input.producer,
-          outcome: input.outcome,
-          artifactRecords: input.artifactRecords,
-          findings: input.findings,
-          ...(input.toolingFailure === undefined ? {} : { toolingFailure: input.toolingFailure }),
-          now: input.now,
+      settleAgentInvocationResult: (input) => (sql, invocationId) =>
+        Effect.gen(function* () {
+          const links = yield* sql<{ readonly invocationId: number }>`
+            SELECT agent_invocation_id AS invocationId
+            FROM validation_phase_agent_invocations
+            WHERE validation_run_id = ${input.validationRunId}
+              AND phase = ${input.phase}
+              AND producer = ${input.producer}
+              AND agent_invocation_id = ${invocationId}
+          `;
+          if (links[0]?.invocationId !== invocationId) {
+            return yield* invalidData(
+              "settle Candidate validation Agent Invocation",
+              "Invocation is not linked to the Validation position",
+            );
+          }
+          yield* recordPhaseResult(
+            sql,
+            {
+              validationRunId: input.validationRunId,
+              phase: input.phase,
+              producer: input.producer,
+              outcome: input.outcome,
+              artifactRecords: input.artifactRecords,
+              findings: input.findings,
+              ...(input.toolingFailure === undefined
+                ? {}
+                : { toolingFailure: input.toolingFailure }),
+            },
+            repository.idPrefix,
+            "settle Candidate validation Agent Invocation",
+          );
         }),
       listPhaseResults: (validationRunId) =>
         repository.transaction("list Validation Phase Results", (sql) =>
@@ -276,7 +311,7 @@ const startOrReuse = (
 
 const complete = (
   sql: SqlClient.SqlClient,
-  input: { readonly validationRunId: number; readonly outcome: string; readonly now: string },
+  input: { readonly validationRunId: number; readonly outcome: string },
 ) =>
   Effect.gen(function* () {
     const updated = yield* sql<{ readonly id: number }>`
@@ -314,23 +349,52 @@ const recordWorkspaceCleanup = (
 const recordPhaseResult = (
   sql: SqlClient.SqlClient,
   input: RecordCandidateValidationPhaseResultInput,
-) => {
-  const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
-  const artifacts = input.artifactRecords.map((artifact) => ({
-    path: artifact.path,
-    originalBytes: artifact.originalBytes,
-    storedBytes: artifact.storedBytes,
-  }));
-  return Effect.asVoid(sql`
-    INSERT INTO validation_phase_results (
-      validation_run_id, phase, producer, outcome, findings, artifacts, tooling_failure
-    ) VALUES (
-      ${input.validationRunId}, ${input.phase}, ${input.producer}, ${input.outcome},
-      ${JSON.stringify(findings.map(findingValue))}, ${JSON.stringify(artifacts)},
-      ${input.toolingFailure === undefined ? null : JSON.stringify(toolingFailureValue(input.toolingFailure))}
-    )
-  `);
-};
+  idPrefix: string,
+  operationName = "record Candidate Validation Phase Result",
+) =>
+  Effect.gen(function* () {
+    yield* requireValidationPosition(sql, {
+      validationRunId: input.validationRunId,
+      phase: input.phase,
+      producer: input.producer,
+      operationName,
+      idPrefix,
+      active: true,
+    });
+    const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
+    if (
+      findings.some(
+        (finding) =>
+          finding.validationRunId !== input.validationRunId ||
+          finding.phase !== input.phase ||
+          finding.producer !== input.producer,
+      ) ||
+      input.artifactRecords.some(
+        (artifact) =>
+          artifact.validationRunId !== input.validationRunId ||
+          artifact.phase !== input.phase ||
+          artifact.producer !== input.producer,
+      ) ||
+      (input.toolingFailure !== undefined &&
+        input.toolingFailure.validationRunId !== input.validationRunId)
+    ) {
+      return yield* invalidData(operationName, "Validation evidence does not match its position");
+    }
+    const artifacts = input.artifactRecords.map((artifact) => ({
+      path: artifact.path,
+      originalBytes: artifact.originalBytes,
+      storedBytes: artifact.storedBytes,
+    }));
+    yield* sql`
+      INSERT INTO validation_phase_results (
+        validation_run_id, phase, producer, outcome, findings, artifacts, tooling_failure
+      ) VALUES (
+        ${input.validationRunId}, ${input.phase}, ${input.producer}, ${input.outcome},
+        ${JSON.stringify(findings.map(findingValue))}, ${JSON.stringify(artifacts)},
+        ${input.toolingFailure === undefined ? null : JSON.stringify(toolingFailureValue(input.toolingFailure))}
+      )
+    `;
+  }).pipe(Effect.asVoid);
 
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,

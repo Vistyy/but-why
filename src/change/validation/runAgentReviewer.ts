@@ -17,6 +17,7 @@ import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import { ReviewerOutputContractFailed } from "../../agent/reviewerOutput.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   reviewerEvidenceFromAgentSession,
   writeReviewerArtifacts,
@@ -67,7 +68,6 @@ export type RunAgentReviewerInput = {
   readonly artifactMaxBytes?: number;
   readonly allowedUntrackedFiles: readonly string[];
   readonly expectedHeadSha: string;
-  readonly now: string;
   readonly makeFindings: (
     result: TranslatedReviewerResult<ReviewerOutput>,
   ) => readonly ValidationRunFindingRecord[];
@@ -77,8 +77,7 @@ export type RunAgentReviewerInput = {
 };
 
 export type RunAgentReviewerResult = {
-  readonly result: TranslatedReviewerResult<ReviewerOutput>;
-  readonly toolingFailure?: ValidationToolingFailure;
+  readonly outcome: CandidateValidationOutcome;
 };
 
 export const runAgentReviewer = (
@@ -88,9 +87,9 @@ export const runAgentReviewer = (
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
 > => {
-  let persistedToolingFailure: ValidationToolingFailure | undefined;
+  let phaseOutcome: CandidateValidationOutcome | undefined;
   return Effect.gen(function* () {
-    const execution = yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
+    yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
       ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
       configuration: input.configuration,
       agentPersistence: input.agentPersistence,
@@ -121,7 +120,7 @@ export const runAgentReviewer = (
             }),
           );
           if (integrity._tag === "Left") {
-            persistedToolingFailure = integrity.left;
+            phaseOutcome = "tooling_failed";
             return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
@@ -133,7 +132,6 @@ export const runAgentReviewer = (
                 ...validationToolingFailureRecord(integrity.left),
                 validationRunId: input.validationRunId,
               },
-              now: input.now,
             });
           }
 
@@ -153,7 +151,7 @@ export const runAgentReviewer = (
             Effect.catchAll((failure) => Effect.succeed({ ok: false as const, failure })),
           );
           if (!artifacts.ok) {
-            persistedToolingFailure = artifacts.failure;
+            phaseOutcome = "tooling_failed";
             return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
@@ -165,12 +163,16 @@ export const runAgentReviewer = (
                 ...validationToolingFailureRecord(artifacts.failure),
                 validationRunId: input.validationRunId,
               },
-              now: input.now,
             });
           }
 
           const toolingFailure = result.ok ? undefined : result.failure;
-          if (toolingFailure !== undefined) persistedToolingFailure = toolingFailure;
+          phaseOutcome =
+            toolingFailure !== undefined
+              ? "tooling_failed"
+              : findings.length > 0
+                ? "blocked"
+                : "passed";
           return input.settleAgentInvocationResult({
             validationRunId: input.validationRunId,
             phase: input.phase,
@@ -186,15 +188,13 @@ export const runAgentReviewer = (
                     validationRunId: input.validationRunId,
                   },
                 }),
-            now: input.now,
           });
         }),
     });
-    const result = translateRuntimeResult(execution.result, input.reviewer);
-    return {
-      result,
-      ...(persistedToolingFailure === undefined ? {} : { toolingFailure: persistedToolingFailure }),
-    };
+    if (phaseOutcome === undefined) {
+      return yield* Effect.die("Agent reviewer completed without phase settlement");
+    }
+    return { outcome: phaseOutcome };
   });
 };
 

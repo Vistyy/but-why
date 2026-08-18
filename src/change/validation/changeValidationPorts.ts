@@ -62,7 +62,6 @@ export type CandidateValidationExecutionPort = {
     readonly toolingFailure?: ValidationToolingFailureRecordInput & {
       readonly validationRunId: number;
     };
-    readonly now: string;
   }) => AgentSessionSqlLink;
   readonly listPhaseResults: (
     validationRunId: number,

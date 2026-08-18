@@ -52,7 +52,6 @@ export type ValidateCandidateInput = {
   readonly resourceRoot?: string;
   readonly policy: CandidateValidationPolicy;
   readonly progress?: SubmitProgress;
-  readonly now: string;
 };
 
 type ValidateAcceptanceContextCandidateInput = {
@@ -63,7 +62,6 @@ type ValidateAcceptanceContextCandidateInput = {
   readonly resourceRoot?: string;
   readonly progress?: SubmitProgress;
   readonly policy: AcceptanceContextCandidateValidationPolicy;
-  readonly now: string;
 };
 
 type ValidateCandidateResult =
@@ -188,7 +186,6 @@ const makeCandidateValidation = (dependencies: {
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
       policy: input.policy,
-      now: input.now,
     });
     if ("blocked" in started) {
       return { ok: false, code: "blocked" } as const;
@@ -250,7 +247,6 @@ const makeCandidateValidation = (dependencies: {
       yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...failure,
-        now: input.now,
       });
       if (cleanupResult.workspace === "failed") {
         return {
@@ -262,7 +258,6 @@ const makeCandidateValidation = (dependencies: {
       yield* dependencies.persistence.complete({
         validationRunId: started.validationRunId,
         outcome: "tooling_failed",
-        now: input.now,
       });
       return {
         ok: false,
@@ -271,27 +266,11 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    const activeResult = workspace.activeWorkspaceResult;
-    const toolingFailures =
-      (
-        activeResult as
-          | { readonly toolingFailures?: readonly ValidationToolingFailure[] }
-          | undefined
-      )?.toolingFailures ?? [];
-    const persistedToolingFailures = activeResult?.persistedToolingFailures ?? [];
-    for (const toolingFailure of toolingFailures) {
-      if (persistedToolingFailures.includes(toolingFailure)) continue;
-      yield* dependencies.persistence.recordToolingFailure({
-        validationRunId: started.validationRunId,
-        ...validationToolingFailureRecord(toolingFailure),
-        now: input.now,
-      });
-    }
-    const outcome: CandidateValidationOutcome = activeResult?.outcome ?? "passed";
+    const outcome: CandidateValidationOutcome =
+      workspace.activeWorkspaceResult?.outcome ?? "passed";
     yield* dependencies.persistence.complete({
       validationRunId: started.validationRunId,
       outcome,
-      now: input.now,
     });
     return outcome === "tooling_failed"
       ? ({
@@ -335,11 +314,7 @@ const runCandidatePhases = (
   validationRunId: number,
   activeWorkspace: ActiveSnapshotWorkspace,
 ): Effect.Effect<
-  {
-    readonly outcome: CandidateValidationOutcome;
-    readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-    readonly toolingFailures: readonly ValidationToolingFailure[];
-  },
+  { readonly outcome: CandidateValidationOutcome },
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
@@ -384,7 +359,6 @@ const runCandidatePhases = (
                 expectedHeadSha: authority.candidate.headSha,
                 allowedUntrackedFiles: policy.copyFiles,
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
-                now: input.now,
                 recordPrepareResult: dependencies.persistence.recordPrepareResult,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -399,7 +373,6 @@ const runCandidatePhases = (
           expectedHeadSha: authority.candidate.headSha,
           allowedUntrackedFiles: policy.copyFiles,
           ...(input.progress === undefined ? {} : { progress: input.progress }),
-          now: input.now,
           continueAfterFinding: true,
           recordCheckResult: dependencies.persistence.recordCheckResult,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
@@ -425,7 +398,6 @@ const runCandidatePhases = (
                 commandCwd: activeWorkspace.worktreePath,
                 resourceRoot,
                 allowedUntrackedFiles: policy.copyFiles,
-                now: input.now,
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
@@ -450,7 +422,6 @@ const runCandidatePhases = (
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot,
           allowedUntrackedFiles: policy.copyFiles,
-          now: input.now,
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,

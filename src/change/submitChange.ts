@@ -254,7 +254,6 @@ const submitChange = (
     const candidate = yield* dependencies.captureCandidate({
       cwd: change.worktreePath,
       changeId: change.id,
-      now: input.now,
       changeBaseSha: refreshedBase.base.commit,
     });
     if (!candidate.ok) return candidate;
@@ -582,7 +581,6 @@ const validateAndPublish = (
             resourceRoot: change.worktreePath,
             policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
-            now,
           })
         : yield* validation.validateCandidate({
             changeId: change.id,
@@ -590,7 +588,6 @@ const validateAndPublish = (
             resourceRoot: change.worktreePath,
             policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
-            now,
           });
     if ("code" in validationResult) {
       if (validationResult.code === "blocked") {

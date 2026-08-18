@@ -49,7 +49,7 @@ class PublicationTemplate extends Context.Tag("@but-why/PublicationTemplate")<
 const publicationTemplateLayer = Layer.effect(
   PublicationTemplate,
   Effect.gen(function* () {
-    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate, now });
+    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate });
     if (!captured.ok) return yield* Effect.dieMessage(`Candidate capture failed: ${captured.code}`);
     const validationRunId = yield* withTestRepository(
       candidateRepoTemplate,
@@ -1544,7 +1544,7 @@ const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, Reposi
 function completeValidation(
   validation: ChangeValidationTestDependencies,
   captured: Captured,
-  at: string,
+  _at: string,
   outcome: "passed" | "blocked" | "tooling_failed" = "passed",
 ) {
   return Effect.gen(function* () {
@@ -1552,7 +1552,6 @@ function completeValidation(
       candidateId: captured.candidateId,
       headSha: captured.headSha,
       policy,
-      now: at,
     });
     if (run.reused) {
       if (outcome !== "passed") throw new Error("Expected a new Validation Run");
@@ -1566,7 +1565,6 @@ function completeValidation(
     yield* validation.execution.complete({
       validationRunId: run.validationRunId,
       outcome,
-      now: at,
     });
     return run.validationRunId;
   });
@@ -1588,7 +1586,6 @@ const nextCandidate = (
       baseRef: "refs/remotes/origin/main",
       changeBaseSha: fixture.captured.changeBaseSha,
       headSha,
-      now: at,
     });
     if (!result.ok) throw new Error(result.code);
     const captured: Captured = {

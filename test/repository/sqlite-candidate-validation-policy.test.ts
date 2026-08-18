@@ -11,8 +11,6 @@ import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCa
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
-const now = "2026-07-25T16:00:00.000Z";
-
 const currentPolicy = {
   acceptanceContext: {
     version: 1 as const,
@@ -64,21 +62,44 @@ const currentPolicy = {
 
 const malformedPolicyRuns: readonly { readonly id: number; readonly policyJson: string }[] = [
   { id: 101, policyJson: '{"checks":' },
-  { id: 102, policyJson: '{"copyFiles":[]}' },
-  { id: 103, policyJson: '{"checks":{},"copyFiles":[]}' },
+  {
+    id: 102,
+    policyJson: JSON.stringify({
+      acceptanceContext: currentPolicy.acceptanceContext,
+      agentEnvironment: currentPolicy.agentEnvironment,
+      prepare: currentPolicy.prepare,
+      copyFiles: currentPolicy.copyFiles,
+      acceptanceReview: currentPolicy.acceptanceReview,
+      specialistReviews: currentPolicy.specialistReviews,
+    }),
+  },
+  { id: 103, policyJson: JSON.stringify({ ...currentPolicy, checks: {} }) },
   {
     id: 104,
-    policyJson: '{"checks":[{"id":"types","command":"true","timeoutSeconds":"30"}],"copyFiles":[]}',
+    policyJson: JSON.stringify({
+      ...currentPolicy,
+      checks: [{ ...currentPolicy.checks[0], timeoutSeconds: "30" }],
+    }),
   },
   {
     id: 105,
-    policyJson:
-      '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"bogus","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}',
+    policyJson: JSON.stringify({
+      ...currentPolicy,
+      specialistReviews: [{ ...currentPolicy.specialistReviews[0], instructionsSource: "bogus" }],
+    }),
   },
   {
     id: 106,
-    policyJson:
-      '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"repo","agentProfile":"a","profileScope":"repo","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}',
+    policyJson: JSON.stringify({
+      ...currentPolicy,
+      specialistReviews: [
+        {
+          ...currentPolicy.specialistReviews[0],
+          agentProfile: "security",
+          profileScope: "repo",
+        },
+      ],
+    }),
   },
 ];
 
@@ -125,7 +146,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-          now,
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
 
@@ -134,7 +154,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           changeBaseSha: "base-sha",
           headSha: "head-sha",
           policy: currentPolicy,
-          now,
         });
         if (started.reused || "blocked" in started)
           throw new Error("Expected a new Validation Run");
@@ -172,7 +191,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-          now,
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
 
@@ -188,7 +206,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
                 ok: true,
               },
             } as CandidateValidationPolicySnapshot,
-            now,
           })
           .pipe(Effect.flip);
         expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -215,6 +232,68 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
     ),
   );
 
+  it.scoped("rejects semantically invalid Validation Policy Snapshots before insertion", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        yield* createCandidateOwningChange("refs/heads/semantic-policy");
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const validation = yield* openSqliteChangeValidationTestDependencies();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/semantic-policy",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+
+        const invalidPolicies = [
+          {
+            ...currentPolicy,
+            checks: [currentPolicy.checks[0], currentPolicy.checks[0]],
+          },
+          {
+            ...currentPolicy,
+            checks: [{ ...currentPolicy.checks[0], timeoutSeconds: 0 }],
+          },
+          {
+            ...currentPolicy,
+            prepare: { ...currentPolicy.prepare, timeoutSeconds: Number.MAX_SAFE_INTEGER + 1 },
+          },
+          {
+            ...currentPolicy,
+            specialistReviews: [
+              currentPolicy.specialistReviews[0],
+              currentPolicy.specialistReviews[0],
+            ],
+          },
+          {
+            ...currentPolicy,
+            specialistReviews: [{ ...currentPolicy.specialistReviews[0], id: "acceptance" }],
+          },
+        ];
+        for (const policy of invalidPolicies) {
+          const error = yield* validation.execution
+            .startOrReuse({
+              candidateId: captured.candidateId,
+              changeBaseSha: "base-sha",
+              headSha: "head-sha",
+              policy: policy as CandidateValidationPolicySnapshot,
+            })
+            .pipe(Effect.flip);
+          expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        }
+
+        const repository = yield* RepositorySql;
+        const rows = yield* repository.operation(
+          "count rejected semantic Validation Policies",
+          (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM validation_runs`,
+        );
+        expect(rows[0]?.count).toBe(0);
+      }),
+    ),
+  );
+
   it.scoped("rejects malformed persisted Validation Policy Snapshots at the SQLite boundary", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
@@ -228,7 +307,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-          now,
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
 

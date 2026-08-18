@@ -3,16 +3,14 @@ import { Effect } from "effect";
 import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
 import { publicChangeId } from "../change/changeId.js";
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
+import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
-import {
-  decodePrepareDefinition,
-  decodeReviewerConfiguration,
-} from "./sqliteChangeStartPersistence.js";
+import { decodePrepareDefinition } from "./sqliteChangeStartPersistence.js";
 import { decodeStoredNullableString, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
@@ -103,7 +101,7 @@ export const decodeChangeRow = (
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    reviewerConfiguration: decodeReviewerConfiguration(
+    reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(
       decodeStoredString(row.reviewerConfiguration, "Change Reviewer Configuration"),
     ),
     prepare,

@@ -50,7 +50,7 @@ describe("Snapshot Workspace lifecycle", () => {
               exitCode: 0,
               stdout: `${commitSha}:LOCAL_INPUT=yes`,
             });
-            return { outcome: "passed" as const, toolingFailures: [] };
+            return { outcome: "passed" as const };
           }).pipe(
             Effect.mapError(
               (cause) =>
@@ -64,7 +64,7 @@ describe("Snapshot Workspace lifecycle", () => {
 
       expect(result).toEqual({
         ok: true,
-        activeWorkspaceResult: { outcome: "passed", toolingFailures: [] },
+        activeWorkspaceResult: { outcome: "passed" },
       });
       expect(cleanupResults).toEqual([{ workspace: "removed" }]);
       expect(existsSync(worktreePath)).toBe(false);
@@ -209,7 +209,7 @@ describe("Snapshot Workspace lifecycle", () => {
                       message: cause.message,
                     }),
                 ),
-                Effect.as({ outcome: "passed" as const, toolingFailures: [] }),
+                Effect.as({ outcome: "passed" as const }),
               ),
         }),
       );

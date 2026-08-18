@@ -573,6 +573,18 @@ const linkAgentInvocation = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
+    const reviewOwners = yield* sql<{ readonly taskId: number; readonly outcome: string | null }>`
+      SELECT task_id AS taskId, outcome FROM task_reviews WHERE id = ${input.reviewId}
+    `;
+    if (
+      reviewOwners[0]?.taskId !== internalTaskId(input.taskId, idPrefix) ||
+      reviewOwners[0].outcome !== null
+    ) {
+      return yield* invalid(
+        "link Task Agent Invocation",
+        "Task Review does not belong to the Task or is not active",
+      );
+    }
     const sessions = yield* sql<{ readonly agentSessionId: number }>`
       SELECT continuation.agent_session_id AS agentSessionId
       FROM agent_invocations AS invocation

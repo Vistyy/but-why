@@ -110,7 +110,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toEqual({ findings: 0 });
+      expect(result).toEqual({ outcome: "passed" });
       expect(review).toHaveBeenCalledOnce();
       const call = review.mock.calls[0]?.[0];
       expect(call).toMatchObject({
@@ -217,7 +217,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toEqual({ findings: 0 });
+      expect(result).toEqual({ outcome: "passed" });
     }),
   );
 
@@ -285,10 +285,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: { _tag: "InfrastructureToolingFailed" },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(settledInvocationIds).toEqual([1]);
       expect(settlementKinds).toEqual(["returned"]);
       expect(results).toMatchObject([
@@ -316,16 +313,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        persistedToolingFailures: [
-          { _tag: "GitToolingFailed", operationName: "verify_candidate_head" },
-        ],
-        toolingFailure: {
-          _tag: "GitToolingFailed",
-          operationName: "verify_candidate_head",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(review).not.toHaveBeenCalled();
       expect(fixture.results).toMatchObject([
         {
@@ -357,7 +345,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({ findings: 1 });
+      expect(result).toEqual({ outcome: "blocked" });
       expect(fixture.results).toHaveLength(1);
       expect(fixture.results[0]).toMatchObject({
         outcome: "failed",
@@ -425,13 +413,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "ReviewerProcessToolingFailed",
-          operationName: "run_reviewer_process",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(fixture.results).toEqual([
         expect.objectContaining({ outcome: "failed", findings: [] }),
       ]);
@@ -458,14 +440,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "ReviewerOutputContractFailed",
-          operationName: "decode_reviewer_output",
-          attempts: 2,
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(fixture.results[0]).toMatchObject({ outcome: "failed", findings: [] });
     }),
   );
@@ -483,13 +458,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "InfrastructureToolingFailed",
-          operationName: "record_reviewer_artifacts",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(fixture.results).toMatchObject([
         {
           outcome: "failed",
@@ -514,13 +483,7 @@ describe("Acceptance Review phase", () => {
       const result = yield* fixture.run();
 
       expect(review).toHaveBeenCalledOnce();
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "GitToolingFailed",
-          operationName: "verify_candidate_head",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(fixture.results).toMatchObject([
         {
           outcome: "failed",
@@ -623,7 +586,6 @@ const acceptancePhaseFixture = (
         settleAgentInvocationResult,
         recordAcceptanceResult,
         allowedUntrackedFiles: [],
-        now,
         listArtifacts: () =>
           Effect.succeed((options.availableArtifactRefs ?? []).map((ref) => ({ ref }))),
         listPreviousCandidateReviewerFindings: () =>

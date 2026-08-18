@@ -4,7 +4,10 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, vi } from "vitest";
-import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  type ReviewerAgentRuntime,
+  ReviewerExecutionFailed,
+} from "../../src/agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import {
   CandidateValidation,
@@ -26,8 +29,6 @@ import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const now = "2026-07-15T10:00:00.000Z";
-
 describe("Candidate validation", () => {
   it.scoped(
     "copies a regular local validation file from the main checkout without changing Candidate identity",
@@ -46,7 +47,7 @@ describe("Candidate validation", () => {
           "HEAD",
         );
         registerCandidateChange(mainCheckout, "refs/heads/linked-candidate", candidateCheckout);
-        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
         writeFileSync(join(mainCheckout, ".validation-env"), "source=main\n");
@@ -73,7 +74,6 @@ describe("Candidate validation", () => {
             copyFiles: [".validation-env"],
             specialistReviews: [],
           },
-          now,
         });
 
         expect(result).toMatchObject({ ok: true, outcome: "passed" });
@@ -106,7 +106,7 @@ describe("Candidate validation", () => {
         writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "candidate");
-        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
 
@@ -126,7 +126,6 @@ describe("Candidate validation", () => {
             copyFiles: [],
             specialistReviews: [],
           },
-          now,
         });
 
         expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
@@ -196,7 +195,7 @@ describe("Candidate validation", () => {
         writeFileSync(join(candidateCheckout, "candidate.txt"), "first\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "first candidate");
-        const first = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        const first = yield* captureLocalCandidate({ cwd: candidateCheckout });
         expect(first.ok).toBe(true);
         if (!first.ok) return;
         const canonicalGitignoreContent = readFileSync(join(mainCheckout, ".gitignore"), "utf8");
@@ -229,7 +228,6 @@ describe("Candidate validation", () => {
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
           policy: firstPolicy,
-          now,
         });
         expect(firstResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
         if (!firstResult.ok) throw new Error("Expected a passed first Validation Run");
@@ -247,8 +245,7 @@ describe("Candidate validation", () => {
         writeFileSync(join(candidateCheckout, "candidate.txt"), "second\n");
         git(candidateCheckout, "add", "candidate.txt");
         git(candidateCheckout, "commit", "-m", "second candidate");
-        const secondNow = "2026-07-15T12:01:00.000Z";
-        const second = yield* captureLocalCandidate({ cwd: candidateCheckout, now: secondNow });
+        const second = yield* captureLocalCandidate({ cwd: candidateCheckout });
         expect(second.ok).toBe(true);
         if (!second.ok) return;
         const secondPolicy = validationPolicy(second.headSha, "second");
@@ -258,7 +255,6 @@ describe("Candidate validation", () => {
           changeBaseSha: second.changeBaseSha,
           headSha: second.headSha,
           policy: secondPolicy,
-          now: secondNow,
         });
         expect(secondResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
         if (!secondResult.ok) throw new Error("Expected a passed second Validation Run");
@@ -271,7 +267,6 @@ describe("Candidate validation", () => {
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
           policy: firstPolicy,
-          now: secondNow,
         }).pipe(Effect.flip);
         expect(historicalCandidateError).toBeInstanceOf(RepositoryPersistedDataInvalid);
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
@@ -283,11 +278,105 @@ describe("Candidate validation", () => {
   );
 
   it.scoped(
+    "persists an Acceptance Review Tooling Failure only on its phase through the public service",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed(reviewerFailure("Acceptance output was invalid.")),
+        );
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          reviewerAgentRuntime: { review },
+        });
+
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          changeId: captured.changeId,
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+          policy: {
+            checks: [],
+            copyFiles: [],
+            acceptanceReview: reviewerPolicy("acceptance"),
+            specialistReviews: [],
+          },
+        });
+
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* toolingFailureScopes(mainCheckout, result.validationRunId)).toEqual([
+          {
+            phase: "acceptance_review",
+            producer: "acceptance",
+            phaseToolingFailure: expect.stringContaining("Acceptance output was invalid."),
+            runToolingFailure: null,
+          },
+        ]);
+      }),
+    10_000,
+  );
+
+  it.scoped(
+    "persists a Specialist Review Tooling Failure only on its phase through the public service",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
+        if (!captured.ok) throw new Error(captured.code);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(({ reviewer }) =>
+          Effect.succeed(
+            reviewer === "acceptance"
+              ? { ok: true as const, report: { findings: [] }, attempts: 1, stdout: "accepted" }
+              : reviewerFailure("Specialist output was invalid."),
+          ),
+        );
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          reviewerAgentRuntime: { review },
+        });
+
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          changeId: captured.changeId,
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+          policy: {
+            checks: [],
+            copyFiles: [],
+            acceptanceReview: reviewerPolicy("acceptance"),
+            specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
+          },
+        });
+
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* toolingFailureScopes(mainCheckout, result.validationRunId)).toEqual([
+          {
+            phase: "specialist_review",
+            producer: "standards",
+            phaseToolingFailure: expect.stringContaining("Specialist output was invalid."),
+            runToolingFailure: null,
+          },
+        ]);
+      }),
+    10_000,
+  );
+
+  it.scoped(
     "runs the fixed Validation Gate for a Change linked to a Task and hands a Specialist Finding to its outcome",
     () =>
       Effect.gen(function* () {
         const mainCheckout = candidateReadyRepo();
-        const captured = yield* captureLocalCandidate({ cwd: mainCheckout, now });
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
         yield* withTestRepository(
@@ -386,7 +475,6 @@ describe("Candidate validation", () => {
             acceptanceReview: reviewerPolicy("acceptance"),
             specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
           },
-          now,
         });
 
         expect(result).toMatchObject({ ok: true, outcome: "blocked", reused: false });
@@ -416,6 +504,70 @@ describe("Candidate validation", () => {
     10_000,
   );
 });
+
+const reviewerFailure = (message: string) => ({
+  ok: false as const,
+  failure: new ReviewerExecutionFailed({
+    kind: "output_contract",
+    operationName: "decode_reviewer_output",
+    diagnostics: [],
+    message,
+  }),
+  sessionUsability: "unknown" as const,
+  attempts: 1,
+  stdout: "invalid reviewer output",
+});
+
+const installAcceptanceContext = (root: string, changeId: string) =>
+  withTestRepository(
+    root,
+    Effect.flatMap(RepositorySql, (repository) =>
+      repository.operation("install current Acceptance Context", (sql) =>
+        Effect.gen(function* () {
+          yield* sql`
+            INSERT INTO tasks (id, title, description, state)
+            VALUES (1, 'Validate phase ownership', 'Keep Tooling Failure ownership exact.', 'todo')
+          `;
+          yield* sql`
+            UPDATE changes SET initial_acceptance_context = ${JSON.stringify({
+              version: 1,
+              title: "Validate phase ownership",
+              description: "Keep Tooling Failure ownership exact.",
+            })}, base_remote_url = 'https://github.com/acme/repo.git'
+            WHERE id = ${internalChangeId(changeId, "BY")}
+          `;
+          yield* sql`
+            INSERT INTO task_change_links (task_id, change_id)
+            VALUES (1, ${internalChangeId(changeId, "BY")})
+          `;
+        }),
+      ),
+    ),
+  );
+
+const toolingFailureScopes = (root: string, validationRunId: number) =>
+  withTestRepository(
+    root,
+    Effect.flatMap(RepositorySql, (repository) =>
+      repository.operation(
+        "inspect reviewer Tooling Failure scope",
+        (sql) =>
+          sql<{
+            readonly phase: string;
+            readonly producer: string;
+            readonly phaseToolingFailure: string | null;
+            readonly runToolingFailure: string | null;
+          }>`
+          SELECT result.phase, result.producer,
+            result.tooling_failure AS phaseToolingFailure,
+            run.run_tooling_failure AS runToolingFailure
+          FROM validation_phase_results AS result
+          JOIN validation_runs AS run ON run.id = result.validation_run_id
+          WHERE run.id = ${validationRunId} AND result.tooling_failure IS NOT NULL
+        `,
+      ),
+    ),
+  );
 
 const validateCandidate = (
   validation: ReturnType<typeof candidateValidationForTest>,

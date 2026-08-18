@@ -6,13 +6,13 @@ import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationPhaseResult,
-  CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
+import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
+import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 
 type StoredPhaseResultRow = {
   readonly validationRunId: number;
@@ -25,7 +25,7 @@ type StoredPhaseResultRow = {
 };
 
 type StoredValidationAgentInvocationRow = {
-  readonly phase: ValidationPhase;
+  readonly phase: string;
   readonly producer: string;
   readonly id: number;
   readonly agentSessionId: number;
@@ -68,7 +68,11 @@ export const listValidationPhaseResults = (
     );
   });
 
-export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validationRunId: number) =>
+export const listValidationAgentInvocations = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredValidationAgentInvocationRow>`
       SELECT link.phase, link.producer,
@@ -90,12 +94,22 @@ export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validat
       WHERE link.validation_run_id = ${validationRunId}
       ORDER BY invocation.id
     `;
+    if (rows.length === 0) return [];
+    const run = yield* requireRun(
+      sql,
+      validationRunId,
+      "list Candidate Agent Invocations",
+      idPrefix,
+    );
     return yield* decodePersisted("list Candidate Agent Invocations", () =>
-      rows.map((row) => ({
-        ...decodeAgentInvocation(row),
-        phase: row.phase,
-        producer: row.producer,
-      })),
+      rows.map((row) => {
+        configuredValidationPosition(row.phase, row.producer, run);
+        return {
+          ...decodeAgentInvocation(row),
+          phase: decodeValidationPhase(row.phase),
+          producer: row.producer,
+        };
+      }),
     );
   });
 
@@ -200,7 +214,7 @@ const readOrderedPhaseResults = (
         .map((row) => ({
           row,
           phasePosition: phasePosition(row.phase),
-          producerPosition: configuredPosition(row.phase, row.producer, run),
+          producerPosition: configuredValidationPosition(row.phase, row.producer, run),
         }))
         .sort(
           (left, right) =>
@@ -317,34 +331,6 @@ const phasePosition = (phase: string): number => {
   }
 };
 
-const configuredPosition = (
-  phase: string,
-  producer: string,
-  run: CandidateValidationRunRecord,
-): number => {
-  switch (decodePhase(phase)) {
-    case validationPhase.prepare:
-      if (run.policy.prepare === undefined) throw new Error("Prepare Result is not configured");
-      return 1;
-    case validationPhase.checks: {
-      const index = run.policy.checks.findIndex((check) => check.id === producer);
-      if (index < 0) throw new Error("Check Result is not configured");
-      return index + 1;
-    }
-    case validationPhase.acceptanceReview:
-      if (run.policy.acceptanceReview === undefined)
-        throw new Error("Acceptance Review is not configured");
-      return 1;
-    case validationPhase.specialistReview: {
-      const index = (run.policy.specialistReviews ?? []).findIndex(
-        (review) => review.id === producer,
-      );
-      if (index < 0) throw new Error("Specialist Review is not configured");
-      return index + 1;
-    }
-  }
-};
-
 const requireRun = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
@@ -357,11 +343,7 @@ const requireRun = (
       : Effect.succeed(run),
   );
 
-const decodePhase = (value: string): ValidationPhase => {
-  if (Object.values(validationPhase).includes(value as ValidationPhase))
-    return value as ValidationPhase;
-  throw new Error("Validation Phase is unsupported");
-};
+const decodePhase = decodeValidationPhase;
 const decodeOutcome = (value: string): CandidateValidationPhaseResult["outcome"] => {
   if (value === "passed" || value === "failed") return value;
   throw new Error("Validation Phase Result outcome is unsupported");

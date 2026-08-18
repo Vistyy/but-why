@@ -39,7 +39,6 @@ describe("Current Candidate selection", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-a",
           headSha: "head-a",
-          now: "2026-08-12T10:00:00.000Z",
         });
         if (!first.ok) throw new Error(first.code);
 
@@ -48,7 +47,6 @@ describe("Current Candidate selection", () => {
           headSha: "head-a",
           changeBaseSha: "base-a",
           policy,
-          now: "2026-08-12T10:01:00.000Z",
         });
         expect(admitted).toMatchObject({ reused: false, validationRunId: 1 });
         if (admitted.reused || "blocked" in admitted || "active" in admitted) {
@@ -61,7 +59,6 @@ describe("Current Candidate selection", () => {
         yield* validation.complete({
           validationRunId: admitted.validationRunId,
           outcome: "passed",
-          now: "2026-08-12T10:02:00.000Z",
         });
 
         const second = yield* capture.commitCapture({
@@ -71,7 +68,6 @@ describe("Current Candidate selection", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-a",
           headSha: "head-b",
-          now: "2026-08-12T10:03:00.000Z",
         });
         if (!second.ok) throw new Error(second.code);
         expect(second.reused).toBe(false);
@@ -83,7 +79,6 @@ describe("Current Candidate selection", () => {
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-a",
           headSha: "head-a",
-          now: "2026-08-12T10:04:00.000Z",
         });
         if (!selectedAgain.ok) throw new Error(selectedAgain.code);
         expect(selectedAgain).toMatchObject({
@@ -103,7 +98,6 @@ describe("Current Candidate selection", () => {
             headSha: "head-b",
             changeBaseSha: "base-a",
             policy,
-            now: "2026-08-12T10:05:00.000Z",
           })
           .pipe(Effect.flip);
         expect(historicalAdmission).toBeInstanceOf(RepositoryPersistedDataInvalid);

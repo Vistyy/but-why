@@ -23,7 +23,6 @@ export type RecordCandidateValidationPhaseResultInput = {
   readonly toolingFailure?: ValidationToolingFailureRecordInput & {
     readonly validationRunId: number;
   };
-  readonly now: string;
 };
 
 export type RecordCandidateValidationCheckResultInput = Omit<
@@ -41,7 +40,6 @@ export type StartCandidateValidationRunInput = {
   readonly headSha: string;
   readonly changeBaseSha?: string;
   readonly policy: Omit<CandidateValidationPolicySnapshot, "acceptanceContext">;
-  readonly now: string;
 };
 
 export type CandidateValidationAuthority = {
@@ -69,7 +67,6 @@ export type StartCandidateValidationRunResult =
 export type CompleteCandidateValidationRunInput = {
   readonly validationRunId: number;
   readonly outcome: CandidateValidationOutcome;
-  readonly now: string;
 };
 
 export type RecordCandidateAcceptanceResultInput = Omit<
@@ -101,7 +98,6 @@ export type AbandonCandidateValidationRunInput = {
 
 export type RecordCandidateToolingFailureInput = ValidationToolingFailureRecordInput & {
   readonly validationRunId: number;
-  readonly now: string;
 };
 
 export type ActiveCandidateValidationRun = {

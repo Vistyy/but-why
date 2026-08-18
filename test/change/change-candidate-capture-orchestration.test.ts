@@ -8,8 +8,6 @@ import type {
 } from "../../src/change/candidateCapture/candidateCapturePersistence.js";
 import { openCandidateCapture } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 
-const now = "2026-07-12T10:00:00.000Z";
-
 describe("Change Candidate capture orchestration", () => {
   it.effect("captures through supplied persistence and Git interfaces", () =>
     Effect.gen(function* () {
@@ -63,7 +61,6 @@ describe("Change Candidate capture orchestration", () => {
 
       const result = yield* capture.capture({
         cwd: "/repo/worktree",
-        now,
         changeBaseSha: "fetched-target",
       });
 
@@ -176,7 +173,6 @@ describe("Change Candidate capture orchestration", () => {
 
         const result = yield* openCandidateCapture({ persistence, git }).capture({
           cwd: "/repo/worktree",
-          now,
           ...("input" in testCase ? testCase.input : {}),
         });
 

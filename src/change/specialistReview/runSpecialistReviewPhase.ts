@@ -32,6 +32,7 @@ import {
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import {
@@ -80,7 +81,6 @@ export type RunSpecialistReviewPhaseInput = {
   readonly recordSpecialistResult: CandidateValidationExecutionPort["recordSpecialistResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
   readonly listArtifacts: (
     validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
@@ -101,9 +101,7 @@ export type RunSpecialistReviewPhaseInput = {
 };
 
 export type RunSpecialistReviewPhaseResult = {
-  readonly findings: 0 | 1;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly toolingFailures: readonly ValidationToolingFailure[];
+  readonly outcome: CandidateValidationOutcome;
 };
 
 export const runSpecialistReviewPhase = (
@@ -114,9 +112,7 @@ export const runSpecialistReviewPhase = (
   FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
-    let hasFindings = false;
-    const persistedToolingFailures: ValidationToolingFailure[] = [];
-    const toolingFailures: ValidationToolingFailure[] = [];
+    let outcome: CandidateValidationOutcome = "passed";
 
     for (const policy of input.policies) {
       const result = yield* runWithSubmitProgress({
@@ -127,38 +123,26 @@ export const runSpecialistReviewPhase = (
           profile: progressProfile(policy.profile),
         },
         run: runSpecialist(input, policy),
-        outcome: (review) =>
-          review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
+        outcome: (review) => (review.outcome === "passed" ? "passed" : "failed"),
         details: (review) =>
-          review.toolingFailure !== undefined
+          review.outcome === "tooling_failed"
             ? { reason: "tooling" as const }
-            : review.hasFindings
+            : review.outcome === "blocked"
               ? { reason: "findings" as const }
               : undefined,
       });
-      if (result.hasFindings) hasFindings = true;
-      if (result.toolingFailure !== undefined) {
-        toolingFailures.push(result.toolingFailure);
-        if (result.toolingFailurePersisted) persistedToolingFailures.push(result.toolingFailure);
-      }
+      if (result.outcome === "tooling_failed") outcome = "tooling_failed";
+      else if (result.outcome === "blocked" && outcome === "passed") outcome = "blocked";
     }
 
-    return {
-      findings: hasFindings ? 1 : 0,
-      ...(persistedToolingFailures.length === 0 ? {} : { persistedToolingFailures }),
-      toolingFailures,
-    };
+    return { outcome };
   });
 
 const runSpecialist = (
   input: RunSpecialistReviewPhaseInput,
   policy: SpecialistReviewPolicy,
 ): Effect.Effect<
-  {
-    readonly hasFindings: boolean;
-    readonly toolingFailure?: ValidationToolingFailure;
-    readonly toolingFailurePersisted?: boolean;
-  },
+  RunSpecialistReviewPhaseResult,
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
 > =>
@@ -175,13 +159,8 @@ const runSpecialist = (
           ...validationToolingFailureRecord(integrity.left),
           validationRunId: input.validationRunId,
         },
-        now: input.now,
       });
-      return {
-        hasFindings: false,
-        toolingFailure: integrity.left,
-        toolingFailurePersisted: true,
-      };
+      return { outcome: "tooling_failed" as const };
     }
 
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
@@ -278,7 +257,6 @@ const runSpecialist = (
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       allowedUntrackedFiles: input.allowedUntrackedFiles,
       expectedHeadSha: input.candidate.headSha,
-      now: input.now,
       makeFindings: (result) =>
         result.ok
           ? result.report.findings.map((finding, findingIndex) => ({
@@ -291,20 +269,7 @@ const runSpecialist = (
           : [],
       settleAgentInvocationResult: input.settleAgentInvocationResult,
     });
-    if (execution.toolingFailure !== undefined) {
-      return {
-        hasFindings: false,
-        toolingFailure: execution.toolingFailure,
-        toolingFailurePersisted: true,
-      };
-    }
-    if (!execution.result.ok) {
-      return {
-        hasFindings: false,
-        toolingFailure: execution.result.failure,
-      };
-    }
-    return { hasFindings: execution.result.report.findings.length > 0 };
+    return execution;
   });
 
 const agentConfiguration = (

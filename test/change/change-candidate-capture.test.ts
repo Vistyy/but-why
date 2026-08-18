@@ -22,7 +22,6 @@ import {
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
 
-const now = "2026-07-12T10:00:00.000Z";
 let committedRepoTemplate: string;
 let captureReadyRepoTemplate: string;
 
@@ -53,7 +52,7 @@ describe("Change Candidate capture boundaries", () => {
       const mainSha = git(repo, "rev-parse", "refs/remotes/origin/main");
       const headSha = git(repo, "rev-parse", "HEAD");
 
-      const result = yield* captureLocalCandidate({ cwd: repo, now });
+      const result = yield* captureLocalCandidate({ cwd: repo });
 
       expect(result).toEqual({
         ok: true,
@@ -79,7 +78,6 @@ describe("Change Candidate capture boundaries", () => {
       git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
       const refreshed = yield* captureLocalCandidate({
         cwd: repo,
-        now: "2026-07-12T11:00:00.000Z",
       });
       expect(refreshed).toEqual({
         ok: false,
@@ -93,7 +91,6 @@ describe("Change Candidate capture boundaries", () => {
       git(repo, "merge", "--no-edit", "refs/remotes/origin/main");
       const merged = yield* captureLocalCandidate({
         cwd: repo,
-        now: "2026-07-12T11:05:00.000Z",
       });
       expect(merged).toMatchObject({
         ok: true,
@@ -122,7 +119,7 @@ describe("Change Candidate capture boundaries", () => {
         const sameTreeHead = git(repo, "commit-tree", baseTree, "-p", "HEAD", "-m", "same tree");
         git(repo, "reset", "--hard", sameTreeHead);
 
-        const captured = yield* captureLocalCandidate({ cwd: repo, now });
+        const captured = yield* captureLocalCandidate({ cwd: repo });
 
         expect(captured).toEqual({
           ok: false,
@@ -151,7 +148,7 @@ describe("Change Candidate capture boundaries", () => {
       git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
       git(repo, "rebase", "refs/remotes/origin/main");
 
-      const captured = yield* captureLocalCandidate({ cwd: repo, now });
+      const captured = yield* captureLocalCandidate({ cwd: repo });
 
       expect(captured).toMatchObject({
         ok: true,
@@ -165,14 +162,13 @@ describe("Change Candidate capture boundaries", () => {
     Effect.gen(function* () {
       const repo = yield* captureReadyRepoCopy();
       const startingCommit = git(repo, "rev-parse", "refs/heads/main");
-      const changed = yield* captureLocalCandidate({ cwd: repo, now });
+      const changed = yield* captureLocalCandidate({ cwd: repo });
       if (!changed.ok) throw new Error(`Candidate capture failed: ${changed.code}`);
 
       git(repo, "reset", "--hard", startingCommit);
       const reverted = yield* captureLocalCandidate({
         cwd: repo,
         changeId: changed.changeId,
-        now: "2026-07-12T10:05:00.000Z",
       });
 
       expect(reverted).toMatchObject({

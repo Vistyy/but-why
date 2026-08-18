@@ -12,17 +12,9 @@ import {
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const policy = {
-  checks: [],
+  prepare: { command: "pnpm install", timeoutSeconds: 60 },
+  checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
   copyFiles: [],
-  acceptanceReview: {
-    instructions: "Review acceptance.",
-    instructionsSource: "repo",
-    profile: {
-      agentProfile: "acceptance",
-      scope: "repo",
-      profile: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } },
-    },
-  },
   specialistReviews: [],
 } as const;
 const now = "2026-08-10T00:00:00.000Z";
@@ -60,7 +52,6 @@ const createRun = (commonDirectory: string, branchRef: string) =>
       baseRef: "refs/remotes/origin/main",
       changeBaseSha: "base",
       headSha: "head",
-      now,
     });
     if (!captured.ok) throw new Error(captured.code);
     const started = yield* validation.execution.startOrReuse({
@@ -68,7 +59,6 @@ const createRun = (commonDirectory: string, branchRef: string) =>
       changeBaseSha: "base",
       headSha: "head",
       policy,
-      now,
     });
     if (started.reused || "blocked" in started || "active" in started) {
       throw new Error("Expected a new Validation Run");
@@ -95,7 +85,6 @@ const expectInvalidRunAuthority = (
             changeBaseSha: "base",
             headSha: "head",
             policy,
-            now,
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -106,7 +95,6 @@ const expectInvalidRunAuthority = (
           changeBaseSha: "base",
           headSha: "head",
           policy,
-          now,
         }),
       ).toEqual({ reused: false, blocked: true });
     }
@@ -143,34 +131,32 @@ describe("SQLite Candidate and Validation read decoding", () => {
           input.commonDirectory,
           "refs/heads/decoding",
         );
-        yield* validation.execution.recordAcceptanceResult({
+        yield* validation.execution.recordCheckResult({
           validationRunId: started.validationRunId,
+          producer: "types",
           outcome: "failed",
-          findings: [
-            {
-              validationRunId: started.validationRunId,
-              phase: "acceptance_review",
-              producer: "acceptance",
-              title: "Fix the issue",
-              description: "The Candidate has an issue.",
-              evidence: "Observed in the Candidate.",
-              files: ["src/main.ts"],
-              artifactRefs: ["artifact:1/acceptance_review/acceptance/stdout.txt"],
-            },
-          ],
+          finding: {
+            validationRunId: started.validationRunId,
+            phase: "checks",
+            producer: "types",
+            title: "Fix the issue",
+            description: "The Candidate has an issue.",
+            evidence: "Observed in the Candidate.",
+            files: ["src/main.ts"],
+            artifactRefs: ["artifact:1/checks/types/stdout.txt"],
+          },
           artifactRecords: [
             {
-              ref: "artifact:1/acceptance_review/acceptance/stdout.txt",
+              ref: "artifact:1/checks/types/stdout.txt",
               validationRunId: started.validationRunId,
-              phase: "acceptance_review",
-              producer: "acceptance",
-              path: "1/acceptance_review/acceptance/stdout.txt",
+              phase: "checks",
+              producer: "types",
+              path: "1/checks/types/stdout.txt",
               originalBytes: 10,
               storedBytes: 7,
               truncated: true,
             },
           ],
-          now,
         });
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
@@ -179,7 +165,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
         yield* validation.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "blocked",
-          now,
         });
 
         expect(yield* validation.reads.getCandidateById(captured.candidateId)).toMatchObject({
@@ -218,7 +203,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
         yield* validation.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "passed",
-          now,
         });
 
         const repository = yield* RepositorySql;
@@ -379,7 +363,6 @@ describe("SQLite Candidate and Validation read decoding", () => {
             artifactRefs: [],
           },
           artifactRecords: [],
-          now,
         });
         const repository = yield* RepositorySql;
         yield* repository.operation(
@@ -394,6 +377,43 @@ describe("SQLite Candidate and Validation read decoding", () => {
 
         expect(
           yield* validation.reads.listFindings(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        yield* repository.operation(
+          "corrupt compact phase Tooling Failure",
+          (sql) => sql`
+            UPDATE validation_phase_results
+            SET findings = '[]', tooling_failure = '{"errorKind":}'
+            WHERE validation_run_id = ${started.validationRunId}
+              AND phase = 'checks' AND producer = 'types'
+          `,
+        );
+        expect(
+          yield* validation.reads.listToolingFailures(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        yield* repository.operation(
+          "corrupt singleton phase producer",
+          (sql) => sql`
+            UPDATE validation_phase_results
+            SET phase = 'prepare', producer = 'types', tooling_failure = NULL
+            WHERE validation_run_id = ${started.validationRunId}
+              AND phase = 'checks' AND producer = 'types'
+          `,
+        );
+        expect(
+          yield* validation.reads.listPhaseResults(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        yield* repository.operation(
+          "corrupt Validation phase name",
+          (sql) => sql`
+            UPDATE validation_phase_results SET phase = 'unknown_phase', producer = 'types'
+            WHERE validation_run_id = ${started.validationRunId} AND phase = 'prepare'
+          `,
+        );
+        expect(
+          yield* validation.reads.listPhaseResults(started.validationRunId).pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),

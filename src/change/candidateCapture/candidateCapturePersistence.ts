@@ -9,7 +9,6 @@ export type CommitCandidateCaptureInput = {
   readonly baseRef: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
-  readonly now: string;
 };
 
 export type CommitCandidateCaptureResult =

@@ -4,7 +4,10 @@ import { runTimedCommand } from "../../command/runTimedCommand.js";
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { runWithSubmitProgress, type SubmitProgress } from "../../submission/submissionProgress.js";
-import type { RecordCandidateValidationCheckResultInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type {
+  CandidateValidationOutcome,
+  RecordCandidateValidationCheckResultInput,
+} from "../candidateValidation/candidateValidationRunStore.js";
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
@@ -27,7 +30,6 @@ export type RunCheckPhaseInput = {
   readonly expectedHeadSha?: string;
   readonly allowedUntrackedFiles?: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
   readonly continueAfterFinding?: boolean;
   readonly recordCheckResult: (
     input: RecordCandidateValidationCheckResultInput,
@@ -35,11 +37,7 @@ export type RunCheckPhaseInput = {
 };
 
 export type RunCheckPhaseResult = {
-  readonly ok: boolean;
-  readonly findings: 0 | 1;
-  readonly validationRunId?: number;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly toolingFailure?: ValidationToolingFailure;
+  readonly outcome: CandidateValidationOutcome;
 };
 
 type CommandResult = {
@@ -86,7 +84,6 @@ export const runCheckPhase = (
                 ...validationToolingFailureRecord(execution.left),
                 validationRunId: input.validationRunId,
               },
-              now: input.now,
             });
             return { producer: check.id, failed: false, toolingFailure: execution.left };
           }
@@ -103,25 +100,15 @@ export const runCheckPhase = (
               ? { reason: "findings" as const }
               : undefined,
       });
-      if (checkResult.toolingFailure !== undefined) {
-        return {
-          ok: false,
-          findings: 0,
-          validationRunId: input.validationRunId,
-          persistedToolingFailures: [checkResult.toolingFailure],
-          toolingFailure: checkResult.toolingFailure,
-        };
-      }
+      if (checkResult.toolingFailure !== undefined) return { outcome: "tooling_failed" };
 
       foundFailure ||= checkResult.failed;
       if (checkResult.failed && input.continueAfterFinding !== true) {
-        return { ok: true, findings: 1, validationRunId: input.validationRunId };
+        return { outcome: "blocked" };
       }
     }
 
-    return foundFailure
-      ? { ok: true, findings: 1, validationRunId: input.validationRunId }
-      : { ok: true, findings: 0 };
+    return { outcome: foundFailure ? "blocked" : "passed" };
   });
 
 const runSingleCheck = (
@@ -146,7 +133,6 @@ const runSingleCheck = (
       durationMs,
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
-      now: input.now,
     });
     const failed = commandResult.exitCode !== 0;
 
@@ -178,7 +164,6 @@ const recordCheckResult = (
     outcome: result.failed ? "failed" : "passed",
     artifactRecords: result.artifactRecords,
     ...(result.finding === undefined ? {} : { finding: result.finding }),
-    now: input.now,
   });
 
 const checkFinding = (
@@ -263,7 +248,6 @@ const writeCheckArtifacts = (input: {
   readonly durationMs: number;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
-  readonly now: string;
 }): Effect.Effect<ValidationCommandArtifacts, ValidationToolingFailure, FileSystem.FileSystem> =>
   writeCommandEvidence({
     validationRunId: input.validationRunId,

@@ -12,8 +12,12 @@ import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagno
 import { idPrefixPattern } from "./idPrefix.js";
 
 const idPrefixSchema = Schema.String.pipe(Schema.pattern(idPrefixPattern));
-const checkIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9_-]*$/u));
-const timeoutSecondsSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
+export const checkIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9_-]*$/u));
+export const timeoutSecondsSchema = Schema.Number.pipe(
+  Schema.int(),
+  Schema.positive(),
+  Schema.filter(Number.isSafeInteger),
+);
 export const repoRelativePathSchema = Schema.String.pipe(
   Schema.filter(isRepoRelativePath, {
     identifier: "repo-relative path",

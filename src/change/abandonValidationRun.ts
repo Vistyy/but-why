@@ -102,7 +102,6 @@ const abandonWhileLocked = (
         errorKind: "infrastructure_tooling_failed",
         operationName: "abandon_validation_run_cleanup",
         errorMessage: `${command.reason} Cleanup workspace=${cleanup.workspace}.${cleanupAttempt.errorMessage === undefined ? "" : ` ${cleanupAttempt.errorMessage}`}`,
-        now: command.now,
       });
       return {
         ok: false,

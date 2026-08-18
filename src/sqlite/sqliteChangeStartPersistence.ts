@@ -3,14 +3,14 @@ import { dirname, join } from "node:path";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import type { ChangePrepareDefinition, ChangePrepareFailure } from "../change/change.js";
+import {
+  decodeSqliteChangeReviewerConfiguration,
+  encodeSqliteChangeReviewerConfiguration,
+} from "../change/changeReviewerConfiguration.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type {
-  ChangeReviewerConfiguration,
-  ChangeStartRecord,
-  CreateChangeStartInput,
-} from "../change/changeStartStore.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -82,6 +82,11 @@ const insertChangeRow = (
       return { ok: false as const, code: "change_start_conflict" as const };
     }
 
+    const reviewerConfiguration = yield* Effect.try({
+      try: () => encodeSqliteChangeReviewerConfiguration(input.reviewerConfiguration),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({ operationName: "create Change Start", cause }),
+    });
     const allocated = yield* sql<{ readonly id: number }>`
       INSERT INTO changes (
         branch_ref, base_ref, base_remote_url, worktree_path,
@@ -91,7 +96,7 @@ const insertChangeRow = (
       ) VALUES (
         ${input.branchRef}, ${input.baseRef}, ${input.baseRemoteUrl}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        ${JSON.stringify(input.reviewerConfiguration)},
+        ${reviewerConfiguration},
         ${input.prepare === undefined ? null : JSON.stringify(input.prepare)},
         NULL, NULL, NULL, 0, NULL
       )
@@ -218,7 +223,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    reviewerConfiguration: decodeReviewerConfiguration(encodedReviewerConfiguration),
+    reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
     prepare,
     prepareFailure:
       encodedPrepareFailure === null
@@ -226,25 +231,6 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
     state: row.closeReason === null ? "open" : "closed",
   };
-};
-
-export const decodeReviewerConfiguration = (source: string): ChangeReviewerConfiguration => {
-  const value: unknown = JSON.parse(source) as unknown;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { specialistReviews?: unknown }).specialistReviews)
-  ) {
-    throw new Error("Stored Change Reviewer Configuration is invalid");
-  }
-  const configuration = value as ChangeReviewerConfiguration;
-  if (
-    configuration.acceptanceReview !== null &&
-    typeof configuration.acceptanceReview !== "object"
-  ) {
-    throw new Error("Stored Change Acceptance Reviewer Configuration is invalid");
-  }
-  return configuration;
 };
 
 export const decodePrepareDefinition = (source: string): ChangePrepareDefinition => {

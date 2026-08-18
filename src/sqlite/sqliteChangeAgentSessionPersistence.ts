@@ -3,9 +3,14 @@ import { Effect } from "effect";
 
 import { internalChangeId } from "../change/changeId.js";
 import type { ChangeAgentSessionPort } from "../change/changePorts.js";
+import {
+  decodeChangeReviewerConfiguration,
+  encodeSqliteChangeReviewerConfiguration,
+} from "../change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { requireValidationPosition } from "./sqliteValidationPosition.js";
 
 export const openSqliteChangeAgentSessionPort = () =>
   Effect.map(
@@ -24,6 +29,31 @@ export const openSqliteChangeAgentSessionPort = () =>
         ),
       linkAgentInvocation: (input) => (sql, invocationId) =>
         Effect.gen(function* () {
+          yield* requireValidationPosition(sql, {
+            validationRunId: input.validationRunId,
+            phase: input.phase,
+            producer: input.producer,
+            operationName: "link Change Agent Invocation",
+            idPrefix: repository.idPrefix,
+            active: true,
+          });
+          const owners = yield* sql<{
+            readonly changeId: number;
+            readonly closeReason: string | null;
+          }>`
+            SELECT candidate.change_id AS changeId, change_row.close_reason AS closeReason
+            FROM validation_runs AS run
+            JOIN candidates AS candidate ON candidate.id = run.candidate_id
+            JOIN changes AS change_row ON change_row.id = candidate.change_id
+            WHERE run.id = ${input.validationRunId}
+          `;
+          const expectedChangeId = internalChangeId(input.changeId, repository.idPrefix);
+          if (owners[0]?.changeId !== expectedChangeId || owners[0].closeReason !== null) {
+            return yield* invalid(
+              "link Change Agent Invocation",
+              "Validation position does not belong to the open Change",
+            );
+          }
           const sessions = yield* sql<{ readonly agentSessionId: number }>`
           SELECT continuation.agent_session_id AS agentSessionId
           FROM agent_invocations AS invocation
@@ -31,25 +61,33 @@ export const openSqliteChangeAgentSessionPort = () =>
           WHERE invocation.id = ${invocationId}
         `;
           const sessionId = sessions[0]?.agentSessionId;
-          if (sessionId === undefined)
-            return yield* Effect.fail(
-              new RepositoryPersistedDataInvalid({
-                operationName: "link Change Agent Invocation",
-                cause: new Error("Invocation Session is missing"),
-              }),
+          if (sessionId === undefined) {
+            return yield* invalid("link Change Agent Invocation", "Invocation Session is missing");
+          }
+          const taskOwners = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM tasks WHERE reviewer_agent_session_id = ${sessionId}
+          `;
+          const otherChangeOwners = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM change_agent_sessions
+            WHERE agent_session_id = ${sessionId} AND change_id <> ${expectedChangeId}
+          `;
+          if ((taskOwners[0]?.count ?? 0) > 0 || (otherChangeOwners[0]?.count ?? 0) > 0) {
+            return yield* invalid(
+              "link Change Agent Invocation",
+              "Agent Session already has another owner",
             );
+          }
           const existingOwners = yield* sql<{ readonly agentSessionId: number }>`
             SELECT agent_session_id AS agentSessionId
             FROM change_agent_sessions
-            WHERE change_id = ${internalChangeId(input.changeId, repository.idPrefix)} AND producer = ${input.producer}
+            WHERE change_id = ${expectedChangeId} AND producer = ${input.producer}
           `;
-          if (existingOwners[0] !== undefined && existingOwners[0].agentSessionId !== sessionId)
-            return yield* Effect.fail(
-              new RepositoryPersistedDataInvalid({
-                operationName: "link Change Agent Invocation",
-                cause: new Error("Change role already has another Agent Session"),
-              }),
+          if (existingOwners[0] !== undefined && existingOwners[0].agentSessionId !== sessionId) {
+            return yield* invalid(
+              "link Change Agent Invocation",
+              "Change role already has another Agent Session",
             );
+          }
           const canCorrect =
             input.configurationSnapshot === undefined
               ? false
@@ -62,9 +100,8 @@ export const openSqliteChangeAgentSessionPort = () =>
             if (configuration !== undefined && configuration !== null) {
               const replacement = yield* Effect.try({
                 try: () => {
-                  const decoded: unknown = JSON.parse(configuration) as unknown;
                   return replaceChangeRoleConfiguration(
-                    decoded as ChangeReviewerConfiguration,
+                    decodeChangeReviewerConfiguration(JSON.parse(configuration) as unknown),
                     input.producer,
                     input.configurationSnapshot,
                   );
@@ -76,14 +113,14 @@ export const openSqliteChangeAgentSessionPort = () =>
                   }),
               });
               yield* sql`
-                UPDATE changes SET reviewer_configuration = ${JSON.stringify(replacement)}
+                UPDATE changes SET reviewer_configuration = ${encodeSqliteChangeReviewerConfiguration(replacement)}
                 WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
               `;
             }
           }
           yield* sql`
           INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
-          VALUES (${internalChangeId(input.changeId, repository.idPrefix)}, ${input.producer}, ${sessionId})
+          VALUES (${expectedChangeId}, ${input.producer}, ${sessionId})
           ON CONFLICT(change_id, producer) DO NOTHING
         `;
           yield* sql`
@@ -135,23 +172,26 @@ const changeAgentConfigurationCanBeCorrected = (
     );
   });
 
+const invalid = (operationName: string, message: string) =>
+  Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+
 const replaceChangeRoleConfiguration = (
   configuration: ChangeReviewerConfiguration,
   producer: string,
   replacement: unknown,
 ): ChangeReviewerConfiguration => {
   if (producer === "acceptance") {
-    return {
+    return decodeChangeReviewerConfiguration({
       ...configuration,
-      acceptanceReview: replacement as ChangeReviewerConfiguration["acceptanceReview"],
-    };
+      acceptanceReview: replacement,
+    });
   }
   const index = configuration.specialistReviews.findIndex((policy) => policy.id === producer);
   if (index < 0) throw new Error(`Change reviewer roster does not contain producer ${producer}`);
-  return {
+  return decodeChangeReviewerConfiguration({
     ...configuration,
     specialistReviews: configuration.specialistReviews.map((policy, policyIndex) =>
-      policyIndex === index ? (replacement as typeof policy) : policy,
+      policyIndex === index ? replacement : policy,
     ),
-  };
+  });
 };

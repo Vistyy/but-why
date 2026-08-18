@@ -227,14 +227,12 @@ const withArtifactLifecycleFixture = <A, E>(
             baseRef: "refs/remotes/origin/main",
             changeBaseSha: "target-sha",
             headSha: `head-${marker}`,
-            now,
           });
           if (!captured.ok) throw new Error(captured.code);
           const started = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             headSha: `head-${marker}`,
             policy,
-            now,
           });
           if (started.reused || "blocked" in started)
             throw new Error("Expected a new Validation Run");
@@ -259,7 +257,6 @@ const withArtifactLifecycleFixture = <A, E>(
                 truncated: false,
               },
             ],
-            now,
           });
           return {
             changeId: captured.changeId,

@@ -80,7 +80,7 @@ export const openSqliteChangeValidationReadPort = () =>
         ),
       listAgentInvocations: (validationRunId) =>
         repository.transaction("list Candidate Agent Invocations", (sql) =>
-          listValidationAgentInvocations(sql, validationRunId),
+          listValidationAgentInvocations(sql, validationRunId, repository.idPrefix),
         ),
     }),
   );

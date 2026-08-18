@@ -18,7 +18,6 @@ import {
   runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
-import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { repoRoot } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -36,7 +35,6 @@ const unusedReviewerExecutor: ReviewerProcessExecutor = {
   execute: () => Effect.die("Captured Specialist runtime must not execute a reviewer process."),
 };
 
-const now = "2026-07-15T10:00:00.000Z";
 const candidate = {
   candidateId: 1,
   changeBaseSha: "1".repeat(40),
@@ -182,7 +180,6 @@ const phaseHarness = (): PhaseHarness => {
             results.push({ ...result, phase: "specialist_review" });
           }),
         allowedUntrackedFiles: [],
-        now,
         listArtifacts: () =>
           Effect.succeed([
             {
@@ -249,9 +246,7 @@ describe("Candidate Specialist Review phase", () => {
             expect(input.prompt).not.toContain(`${other} concern instructions`);
           }
         }
-        expect(result).toMatchObject({ findings: 1 });
-        expect(result.toolingFailures).toHaveLength(1);
-        expect(result.persistedToolingFailures).toEqual(result.toolingFailures);
+        expect(result).toEqual({ outcome: "tooling_failed" });
         expect(harness.results[1]?.toolingFailure).toMatchObject({
           errorKind: "reviewer_output_contract_failed",
         });
@@ -315,7 +310,7 @@ describe("Candidate Specialist Review phase", () => {
         reviewerExecutor: createPiReviewerProcessExecutor(),
       });
 
-      expect(result).toEqual({ findings: 0, toolingFailures: [] });
+      expect(result).toEqual({ outcome: "passed" });
     }),
   );
 
@@ -335,7 +330,7 @@ describe("Candidate Specialist Review phase", () => {
         },
       );
 
-      expect(result).toEqual({ findings: 0, toolingFailures: [] });
+      expect(result).toEqual({ outcome: "passed" });
       expect(review).toHaveBeenCalledOnce();
       expect(review.mock.calls[0]?.[0].prompt).toContain(earlier.title);
       expect(review.mock.calls[0]?.[0].resumeSession).toBeUndefined();
@@ -348,7 +343,7 @@ describe("Candidate Specialist Review phase", () => {
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
-        const first = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        const first = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
         const artifactsRoot = join(commonDirectory(repo), "but-why", "artifacts");
         const validation = candidateValidationForTest({
@@ -379,7 +374,6 @@ describe("Candidate Specialist Review phase", () => {
           policies: readonly SpecialistReviewPolicy[],
           runtime: ReviewerAgentRuntime<ReviewerOutput>,
           outcome: "passed" | "blocked" | "tooling_failed",
-          runNow: string,
         ) =>
           validation.runWithPersistence((persistence) =>
             Effect.gen(function* () {
@@ -388,7 +382,6 @@ describe("Candidate Specialist Review phase", () => {
                 headSha: captured.headSha,
                 changeBaseSha: captured.changeBaseSha,
                 policy: { checks: [], copyFiles: [], specialistReviews: policies },
-                now: runNow,
               });
               if (started.reused || "blocked" in started)
                 throw new Error("Expected a new unblocked Specialist Validation Run");
@@ -415,7 +408,6 @@ describe("Candidate Specialist Review phase", () => {
                 settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
                 recordSpecialistResult: persistence.execution.recordSpecialistResult,
                 allowedUntrackedFiles: [],
-                now: runNow,
                 listArtifacts: persistence.reads.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   persistence.execution.listPreviousCandidateReviewerFindings,
@@ -424,18 +416,10 @@ describe("Candidate Specialist Review phase", () => {
                 validationRunId: started.validationRunId,
                 cleanupWorkspace: "not_created",
               });
-              for (const toolingFailure of result.toolingFailures) {
-                if (result.persistedToolingFailures?.includes(toolingFailure)) continue;
-                yield* persistence.execution.recordToolingFailure({
-                  validationRunId: started.validationRunId,
-                  ...validationToolingFailureRecord(toolingFailure),
-                  now: runNow,
-                });
-              }
+              expect(result.outcome).toBe(outcome);
               yield* persistence.execution.complete({
                 validationRunId: started.validationRunId,
-                outcome,
-                now: runNow,
+                outcome: result.outcome,
               });
               return { validationRunId: started.validationRunId, result };
             }),
@@ -447,7 +431,6 @@ describe("Candidate Specialist Review phase", () => {
             [policy("standards"), policy("broken-first"), policy("broken-second")],
             { review: firstReview },
             "tooling_failed",
-            now,
           ),
         );
         expect(
@@ -487,9 +470,7 @@ describe("Candidate Specialist Review phase", () => {
         );
 
         git(repo, "commit", "--allow-empty", "-m", "failed Specialist successor");
-        const failedSuccessor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:03:00.000Z" }),
-        );
+        const failedSuccessor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!failedSuccessor.ok)
           throw new Error(`Candidate capture failed: ${failedSuccessor.code}`);
         const failedReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -507,26 +488,17 @@ describe("Candidate Specialist Review phase", () => {
             [policy("standards")],
             { review: failedReview },
             "tooling_failed",
-            "2026-07-15T10:03:00.000Z",
           ),
         );
 
         git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
-        const successor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:05:00.000Z" }),
-        );
+        const successor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
         const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
         const clean = yield* Effect.suspend(() =>
-          runPersisted(
-            successor,
-            [policy("standards")],
-            { review: successorReview },
-            "passed",
-            "2026-07-15T10:05:00.000Z",
-          ),
+          runPersisted(successor, [policy("standards")], { review: successorReview }, "passed"),
         );
         expect(successorReview).toHaveBeenCalledOnce();
         expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
@@ -542,21 +514,13 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual(["Durable Specialist Finding"]);
 
         git(repo, "commit", "--allow-empty", "-m", "later Specialist successor");
-        const laterSuccessor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:10:00.000Z" }),
-        );
+        const laterSuccessor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!laterSuccessor.ok) throw new Error(`Candidate capture failed: ${laterSuccessor.code}`);
         const laterReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
         yield* Effect.suspend(() =>
-          runPersisted(
-            laterSuccessor,
-            [policy("standards")],
-            { review: laterReview },
-            "passed",
-            "2026-07-15T10:10:00.000Z",
-          ),
+          runPersisted(laterSuccessor, [policy("standards")], { review: laterReview }, "passed"),
         );
         expect(laterReview).toHaveBeenCalledTimes(1);
         expect(laterReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
@@ -584,10 +548,7 @@ describe("Candidate Specialist Review phase", () => {
             }),
         }),
       );
-      expect(runtimeResult).toMatchObject({
-        findings: 0,
-        toolingFailures: [{ message: "Reviewer launch failed." }],
-      });
+      expect(runtimeResult).toEqual({ outcome: "tooling_failed" });
       expect(runtimeHarness.results[0]?.outcome).toBe("failed");
 
       const artifactHarness = phaseHarness();
@@ -599,11 +560,7 @@ describe("Candidate Specialist Review phase", () => {
           { artifactsRoot: nonDirectory },
         ),
       );
-      expect(artifactFailure).toMatchObject({
-        toolingFailures: [
-          { _tag: "InfrastructureToolingFailed", operationName: "record_reviewer_artifacts" },
-        ],
-      });
+      expect(artifactFailure).toEqual({ outcome: "tooling_failed" });
       expect(artifactHarness.results).toMatchObject([
         {
           outcome: "failed",
@@ -628,13 +585,7 @@ describe("Candidate Specialist Review phase", () => {
         },
       );
 
-      expect(result).toMatchObject({
-        findings: 0,
-        persistedToolingFailures: [
-          { _tag: "GitToolingFailed", operationName: "verify_candidate_head" },
-        ],
-        toolingFailures: [{ _tag: "GitToolingFailed", operationName: "verify_candidate_head" }],
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(review).not.toHaveBeenCalled();
       expect(harness.results).toMatchObject([
         {
@@ -654,7 +605,7 @@ describe("Candidate Specialist Review phase", () => {
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
-        const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const results: Parameters<
           NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
@@ -701,16 +652,12 @@ describe("Candidate Specialist Review phase", () => {
                 results.push({ ...result, phase: "specialist_review" });
               }),
             allowedUntrackedFiles: [],
-            now,
             listArtifacts: () => Effect.succeed([]),
             listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
           }),
         );
 
-        expect(integrityFailure).toMatchObject({
-          findings: 0,
-          toolingFailures: [{ _tag: "GitToolingFailed", operationName: "verify_candidate_head" }],
-        });
+        expect(integrityFailure).toEqual({ outcome: "tooling_failed" });
         expect(results).toMatchObject([
           {
             outcome: "failed",

@@ -34,6 +34,7 @@ import {
 } from "../../submission/submissionProgress.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import {
@@ -84,7 +85,6 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly recordAcceptanceResult: CandidateValidationExecutionPort["recordAcceptanceResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
   readonly listArtifacts: (
     validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
@@ -105,9 +105,7 @@ export type RunAcceptanceReviewPhaseInput = {
 };
 
 export type RunAcceptanceReviewPhaseResult = {
-  readonly findings: 0 | 1;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly toolingFailure?: ValidationToolingFailure;
+  readonly outcome: CandidateValidationOutcome;
 };
 
 export const runAcceptanceReviewPhase = (
@@ -132,13 +130,8 @@ export const runAcceptanceReviewPhase = (
             ...validationToolingFailureRecord(integrity.left),
             validationRunId: input.validationRunId,
           },
-          now: input.now,
         });
-        return {
-          findings: 0,
-          persistedToolingFailures: [integrity.left],
-          toolingFailure: integrity.left,
-        };
+        return { outcome: "tooling_failed" as const };
       }
 
       const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
@@ -230,7 +223,6 @@ export const runAcceptanceReviewPhase = (
           : { artifactMaxBytes: input.artifactMaxBytes }),
         allowedUntrackedFiles: input.allowedUntrackedFiles,
         expectedHeadSha: input.candidate.headSha,
-        now: input.now,
         makeFindings: (result) =>
           result.ok
             ? result.report.findings.map((finding, index) => ({
@@ -243,28 +235,13 @@ export const runAcceptanceReviewPhase = (
             : [],
         settleAgentInvocationResult: input.settleAgentInvocationResult,
       });
-      const findings = execution.result.ok ? execution.result.report.findings : [];
-      if (execution.toolingFailure !== undefined) {
-        return {
-          findings: 0,
-          persistedToolingFailures: [execution.toolingFailure],
-          toolingFailure: execution.toolingFailure,
-        };
-      }
-      if (!execution.result.ok) {
-        return {
-          findings: 0,
-          toolingFailure: execution.result.failure,
-        };
-      }
-      return { findings: findings.length === 0 ? 0 : 1 };
+      return execution;
     }),
-    outcome: (result) =>
-      result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
+    outcome: (result) => (result.outcome === "passed" ? "passed" : "failed"),
     details: (result) =>
-      result.toolingFailure !== undefined
+      result.outcome === "tooling_failed"
         ? { reason: "tooling" as const }
-        : result.findings === 1
+        : result.outcome === "blocked"
           ? { reason: "findings" as const }
           : undefined,
   });

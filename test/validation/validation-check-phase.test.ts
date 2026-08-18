@@ -10,8 +10,6 @@ import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceComm
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const now = "2026-06-30T12:00:00.000Z";
-
 const runCheckPhase = (input: Parameters<typeof runCheckPhaseWithFileSystem>[0]) =>
   runCheckPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
@@ -47,7 +45,6 @@ describe("Check Phase Results", () => {
           validationRunId: 133,
           checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
           artifactsRoot: createTestWorkspace(),
-          now,
           commandExecutor: (command, options) =>
             Effect.sync(() => {
               const result = runTestProcess(shPath, ["-c", command], {
@@ -63,14 +60,7 @@ describe("Check Phase Results", () => {
           recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
         });
 
-        expect(result).toMatchObject({
-          ok: false,
-          findings: 0,
-          toolingFailure: {
-            _tag: "CheckCommandExecutionToolingFailed",
-            message: "Could not find timeout command for check quality.",
-          },
-        });
+        expect(result).toEqual({ outcome: "tooling_failed" });
         expect(recordedResults).toMatchObject([
           {
             producer: "quality",
@@ -90,19 +80,12 @@ describe("Check Phase Results", () => {
         validationRunId: 133,
         checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: createTestWorkspace(),
-        now,
         commandExecutor: () =>
           Effect.fail(new WorkspaceCommandExecutionFailed({ message: "executor unavailable" })),
         recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toMatchObject({
-        ok: false,
-        toolingFailure: {
-          _tag: "CheckCommandExecutionToolingFailed",
-          message: "executor unavailable",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(recordedResults).toMatchObject([
         {
           producer: "quality",
@@ -121,7 +104,6 @@ describe("Check Phase Results", () => {
           validationRunId: 133,
           checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
           artifactsRoot: createTestWorkspace(),
-          now,
           commandExecutor: () => Effect.die(defect),
           recordCheckResult: () => Effect.void,
         }),
@@ -146,7 +128,6 @@ describe("Check Phase Results", () => {
           { id: "later", command: "exit 0", timeoutSeconds: 1 },
         ],
         artifactsRoot: createTestWorkspace(),
-        now,
         commandExecutor: (command) =>
           Effect.sync(() => {
             commands.push(command);
@@ -165,7 +146,7 @@ describe("Check Phase Results", () => {
         recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toEqual({ ok: true, findings: 1, validationRunId: 133 });
+      expect(result).toEqual({ outcome: "blocked" });
       expect(commands).toHaveLength(4);
       expect(recordedResults).toHaveLength(2);
       expect(recordedResults.map((result) => result.outcome)).toEqual(["failed", "passed"]);
@@ -188,7 +169,6 @@ describe("Check Phase Results", () => {
           artifactsRoot: createTestWorkspace(),
           expectedHeadSha: "abc123",
           allowedUntrackedFiles: [".validation-env"],
-          now,
           commandExecutor: (command) =>
             Effect.sync(() => {
               commands.push(command);
@@ -201,13 +181,7 @@ describe("Check Phase Results", () => {
           recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
         });
 
-        expect(result).toMatchObject({
-          ok: false,
-          toolingFailure: {
-            _tag: "GitToolingFailed",
-            message: "Snapshot Workspace no longer matches the Candidate.",
-          },
-        });
+        expect(result).toEqual({ outcome: "tooling_failed" });
         expect(recordedResults).toMatchObject([
           {
             producer: "quality",
@@ -229,7 +203,6 @@ describe("Check Phase Results", () => {
         validationRunId: 133,
         checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: nonDirectory,
-        now,
         commandExecutor: (command) =>
           Effect.succeed(
             command === "command -v timeout >/dev/null 2>&1"
@@ -243,17 +216,7 @@ describe("Check Phase Results", () => {
         recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toMatchObject({
-        ok: false,
-        findings: 0,
-        persistedToolingFailures: [
-          { _tag: "InfrastructureToolingFailed", operationName: "record_check_artifacts" },
-        ],
-        toolingFailure: {
-          _tag: "InfrastructureToolingFailed",
-          operationName: "record_check_artifacts",
-        },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(recordedResults).toMatchObject([
         {
           producer: "quality",
@@ -273,7 +236,6 @@ describe("Check Phase Results", () => {
         validationRunId: 6,
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
         artifactsRoot,
-        now,
         commandExecutor: (command) =>
           Effect.succeed(
             command === "command -v timeout >/dev/null 2>&1"
@@ -283,7 +245,7 @@ describe("Check Phase Results", () => {
         recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toEqual({ ok: true, findings: 1, validationRunId: 6 });
+      expect(result).toEqual({ outcome: "blocked" });
       expect(recordedResults).toHaveLength(1);
       expect(recordedResults[0]?.finding).toEqual({
         validationRunId: 6,
@@ -318,7 +280,6 @@ describe("Check Phase Results", () => {
         validationRunId: 133,
         checks: [{ id: "[quality]", command: "true", timeoutSeconds: 1 }],
         artifactsRoot: createTestWorkspace(),
-        now,
         commandExecutor: (command) =>
           Effect.succeed(
             command === "command -v timeout >/dev/null 2>&1"
@@ -332,7 +293,7 @@ describe("Check Phase Results", () => {
         recordCheckResult: (input) => Effect.sync(() => void recordedResults.push(input)),
       });
 
-      expect(result).toEqual({ ok: true, findings: 0 });
+      expect(result).toEqual({ outcome: "passed" });
       expect(recordedResults).toMatchObject([{ producer: "[quality]", outcome: "passed" }]);
     }),
   );

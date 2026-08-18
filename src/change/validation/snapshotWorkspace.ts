@@ -1,7 +1,6 @@
 import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js";
 import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
-import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type SnapshotWorkspaceCleanupResult = {
   readonly workspace: CleanupState;
@@ -14,8 +13,6 @@ export type ActiveSnapshotWorkspace = {
 
 export type ActiveSnapshotWorkspaceResult = {
   readonly outcome: CandidateValidationOutcome;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
 export type SnapshotWorkspaceOperationName =

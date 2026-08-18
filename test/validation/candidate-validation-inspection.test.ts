@@ -34,6 +34,16 @@ const policy = {
     { id: "tests", command: "pnpm test", timeoutSeconds: 30 },
   ],
   copyFiles: [".env.test"],
+  acceptanceReview: {
+    instructions: "Review acceptance.",
+    instructionsSource: "built_in" as const,
+    profile: {
+      agentProfile: "acceptance",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
+    },
+  },
+  specialistReviews: [],
 };
 let candidateValidationRepoTemplate: string;
 
@@ -177,7 +187,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
-        now: later,
       });
 
       const shown = yield* runByInProcessEffect(fixture.root, [
@@ -224,7 +233,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           .complete({
             validationRunId: fixture.validationRunId,
             outcome: "tooling_failed",
-            now,
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -287,7 +295,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy,
-        now,
       });
       expect(second.reused).toBe(false);
       if (!("active" in second) || !second.active)
@@ -297,13 +304,11 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
-        now: later,
       });
       const third = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy,
-        now: later,
       });
       expect(third.reused).toBe(false);
       if ("blocked" in third) throw new Error("Expected a new Validation Run");
@@ -317,7 +322,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "passed",
-        now,
       });
       yield* fixture.recordDecision(
         "Keep rationale separate from intent",
@@ -331,7 +335,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           ...policy,
           prepare: { ...policy.prepare, command: "pnpm install --frozen-lockfile" },
         },
-        now: later,
       });
 
       expect(reused).toEqual({
@@ -348,7 +351,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
-        now,
       });
       const decision = {
         choice: "Keep rationale separate from intent",
@@ -359,7 +361,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy,
-        now,
       });
       expect(first.reused).toBe(false);
       if ("blocked" in first) throw new Error("Expected a new Validation Run");
@@ -383,7 +384,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: fixture.validationRunId,
         outcome: "passed",
         artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
-        now,
       });
       yield* fixture.runStore.recordCheckResult({
         validationRunId: fixture.validationRunId,
@@ -409,7 +409,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           operationName: "run_types",
           errorMessage: "Types process failed.",
         },
-        now,
       });
       yield* fixture.runStore.recordCheckResult({
         validationRunId: fixture.validationRunId,
@@ -432,19 +431,16 @@ describe("Candidate-owned Validation Run inspection", () => {
           operationName: "run_tests",
           errorMessage: "Tests process failed.",
         },
-        now,
       });
       yield* fixture.runStore.recordToolingFailure({
         validationRunId: fixture.validationRunId,
         errorKind: "snapshot_workspace_setup_failed",
         operationName: "cleanup_snapshot_workspace",
         errorMessage: "Could not remove worktree.",
-        now: later,
       });
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
-        now: later,
       });
 
       const result = yield* runByInProcessEffect(fixture.root, [
@@ -538,7 +534,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
-        now,
       });
       const reviewPolicy = {
         checks: [],
@@ -575,14 +570,12 @@ describe("Candidate-owned Validation Run inspection", () => {
         candidateId: fixture.candidateId,
         headSha: "head-sha",
         policy: reviewPolicy,
-        now: later,
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: started.validationRunId,
         outcome: "passed",
-        now: later,
       });
 
       const result = yield* runByInProcessEffect(fixture.root, [
@@ -603,12 +596,10 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: empty.validationRunId,
         outcome: "passed",
         artifactRecords: [empty.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
-        now,
       });
       yield* empty.runStore.completeAfterCleanup({
         validationRunId: empty.validationRunId,
         outcome: "passed",
-        now,
       });
 
       const emptyResult = yield* runByInProcessEffect(empty.root, [
@@ -658,7 +649,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         producer: "types",
         outcome: "passed",
         artifactRecords: [missing],
-        now,
       });
       rmSync(join(unavailable.artifactsRoot, missing.path));
 
@@ -771,7 +761,6 @@ const candidateValidationFixture = () =>
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "target-sha",
           headSha: "head-sha",
-          now,
         }),
       ),
       Effect.provide(repositoryLayer),
@@ -782,7 +771,6 @@ const candidateValidationFixture = () =>
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
         policy,
-        now,
       }),
     );
     if (runResult.reused) throw new Error("Expected a new Validation Run");
