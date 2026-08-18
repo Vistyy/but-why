@@ -44,8 +44,13 @@ beforeAll(() => {
       .prepare("INSERT INTO tasks (id, title, description, state) VALUES (1, ?, ?, 'todo')")
       .run(acceptanceContext.title, acceptanceContext.description);
     database
-      .prepare("UPDATE changes SET initial_acceptance_context = ? WHERE id = 1")
-      .run(JSON.stringify(acceptanceContext));
+      .prepare(
+        "UPDATE changes SET initial_acceptance_context = ?, reviewer_configuration = ? WHERE id = 1",
+      )
+      .run(
+        JSON.stringify(acceptanceContext),
+        JSON.stringify({ acceptanceReview: acceptancePolicy, specialistReviews: [] }),
+      );
     database.prepare("INSERT INTO task_change_links (task_id, change_id) VALUES (1, 1)").run();
   } finally {
     database.close();

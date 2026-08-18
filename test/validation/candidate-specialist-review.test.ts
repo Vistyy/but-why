@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -375,54 +376,70 @@ describe("Candidate Specialist Review phase", () => {
           runtime: ReviewerAgentRuntime<ReviewerOutput>,
           outcome: "passed" | "blocked" | "tooling_failed",
         ) =>
-          validation.runWithPersistence((persistence) =>
-            Effect.gen(function* () {
-              const started = yield* persistence.execution.startOrReuse({
-                candidateId: captured.candidateId,
-                headSha: captured.headSha,
-                changeBaseSha: captured.changeBaseSha,
-                policy: { checks: [], copyFiles: [], specialistReviews: policies },
-              });
-              if (started.reused || "blocked" in started)
-                throw new Error("Expected a new unblocked Specialist Validation Run");
-              const result = yield* runSpecialistReviewPhase({
-                validationRunId: started.validationRunId,
-                changeId: captured.changeId,
-                candidate: captured,
-                policies,
-                runtime,
-                commandExecutor: () =>
-                  Effect.succeed({
-                    exitCode: 0,
-                    stdout: `${captured.headSha}\n`,
-                    stderr: "",
-                  }),
-                reviewerExecutor: unusedReviewerExecutor,
-                artifactsRoot,
-                commandCwd: repo,
-                resourceRoot: repo,
-                sessionStorageRoot: artifactsRoot,
-                agentPersistence: persistence.agentPersistence,
-                getAgentSession: persistence.agentSessions.getAgentSession,
-                linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
-                settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
-                recordSpecialistResult: persistence.execution.recordSpecialistResult,
-                allowedUntrackedFiles: [],
-                listArtifacts: persistence.reads.listArtifacts,
-                listPreviousCandidateReviewerFindings:
-                  persistence.execution.listPreviousCandidateReviewerFindings,
-              });
-              yield* persistence.execution.recordWorkspaceCleanup({
-                validationRunId: started.validationRunId,
-                cleanupWorkspace: "not_created",
-              });
-              expect(result.outcome).toBe(outcome);
-              yield* persistence.execution.complete({
-                validationRunId: started.validationRunId,
-                outcome: result.outcome,
-              });
-              return { validationRunId: started.validationRunId, result };
-            }),
+          Effect.sync(() => {
+            const database = new DatabaseSync(candidateRepositoryConfig(repo).statePath);
+            try {
+              database.prepare("UPDATE changes SET reviewer_configuration = ? WHERE id = 1").run(
+                JSON.stringify({
+                  acceptanceReview: null,
+                  specialistReviews: policies,
+                }),
+              );
+            } finally {
+              database.close();
+            }
+          }).pipe(
+            Effect.zipRight(
+              validation.runWithPersistence((persistence) =>
+                Effect.gen(function* () {
+                  const started = yield* persistence.execution.startOrReuse({
+                    candidateId: captured.candidateId,
+                    headSha: captured.headSha,
+                    changeBaseSha: captured.changeBaseSha,
+                    policy: { checks: [], copyFiles: [], specialistReviews: policies },
+                  });
+                  if (started.reused || "blocked" in started)
+                    throw new Error("Expected a new unblocked Specialist Validation Run");
+                  const result = yield* runSpecialistReviewPhase({
+                    validationRunId: started.validationRunId,
+                    changeId: captured.changeId,
+                    candidate: captured,
+                    policies,
+                    runtime,
+                    commandExecutor: () =>
+                      Effect.succeed({
+                        exitCode: 0,
+                        stdout: `${captured.headSha}\n`,
+                        stderr: "",
+                      }),
+                    reviewerExecutor: unusedReviewerExecutor,
+                    artifactsRoot,
+                    commandCwd: repo,
+                    resourceRoot: repo,
+                    sessionStorageRoot: artifactsRoot,
+                    agentPersistence: persistence.agentPersistence,
+                    getAgentSession: persistence.agentSessions.getAgentSession,
+                    linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+                    settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+                    recordSpecialistResult: persistence.execution.recordSpecialistResult,
+                    allowedUntrackedFiles: [],
+                    listArtifacts: persistence.reads.listArtifacts,
+                    listPreviousCandidateReviewerFindings:
+                      persistence.execution.listPreviousCandidateReviewerFindings,
+                  });
+                  yield* persistence.execution.recordWorkspaceCleanup({
+                    validationRunId: started.validationRunId,
+                    cleanupWorkspace: "not_created",
+                  });
+                  expect(result.outcome).toBe(outcome);
+                  yield* persistence.execution.complete({
+                    validationRunId: started.validationRunId,
+                    outcome: result.outcome,
+                  });
+                  return { validationRunId: started.validationRunId, result };
+                }),
+              ),
+            ),
           );
 
         const durable = yield* Effect.suspend(() =>

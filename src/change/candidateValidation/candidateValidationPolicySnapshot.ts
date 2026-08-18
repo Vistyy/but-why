@@ -5,7 +5,7 @@ import { checkIdSchema, timeoutSecondsSchema } from "../../contracts/repoConfig.
 import { acceptanceContextSnapshotSchema } from "../validationRun/acceptanceContextSnapshot.js";
 
 const piRuntimeConfigSnapshotSchema = Schema.Struct({
-  model: Schema.optional(nonBlankStringSchema),
+  model: nonBlankStringSchema,
   thinking: Schema.optional(Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh")),
   extensions: Schema.optional(Schema.Array(nonBlankStringSchema)),
   skills: Schema.optional(Schema.Array(nonBlankStringSchema)),
@@ -15,7 +15,7 @@ const piRuntimeConfigSnapshotSchema = Schema.Struct({
 
 const piAgentProfileConfigSnapshotSchema = Schema.Struct({
   agentRuntime: Schema.Literal("pi"),
-  runtimeConfig: Schema.optional(piRuntimeConfigSnapshotSchema),
+  runtimeConfig: piRuntimeConfigSnapshotSchema,
 });
 
 const resolvedPiAgentProfileSnapshotSchema = Schema.Struct({

@@ -8,6 +8,8 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
+import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -29,6 +31,7 @@ import {
 } from "./sqliteChangeAuthorityHistory.js";
 import { latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import {
   listValidationArtifacts,
   listValidationFindings,
@@ -53,7 +56,7 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       complete: (input) =>
         repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
-          complete(sql, input),
+          complete(sql, input, repository.idPrefix),
         ),
       recordWorkspaceCleanup: (input) =>
         repository.transactionImmediate("record Validation Run cleanup", (sql) =>
@@ -203,9 +206,11 @@ const startOrReuse = (
       readonly id: number;
       readonly closeReason: string | null;
       readonly acceptanceContext: string | null;
+      readonly reviewerConfiguration: string;
     }>`
       SELECT id, close_reason AS closeReason,
-        initial_acceptance_context AS acceptanceContext
+        initial_acceptance_context AS acceptanceContext,
+        reviewer_configuration AS reviewerConfiguration
       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
     `;
     const changeAuthority = yield* decodePersisted(operationName, () => {
@@ -219,6 +224,7 @@ const startOrReuse = (
           row.acceptanceContext === null
             ? null
             : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
+        reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(row.reviewerConfiguration),
       };
     });
     const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
@@ -277,7 +283,10 @@ const startOrReuse = (
       ...(acceptanceContext === null ? {} : { acceptanceContext }),
     };
     const policySnapshot = yield* Effect.try({
-      try: () => encodeSqliteCandidateValidationPolicy(policy),
+      try: () => {
+        requireMatchingReviewerRoster(policy, changeAuthority.reviewerConfiguration);
+        return encodeSqliteCandidateValidationPolicy(policy);
+      },
       catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
     });
     const authority = {
@@ -311,9 +320,21 @@ const startOrReuse = (
 
 const complete = (
   sql: SqlClient.SqlClient,
-  input: { readonly validationRunId: number; readonly outcome: string },
+  input: {
+    readonly validationRunId: number;
+    readonly outcome: "passed" | "blocked" | "tooling_failed";
+  },
+  idPrefix: string,
 ) =>
   Effect.gen(function* () {
+    const operationName = "complete Candidate Validation Run";
+    yield* requireCoherentValidationCompletion(
+      sql,
+      input.validationRunId,
+      input.outcome,
+      operationName,
+      idPrefix,
+    );
     const updated = yield* sql<{ readonly id: number }>`
       UPDATE validation_runs SET outcome = ${input.outcome}
       WHERE id = ${input.validationRunId} AND outcome IS NULL AND cleanup_pending = 0
@@ -321,7 +342,7 @@ const complete = (
     `;
     if (updated[0]?.id !== input.validationRunId) {
       return yield* invalidData(
-        "complete Candidate Validation Run",
+        operationName,
         "Validation Run cannot complete before cleanup succeeds.",
       );
     }
@@ -469,6 +490,26 @@ const listPreviousCandidateReviewerFindings = (
       });
     });
   });
+
+const requireMatchingReviewerRoster = (
+  policy: {
+    readonly acceptanceReview?: unknown;
+    readonly specialistReviews?: readonly { readonly id: string }[] | undefined;
+  },
+  configuration: ChangeReviewerConfiguration,
+): void => {
+  if ((policy.acceptanceReview !== undefined) !== (configuration.acceptanceReview !== null)) {
+    throw new Error("Validation Acceptance Reviewer does not match the Change reviewer roster");
+  }
+  const policySpecialists = (policy.specialistReviews ?? []).map((review) => review.id);
+  const configuredSpecialists = configuration.specialistReviews.map((review) => review.id);
+  if (
+    policySpecialists.length !== configuredSpecialists.length ||
+    policySpecialists.some((id, index) => id !== configuredSpecialists[index])
+  ) {
+    throw new Error("Validation Specialists do not match the Change reviewer roster");
+  }
+};
 
 const findingValue = (finding: CandidateValidationFinding) => ({
   title: finding.title,

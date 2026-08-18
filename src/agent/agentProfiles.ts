@@ -1,4 +1,8 @@
-import type { AgentProfileReference, PiAgentProfileConfig } from "../contracts/agentConfig.js";
+import type {
+  AgentProfileReference,
+  PiAgentProfileConfig,
+  PiRuntimeConfig,
+} from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
@@ -16,6 +20,12 @@ export type ResolvedPiAgentProfile = {
 };
 
 export type InteractiveSessionAgentProfile = ResolvedPiAgentProfile;
+
+export type ResolvedReviewerPiAgentProfile = Omit<ResolvedPiAgentProfile, "profile"> & {
+  readonly profile: PiAgentProfileConfig & {
+    readonly runtimeConfig: PiRuntimeConfig & { readonly model: string };
+  };
+};
 
 type ProfileResolutionInput = {
   readonly repoSelection?: AgentProfileReference;
@@ -64,11 +74,21 @@ export const resolveInteractiveSessionAgentProfile = (input: {
       : selection;
 };
 
-export const resolveAgentProfile = (
+export function resolveAgentProfile(
+  input: ProfileResolutionInput & { readonly requireModel: false },
+):
+  | { readonly ok: true; readonly resolved: InteractiveSessionAgentProfile }
+  | { readonly ok: false; readonly error: AgentProfileResolutionError };
+export function resolveAgentProfile(
   input: ProfileResolutionInput,
 ):
-  | { readonly ok: true; readonly resolved: ResolvedPiAgentProfile }
-  | { readonly ok: false; readonly error: AgentProfileResolutionError } => {
+  | { readonly ok: true; readonly resolved: ResolvedReviewerPiAgentProfile }
+  | { readonly ok: false; readonly error: AgentProfileResolutionError };
+export function resolveAgentProfile(
+  input: ProfileResolutionInput,
+):
+  | { readonly ok: true; readonly resolved: InteractiveSessionAgentProfile }
+  | { readonly ok: false; readonly error: AgentProfileResolutionError } {
   const selection = input.repoSelection ?? input.globalSelection ?? input.defaultSelection;
   const selectionKind =
     input.repoSelection !== undefined || input.globalSelection !== undefined
@@ -104,7 +124,7 @@ export const resolveAgentProfile = (
   }
 
   const model = profile.runtimeConfig?.model;
-  if (input.requireModel !== false && model === undefined) {
+  if (input.requireModel !== false && (model === undefined || model.trim().length === 0)) {
     return {
       ok: false,
       error: new MissingAgentModel({
@@ -115,10 +135,16 @@ export const resolveAgentProfile = (
     };
   }
 
-  const resolved: ResolvedPiAgentProfile = {
+  const resolved: InteractiveSessionAgentProfile = {
     agentProfile: selection.name,
     scope: selection.scope,
-    profile,
+    profile:
+      input.requireModel === false
+        ? profile
+        : {
+            ...profile,
+            runtimeConfig: { ...profile.runtimeConfig, model: model as string },
+          },
   };
   if (input.globalConfigDirectory !== undefined) {
     Object.defineProperty(resolved, "globalConfigDirectory", {
@@ -128,4 +154,4 @@ export const resolveAgentProfile = (
   }
 
   return { ok: true, resolved };
-};
+}

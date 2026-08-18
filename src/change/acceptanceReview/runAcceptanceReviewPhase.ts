@@ -251,16 +251,16 @@ const agentConfiguration = (
 ): AgentSessionConfiguration => ({
   harness: "pi",
   provider: null,
-  model: profile.profile.runtimeConfig?.model ?? "",
-  thinking: profile.profile.runtimeConfig?.thinking ?? null,
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? null,
 });
 
 const progressProfile = (
   profile: RunAcceptanceReviewPhaseInput["policy"]["profile"],
 ): SubmitProgressProfile => ({
   name: profile.agentProfile,
-  model: profile.profile.runtimeConfig?.model ?? "unknown",
-  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? "default",
 });
 
 const verifyIntegrity = (

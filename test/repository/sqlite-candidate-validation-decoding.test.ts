@@ -131,6 +131,11 @@ describe("SQLite Candidate and Validation read decoding", () => {
           input.commonDirectory,
           "refs/heads/decoding",
         );
+        yield* validation.execution.recordPrepareResult({
+          validationRunId: started.validationRunId,
+          outcome: "passed",
+          artifactRecords: [],
+        });
         yield* validation.execution.recordCheckResult({
           validationRunId: started.validationRunId,
           producer: "types",
@@ -196,6 +201,17 @@ describe("SQLite Candidate and Validation read decoding", () => {
           input.commonDirectory,
           "refs/heads/authority-boundary",
         );
+        yield* validation.execution.recordPrepareResult({
+          validationRunId: started.validationRunId,
+          outcome: "passed",
+          artifactRecords: [],
+        });
+        yield* validation.execution.recordCheckResult({
+          validationRunId: started.validationRunId,
+          producer: "types",
+          outcome: "passed",
+          artifactRecords: [],
+        });
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
           cleanupWorkspace: "not_created",

@@ -184,6 +184,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           return started.dispatch;
         }),
       );
+      yield* fixture.recordRunToolingFailure("Agent Invocation inspection fixture");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
@@ -274,6 +275,43 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("rejects completion outcomes that are not established by persisted evidence", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.recordWorkspaceCleanup({
+        validationRunId: fixture.validationRunId,
+        cleanupWorkspace: "not_created",
+      });
+
+      for (const outcome of ["passed", "blocked"] as const) {
+        expect(
+          yield* fixture.runStore
+            .complete({ validationRunId: fixture.validationRunId, outcome })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      }
+
+      yield* fixture.recordRunToolingFailure("Snapshot Workspace setup did not start phases");
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+      });
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "tooling_failed",
+      });
+    }),
+  );
+
+  it.effect("rejects manufactured passing evidence during publication reads", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.setValidationRunPassedWithoutEvidence();
+      const error = yield* fixture.getCurrentPassingEvidence().pipe(Effect.flip);
+      expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+    }),
+  );
+
   it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
@@ -301,6 +339,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         throw new Error("Expected an Active Validation Run");
       expect(second.validationRunId).toBe(fixture.validationRunId);
 
+      yield* fixture.recordRunToolingFailure("Complete the first Validation Run");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
@@ -319,6 +358,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("reuses the latest passing judgment across mutable policy and authority", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      yield* fixture.recordPassingResults(fixture.validationRunId);
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "passed",
@@ -348,6 +388,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("snapshots Implementation Decisions in a new Validation Run", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      yield* fixture.recordRunToolingFailure("Create a later Validation Run");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
@@ -531,6 +572,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("shows each review policy with one Agent Profile identity in the Snapshot", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      yield* fixture.recordRunToolingFailure("Replace the reviewer policy fixture");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
@@ -566,6 +608,10 @@ describe("Candidate-owned Validation Run inspection", () => {
           },
         ],
       } as const;
+      yield* fixture.setReviewerConfiguration({
+        acceptanceReview: reviewPolicy.acceptanceReview,
+        specialistReviews: reviewPolicy.specialistReviews,
+      });
       const started = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
@@ -573,6 +619,19 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
+      yield* fixture.runStore.recordAcceptanceResult({
+        validationRunId: started.validationRunId,
+        outcome: "passed",
+        findings: [],
+        artifactRecords: [],
+      });
+      yield* fixture.runStore.recordSpecialistResult({
+        validationRunId: started.validationRunId,
+        producer: "standards",
+        outcome: "passed",
+        findings: [],
+        artifactRecords: [],
+      });
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: started.validationRunId,
         outcome: "passed",
@@ -596,10 +655,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: empty.validationRunId,
         outcome: "passed",
         artifactRecords: [empty.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
-      });
-      yield* empty.runStore.completeAfterCleanup({
-        validationRunId: empty.validationRunId,
-        outcome: "passed",
       });
 
       const emptyResult = yield* runByInProcessEffect(empty.root, [
@@ -734,6 +789,8 @@ const candidateValidationFixture = () =>
       Effect.flatMap(openSqliteChangeValidationTestDependencies(), use).pipe(
         Effect.provide(repositoryLayer),
       );
+    const withRepository = <A, E>(program: Effect.Effect<A, E, RepositorySql>) =>
+      program.pipe(Effect.provide(repositoryLayer));
     yield* withTestRepository(
       root,
       Effect.gen(function* () {
@@ -747,7 +804,10 @@ const candidateValidationFixture = () =>
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', ${join(root, "feature-worktree")},
-            '{"acceptanceReview":null,"specialistReviews":[]}', 0
+            ${JSON.stringify({
+              acceptanceReview: policy.acceptanceReview,
+              specialistReviews: policy.specialistReviews,
+            })}, 0
           )
         `,
         );
@@ -828,6 +888,11 @@ const candidateValidationFixture = () =>
           ChangeValidationTestDependencies["execution"]["recordAcceptanceResult"]
         >[0],
       ) => withPersistence((persistence) => persistence.execution.recordAcceptanceResult(input)),
+      recordSpecialistResult: (
+        input: Parameters<
+          ChangeValidationTestDependencies["execution"]["recordSpecialistResult"]
+        >[0],
+      ) => withPersistence((persistence) => persistence.execution.recordSpecialistResult(input)),
       recordToolingFailure: (
         input: Parameters<ChangeValidationTestDependencies["execution"]["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.execution.recordToolingFailure(input)),
@@ -854,9 +919,77 @@ const candidateValidationFixture = () =>
         ),
     };
 
+    const recordRunToolingFailure = (errorMessage: string) =>
+      runStore.recordToolingFailure({
+        validationRunId: runResult.validationRunId,
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "set_up_snapshot_workspace",
+        errorMessage,
+      });
+    const recordPassingResults = (validationRunId: number) =>
+      withPersistence((persistence) =>
+        Effect.gen(function* () {
+          yield* persistence.execution.recordPrepareResult({
+            validationRunId,
+            outcome: "passed",
+            artifactRecords: [],
+          });
+          for (const check of policy.checks) {
+            yield* persistence.execution.recordCheckResult({
+              validationRunId,
+              producer: check.id,
+              outcome: "passed",
+              artifactRecords: [],
+            });
+          }
+          yield* persistence.execution.recordAcceptanceResult({
+            validationRunId,
+            outcome: "passed",
+            findings: [],
+            artifactRecords: [],
+          });
+        }),
+      );
+    const getCurrentPassingEvidence = () =>
+      openSqliteChangeTestDependencies().pipe(
+        Effect.flatMap((changes) =>
+          changes.authority.getCurrentPassingEvidence(candidateResult.changeId),
+        ),
+        Effect.provide(repositoryLayer),
+      );
+    const setValidationRunPassedWithoutEvidence = () =>
+      withRepository(
+        Effect.flatMap(RepositorySql, (repository) =>
+          repository.operation(
+            "manufacture passing Validation evidence fixture",
+            (sql) => sql`
+              UPDATE validation_runs SET outcome = 'passed', cleanup_pending = 0
+              WHERE id = ${runResult.validationRunId}
+            `,
+          ),
+        ),
+      );
+    const setReviewerConfiguration = (configuration: unknown) =>
+      withRepository(
+        Effect.flatMap(RepositorySql, (repository) =>
+          repository.operation(
+            "replace Change reviewer fixture",
+            (sql) => sql`
+              UPDATE changes SET reviewer_configuration = ${JSON.stringify(configuration)}
+              WHERE id = 1
+            `,
+          ),
+        ),
+      );
+
     return {
       root,
       runStore,
+      recordRunToolingFailure,
+      recordPassingResults,
+      getCurrentPassingEvidence,
+      setValidationRunPassedWithoutEvidence,
+      setReviewerConfiguration,
       artifactsRoot,
       artifact,
       validationRunId: runResult.validationRunId,

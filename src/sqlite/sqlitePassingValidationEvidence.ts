@@ -11,6 +11,7 @@ import {
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 const currentPassingEvidenceOperation = "read current passing Change evidence";
@@ -145,6 +146,13 @@ const readPassingEvidenceForCandidate = (
     const validationRunId = rows[0]?.id;
     if (validationRunId === undefined) return undefined;
     const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    yield* requireCoherentValidationCompletion(
+      sql,
+      validationRunId,
+      "passed",
+      operationName,
+      idPrefix,
+    );
     return yield* decodePersisted(operationName, () => {
       if (run === undefined) throw new Error("Passing Validation Run was not selected");
       if (run.candidateId !== candidate.id) {

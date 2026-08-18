@@ -329,7 +329,7 @@ describe("Candidate validation", () => {
         const mainCheckout = candidateReadyRepo();
         const captured = yield* captureLocalCandidate({ cwd: mainCheckout });
         if (!captured.ok) throw new Error(captured.code);
-        yield* installAcceptanceContext(mainCheckout, captured.changeId);
+        yield* installAcceptanceContext(mainCheckout, captured.changeId, true);
         const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(({ reviewer }) =>
           Effect.succeed(
             reviewer === "acceptance"
@@ -394,6 +394,9 @@ describe("Candidate validation", () => {
                     version: 1,
                     title: "Validate the fixed Gate",
                     description: "Run each eligible phase in its fixed order.",
+                  })}, reviewer_configuration = ${JSON.stringify({
+                    acceptanceReview: reviewerPolicy("acceptance"),
+                    specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
                   })}, base_remote_url = 'https://github.com/acme/repo.git'
                   WHERE id = ${internalChangeId(captured.changeId, "BY")}
                 `;
@@ -518,7 +521,7 @@ const reviewerFailure = (message: string) => ({
   stdout: "invalid reviewer output",
 });
 
-const installAcceptanceContext = (root: string, changeId: string) =>
+const installAcceptanceContext = (root: string, changeId: string, withSpecialist = false) =>
   withTestRepository(
     root,
     Effect.flatMap(RepositorySql, (repository) =>
@@ -533,6 +536,11 @@ const installAcceptanceContext = (root: string, changeId: string) =>
               version: 1,
               title: "Validate phase ownership",
               description: "Keep Tooling Failure ownership exact.",
+            })}, reviewer_configuration = ${JSON.stringify({
+              acceptanceReview: reviewerPolicy("acceptance"),
+              specialistReviews: withSpecialist
+                ? [{ id: "standards", ...reviewerPolicy("standards") }]
+                : [],
             })}, base_remote_url = 'https://github.com/acme/repo.git'
             WHERE id = ${internalChangeId(changeId, "BY")}
           `;

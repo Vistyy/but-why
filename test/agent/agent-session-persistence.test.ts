@@ -48,6 +48,30 @@ const initializedRepository = () =>
     return root;
   });
 
+it.effect("rejects a blank selected model before creating Agent evidence", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const error = yield* persistence
+          .beginInvocation({
+            configuration: { ...configuration, model: "  " },
+            createdAt: "2026-08-14T11:59:00.000Z",
+            linkInvocation: noOpLink,
+          })
+          .pipe(Effect.flip);
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        const repository = yield* RepositorySql;
+        const rows = yield* repository.operation(
+          "count rejected blank-model Agent evidence",
+          (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM agent_sessions`,
+        );
+        expect(rows[0]?.count).toBe(0);
+      }),
+    );
+  }),
+);
+
 it.effect("records and resumes a usable Agent Continuation with exact token evidence", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();

@@ -5,9 +5,11 @@ import { internalChangeId } from "../change/changeId.js";
 import type { ChangeAgentSessionPort } from "../change/changePorts.js";
 import {
   decodeChangeReviewerConfiguration,
+  decodeSqliteChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
 } from "../change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
+import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
@@ -40,20 +42,37 @@ export const openSqliteChangeAgentSessionPort = () =>
           const owners = yield* sql<{
             readonly changeId: number;
             readonly closeReason: string | null;
+            readonly reviewerConfiguration: string;
           }>`
-            SELECT candidate.change_id AS changeId, change_row.close_reason AS closeReason
+            SELECT candidate.change_id AS changeId, change_row.close_reason AS closeReason,
+              change_row.reviewer_configuration AS reviewerConfiguration
             FROM validation_runs AS run
             JOIN candidates AS candidate ON candidate.id = run.candidate_id
             JOIN changes AS change_row ON change_row.id = candidate.change_id
             WHERE run.id = ${input.validationRunId}
           `;
           const expectedChangeId = internalChangeId(input.changeId, repository.idPrefix);
-          if (owners[0]?.changeId !== expectedChangeId || owners[0].closeReason !== null) {
+          const owner = owners[0];
+          if (owner?.changeId !== expectedChangeId || owner.closeReason !== null) {
             return yield* invalid(
               "link Change Agent Invocation",
               "Validation position does not belong to the open Change",
             );
           }
+          const reviewerConfiguration = yield* Effect.try({
+            try: () => {
+              const configuration = decodeSqliteChangeReviewerConfiguration(
+                owner.reviewerConfiguration,
+              );
+              requireChangeReviewerRole(configuration, input.phase, input.producer);
+              return configuration;
+            },
+            catch: (cause) =>
+              new RepositoryPersistedDataInvalid({
+                operationName: "link Change Agent Invocation",
+                cause,
+              }),
+          });
           const sessions = yield* sql<{ readonly agentSessionId: number }>`
           SELECT continuation.agent_session_id AS agentSessionId
           FROM agent_invocations AS invocation
@@ -93,30 +112,23 @@ export const openSqliteChangeAgentSessionPort = () =>
               ? false
               : yield* changeAgentConfigurationCanBeCorrected(sql, sessionId, invocationId);
           if (canCorrect) {
-            const configurations = yield* sql<{ readonly configuration: string | null }>`
-              SELECT reviewer_configuration AS configuration FROM changes WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
+            const replacement = yield* Effect.try({
+              try: () =>
+                replaceChangeRoleConfiguration(
+                  reviewerConfiguration,
+                  input.producer,
+                  input.configurationSnapshot,
+                ),
+              catch: (cause) =>
+                new RepositoryPersistedDataInvalid({
+                  operationName: "correct Change Agent configuration",
+                  cause,
+                }),
+            });
+            yield* sql`
+              UPDATE changes SET reviewer_configuration = ${encodeSqliteChangeReviewerConfiguration(replacement)}
+              WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
             `;
-            const configuration = configurations[0]?.configuration;
-            if (configuration !== undefined && configuration !== null) {
-              const replacement = yield* Effect.try({
-                try: () => {
-                  return replaceChangeRoleConfiguration(
-                    decodeChangeReviewerConfiguration(JSON.parse(configuration) as unknown),
-                    input.producer,
-                    input.configurationSnapshot,
-                  );
-                },
-                catch: (cause) =>
-                  new RepositoryPersistedDataInvalid({
-                    operationName: "correct Change Agent configuration",
-                    cause,
-                  }),
-              });
-              yield* sql`
-                UPDATE changes SET reviewer_configuration = ${encodeSqliteChangeReviewerConfiguration(replacement)}
-                WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
-              `;
-            }
           }
           yield* sql`
           INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
@@ -174,6 +186,26 @@ const changeAgentConfigurationCanBeCorrected = (
 
 const invalid = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+
+const requireChangeReviewerRole = (
+  configuration: ChangeReviewerConfiguration,
+  phase: string,
+  producer: string,
+): void => {
+  if (phase === validationPhase.acceptanceReview && producer === "acceptance") {
+    if (configuration.acceptanceReview === null) {
+      throw new Error("Change reviewer roster does not contain the Acceptance Reviewer");
+    }
+    return;
+  }
+  if (
+    phase === validationPhase.specialistReview &&
+    configuration.specialistReviews.some((review) => review.id === producer)
+  ) {
+    return;
+  }
+  throw new Error("Validation position is not a Change reviewer role");
+};
 
 const replaceChangeRoleConfiguration = (
   configuration: ChangeReviewerConfiguration,

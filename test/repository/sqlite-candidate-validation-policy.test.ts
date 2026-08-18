@@ -127,7 +127,10 @@ const createCandidateOwningChange = (branchRef: string) =>
         ${branchRef}, 'refs/remotes/origin/main',
         'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
         ${encodeSqliteAcceptanceContextSnapshot(currentPolicy.acceptanceContext)},
-        '{"acceptanceReview":null,"specialistReviews":[]}', 0
+        ${JSON.stringify({
+          acceptanceReview: currentPolicy.acceptanceReview,
+          specialistReviews: currentPolicy.specialistReviews,
+        })}, 0
       )
     `,
     );
@@ -270,6 +273,26 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           {
             ...currentPolicy,
             specialistReviews: [{ ...currentPolicy.specialistReviews[0], id: "acceptance" }],
+          },
+          {
+            ...currentPolicy,
+            acceptanceReview: {
+              ...currentPolicy.acceptanceReview,
+              profile: {
+                ...currentPolicy.acceptanceReview.profile,
+                profile: { agentRuntime: "pi" as const, runtimeConfig: { model: " " } },
+              },
+            },
+          },
+          {
+            ...currentPolicy,
+            acceptanceReview: {
+              ...currentPolicy.acceptanceReview,
+              profile: {
+                ...currentPolicy.acceptanceReview.profile,
+                profile: { agentRuntime: "pi" as const },
+              },
+            },
           },
         ];
         for (const policy of invalidPolicies) {

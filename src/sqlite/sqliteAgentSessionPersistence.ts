@@ -74,6 +74,9 @@ const beginInvocation = (
   input: Parameters<AgentSessionPersistence["beginInvocation"]>[0],
 ) =>
   Effect.gen(function* () {
+    if (input.configuration.model.trim().length === 0) {
+      return yield* invalid("dispatch Agent Invocation", "Agent model must not be blank");
+    }
     const unsettled = yield* sql<{ readonly id: number }>`
       SELECT invocation.id
       FROM agent_invocations AS invocation
@@ -112,7 +115,7 @@ const beginInvocation = (
           : {
               harness: decodeHarness(current.harness),
               provider: current.provider,
-              model: current.model,
+              model: requiredModel(current.model),
               thinking: current.thinking === null ? null : decodeThinking(current.thinking),
             },
     );
@@ -367,7 +370,7 @@ const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
   agentSessionId: row.agentSessionId,
   harness: decodeHarness(row.harness),
   provider: row.provider,
-  model: row.model,
+  model: requiredModel(row.model),
   thinking: row.thinking === null ? null : (decodeThinking(row.thinking) ?? null),
   transcriptPath: row.transcriptPath,
   unusableReason: row.unusableReason,
@@ -401,7 +404,7 @@ const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
       agentSessionId: row.agentSessionId,
       harness: decodeHarness(row.harness),
       provider: row.provider,
-      model: row.model,
+      model: requiredModel(row.model),
       thinking: row.thinking === null ? null : decodeThinking(row.thinking),
       transcriptPath: row.transcriptPath,
       unusableReason: row.unusableReason,
@@ -409,6 +412,10 @@ const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
   };
 };
 
+const requiredModel = (value: string): string => {
+  if (value.trim().length === 0) throw new Error("Agent model is blank");
+  return value;
+};
 const decodeHarness = (value: string): "pi" => {
   if (value !== "pi") throw new Error(`Unsupported Agent Harness: ${value}`);
   return "pi";

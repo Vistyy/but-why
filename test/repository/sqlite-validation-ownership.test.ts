@@ -158,6 +158,19 @@ describe("SQLite Validation ownership", () => {
             artifactRecords: [],
           }),
         });
+        yield* validation.execution.recordCheckResult({
+          validationRunId: started.validationRunId,
+          producer: "types",
+          outcome: "passed",
+          artifactRecords: [],
+        });
+        yield* validation.execution.recordSpecialistResult({
+          validationRunId: started.validationRunId,
+          producer: "second",
+          outcome: "passed",
+          findings: [],
+          artifactRecords: [],
+        });
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
           cleanupWorkspace: "not_created",
@@ -188,6 +201,57 @@ describe("SQLite Validation ownership", () => {
         );
         expect(
           yield* validation.reads.listAgentInvocations(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      }),
+    ),
+  );
+
+  it.scoped("rejects Change Sessions for non-review phases and reviewers outside the roster", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const fixture = yield* createRun(input.commonDirectory, "reviewer-roster");
+        expect(
+          yield* fixture.validation.agentPersistence
+            .beginInvocation({
+              configuration,
+              createdAt: "2026-10-02T10:00:10.000Z",
+              linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+                validationRunId: fixture.started.validationRunId,
+                changeId: fixture.captured.changeId,
+                phase: "checks",
+                producer: "types",
+              }),
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        yield* fixture.validation.execution.recordToolingFailure({
+          validationRunId: fixture.started.validationRunId,
+          errorKind: "snapshot_workspace_setup_failed",
+          operationName: "set_up_snapshot_workspace",
+          errorMessage: "Stop the roster fixture Run.",
+        });
+        yield* fixture.validation.execution.recordWorkspaceCleanup({
+          validationRunId: fixture.started.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        yield* fixture.validation.execution.complete({
+          validationRunId: fixture.started.validationRunId,
+          outcome: "tooling_failed",
+        });
+
+        expect(
+          yield* fixture.validation.execution
+            .startOrReuse({
+              candidateId: fixture.captured.candidateId,
+              changeBaseSha: "base",
+              headSha: "reviewer-roster-head",
+              policy: {
+                ...policy,
+                specialistReviews: [...policy.specialistReviews, specialist("rogue")],
+              },
+            })
+            .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),

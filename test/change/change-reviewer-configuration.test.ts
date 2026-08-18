@@ -17,7 +17,7 @@ const specialist = (id: string) => ({
   profile: {
     agentProfile: id,
     scope: "repo" as const,
-    profile: { agentRuntime: "pi" as const },
+    profile: { agentRuntime: "pi" as const, runtimeConfig: { model: `${id}-model` } },
   },
 });
 
@@ -34,6 +34,18 @@ it("strictly decodes and encodes Change reviewer configuration", () => {
     { ...valid, excess: true },
     { ...valid, specialistReviews: [specialist("standards"), specialist("standards")] },
     { ...valid, specialistReviews: [specialist("acceptance")] },
+    {
+      ...valid,
+      specialistReviews: [
+        {
+          ...specialist("standards"),
+          profile: {
+            ...specialist("standards").profile,
+            profile: { agentRuntime: "pi" as const, runtimeConfig: { model: " " } },
+          },
+        },
+      ],
+    },
   ]) {
     expect(() => decodeSqliteChangeReviewerConfiguration(JSON.stringify(invalid))).toThrow();
     expect(() =>

@@ -1,6 +1,9 @@
 import { dirname, join } from "node:path";
 
-import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/agentProfiles.js";
+import {
+  type ResolvedReviewerPiAgentProfile,
+  resolveAgentProfile,
+} from "../../agent/agentProfiles.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js";
@@ -13,7 +16,7 @@ import {
 export type AcceptanceReviewPolicy = {
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global" | "built_in";
-  readonly profile: ResolvedPiAgentProfile;
+  readonly profile: ResolvedReviewerPiAgentProfile;
 };
 
 export const resolveAcceptanceReviewPolicy = (input: {
