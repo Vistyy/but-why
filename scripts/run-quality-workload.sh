@@ -8,6 +8,9 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ "${BY_RELEASE_BASELINE_REHEARSAL:-0}" == "1" && -z "${BY_RELEASE_BASELINE_REHEARSAL_ROOT:-}" ]]; then
+    export BY_RELEASE_BASELINE_REHEARSAL_ROOT="$(pwd -P)"
+fi
 if [[ "${BY_CAPACITY_LOCK_HELD:-0}" != "1" ]]; then
     started_at_ns=$(date +%s%N)
     lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
@@ -74,7 +77,7 @@ if (( interrupted_status == 0 )); then
     test_pid=${child_pids[-1]}
     wait_for_child "$test_pid" || status=1
 fi
-if (( interrupted_status == 0 && status == 0 )) && [[ "${BY_RELEASE_BASELINE_REHEARSAL:-0}" == "1" ]]; then
+if (( interrupted_status == 0 && status == 0 )) && [[ "${BY_RELEASE_BASELINE_REHEARSAL:-0}" == "1" && "$(pwd -P)" == "${BY_RELEASE_BASELINE_REHEARSAL_ROOT:-}" ]]; then
     required_rehearsal_environment=(
         BY_RELEASE_BASELINE_OLD_STATE
         BY_RELEASE_BASELINE_OLD_RUNTIME
