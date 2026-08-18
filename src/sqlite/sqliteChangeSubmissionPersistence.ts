@@ -6,13 +6,15 @@ import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePor
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
+  decodeImplementationDecisions,
+  readImplementationBlockerHistory,
+  type StoredImplementationDecisionRow,
+} from "./sqliteChangeAuthorityHistory.js";
+import {
   changeReadColumns,
   decodeChangeRow,
-  decodeImplementationDecisions,
   deriveAcceptanceContext,
-  readImplementationBlockerHistory,
   type StoredChangeRow,
-  type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
 import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";

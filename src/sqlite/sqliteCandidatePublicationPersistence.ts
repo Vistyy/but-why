@@ -16,11 +16,13 @@ import type {
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
+  decodeImplementationDecisions,
+  type StoredImplementationDecisionRow,
+} from "./sqliteChangeAuthorityHistory.js";
+import {
   changeReadColumns,
   decodeChangeRow,
-  decodeImplementationDecisions,
   type StoredChangeRow,
-  type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
 import { readCurrentPassingValidationEvidence } from "./sqlitePassingValidationEvidence.js";

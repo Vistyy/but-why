@@ -13,7 +13,7 @@ import {
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
-} from "./sqliteChangeReadModel.js";
+} from "./sqliteChangeAuthorityHistory.js";
 import { readCurrentPassingValidationEvidence } from "./sqlitePassingValidationEvidence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 

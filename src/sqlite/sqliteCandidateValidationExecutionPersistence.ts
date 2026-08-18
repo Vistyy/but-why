@@ -22,12 +22,11 @@ import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidati
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
-  deriveAcceptanceContext,
   implementationBlockerReadColumns,
-  latestResolvedBlockerId,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
-} from "./sqliteChangeReadModel.js";
+} from "./sqliteChangeAuthorityHistory.js";
+import { deriveAcceptanceContext, latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   listValidationArtifacts,

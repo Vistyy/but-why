@@ -5,7 +5,10 @@ import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositorySt
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
-import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
+import {
+  type ChangeValidationTestDependencies,
+  openSqliteChangeValidationTestDependencies,
+} from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const policy = {
@@ -71,6 +74,65 @@ const createRun = (commonDirectory: string, branchRef: string) =>
       throw new Error("Expected a new Validation Run");
     }
     return { captured, started, validation };
+  });
+
+const expectInvalidRunAuthority = (
+  changeId: string,
+  candidateId: number,
+  validationRunId: number,
+  validation: ChangeValidationTestDependencies,
+  startOutcome: "invalid" | "blocked",
+) =>
+  Effect.gen(function* () {
+    expect(yield* validation.reads.getRunById(validationRunId).pipe(Effect.flip)).toBeInstanceOf(
+      RepositoryPersistedDataInvalid,
+    );
+    if (startOutcome === "invalid") {
+      expect(
+        yield* validation.execution
+          .startOrReuse({
+            candidateId,
+            changeBaseSha: "base",
+            headSha: "head",
+            policy,
+            now,
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+    } else {
+      expect(
+        yield* validation.execution.startOrReuse({
+          candidateId,
+          changeBaseSha: "base",
+          headSha: "head",
+          policy,
+          now,
+        }),
+      ).toEqual({ reused: false, blocked: true });
+    }
+
+    const changes = yield* openSqliteChangeTestDependencies();
+    expect(
+      yield* changes.publication.getCurrentPassingEvidence(changeId).pipe(Effect.flip),
+    ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+    expect(
+      yield* changes.publication
+        .beginPublication({
+          changeId,
+          candidateId,
+          validationRunId,
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "authority-boundary",
+          expectedHeadSha: "head",
+          now,
+        })
+        .pipe(Effect.flip),
+    ).toBeInstanceOf(RepositoryPersistedDataInvalid);
   });
 
 describe("SQLite Candidate and Validation read decoding", () => {
@@ -142,12 +204,12 @@ describe("SQLite Candidate and Validation read decoding", () => {
     ),
   );
 
-  it.scoped("rejects a Validation Run Blocker boundary from another Change", () =>
+  it.scoped("rejects invalid Validation Run authority boundaries across all consumers", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const { captured, started, validation } = yield* createRun(
           input.commonDirectory,
-          "refs/heads/blocker-boundary",
+          "refs/heads/authority-boundary",
         );
         yield* validation.execution.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
@@ -160,65 +222,90 @@ describe("SQLite Candidate and Validation read decoding", () => {
         });
 
         const otherChangeId = yield* createCandidateOwningChange(
-          "refs/heads/other-blocker-boundary",
+          "refs/heads/other-authority-boundary",
         );
         const repository = yield* RepositorySql;
-        const blockerRows = yield* repository.operation(
-          "create foreign Validation Run Blocker boundary",
+        const decisionRows = yield* repository.operation(
+          "create foreign Validation Run Decision boundary",
           (sql) => sql<{ readonly id: number }>`
-            INSERT INTO implementation_blockers (change_id, content, resolution_content)
-            VALUES (${otherChangeId}, 'Foreign blocker', NULL)
+            INSERT INTO implementation_decisions (change_id, choice, rationale)
+            VALUES (${otherChangeId}, 'Foreign decision', 'Belongs to another Change.')
             RETURNING id
           `,
         );
-        const foreignBlockerId = blockerRows[0]?.id;
+        const foreignDecisionId = decisionRows[0]?.id;
+        if (foreignDecisionId === undefined) throw new Error("Decision identity was not allocated");
+        yield* repository.operation(
+          "bind foreign Validation Run Decision boundary",
+          (sql) => sql`
+            UPDATE validation_runs
+            SET highest_decision_id = ${foreignDecisionId}
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+        yield* expectInvalidRunAuthority(
+          captured.changeId,
+          captured.candidateId,
+          started.validationRunId,
+          validation,
+          "invalid",
+        );
+
+        const foreignBlockerRows = yield* repository.operation(
+          "create foreign Validation Run Blocker boundary",
+          (sql) => sql<{ readonly id: number }>`
+            INSERT INTO implementation_blockers (change_id, content, resolution_content)
+            VALUES (${otherChangeId}, 'Foreign blocker', 'Resolved elsewhere.')
+            RETURNING id
+          `,
+        );
+        const foreignBlockerId = foreignBlockerRows[0]?.id;
         if (foreignBlockerId === undefined) throw new Error("Blocker identity was not allocated");
         yield* repository.operation(
           "bind foreign Validation Run Blocker boundary",
           (sql) => sql`
             UPDATE validation_runs
-            SET highest_blocker_id = ${foreignBlockerId}
+            SET highest_decision_id = NULL, highest_blocker_id = ${foreignBlockerId}
             WHERE id = ${started.validationRunId}
           `,
         );
+        yield* expectInvalidRunAuthority(
+          captured.changeId,
+          captured.candidateId,
+          started.validationRunId,
+          validation,
+          "invalid",
+        );
 
-        expect(
-          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(
-          yield* validation.execution
-            .startOrReuse({
-              candidateId: captured.candidateId,
-              changeBaseSha: "base",
-              headSha: "head",
-              policy,
-              now,
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-
-        const changes = yield* openSqliteChangeTestDependencies();
-        expect(
-          yield* changes.publication.getCurrentPassingEvidence(captured.changeId).pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(
-          yield* changes.publication
-            .beginPublication({
-              changeId: captured.changeId,
-              candidateId: captured.candidateId,
-              validationRunId: started.validationRunId,
-              target: {
-                owner: "acme",
-                repo: "widgets",
-                baseBranch: "main",
-                remoteName: "origin",
-              },
-              headBranch: "blocker-boundary",
-              expectedHeadSha: "head",
-              now,
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        const unresolvedBlockerRows = yield* repository.operation(
+          "create unresolved Validation Run Blocker boundary",
+          (sql) => sql<{ readonly id: number }>`
+            INSERT INTO implementation_blockers (change_id, content, resolution_content)
+            VALUES (
+              (SELECT change_id FROM candidates WHERE id = ${captured.candidateId}),
+              'Unresolved blocker', NULL
+            )
+            RETURNING id
+          `,
+        );
+        const unresolvedBlockerId = unresolvedBlockerRows[0]?.id;
+        if (unresolvedBlockerId === undefined)
+          throw new Error("Blocker identity was not allocated");
+        yield* repository.operation(
+          "bind unresolved Validation Run Blocker boundary",
+          (sql) => sql`
+            UPDATE validation_runs
+            SET highest_blocker_id = ${unresolvedBlockerId}
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+        yield* expectInvalidRunAuthority(
+          captured.changeId,
+          captured.candidateId,
+          started.validationRunId,
+          validation,
+          "blocked",
+        );
       }),
     ),
   );

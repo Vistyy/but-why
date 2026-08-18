@@ -13,7 +13,7 @@ import {
   decodeImplementationDecisions,
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
-} from "./sqliteChangeReadModel.js";
+} from "./sqliteChangeAuthorityHistory.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export type StoredValidationRunRow = {
@@ -92,13 +92,19 @@ export const readValidationRunById = (
       operationName,
       idPrefix,
     );
-    yield* readImplementationBlockerPrefix(
+    const blockers = yield* readImplementationBlockerPrefix(
       sql,
       candidate.changeId,
       row.highestBlockerId,
       operationName,
       idPrefix,
     );
+    if (blockers.active !== null) {
+      return yield* invalidData(
+        operationName,
+        "Validation Run includes an unresolved Implementation Blocker",
+      );
+    }
     return yield* decodePersisted(
       operationName,
       () => decodeValidationRunRow(row, decisions).record,

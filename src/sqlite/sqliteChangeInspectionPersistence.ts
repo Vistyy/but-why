@@ -6,13 +6,15 @@ import type { ChangeListRecord, ChangeReadPort } from "../change/changePorts.js"
 import type { ListChangesInput } from "../change/changeStore.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
+  decodeImplementationDecisions,
+  readImplementationBlockerHistory,
+  type StoredImplementationDecisionRow,
+} from "./sqliteChangeAuthorityHistory.js";
+import {
   changeReadColumns,
   decodeChangeRow,
-  decodeImplementationDecisions,
   deriveAcceptanceContext,
-  readImplementationBlockerHistory,
   type StoredChangeRow,
-  type StoredImplementationDecisionRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
