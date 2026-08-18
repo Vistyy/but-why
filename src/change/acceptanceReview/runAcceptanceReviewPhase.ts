@@ -32,9 +32,9 @@ import {
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
-import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
 import {

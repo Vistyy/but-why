@@ -18,7 +18,7 @@ const piAgentProfileConfigSnapshotSchema = Schema.Struct({
   runtimeConfig: Schema.optional(piRuntimeConfigSnapshotSchema),
 });
 
-export const resolvedPiAgentProfileSnapshotSchema = Schema.Struct({
+const resolvedPiAgentProfileSnapshotSchema = Schema.Struct({
   agentProfile: configNameSchema,
   scope: Schema.Literal("repo", "global"),
   profile: piAgentProfileConfigSnapshotSchema,

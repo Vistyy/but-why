@@ -6,7 +6,7 @@ import {
   specialistReviewPolicySnapshotSchema,
 } from "./candidateValidation/candidateValidationPolicySnapshot.js";
 
-export const changeReviewerConfigurationSchema = Schema.Struct({
+const changeReviewerConfigurationSchema = Schema.Struct({
   acceptanceReview: Schema.NullOr(acceptanceReviewPolicySnapshotSchema),
   specialistReviews: Schema.Array(specialistReviewPolicySnapshotSchema),
 }).pipe(
