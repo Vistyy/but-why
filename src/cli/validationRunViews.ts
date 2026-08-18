@@ -37,6 +37,10 @@ export const candidateValidationRunInspectionView = (
   },
   change: candidateValidationChangeView(inspection.change),
   candidate: candidateView(inspection.candidate),
+  workspace: {
+    cleanup: inspection.validationRun.workspaceCleanup,
+    blockingReason: inspection.validationRun.cleanupBlockingReason,
+  },
   policy: structuredValue(inspection.validationRun.policy),
   reviewerConfiguration: structuredValue(inspection.change.reviewerConfiguration),
   phases: [

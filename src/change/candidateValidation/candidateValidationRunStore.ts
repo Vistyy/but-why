@@ -126,6 +126,8 @@ export type CandidateValidationRunRecord = {
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";
   readonly outcome: CandidateValidationOutcome | null;
+  readonly workspaceCleanup: "not_created" | "removed" | "failed";
+  readonly cleanupBlockingReason: string | null;
 };
 
 export type CandidateValidationAgentInvocation = AgentInvocationRecord & {

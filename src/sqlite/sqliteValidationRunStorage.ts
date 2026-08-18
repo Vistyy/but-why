@@ -23,12 +23,14 @@ export type StoredValidationRunRow = {
   readonly highestDecisionId: number | null;
   readonly highestBlockerId: number | null;
   readonly outcome: CandidateValidationRunRecord["outcome"];
+  readonly cleanupPending: number;
+  readonly cleanupBlockingReason: string | null;
 };
 
 export const validationRunReadColumns = `
   id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
   highest_decision_id AS highestDecisionId, highest_blocker_id AS highestBlockerId,
-  outcome
+  outcome, cleanup_pending AS cleanupPending, cleanup_blocking_reason AS cleanupBlockingReason
 `;
 
 type DecodedValidationRun = {
@@ -50,6 +52,12 @@ const decodeValidationRunRow = (
   ) {
     throw new Error("Validation Run outcome is unsupported");
   }
+  if (row.cleanupPending !== 0 && row.cleanupPending !== 1) {
+    throw new Error("Validation Run cleanup obligation is unsupported");
+  }
+  if (row.cleanupPending === 0 && row.cleanupBlockingReason !== null) {
+    throw new Error("Validation Run cleanup relationship is invalid");
+  }
   return {
     record: {
       id: row.id,
@@ -58,6 +66,13 @@ const decodeValidationRunRow = (
       implementationDecisions,
       state: row.outcome === null ? "running" : "complete",
       outcome: row.outcome,
+      workspaceCleanup:
+        row.cleanupPending === 0
+          ? "removed"
+          : row.cleanupBlockingReason === null
+            ? "not_created"
+            : "failed",
+      cleanupBlockingReason: row.cleanupBlockingReason,
     },
     policySnapshot: row.policySnapshot,
     highestDecisionId: row.highestDecisionId,

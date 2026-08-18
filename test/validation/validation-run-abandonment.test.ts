@@ -21,6 +21,8 @@ const runningRun: CandidateValidationRunRecord = {
   implementationDecisions: [],
   state: "running",
   outcome: null,
+  workspaceCleanup: "not_created",
+  cleanupBlockingReason: null,
 };
 
 const abandonmentContext: CandidateValidationRunAbandonmentContext = {
