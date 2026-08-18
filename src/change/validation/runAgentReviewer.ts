@@ -169,6 +169,8 @@ export const runAgentReviewer = (
             });
           }
 
+          const toolingFailure = result.ok ? undefined : result.failure;
+          if (toolingFailure !== undefined) persistedToolingFailure = toolingFailure;
           return input.settleAgentInvocationResult({
             validationRunId: input.validationRunId,
             phase: input.phase,
@@ -176,6 +178,14 @@ export const runAgentReviewer = (
             outcome: result.ok && findings.length === 0 ? "passed" : "failed",
             findings,
             artifactRecords: artifacts.artifactRecords,
+            ...(toolingFailure === undefined
+              ? {}
+              : {
+                  toolingFailure: {
+                    ...validationToolingFailureRecord(toolingFailure),
+                    validationRunId: input.validationRunId,
+                  },
+                }),
             now: input.now,
           });
         }),

@@ -247,6 +247,10 @@ describe("Candidate Specialist Review phase", () => {
         }
         expect(result).toMatchObject({ findings: 1 });
         expect(result.toolingFailures).toHaveLength(1);
+        expect(result.persistedToolingFailures).toEqual(result.toolingFailures);
+        expect(harness.results[1]?.toolingFailure).toMatchObject({
+          errorKind: "reviewer_output_contract_failed",
+        });
         expect(
           harness.results.map(({ producer, outcome, findings }) => ({
             producer,
@@ -351,13 +355,15 @@ describe("Candidate Specialist Review phase", () => {
             commonDirectory: commonDirectory(repo),
           },
         });
-        const broken = outputFailure("broken", "Broken durable Specialist output.");
         const firstReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           input.reviewer === "standards"
             ? Effect.succeed(success([finding("Durable Specialist Finding")]))
             : Effect.succeed({
                 ok: false as const,
-                failure: broken,
+                failure: outputFailure(
+                  input.reviewer,
+                  `Broken durable ${input.reviewer} Specialist output.`,
+                ),
                 sessionUsability: "unknown" as const,
                 attempts: 2,
                 stdout: "invalid durable output",
@@ -414,6 +420,7 @@ describe("Candidate Specialist Review phase", () => {
                 cleanupWorkspace: "not_created",
               });
               for (const toolingFailure of result.toolingFailures) {
+                if (result.persistedToolingFailures?.includes(toolingFailure)) continue;
                 yield* persistence.execution.recordToolingFailure({
                   validationRunId: started.validationRunId,
                   ...validationToolingFailureRecord(toolingFailure),
@@ -432,7 +439,7 @@ describe("Candidate Specialist Review phase", () => {
         const durable = yield* Effect.suspend(() =>
           runPersisted(
             first,
-            [policy("standards"), policy("broken")],
+            [policy("standards"), policy("broken-first"), policy("broken-second")],
             { review: firstReview },
             "tooling_failed",
             now,
@@ -442,7 +449,8 @@ describe("Candidate Specialist Review phase", () => {
           yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
         ).toEqual([
           { producer: "standards", outcome: "failed" },
-          { producer: "broken", outcome: "failed" },
+          { producer: "broken-first", outcome: "failed" },
+          { producer: "broken-second", outcome: "failed" },
         ]);
         expect(
           (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
@@ -454,7 +462,13 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual([
           expect.objectContaining({
             errorKind: "reviewer_output_contract_failed",
-            errorMessage: expect.stringContaining("Broken durable Specialist output."),
+            errorMessage: expect.stringContaining("Broken durable broken-first Specialist output."),
+          }),
+          expect.objectContaining({
+            errorKind: "reviewer_output_contract_failed",
+            errorMessage: expect.stringContaining(
+              "Broken durable broken-second Specialist output.",
+            ),
           }),
         ]);
         expect(
@@ -462,7 +476,8 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
-            expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
+            expect.objectContaining({ phase: "specialist_review", producer: "broken-first" }),
+            expect.objectContaining({ phase: "specialist_review", producer: "broken-second" }),
           ]),
         );
 

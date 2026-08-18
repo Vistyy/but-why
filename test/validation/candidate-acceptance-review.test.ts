@@ -355,11 +355,13 @@ const runReviewPhases = (
           persistence.execution.listPreviousCandidateReviewerFindings,
       }).pipe(Effect.provide(NodeFileSystem.layer));
       if (acceptance.toolingFailure !== undefined) {
-        yield* persistence.execution.recordToolingFailure({
-          validationRunId: started.validationRunId,
-          ...validationToolingFailureRecord(acceptance.toolingFailure),
-          now,
-        });
+        if (!acceptance.persistedToolingFailures?.includes(acceptance.toolingFailure)) {
+          yield* persistence.execution.recordToolingFailure({
+            validationRunId: started.validationRunId,
+            ...validationToolingFailureRecord(acceptance.toolingFailure),
+            now,
+          });
+        }
         yield* persistence.execution.complete({
           validationRunId: started.validationRunId,
           outcome: "tooling_failed",
