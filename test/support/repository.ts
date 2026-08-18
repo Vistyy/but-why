@@ -71,7 +71,6 @@ export const passTaskReviewFixture = (
       reviewId,
       findings: [],
       now,
-      agentSettlement: true,
     });
     if (!completed.ok || completed.outcome !== "passed") {
       throw new Error("Could not complete passing Task Review fixture");

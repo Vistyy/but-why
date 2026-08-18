@@ -110,7 +110,7 @@ export const openSqliteTaskReviewPersistence = (
           input.toolingFailure,
           repository.idPrefix,
           mainCheckoutRoot,
-          input.agentSettlement === true,
+          "tooling_failure",
         ),
       ),
     abandon: (reviewId, reason, now) =>
@@ -134,6 +134,7 @@ export const openSqliteTaskReviewPersistence = (
             { operation: "task_review_abandoned", message: reason },
             repository.idPrefix,
             mainCheckoutRoot,
+            "tooling_failure",
           );
         }),
       ),
@@ -218,7 +219,7 @@ export const openSqliteTaskReviewPersistence = (
               input.toolingFailure,
               repository.idPrefix,
               mainCheckoutRoot,
-              true,
+              "agent_settlement",
             );
             if (!completed.ok)
               return yield* invalid(
@@ -396,7 +397,7 @@ const completeReview = (
   toolingFailure: TaskReviewToolingFailure | undefined,
   idPrefix: string,
   mainCheckoutRoot: string,
-  allowAlreadyComplete = false,
+  authority: "agent_settlement" | "tooling_failure",
 ) =>
   Effect.gen(function* () {
     const current = yield* getReview(sql, reviewId, idPrefix, mainCheckoutRoot);
@@ -404,9 +405,6 @@ const completeReview = (
       return { ok: false as const, code: "task_review_not_found" as const };
     }
     if (current.state === "complete") {
-      if (!allowAlreadyComplete && current.outcome !== "tooling_failed") {
-        return { ok: false as const, code: "task_review_not_active" as const };
-      }
       const completed = completedTaskReviewResult(
         current,
         yield* readTaskState(sql, current.taskId, idPrefix),
@@ -422,6 +420,12 @@ const completeReview = (
     const failure = admission.ok ? toolingFailure : admission.failure;
     const outcome =
       failure !== undefined ? "tooling_failed" : findings.length > 0 ? "blocked" : "passed";
+    if (outcome !== "tooling_failed" && authority !== "agent_settlement") {
+      return yield* invalid(
+        "complete Task Review",
+        "Only atomic Agent settlement can pass or block an Active Task Review",
+      );
+    }
     yield* requireTaskReviewInvocationEvidence(sql, reviewId, outcome);
     if (outcome === "passed") {
       yield* sql`

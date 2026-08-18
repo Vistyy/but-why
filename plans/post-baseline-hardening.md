@@ -166,15 +166,9 @@ For example, SQLite column types and foreign keys can make some corruption check
 
 #### Reviewer configuration
 
-`changes.reviewer_configuration` parsing or decoding appears in:
-
-- `src/sqlite/sqliteChangeReadModel.ts`;
-- `src/sqlite/sqliteChangeStartPersistence.ts`;
-- `src/sqlite/sqliteChangeSubmissionPersistence.ts`;
-- `src/sqlite/sqliteChangeReviewerSessionPersistence.ts`.
-
-At least one path directly casts parsed JSON.
-Investigate one Change-owned persisted-value decoder and one encoding path rather than parallel local interpretations.
+Change Reviewer configuration encoding and decoding is owned by `src/change/changeReviewerConfiguration.ts`.
+Its current SQLite consumers include Change reads, Change Start, Candidate Validation execution, and Change Agent Session persistence.
+Investigate whether every consumer consistently uses the Change-owned persisted-value decoder and encoding path rather than introducing parallel local interpretations.
 
 #### Agent Invocation projections
 

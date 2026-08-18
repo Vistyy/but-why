@@ -174,6 +174,54 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
   );
 });
 
+it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const agents = yield* openSqliteAgentSessionPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
+      const configuration = { harness: "pi" as const, model: "test-model" };
+      const invocation = yield* agents.beginInvocation({
+        configuration,
+        createdAt: now,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: admitted.review.id,
+          configuration,
+          configurationSnapshot: policy,
+        }),
+      });
+      if (!invocation.ok) throw new Error(invocation.code);
+      yield* agents.settleInvocation({
+        invocationId: invocation.dispatch.invocation.id,
+        continuationId: invocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "returned" },
+      });
+
+      expect(
+        yield* reviews
+          .complete({ reviewId: admitted.review.id, findings: [], now: later })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      expect(yield* reviews.getById(admitted.review.id)).toMatchObject({
+        state: "running",
+        outcome: null,
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
+    }),
+  ),
+);
+
 it.scoped("orders immutable Task Review history by its SQLite ID", () =>
   withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
     Effect.gen(function* () {
@@ -250,7 +298,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         reviewId: first.review.id,
         findings: blockedFindings,
         now: later,
-        agentSettlement: true,
       });
       expect(blocked).toMatchObject({ ok: true, outcome: "blocked" });
 
@@ -291,7 +338,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         reviewId: second.review.id,
         findings: [],
         now: later,
-        agentSettlement: true,
       });
       expect(passed).toMatchObject({ ok: true, outcome: "passed" });
 

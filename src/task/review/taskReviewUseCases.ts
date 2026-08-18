@@ -407,7 +407,6 @@ const submitTaskReview = (
           findings: execution.ok ? execution.output.findings : (execution.findings ?? []),
           ...(execution.ok ? {} : { toolingFailure: execution.failure }),
           now,
-          agentSettlement: true,
         });
         if (!completed.ok) {
           const active = yield* input.persistence.getById(reviewId);
