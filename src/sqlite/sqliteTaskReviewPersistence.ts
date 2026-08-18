@@ -49,6 +49,13 @@ type ReviewRow = {
   readonly cleanupBlockingReason: string | null;
 };
 
+type TaskReviewInvocationEvidenceRow = {
+  readonly invocationId: number;
+  readonly settledAt: string | null;
+  readonly settlementKind: string | null;
+  readonly taskOwned: number;
+};
+
 type AgentInvocationRow = {
   readonly id: number;
   readonly agentSessionId: number;
@@ -169,15 +176,40 @@ export const openSqliteTaskReviewPersistence = (
       (input): AgentSessionSqlLink =>
       (sql, invocationId) =>
         Effect.gen(function* () {
-          const linked = yield* sql<{ readonly reviewId: number }>`
-            SELECT task_review_id AS reviewId FROM task_review_agent_invocations
-            WHERE task_review_id = ${input.reviewId} AND agent_invocation_id = ${invocationId}
-          `;
-          if (linked.length === 0)
+          const operationName = "settle Task Review with Agent Invocation";
+          const invocations = yield* readTaskReviewInvocationEvidence(sql, input.reviewId);
+          const terminal = invocations.at(-1);
+          if (terminal?.invocationId !== invocationId) {
             return yield* invalid(
-              "settle Task Review with Agent Invocation",
-              "Invocation is not linked to the Task Review",
+              operationName,
+              "Only the terminal linked Invocation can settle the Task Review",
             );
+          }
+          if (
+            invocations.some(
+              (invocation) =>
+                invocation.taskOwned !== 1 ||
+                invocation.settledAt === null ||
+                invocation.settlementKind === null,
+            )
+          ) {
+            return yield* invalid(
+              operationName,
+              "Every Task Review Invocation must be Task-owned and settled",
+            );
+          }
+          if (input.complete && input.toolingFailure !== undefined) {
+            return yield* invalid(
+              operationName,
+              "A completed Agent Task Review settlement cannot contain a Tooling Failure",
+            );
+          }
+          if (input.complete && terminal.settlementKind !== "returned") {
+            return yield* invalid(
+              operationName,
+              "Passing and Finding-blocked Task Reviews require a returned terminal Invocation",
+            );
+          }
           if (input.complete) {
             const completed = yield* completeReview(
               sql,
@@ -390,6 +422,7 @@ const completeReview = (
     const failure = admission.ok ? toolingFailure : admission.failure;
     const outcome =
       failure !== undefined ? "tooling_failed" : findings.length > 0 ? "blocked" : "passed";
+    yield* requireTaskReviewInvocationEvidence(sql, reviewId, outcome);
     if (outcome === "passed") {
       yield* sql`
         UPDATE tasks SET state = 'todo'
@@ -542,6 +575,59 @@ const decodeReview = (
         new RepositoryPersistedDataInvalid({ operationName: "read Task Review", cause }),
     });
   });
+
+const readTaskReviewInvocationEvidence = (sql: SqlClient.SqlClient, reviewId: number) =>
+  sql<TaskReviewInvocationEvidenceRow>`
+    SELECT link.agent_invocation_id AS invocationId,
+      invocation.settled_at AS settledAt,
+      invocation.settlement_kind AS settlementKind,
+      CASE WHEN task.reviewer_agent_session_id = continuation.agent_session_id
+        THEN 1 ELSE 0 END AS taskOwned
+    FROM task_review_agent_invocations AS link
+    JOIN task_reviews AS review ON review.id = link.task_review_id
+    JOIN tasks AS task ON task.id = review.task_id
+    JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+    JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
+    WHERE link.task_review_id = ${reviewId}
+    ORDER BY link.agent_invocation_id
+  `;
+
+const requireTaskReviewInvocationEvidence = (
+  sql: SqlClient.SqlClient,
+  reviewId: number,
+  outcome: "passed" | "blocked" | "tooling_failed",
+) =>
+  Effect.gen(function* () {
+    const invocations = yield* readTaskReviewInvocationEvidence(sql, reviewId);
+    if ((outcome === "passed" || outcome === "blocked") && invocations.length === 0) {
+      return yield* invalid(
+        "complete Task Review",
+        "Passing and Finding-blocked Task Reviews require Agent Invocation evidence",
+      );
+    }
+    if (
+      invocations.some(
+        (invocation) =>
+          invocation.taskOwned !== 1 ||
+          invocation.settledAt === null ||
+          invocation.settlementKind === null,
+      )
+    ) {
+      return yield* invalid(
+        "complete Task Review",
+        "Every linked Task Review Invocation must be Task-owned and settled",
+      );
+    }
+    if (
+      (outcome === "passed" || outcome === "blocked") &&
+      invocations.at(-1)?.settlementKind !== "returned"
+    ) {
+      return yield* invalid(
+        "complete Task Review",
+        "Task Review outcome does not match its terminal Invocation",
+      );
+    }
+  }).pipe(Effect.asVoid);
 
 const readAgentInvocations = (
   sql: SqlClient.SqlClient,

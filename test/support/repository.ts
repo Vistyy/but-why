@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { internalTaskId, type PublicTaskId } from "../../src/task/taskId.js";
 
@@ -14,7 +15,10 @@ const taskReviewPolicyFixture = {
   profile: {
     agentProfile: "review",
     scope: "global" as const,
-    profile: { agentRuntime: "pi" as const },
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "test-model" },
+    },
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
@@ -26,6 +30,7 @@ export const passTaskReviewFixture = (
   now: string,
 ) =>
   Effect.gen(function* () {
+    const agents = yield* openSqliteAgentSessionPersistence();
     const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
     const admitted = yield* reviews.admit({
       taskId,
@@ -38,7 +43,36 @@ export const passTaskReviewFixture = (
       throw new Error(`Could not admit passing Task Review fixture: ${admitted.code}`);
     const reviewId = admitted.review.id;
     yield* reviews.recordCleanup(reviewId, "removed", now);
-    const completed = yield* reviews.complete({ reviewId, findings: [], now });
+    const configuration = { harness: "pi" as const, model: "test-model" };
+    const invocation = yield* agents.beginInvocation({
+      configuration,
+      createdAt: now,
+      linkInvocation: reviews.linkAgentInvocation({
+        taskId,
+        reviewId,
+        configuration,
+        configurationSnapshot: taskReviewPolicyFixture,
+      }),
+    });
+    if (!invocation.ok)
+      throw new Error(`Could not dispatch Task Review fixture: ${invocation.code}`);
+    yield* agents.settleInvocation({
+      invocationId: invocation.dispatch.invocation.id,
+      continuationId: invocation.dispatch.continuation.id,
+      settlement: { settledAt: now, kind: "returned" },
+      settleDomain: reviews.settleAgentReview({
+        reviewId,
+        findings: [],
+        now,
+        complete: true,
+      }),
+    });
+    const completed = yield* reviews.complete({
+      reviewId,
+      findings: [],
+      now,
+      agentSettlement: true,
+    });
     if (!completed.ok || completed.outcome !== "passed") {
       throw new Error("Could not complete passing Task Review fixture");
     }

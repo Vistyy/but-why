@@ -152,6 +152,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         Effect.gen(function* () {
           const agents = yield* openSqliteAgentSessionPersistence();
           const agentSessions = yield* openSqliteChangeAgentSessionPort();
+          const abandonment = yield* openSqliteValidationRunAbandonmentPort();
           const linkAgentInvocation = agentSessions.linkAgentInvocation;
           if (linkAgentInvocation === undefined)
             throw new Error("Change Agent linking is unavailable");
@@ -182,15 +183,16 @@ describe("Candidate-owned Validation Run inspection", () => {
               },
             },
           });
+          yield* abandonment.abandon({
+            validationRunId: fixture.validationRunId,
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "validation_run_abandonment",
+            errorMessage: "Agent Invocation inspection fixture",
+            now: later,
+          });
           return started.dispatch;
         }),
       );
-      yield* fixture.recordRunToolingFailure("Agent Invocation inspection fixture");
-      yield* fixture.runStore.completeAfterCleanup({
-        validationRunId: fixture.validationRunId,
-        outcome: "tooling_failed",
-      });
-
       const shown = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "show",

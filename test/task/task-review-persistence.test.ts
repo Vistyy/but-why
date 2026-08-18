@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import {
   createDetachedDisposableWorktree,
   prepareDisposableWorkspaceParent,
@@ -22,7 +23,10 @@ const policy = {
   profile: {
     agentProfile: "review",
     scope: "global" as const,
-    profile: { agentRuntime: "pi" as const },
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "test-model" },
+    },
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
@@ -175,6 +179,7 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
       const first = yield* reviews.admit({
@@ -186,17 +191,66 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
       });
       if (!first.ok) throw new Error(`Task Review admission failed: ${first.code}`);
       yield* reviews.recordCleanup(first.review.id, "removed", now);
+      const blockedFindings = [
+        {
+          title: "Clarify scope",
+          description: "The proposal is incomplete.",
+          evidence: "Missing supported outcome.",
+          files: [],
+        },
+      ];
+      expect(
+        yield* reviews
+          .complete({ reviewId: first.review.id, findings: blockedFindings, now })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      const configuration = { harness: "pi" as const, model: "test-model" };
+      const blockedInvocation = yield* agents.beginInvocation({
+        configuration,
+        createdAt: now,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: first.review.id,
+          configuration,
+          configurationSnapshot: policy,
+        }),
+      });
+      if (!blockedInvocation.ok) throw new Error(blockedInvocation.code);
+      expect(
+        yield* agents
+          .settleInvocation({
+            invocationId: blockedInvocation.dispatch.invocation.id,
+            continuationId: blockedInvocation.dispatch.continuation.id,
+            settlement: {
+              settledAt: later,
+              kind: "launch_failed",
+              unusableReason: "The Agent did not return Findings.",
+            },
+            settleDomain: reviews.settleAgentReview({
+              reviewId: first.review.id,
+              findings: blockedFindings,
+              now: later,
+              complete: true,
+            }),
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      yield* agents.settleInvocation({
+        invocationId: blockedInvocation.dispatch.invocation.id,
+        continuationId: blockedInvocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "returned" },
+        settleDomain: reviews.settleAgentReview({
+          reviewId: first.review.id,
+          findings: blockedFindings,
+          now: later,
+          complete: true,
+        }),
+      });
       const blocked = yield* reviews.complete({
         reviewId: first.review.id,
-        findings: [
-          {
-            title: "Clarify scope",
-            description: "The proposal is incomplete.",
-            evidence: "Missing supported outcome.",
-            files: [],
-          },
-        ],
-        now,
+        findings: blockedFindings,
+        now: later,
+        agentSettlement: true,
       });
       expect(blocked).toMatchObject({ ok: true, outcome: "blocked" });
 
@@ -210,7 +264,35 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
       if (!second.ok) throw new Error(`Task Review admission failed: ${second.code}`);
       expect(second.review.id).toBe(2);
       yield* reviews.recordCleanup(second.review.id, "removed", now);
-      const passed = yield* reviews.complete({ reviewId: second.review.id, findings: [], now });
+      const passedInvocation = yield* agents.beginInvocation({
+        agentSessionId: blockedInvocation.dispatch.agentSessionId,
+        configuration,
+        createdAt: now,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: second.review.id,
+          configuration,
+          configurationSnapshot: policy,
+        }),
+      });
+      if (!passedInvocation.ok) throw new Error(passedInvocation.code);
+      yield* agents.settleInvocation({
+        invocationId: passedInvocation.dispatch.invocation.id,
+        continuationId: passedInvocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "returned" },
+        settleDomain: reviews.settleAgentReview({
+          reviewId: second.review.id,
+          findings: [],
+          now: later,
+          complete: true,
+        }),
+      });
+      const passed = yield* reviews.complete({
+        reviewId: second.review.id,
+        findings: [],
+        now: later,
+        agentSettlement: true,
+      });
       expect(passed).toMatchObject({ ok: true, outcome: "passed" });
 
       expect((yield* reviews.listForTask(publicTaskId("BY-1"))).map((review) => review.id)).toEqual(

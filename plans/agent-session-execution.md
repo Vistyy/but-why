@@ -184,14 +184,14 @@ Agent infrastructure does not access Task or Change tables.
 A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
 The direct BY-274 baseline needs durable representation for logical sessions, physical continuations, and Invocations because they have distinct write and recovery lifecycles.
-Existing Reviewer Session records remain only in the prerelease state because they lack the per-call facts needed to reconstruct exact Invocations honestly.
-No old Reviewer Session record is imported or converted into the new baseline.
+Prerelease reviewer records lack the per-call facts needed to reconstruct exact Invocations honestly.
+The baseline does not import or convert those records.
 All new reviewer work writes only the Agent Session representation.
 The final baseline and released executable remove legacy Reviewer tables and readers, while the old rows remain in the dated low-value backup.
 Working internal Agent Session code remains in place unless the final schema, retired legacy representation removal, or supported behavior requires a change.
 Adapter relocation and general cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
-The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
+The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease reviewer schema.
 The separately authorized live cutover keeps the pre-merge source commit and uses its built or retained old executable only for exact merged-Change reconciliation.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
@@ -224,7 +224,7 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 - Invocation and transcript evidence is limited to the fields defined above, including `cacheRead` and `cacheWrite` token evidence; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
 - Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying configuration into each Review or Run.
-- Retire generic Reviewer Session, transcript-array, per-Review policy, and reviewer execution-summary presentation in favor of owner-role configuration, Agent Session, continuation, Invocation, domain Tooling Failure, and cleanup evidence.
+- Use owner-role configuration, Agent Sessions, Agent Continuations, Agent Invocations, domain Tooling Failures, and cleanup evidence instead of the prerelease generic reviewer representation and aggregates.
 - The direct BY-274 baseline conforms to this exact physical schema without importing or converting legacy Reviewer records.
 
 ## Exclusions

@@ -36,16 +36,7 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
-      const admitted = yield* reviews.admit({
-        taskId: publicTaskId("BY-2"),
-        policy,
-        baseRef: "refs/heads/main",
-        baseCommit: "a".repeat(40),
-        now,
-      });
-      if (!admitted.ok) throw new Error(admitted.code);
-      yield* reviews.recordCleanup(admitted.review.id, "removed", now);
-      yield* reviews.complete({ reviewId: admitted.review.id, findings: [], now });
+      const completed = yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-2"), now);
       const before = yield* tasks.getTaskById(publicTaskId("BY-2"));
 
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
@@ -64,13 +55,13 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         description: "Approved intent",
       });
       expect(yield* reviews.listForTask(publicTaskId("BY-2"))).toMatchObject([
-        { id: admitted.review.id, state: "complete", outcome: "passed" },
+        { id: completed.review.id, state: "complete", outcome: "passed" },
       ]);
       expect(before).toMatchObject({ state: "todo" });
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toMatchObject({
         ok: true,
         outcome: "passed",
-        review: { id: admitted.review.id },
+        review: { id: completed.review.id },
         task: { id: "BY-2", state: "todo" },
       });
     }),

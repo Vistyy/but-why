@@ -99,13 +99,17 @@ export const requireCoherentValidationCompletion = (
         positionRows.push(row);
         reviewerInvocations.set(key, positionRows);
         if (
-          (row.phase === validationPhase.acceptanceReview ||
-            row.phase === validationPhase.specialistReview) &&
-          (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null)
+          row.phase === validationPhase.acceptanceReview ||
+          row.phase === validationPhase.specialistReview
         ) {
-          throw new Error(
-            "Every linked reviewer Invocation must be Change-owned and settled before completion",
-          );
+          if (!resultByPosition.has(key)) {
+            throw new Error("Every linked reviewer position requires its final Phase Result");
+          }
+          if (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null) {
+            throw new Error(
+              "Every linked reviewer Invocation must be Change-owned and settled before completion",
+            );
+          }
         }
       }
       if (toolingFailures.length !== toolingPositions.size + (runToolingFailure === null ? 0 : 1)) {

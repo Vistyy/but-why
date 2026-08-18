@@ -257,6 +257,23 @@ describe("SQLite Validation ownership", () => {
         });
         if (!invocation.ok) throw new Error(invocation.code);
         expect(
+          yield* fixture.validation.execution
+            .recordSpecialistResult({
+              validationRunId: fixture.started.validationRunId,
+              producer: "first",
+              outcome: "failed",
+              findings: [],
+              artifactRecords: [],
+              toolingFailure: {
+                validationRunId: fixture.started.validationRunId,
+                errorKind: "infrastructure_tooling_failed",
+                operationName: "verify_specialist_candidate",
+                errorMessage: "This failure did not occur before dispatch.",
+              },
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
           yield* fixture.validation.agentPersistence
             .settleInvocation({
               invocationId: invocation.dispatch.invocation.id,
@@ -287,12 +304,17 @@ describe("SQLite Validation ownership", () => {
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        yield* fixture.validation.agentPersistence.settleInvocation({
+          invocationId: invocation.dispatch.invocation.id,
+          continuationId: invocation.dispatch.continuation.id,
+          settlement: { settledAt: "2026-10-02T10:00:06.000Z", kind: "returned" },
+        });
 
         yield* fixture.validation.execution.recordToolingFailure({
           validationRunId: fixture.started.validationRunId,
           errorKind: "reviewer_process_execution_failed",
           operationName: "run_specialist_reviewer",
-          errorMessage: "The reviewer Invocation remains unsettled.",
+          errorMessage: "The reviewer Invocation has no final Phase Result.",
         });
         yield* fixture.validation.execution.recordWorkspaceCleanup({
           validationRunId: fixture.started.validationRunId,
@@ -499,12 +521,39 @@ describe("SQLite Validation ownership", () => {
             kind: "launch_failed",
             unusableReason: "Correct the Specialist model.",
           },
+          settleDomain: fixture.validation.execution.settleAgentInvocationResult({
+            validationRunId: fixture.started.validationRunId,
+            phase: "specialist_review",
+            producer: "first",
+            outcome: "failed",
+            findings: [],
+            artifactRecords: [],
+            toolingFailure: {
+              validationRunId: fixture.started.validationRunId,
+              errorKind: "reviewer_process_execution_failed",
+              operationName: "run_specialist_reviewer",
+              errorMessage: "The configured model was unavailable.",
+            },
+          }),
         });
-        yield* fixture.validation.execution.recordToolingFailure({
+        yield* fixture.validation.execution.recordCheckResult({
           validationRunId: fixture.started.validationRunId,
-          errorKind: "reviewer_process_execution_failed",
-          operationName: "run_specialist_reviewer",
-          errorMessage: "The configured model was unavailable.",
+          producer: "types",
+          outcome: "passed",
+          artifactRecords: [],
+        });
+        yield* fixture.validation.execution.recordSpecialistResult({
+          validationRunId: fixture.started.validationRunId,
+          producer: "second",
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: {
+            validationRunId: fixture.started.validationRunId,
+            errorKind: "infrastructure_tooling_failed",
+            operationName: "verify_specialist_candidate",
+            errorMessage: "The Candidate changed before the second reviewer dispatched.",
+          },
         });
         yield* fixture.validation.execution.recordWorkspaceCleanup({
           validationRunId: fixture.started.validationRunId,

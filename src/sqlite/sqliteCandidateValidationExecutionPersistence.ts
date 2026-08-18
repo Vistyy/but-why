@@ -90,8 +90,10 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transactionImmediate("record Candidate Acceptance Review Result", (sql) =>
           Effect.gen(function* () {
             yield* requirePreDispatchReviewerIntegrityFailure(
+              sql,
               input,
               validationPhase.acceptanceReview,
+              "acceptance",
               "record Candidate Acceptance Review Result",
             );
             yield* recordPhaseResult(
@@ -109,8 +111,10 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         repository.transactionImmediate("record Candidate Specialist Review Result", (sql) =>
           Effect.gen(function* () {
             yield* requirePreDispatchReviewerIntegrityFailure(
+              sql,
               input,
               validationPhase.specialistReview,
+              input.producer,
               "record Candidate Specialist Review Result",
             );
             yield* recordPhaseResult(
@@ -472,34 +476,47 @@ const recordPhaseResult = (
   }).pipe(Effect.asVoid);
 
 const requirePreDispatchReviewerIntegrityFailure = (
+  sql: SqlClient.SqlClient,
   input: Pick<
     RecordCandidateValidationPhaseResultInput,
-    "outcome" | "findings" | "artifactRecords" | "toolingFailure"
+    "validationRunId" | "outcome" | "findings" | "artifactRecords" | "toolingFailure"
   >,
   phase: typeof validationPhase.acceptanceReview | typeof validationPhase.specialistReview,
+  producer: string,
   operationName: string,
-) => {
-  const failure = input.toolingFailure;
-  const expectedInfrastructureOperation =
-    phase === validationPhase.acceptanceReview
-      ? "verify_acceptance_candidate"
-      : "verify_specialist_candidate";
-  const isIntegrityFailure =
-    failure !== undefined &&
-    ((failure.errorKind === "git_tooling_failed" &&
-      failure.operationName === "verify_candidate_head") ||
-      (failure.errorKind === "infrastructure_tooling_failed" &&
-        failure.operationName === expectedInfrastructureOperation));
-  return input.outcome === "failed" &&
-    (input.findings ?? []).length === 0 &&
-    input.artifactRecords.length === 0 &&
-    isIntegrityFailure
-    ? Effect.void
-    : invalidData(
+) =>
+  Effect.gen(function* () {
+    const linked = yield* sql<{ readonly count: number }>`
+    SELECT COUNT(*) AS count
+    FROM validation_phase_agent_invocations
+    WHERE validation_run_id = ${input.validationRunId}
+      AND phase = ${phase}
+      AND producer = ${producer}
+  `;
+    const failure = input.toolingFailure;
+    const expectedInfrastructureOperation =
+      phase === validationPhase.acceptanceReview
+        ? "verify_acceptance_candidate"
+        : "verify_specialist_candidate";
+    const isIntegrityFailure =
+      failure !== undefined &&
+      ((failure.errorKind === "git_tooling_failed" &&
+        failure.operationName === "verify_candidate_head") ||
+        (failure.errorKind === "infrastructure_tooling_failed" &&
+          failure.operationName === expectedInfrastructureOperation));
+    if (
+      (linked[0]?.count ?? 0) > 0 ||
+      input.outcome !== "failed" ||
+      (input.findings ?? []).length !== 0 ||
+      input.artifactRecords.length !== 0 ||
+      !isIntegrityFailure
+    ) {
+      return yield* invalidData(
         operationName,
         "A direct reviewer Result requires pre-dispatch Candidate integrity failure evidence",
       );
-};
+    }
+  }).pipe(Effect.asVoid);
 
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,
