@@ -295,7 +295,38 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("snapshots Implementation Decisions without changing policy reuse identity", () =>
+  it.effect("reuses the latest passing judgment across mutable policy and authority", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.completeAfterCleanup({
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+        now,
+      });
+      yield* fixture.recordDecision(
+        "Keep rationale separate from intent",
+        "Preserve rationale separately from approved intent.",
+      );
+
+      const reused = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy: {
+          ...policy,
+          prepare: { ...policy.prepare, command: "pnpm install --frozen-lockfile" },
+        },
+        now: later,
+      });
+
+      expect(reused).toMatchObject({
+        reused: true,
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+      });
+    }),
+  );
+
+  it.effect("snapshots Implementation Decisions in a new Validation Run", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.runStore.completeAfterCleanup({
@@ -304,10 +335,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         now,
       });
       const decision = {
-        id: "decision-1",
-        changeId: fixture.changeId,
-        sequence: 1,
-        recordedAt: now,
         choice: "Keep rationale separate from intent",
         rationale: "Preserve rationale separately from approved intent.",
       };

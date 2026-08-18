@@ -246,10 +246,12 @@ export const validateChangePublicationRelationships = (
           readonly candidateChangeId: number;
           readonly candidateHeadSha: string;
           readonly validationRunCandidateId: number | null;
+          readonly validationRunOutcome: string | null;
         }>`
           SELECT candidate.change_id AS candidateChangeId,
             candidate.head_commit AS candidateHeadSha,
-            validation_run.candidate_id AS validationRunCandidateId
+            validation_run.candidate_id AS validationRunCandidateId,
+            validation_run.outcome AS validationRunOutcome
           FROM candidates AS candidate
           LEFT JOIN validation_runs AS validation_run
             ON validation_run.id = ${publication.validationRunId}
@@ -264,6 +266,9 @@ export const validateChangePublicationRelationships = (
             }
             if (row.validationRunCandidateId !== publication.candidateId) {
               throw new Error("Publication Validation Run belongs to another Candidate");
+            }
+            if (row.validationRunOutcome !== "passed") {
+              throw new Error("Publication Validation Run did not pass");
             }
             if (row.candidateHeadSha !== publication.expectedHeadSha) {
               throw new Error("Publication expected head does not match its Candidate");

@@ -37,6 +37,7 @@ import {
 } from "./sqliteValidationEvidenceStorage.js";
 import {
   readActiveValidationRunForChange,
+  readValidationRunById,
   type StoredValidationRunRow,
   validationRunReadColumns,
 } from "./sqliteValidationRunStorage.js";
@@ -233,16 +234,21 @@ const startOrReuse = (
       [candidate.id],
     );
     const latest = latestRows[0];
-    if (
-      latest !== undefined &&
-      latest.outcome === "passed" &&
-      latest.policySnapshot === policySnapshot &&
-      latest.highestDecisionId === highestDecisionId &&
-      latest.highestBlockerId === highestBlockerId
-    ) {
+    if (latest?.outcome === "passed") {
+      const decoded = yield* readValidationRunById(sql, latest.id, operationName, idPrefix);
+      if (
+        decoded === undefined ||
+        decoded.candidateId !== candidate.id ||
+        decoded.outcome !== "passed"
+      ) {
+        return yield* invalidData(
+          operationName,
+          "Reusable Validation Run does not match its Candidate and passing outcome",
+        );
+      }
       return {
         reused: true,
-        validationRunId: latest.id,
+        validationRunId: decoded.id,
         outcome: "passed",
         authority,
       } satisfies StartCandidateValidationRunResult;

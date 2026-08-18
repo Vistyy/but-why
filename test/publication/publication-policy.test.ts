@@ -9,6 +9,7 @@ import type {
   GitHubPullRequestCreationRequest,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
+import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -1254,6 +1255,53 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("rejects non-passing Validation Runs in publication transactions", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const failed = yield* nextCandidate(
+          fixture,
+          "Failed Candidate",
+          "2026-07-25T15:10:00.000Z",
+          "blocked",
+        );
+        const failedReservation = reservation(failed.captured, failed.validationRunId);
+
+        const beginError = yield* Effect.flip(
+          fixture.changes.publication.beginPublication(failedReservation),
+        );
+        expect(beginError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.changes.publication.getChangeById(fixture.captured.changeId),
+        ).toMatchObject({ publication: null });
+
+        const currentReservation = reservation(fixture.captured, fixture.validationRunId);
+        expect(
+          yield* fixture.changes.publication.beginPublication(currentReservation),
+        ).toMatchObject({ ok: true, created: true });
+
+        const replaceError = yield* Effect.flip(
+          fixture.changes.publication.replacePendingPublication({
+            ...failedReservation,
+            expectedCurrentCandidateId: fixture.captured.candidateId,
+            expectedCurrentValidationRunId: fixture.validationRunId,
+            expectedCurrentHeadSha: fixture.captured.headSha,
+            expectedCurrentHeadBranch: "feature",
+            expectedCurrentTarget: target,
+          }),
+        );
+        expect(replaceError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.changes.publication.getChangeById(fixture.captured.changeId),
+        ).toMatchObject({
+          publication: {
+            candidateId: fixture.captured.candidateId,
+            validationRunId: fixture.validationRunId,
+          },
+        });
+      }),
+    ),
+  );
+
   it.scoped("reuses passing evidence for the same Candidate without artificial republication", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
@@ -1288,15 +1336,16 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           now: "2026-07-25T15:20:00.000Z",
         });
         expect(recorded.ok).toBe(true);
-        const freshRunId = yield* completeValidation(
+        const reusedRunId = yield* completeValidation(
           fixture.validation,
           fixture.captured,
           "2026-07-25T15:21:00.000Z",
         );
+        expect(reusedRunId).toBe(fixture.validationRunId);
 
         const refreshed = yield* publication.publish({
           ...input(fixture),
-          validationRunId: freshRunId,
+          validationRunId: reusedRunId,
           now: "2026-07-25T15:21:00.000Z",
         });
         expect(refreshed).toMatchObject({
@@ -1309,7 +1358,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           {
             publication: {
               candidateId: fixture.captured.candidateId,
-              validationRunId: freshRunId,
+              validationRunId: reusedRunId,
               pullRequest: { number: 42 },
             },
           },
@@ -1495,6 +1544,7 @@ function completeValidation(
   validation: ChangeValidationTestDependencies,
   captured: Captured,
   at: string,
+  outcome: "passed" | "blocked" | "tooling_failed" = "passed",
 ) {
   return Effect.gen(function* () {
     const run = yield* validation.execution.startOrReuse({
@@ -1503,7 +1553,10 @@ function completeValidation(
       policy,
       now: at,
     });
-    if (run.reused) return run.validationRunId;
+    if (run.reused) {
+      if (outcome !== "passed") throw new Error("Expected a new Validation Run");
+      return run.validationRunId;
+    }
     if ("blocked" in run) throw new Error("Expected a Validation Run");
     yield* validation.execution.recordWorkspaceCleanup({
       validationRunId: run.validationRunId,
@@ -1511,14 +1564,19 @@ function completeValidation(
     });
     yield* validation.execution.complete({
       validationRunId: run.validationRunId,
-      outcome: "passed",
+      outcome,
       now: at,
     });
     return run.validationRunId;
   });
 }
 
-const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
+const nextCandidate = (
+  fixture: Fixture,
+  subject: string,
+  at: string,
+  outcome: "passed" | "blocked" | "tooling_failed" = "passed",
+) =>
   Effect.gen(function* () {
     const headSha = `${subject}-head`;
     const capture = yield* openSqliteCandidateCapturePersistence();
@@ -1541,9 +1599,19 @@ const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
       headSha,
       trackedTreeMatchesChangeBase: false,
     };
-    const validationRunId = yield* completeValidation(fixture.validation, captured, at);
+    const validationRunId = yield* completeValidation(fixture.validation, captured, at, outcome);
     return { captured, validationRunId };
   });
+
+const reservation = (captured: Captured, validationRunId: number) => ({
+  changeId: captured.changeId,
+  candidateId: captured.candidateId,
+  validationRunId,
+  target,
+  headBranch: "feature",
+  expectedHeadSha: captured.headSha,
+  now,
+});
 
 const input = (fixture: Fixture) => ({
   changeId: fixture.captured.changeId,

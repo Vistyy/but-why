@@ -11,10 +11,7 @@ import {
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
-import {
-  type StoredValidationRunRow,
-  validationRunReadColumns,
-} from "./sqliteValidationRunStorage.js";
+import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 const currentPassingEvidenceOperation = "read current passing Change evidence";
 const completedPublicationEvidenceOperation = "read completed Candidate Publication evidence";
@@ -49,7 +46,13 @@ export const readCurrentPassingValidationEvidence = (
     ) {
       return undefined;
     }
-    return yield* readPassingEvidenceForCandidate(sql, changeId, candidate, query, idPrefix);
+    return yield* readPassingEvidenceForCandidate(
+      sql,
+      candidate,
+      query,
+      currentPassingEvidenceOperation,
+      idPrefix,
+    );
   });
 
 export const readCompletedCandidatePublicationEvidence = (
@@ -75,9 +78,9 @@ export const readCompletedCandidatePublicationEvidence = (
     if (candidate === undefined) return undefined;
     return yield* readPassingEvidenceForCandidate(
       sql,
-      changeId,
       candidate,
       { validationRunId },
+      completedPublicationEvidenceOperation,
       idPrefix,
     );
   });
@@ -121,9 +124,9 @@ const decodeSelectedCandidate = (
 
 const readPassingEvidenceForCandidate = (
   sql: SqlClient.SqlClient,
-  changeId: string,
   candidate: ReturnType<typeof decodeCandidate>,
   query: CurrentChangeEvidenceQuery | undefined,
+  operationName: string,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
@@ -132,42 +135,27 @@ const readPassingEvidenceForCandidate = (
       candidate.id,
       ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
     ];
-    const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
+    const rows = yield* sql.unsafe<{ readonly id: number }>(
+      `SELECT id
        FROM validation_runs
        WHERE candidate_id = ? AND outcome = 'passed' ${requestedRunPredicate}
        ORDER BY id DESC`,
       parameters,
     );
-    const highWater = yield* readCurrentAuthorityHighWater(sql, changeId, idPrefix);
-    const run = rows.find(
-      (row) =>
-        row.candidateId === candidate.id &&
-        row.highestDecisionId === highWater.highestDecisionId &&
-        row.highestBlockerId === highWater.highestBlockerId,
-    );
-    if (run === undefined) return undefined;
-    return {
-      candidateId: candidate.id,
-      validationRunId: run.id,
-      changeBaseSha: candidate.changeBaseSha,
-      headSha: candidate.headSha,
-    } satisfies ChangePublicationEvidence;
+    const validationRunId = rows[0]?.id;
+    if (validationRunId === undefined) return undefined;
+    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    return yield* decodePersisted(operationName, () => {
+      if (run === undefined) throw new Error("Passing Validation Run was not selected");
+      if (run.candidateId !== candidate.id) {
+        throw new Error("Passing Validation Run belongs to another Candidate");
+      }
+      if (run.outcome !== "passed") throw new Error("Validation Run did not pass");
+      return {
+        candidateId: candidate.id,
+        validationRunId: run.id,
+        changeBaseSha: candidate.changeBaseSha,
+        headSha: candidate.headSha,
+      } satisfies ChangePublicationEvidence;
+    });
   });
-
-const readCurrentAuthorityHighWater = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  idPrefix: string,
-) =>
-  Effect.map(
-    sql<{
-      readonly highestDecisionId: number | null;
-      readonly highestBlockerId: number | null;
-    }>`
-      SELECT
-        (SELECT MAX(id) FROM implementation_decisions WHERE change_id = ${internalChangeId(changeId, idPrefix)}) AS highestDecisionId,
-        (SELECT MAX(id) FROM implementation_blockers WHERE change_id = ${internalChangeId(changeId, idPrefix)}) AS highestBlockerId
-    `,
-    (rows) => rows[0] ?? { highestDecisionId: null, highestBlockerId: null },
-  );
