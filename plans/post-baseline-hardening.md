@@ -11,14 +11,17 @@ It is not implementation authority and is not a substitute for SQLite Tasks.
 
 BY-269 completed the Task and Change coordination direction, BY-271 completed the internal numeric identity and operational naming direction, and BY-275 completed the Agent Session design prerequisite.
 BY-274 is the one remaining direct first-release baseline and operational cutover.
-BY-274 acceptance is limited to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
+BY-274 acceptance is limited to the exact baseline implementation and disposable tests of candidate source or package artifacts before merge.
 The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
 Live post-reconcile verification is not a Task completion condition.
 Post-baseline sequencing begins only after the live operator cutover succeeds.
 BY-274 does not import or convert old data, and it retains working internal code unless the final schema, retired representation removal, or supported behavior requires a change.
-This plan owns the post-baseline hardening concerns that do not belong in that direct cutover, including Adapter relocation, SQL ownership enforcement, and general cleanup.
+This plan owns the post-baseline hardening concerns that do not belong in that direct cutover, including existing Adapter relocation, SQL ownership enforcement, and module cleanup.
+It also records deferred investigations into a simpler Repo, Global, and package Agent resource model and an optional future local untracked-file injection boundary.
 Creating durable follow-up Tasks against transient structures before the baseline would create avoidable rework.
 This plan preserves the concerns until they can be reinspected against the final baseline.
+The first release removes `copyFiles` rather than replacing it with another implicit file-copy mechanism.
+A future local untracked-file injection may replace that capability only if post-baseline evidence establishes a supported need and a safe owner boundary.
 
 This plan does not authorize implementation.
 It does not extend the accepted scope of an active Change.
@@ -518,7 +521,15 @@ The following grouping is an investigation aid rather than an adoption decision.
 - defer `no-unknown-type-aliases`;
 - defer `no-widen-then-assert`.
 
-## 6. Explicitly deferred or rejected generalizations
+## 6. Deferred resource and workspace investigations
+
+After the baseline, investigate whether a simpler Repo, Global, and package Agent resource model preserves the frozen Change policy, Agent Session continuity, and portable behavior without a generalized loader.
+Keep this investigation bounded to observed resource-resolution problems and do not implement a broader model without evidence.
+
+If evidence establishes a need for local untracked-file access, investigate an explicit local untracked-file injection boundary as the possible replacement for removed `copyFiles` behavior.
+Do not add that capability to the first release or infer its need from the existence of a configuration option.
+
+## 7. Explicitly deferred or rejected generalizations
 
 Do not create work solely for:
 

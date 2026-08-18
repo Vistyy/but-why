@@ -18,7 +18,7 @@ BY-269 completed the Task and Change coordination direction recorded here, inclu
 BY-271 completed the internal Task and Change identity direction, including independent SQLite-allocated numeric IDs, immutable table-local ordering, the frozen repository `idPrefix`, derived public IDs, and Change-owned operational names.
 BY-275 completed the Agent Session and Agent Invocation design prerequisite for BY-274.
 BY-274 is the one remaining direct baseline cutover.
-It establishes the final schema without importing or converting old data, retains working internal code unless the final schema, a retired representation, or supported behavior requires a change, and defers Adapter relocation, SQL ownership, and general cleanup to `post-baseline-hardening.md`.
+It establishes the final schema without importing or converting old data, retains working internal code unless the final schema, a retired representation, or supported behavior requires a change, and defers existing Adapter, SQL, and module cleanup to `post-baseline-hardening.md`.
 This file remains a plan for the accepted boundary and does not become current implementation authority.
 
 ## Accepted planning direction
@@ -49,7 +49,8 @@ Changes own:
 
 Task and Change coordination owns moving approved Task intent into a Change, completing the corresponding Task from sufficient Change evidence, coordinating cancellation, and joining Task and Change projections for CLI output.
 It must use the supported Task and Change interfaces instead of direct cross-module reads or duplicated lifecycle policy.
-Repository Runtime continues to own repository identity, shared database access, configuration, preparation, and executable selection.
+Repository Runtime continues to own repository identity, shared database access, configuration, preparation, and executable selection for the globally installed built `by` executable.
+It has no canonical-main executable or configuration authority, and it adds no root plumbing for one.
 
 The built-in Implementer continues to commit in one persistent Managed Worktree and invoke Change Submission through the `by` CLI.
 A later Candidate for the same Change is another immutable committed state from that same implementation lineage, not another Managed Worktree.
@@ -120,7 +121,8 @@ The boundary change must make this behavior depend only on Change-owned Acceptan
 
 The Change retains its immutable initial Acceptance Context, and each approved Resolution remains on its Implementation Blocker.
 The current Acceptance Context is derived by applying those ordered Resolutions rather than updating a second stored copy.
-Each Validation Run retains the exact resulting Acceptance Context it used in its immutable Validation Policy Snapshot.
+Each Validation Run retains the exact resulting Acceptance Context it used in its immutable Validation Input Snapshot.
+The Validation Input Snapshot does not duplicate the frozen Change reviewer policy.
 
 ### Candidate selection, validation, and Acceptance Review
 
@@ -128,10 +130,10 @@ After Change Start, Candidate selection, Submission, Validation, and Acceptance 
 They use the Acceptance Context captured on the Change.
 
 Candidate selection records the exact Change, fetched Change Base commit, and Repository Branch head commit.
-Validation start currently copies the current Change Acceptance Context into the Validation Policy Snapshot and records the exact Candidate, Implementation Decisions, Blocker history, and latest resolved Blocker identity required by current validation rules.
+Validation start stores the current Change Acceptance Context in the immutable Validation Input Snapshot and records the exact Candidate, Implementation Decisions, Blocker history, and latest resolved Blocker identity required by current validation rules.
 The replacement baseline stores the highest included Decision and Blocker IDs; because Blockers cannot overlap and Validation cannot start with an unresolved Blocker, the highest included Blocker also identifies the latest Resolution.
-The Acceptance Reviewer receives that copied Acceptance Context with the Candidate, Decisions, Blocker history, prior Findings, and Artifact references.
-Validation Run inspection exposes the retained policy snapshot.
+The Acceptance Reviewer receives that retained Acceptance Context with the Candidate, Decisions, Blocker history, prior Findings, and Artifact references.
+Validation Run inspection exposes the retained validation input snapshot without repeating reviewer policy.
 
 The main implementation owners are:
 
@@ -248,7 +250,7 @@ Task Review also depends on infrastructure currently shared with Change Delivery
 - Structured CLI output.
 
 The completed BY-269, BY-271, and BY-275 work supplies the ownership, identity, and Agent Session direction for the final `0001_baseline`.
-BY-274 acceptance is limited to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
+BY-274 acceptance is limited to the exact baseline implementation and disposable tests of candidate source or package artifacts before merge.
 The remaining live operator cutover is separately authorized after acceptance and does not create a second Task or product feature.
 Merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization, so live post-reconcile verification is not a Task completion condition.
 The live pause, reconciliation, archive, fresh-init, and recovery sequence must complete successfully before post-baseline sequencing resumes.
@@ -281,7 +283,7 @@ Change Start stores that content as the initial Acceptance Context while the sam
 Tasks own Task Review, approval, readiness, and the exact context eligible to start a Change.
 Changes do not independently review Task intent or reinterpret Task readiness.
 After Change Start, implementation and validation read the Change-owned Acceptance Context rather than mutable live Task Context.
-Validation Policy Snapshots retain the exact complete Acceptance Context used by each Validation Run.
+Validation Input Snapshots retain the exact complete Acceptance Context used by each Validation Run without duplicating the frozen Change reviewer policy.
 
 The initial boundary has no portable transfer artifact, compatibility envelope, digest, Intent Reference, approval signature, or external approval claim.
 A future external Task backend must justify any additional boundary contract when it becomes supported.
@@ -294,7 +296,12 @@ This behavior needs no separate request identifier or retry protocol.
 ### Change-owned authority after Change Start
 
 The initial Acceptance Context and approved Change-owned Resolutions are authoritative for that Change.
+Change Base remains the Git target rather than a workspace or scratch tree.
+At Change Start, the workflow reads the Change Base Repo Config and configured policy text directly from that Git target once.
+The complete Change policy freezes for the short Change lifetime, and Submit does not reread policy.
 Validation must use the exact current Acceptance Context version retained by Changes and must not read mutable live Task content.
+Validation skills and extensions resolve only from packaged resources or Global resources.
+Change Base and Candidate content do not supply Validation skills or extensions.
 
 A Task link always requires the Change to retain the approved Task intent as initial Acceptance Context.
 A Change without a Task has no Acceptance Context and validates existing committed work without implementation intent.
@@ -325,8 +332,8 @@ Accepted planning direction:
   Changes retain the initial Acceptance Context and the Resolution lineage so delivery evidence does not imply that Task Review approved later amendments.
   The first boundary change does not write those Resolutions back to the Task.
   Later Task and Change coordination may surface them to Tasks without making that behavior part of initial Change execution.
-- **Resolved planning direction:** At Validation Run start, the complete current Acceptance Context is stored in the immutable Validation Policy Snapshot.
-  The Acceptance Reviewer input is built from that retained content.
+- **Resolved planning direction:** At Validation Run start, the complete current Acceptance Context is stored in the immutable Validation Input Snapshot.
+  The Acceptance Reviewer input is built from that retained content without rereading Change policy.
   The existing `version: 1` identifies the stored format rather than a separate Acceptance Context revision.
   No digest or separate revision identifier is required.
 
@@ -350,6 +357,7 @@ Task and Change composition connects narrow transaction-bound Task, Change, and 
 The workflow calls those narrow operations without receiving raw SQL or concrete Adapters.
 Each Adapter accesses only its owner's tables, and any failure rolls back the complete coordinated update.
 The current Adapters that open their own transactions must be split into transaction wrappers and transaction-bound operations where coordination requires them.
+Existing Adapter, SQL, and module cleanup remains a post-baseline investigation rather than a first-release cutover requirement.
 A future external Task backend must define its own completion and recovery contract when that backend becomes supported.
 
 ## Boundary cleanup
@@ -374,7 +382,7 @@ The cleanup inventory must cover implementation, persistence, migrations, CLI co
 Do not treat the boundary change as moving `src/task/` alone.
 Place cross-domain application operations under `src/taskChange/` without naming a generic coordination service.
 BY-274 does not require moving working owner-specific SQLite Adapters from the flat `src/sqlite/` area.
-Adapter relocation, SQL ownership enforcement, and general cleanup are deferred to `post-baseline-hardening.md`, where their final scope and verification can be bounded against the baseline.
+Existing Adapter relocation, SQL ownership enforcement, and module cleanup are deferred to `post-baseline-hardening.md`, where their final scope and verification can be bounded against the baseline.
 Keep shared database lifecycle and immutable ordered migrations under Repository Runtime.
 Tasks and Changes currently share repository and agent infrastructure.
 The design must inspect ownership of:
@@ -397,8 +405,9 @@ Tasks and Changes retain ownership of agent roles, instructions, supplied author
 A Review remains a Task- or Change-owned use of Agent infrastructure rather than a shared Agent-infrastructure domain concept.
 The visible Implementer session remains separate from shared headless Agent Invocation.
 Changes own implementation behavior, and `InteractiveSessionHost` owns Herdr launching.
-Exact-commit disposable Snapshot Workspaces remain shared infrastructure behind a narrow workspace interface used by Task Review and Change Validation.
-They remain separate from the Change-owned persistent Managed Worktree.
+Task Review and Candidate execution workspaces remain distinct disposable workspaces behind a narrow shared workspace interface.
+They remain separate from the Change-owned persistent Managed Worktree and any Change Base scratch or file tree.
+Their exact review or Candidate provenance and owner-held cleanup obligations remain real, inspectable boundaries.
 Repository Runtime reads repository and global configuration, including the configured Repository Preparation command.
 Shared Repository Preparation executes that command through a narrow interface.
 Tasks and Changes decide when preparation is required and how its failure affects their workflows.
@@ -407,9 +416,10 @@ Repository initialization stores it in Shared Repository State, where it remains
 Because But Why is unreleased, the first-release configuration uses only `idPrefix`, rejects conflict with initialized state, and provides no `taskPrefix` compatibility behavior.
 Tasks and Changes select and store the resolved Agent Profile required by their reviewer policy.
 A Task stores its resolved Task Reviewer configuration when its Task Reviewer Agent Session first launches.
-A Change fixes its reviewer roster and stores all resolved role configurations at Change Start, even though their Agent Sessions are created lazily.
-The approved no-conversation `launch_failed` correction may replace only the affected owner-role configuration and never changes the Change roster.
-After a conversation is established, later Repo or Global Config changes do not alter that stored owner-role configuration.
+A Change fixes its complete policy, reviewer roster, and all resolved role configurations at Change Start, even though its Agent Sessions are created lazily.
+Validation skills and extensions come only from packaged resources or Global resources.
+A Change reviewer configuration has no post-Start replacement path.
+After Change Start, later Repo or Global Config changes do not alter the frozen Change policy or its stored owner-role configuration.
 Agent infrastructure applies the stored profile as the exact Pi model, tools, skills, extensions, and runtime settings.
 
 Tasks, Changes, and Task and Change operations define their own result data.
@@ -418,7 +428,7 @@ CLI modules only map commands to supported operations and their results.
 Public output may retain lifecycle fields derived from authoritative owner data: Change derives `open` or `closed` from its close reason, and Task Review and Validation Run derive `active` or `complete` from nullable outcome.
 Public histories use immutable integer order and do not retain creation, update, closure, or age fields whose source timestamps are removed.
 Task Review and Validation Run inspection expose exact Agent Invocation evidence and join their owner's effective reviewer configuration without copying it into the Review or Run.
-Snapshot Workspace inspection may expose its deterministic derived path together with cleanup evidence even though the path is not stored.
+Task Review and Candidate execution workspace inspection exposes exact path, state, provenance, cleanup obligation, and blocking reason for recovery.
 
 The existing `by change start` command remains one command.
 With `--task`, it selects Task and Change coordination.
@@ -465,7 +475,7 @@ The boundary is sufficient only when all of these paths are practical through on
 4. **Complete:** Define and review coordinated Task and Change completion.
 5. **Complete:** Inventory shared infrastructure and define the module dependency rules.
 6. **Complete (BY-275):** BY-275 completed the Agent Session and Agent Invocation design prerequisite for the first-release database baseline.
-7. **Remaining (BY-274):** Complete the exact first-release baseline implementation, verified old bundle, and successful disposable rehearsal, then separately authorize the live operator cutover.
+7. **Remaining (BY-274):** Complete the exact first-release baseline implementation and disposable tests of candidate source or package artifacts before merge, then separately authorize the live operator cutover.
    Do not import or convert old data, add intermediate persistence migrations, or move working internal code unless the final schema, retired representation removal, or supported behavior requires it.
    Candidate Publication presentation remains deferred and adds any later storage through a normal post-baseline migration.
 8. Reassess the release and Global Watcher plans against the accepted boundary.

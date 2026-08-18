@@ -10,7 +10,7 @@ It is not implementation authority.
 ## Outcome
 
 BY-269 and BY-271 are completed planning and implementation predecessors, and BY-275 is the completed Agent Session prerequisite, for the direct BY-274 baseline cutover.
-BY-274 acceptance is limited to exact baseline implementation, verified old-bundle evidence, and successful disposable rehearsal.
+BY-274 acceptance is limited to the exact baseline implementation and disposable tests of candidate source or package artifacts before merge.
 The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
 Live post-reconcile verification is not a Task completion condition, and post-baseline sequencing resumes only after successful live operation.
 Task Review and Change reviewers use shared Agent Session and Agent Invocation capabilities for mechanics they currently share.
@@ -39,14 +39,18 @@ When no continuation exists, dispatch creates one; when the current continuation
 Past Invocations and continuations remain history without separate replacement metadata.
 
 The owning domain resolves and stores the Agent Profile, role instructions, Agent Environment, tools, skills, and extensions once for the applicable owner lifecycle.
-A Task stores this configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
+Validation skills and extensions resolve only from packaged resources or Global resources.
+Change Base and Candidate content do not supply Validation skills or extensions.
+Change Start reads the Change Base Repo Config and configured policy text directly from the Git target once.
+A Change freezes its complete resolved policy for its short lifetime, and Submit does not reread policy.
+A Task stores its Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
 A Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
 These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
 Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
 Later Repo or Global Config changes do not alter those stored configurations, add or remove Change reviewers, or replace a usable continuation.
 The owning domain validates a resolved snapshot before storage.
-A retry may replace only that owner-role configuration from corrected current config when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
-Replacement never changes the Change reviewer roster.
+A Task Reviewer retry may replace only the Task owner-role configuration when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
+A Change reviewer configuration has no post-Start replacement path.
 Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
 Missing or unusable transcript recovery creates a replacement continuation with that same configuration rather than adopting later config.
 Every later Invocation and replacement continuation for that owner-role Agent Session uses the stored configuration.
@@ -183,16 +187,15 @@ Task or Change composition connects its domain operation with narrow transaction
 Agent infrastructure does not access Task or Change tables.
 A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
-The direct BY-274 baseline needs durable representation for logical sessions, physical continuations, and Invocations because they have distinct write and recovery lifecycles.
+The direct BY-274 baseline needs durable representation for logical sessions, physical continuations, Invocations, and the frozen Change policy because they have distinct write and recovery lifecycles.
 Existing Reviewer Session records remain read-only legacy evidence until the old state is archived because they lack the per-call facts needed to reconstruct exact Invocations honestly.
 No old Reviewer Session record is imported or converted into the new baseline.
 All new reviewer work writes only the Agent Session representation.
 The final baseline and released executable remove legacy Reviewer tables and readers after the archive preserves the old evidence.
 Working internal Agent Session code remains in place unless the final schema, retired legacy representation removal, or supported behavior requires a change.
-Adapter relocation and general cleanup remain post-baseline hardening work.
+Adapter relocation, SQL ownership enforcement, and module cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
-BY-274 acceptance verifies the old Pinned Predecessor Executable and a successful disposable rehearsal before the separately authorized live operator cutover.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
 
@@ -223,7 +226,7 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 - Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
 - Invocation and transcript evidence is limited to the fields defined above, including `cacheRead` and `cacheWrite` token evidence; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
-- Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying configuration into each Review or Run.
+- Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying reviewer policy into each Review or Run.
 - Retire generic Reviewer Session, transcript-array, per-Review policy, and reviewer execution-summary presentation in favor of owner-role configuration, Agent Session, continuation, Invocation, domain Tooling Failure, and cleanup evidence.
 - The direct BY-274 baseline conforms to this exact physical schema without importing or converting legacy Reviewer records.
 

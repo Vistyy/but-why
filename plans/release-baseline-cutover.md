@@ -14,12 +14,18 @@ BY-271 completed internal Task and Change identities, immutable table-local nume
 BY-275 completed the shared Agent Session and Agent Invocation design used by the final baseline.
 BY-274 is the one remaining direct implementation Change for the first-release baseline and operational state cutover.
 The first public release initializes Shared Repository State from one reviewed `0001_baseline` that represents only the supported `0.1.0` system.
+The built package installed globally is the released and live-state executable.
+Candidate source or package artifacts run only in disposable tests until their Change merges.
+No canonical-main executable or configuration authority, or root plumbing for one, is part of the product.
 The prerelease migration chain and database representation are retired at the release boundary rather than supported through compatibility behavior.
 All migrations after the release baseline are immutable, ordered, and forward-only.
 
 ## Baseline rules
 
 - Construct `0001_baseline` from the accepted final domain model.
+- Use the globally installed built `by` executable for released and live-state operations.
+- Keep candidate source and package artifacts inside disposable tests until their Change merges.
+- Do not use a canonical-main executable or configuration authority for product operations.
 - Do not concatenate historical migrations or blindly copy `sqlite_schema`.
 - Do not ship prerelease import behavior, migration shims, ledger rewriting, or compatibility for the retired prerelease database.
 - Use plain `CREATE TABLE` statements so unexpected existing objects fail initialization.
@@ -75,7 +81,7 @@ Final physical schema and settled contracts:
   Store the repository's immutable `id_prefix` once in `shared_state_identity` and derive public Task and Change IDs at the application boundary as `<id-prefix>-<task-number>` and `<id-prefix>-C<change-number>`.
   Use integer foreign keys internally and do not store duplicated public ID strings on domain rows.
   Repository initialization freezes `id_prefix`; opening Shared Repository State rejects a conflicting configured `idPrefix` with actionable failure behavior.
-  Keep Change Repository Branch, Change Base ref and remote URL, Managed Worktree path, optional initial Acceptance Context, reviewer configuration snapshot, closure fields, and cleanup obligation directly on `changes`.
+  Keep Change Repository Branch, Change Base ref and remote URL, Managed Worktree path, optional initial Acceptance Context, frozen Change policy representation, closure fields, and cleanup obligation directly on `changes`.
   Keep the optional one-to-one Task relationship only in `task_change_links`.
   Keep Decisions, Blockers, Candidates, Validation Runs, and GitHub Publication in their owner-specific history or operation tables.
   Do not store the starting commit, Git Common Directory, mutable current Acceptance Context, Current Candidate pointer, or Active Validation Run pointer on Change.
@@ -87,21 +93,27 @@ Final physical schema and settled contracts:
   Candidate therefore represents one selected committed-state occurrence, not the unique identity of a commit pair across the complete Change history.
   Do not add a uniqueness constraint across Change and commit pair.
   Index `(change_id, id DESC)` to find the Current Candidate and list Candidate history by immutable Candidate order.
-- Store only Snapshot Workspace cleanup obligation on its Task Review or Validation Run and do not retain a separate workspace table or stored Snapshot Workspace path.
-  Derive and verify the exact deterministic path from the canonical main checkout and Review or Validation Run ID before cleanup.
-  Derive a Validation Snapshot Workspace's expected commit from its immutable Candidate.
+- Retain distinct Task Review and Candidate execution workspaces with real state, exact provenance, actual recovery identity, and owner-held cleanup obligations.
+  Task Review workspace state remains with its Task Review evidence.
+  Candidate execution workspace state remains in an owner-scoped recovery representation linked to its Validation Run.
+  Derive and verify deterministic workspace paths only where the supported recovery contract guarantees derivation.
   Continue storing the Change Managed Worktree path because Change recovery preserves its originally recorded location.
+  Do not collapse execution workspaces into the Change Managed Worktree or create a Change Base scratch or file tree.
 
 - Derive an Active Validation Run by selecting a Validation Run with no outcome through its Candidate and Change.
   The immediate SQLite start transaction checks the complete Change for any unfinished Run, confirms the selected Candidate is current, and creates the new Run atomically.
   Do not add an Active Validation Run table, Change pointer, or per-Candidate partial uniqueness index.
 - Require every Change to be created through Change Start with a Repository Branch, Change Base ref and remote URL, and Managed Worktree path.
-  Resolve and validate the reviewer configuration from Repo Config at the exact starting commit, current Global Config, and their resolved guidance and resources before creating the Change.
-  Invalid reviewer configuration rejects Start without creating a Change.
-  After Git intent and reviewer configuration resolve, Task and Change coordination atomically creates the Change, its reviewer configuration snapshot, and its optional Task link.
+  Treat Change Base as the Git target for Change Start and later Candidate operations.
+  Read the Change Base Repo Config and configured policy text directly from that Git target once at Change Start.
+  Resolve and validate the complete Change policy from that input and allowed Global and packaged resources before creating the Change.
+  Validation skills and extensions resolve only from packaged resources or Global resources.
+  Change Base and Candidate content do not supply Validation skills or extensions.
+  Invalid Change policy rejects Start without creating a Change.
+  After Git intent and Change policy resolve, Task and Change coordination atomically creates the Change, its frozen policy representation, and its optional Task link.
   Managed Worktree provisioning and Repository Preparation then run against the durable Open Change.
   Their failure preserves the Change and intended Managed Worktree path for supported retry.
-  Later Candidate configuration may change per-Run Prepare and Checks but cannot change the Change reviewer roster or configuration.
+  The complete Change policy remains frozen for the short Change lifetime, and Submit does not reread policy.
   Candidate capture operates only on an existing Open Change and does not implicitly create one.
   This first-release requirement applies to the current local Managed Worktree model and does not define a future cloud Implementer contract.
 - Do not persist the Change starting commit after Change Start.
@@ -112,6 +124,7 @@ Final physical schema and settled contracts:
   Derive the current Acceptance Context by applying ordered Resolutions rather than storing a mutable second copy on the Change.
   For a Change without a Task, a Resolution unblocks implementation but does not create Acceptance Context or cause Acceptance Review to run.
   Each Validation Run retains the exact resulting Acceptance Context it reviewed when one exists.
+  Its immutable Validation Input Snapshot does not duplicate the frozen Change reviewer policy.
 - Keep the core Change representation independent of GitHub.
   Store current GitHub-specific delivery evidence in a separate one-to-zero-or-one `github_publications` table with the internal integer `change_id` as its primary key.
   Do not add a separate publication ID because no current record references Publication independently.
@@ -138,9 +151,9 @@ Final physical schema and settled contracts:
   A partial unique index on `task_reviews.task_id` where `outcome IS NULL` enforces at most one Active Task Review per Task.
 - Remove Task and Change `created_at` and `updated_at`, and remove Change `closed_at`.
   Their repository-local numeric IDs already provide creation order, and no supported operation requires those event times.
-- Represent each Change, Task Review, and Validation Run cleanup obligation directly with `cleanup_pending` and nullable `cleanup_blocking_reason` on its owning row.
-  Owner operations create, clear, or retain that obligation and its actionable failure reason.
-  Do not add cleanup timestamps, separate cleanup tables, or SQLite field-combination constraints.
+- Represent each Change, Task Review, Validation Run, and Candidate execution workspace cleanup obligation at its owning state boundary with actionable failure evidence.
+  Owner operations create, clear, or retain each obligation and its actionable failure reason.
+  Do not add cleanup timestamps or broad defensive constraints.
 - Store immutable Task Review Findings as an ordered JSON value and its optional Tooling Failure as one embedded value on the Task Review.
   Do not retain separate Task Review Findings or Tooling Failures tables.
 - Store a phase- or producer-specific Validation Tooling Failure on its `validation_phase_results` row.
@@ -162,14 +175,13 @@ Final physical schema and settled contracts:
   The Task stores its resolved Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
   The Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
   These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
-  Validate a resolved snapshot before storage.
-  Later Repo or Global Config changes do not alter stored configurations after a usable continuation exists, and replacement continuations reuse them.
-  A retry may replace only that owner-role configuration from corrected current config when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
-  Replacement never changes the Change reviewer roster.
-  Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
-  Missing or unusable transcript recovery uses that same configuration.
+  Validate the complete resolved Change policy before storage.
+  The frozen Change policy includes Repository Preparation, Checks, reviewer configuration, configured policy text, and allowed Agent resources.
+  Later Repo or Global Config changes do not alter the frozen Change policy or its replacement continuations.
+  A Change reviewer configuration has no post-Start replacement path.
+  Missing or unusable transcript recovery uses the stored Change configuration.
   Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
-  Prepare, Checks, Acceptance Context, and the output contract remain captured independently for each Validation Run rather than being frozen at Change Start.
+  Each Validation Run captures its exact Candidate, resulting Acceptance Context, Change evidence, and phase inputs without copying reviewer policy or rereading Change policy.
   For first-release Pi, store the nullable transcript-relative path and nullable unusable reason on its physical continuation and do not retain a separate transcript-reference table.
   A continuation is resumable only when its transcript path is present and no unusable reason is recorded.
   Do not add a replacement pointer, generic continuation status, or superseded timestamp.
@@ -223,8 +235,7 @@ Final physical schema and settled contracts:
   Do not expose compatibility fingerprint, continuity, review-call count, or aggregate reviewer duration.
   Each Invocation projection identifies its Invocation, Agent Session, and continuation; the continuation Agent Harness, nullable model provider, model, and nullable thinking level; dispatch and settlement timestamps; settlement kind; nullable all-or-none input, `cacheRead`, `cacheWrite`, output, and total token usage; transcript-relative path; and unusable reason.
   Keep command-duration evidence when it describes an actual check execution.
-- Snapshot Workspace inspection may expose its deterministic derived path for recovery, but the path is not persisted.
-  Continue exposing its cleanup obligation and blocking reason.
+- Task Review and Candidate execution workspace inspection exposes its exact path, state, provenance, cleanup obligation, and blocking reason for recovery.
 - Retain only indexes justified by current predicates, ordering, uniqueness, or active-row invariants.
 
 The preceding physical choices are exact BY-274 schema contracts.
@@ -239,8 +250,9 @@ The `changes` table contains:
 - Required `base_ref` and `base_remote_url`.
 - Required unique `worktree_path`, which records the intended location before provisioning so failure remains retryable.
 - Nullable `initial_acceptance_context` JSON.
-- Required `reviewer_configuration` JSON containing the fixed roster and each role's resolved configuration at Change Start, subject only to the approved pre-conversation role-configuration correction.
+- Required `reviewer_configuration` JSON containing the fixed roster, each role's resolved configuration, configured policy text, and allowed Agent resources at Change Start.
 - Nullable `prepare_definition` JSON that freezes the exact Repository Preparation command and timeout for retry.
+- Nullable `checks_definition` JSON that freezes the exact configured Checks for the Change lifetime.
 - Nullable `prepare_failure` JSON containing the latest retained preparation failure evidence.
 - Nullable `close_reason` and `cancel_reason`.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
@@ -269,12 +281,14 @@ The `task_reviews` table contains:
 - Required integer `task_id` foreign key.
 - Required `proposal` and `dependency_evidence` JSON snapshots.
 - Required `base_ref` and `base_commit`.
+- Required Task Review execution workspace identity, path, state, and cleanup evidence.
 - Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
 - Required ordered `findings` JSON and nullable `tooling_failure` JSON.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
 
 A partial unique index on `task_reviews.task_id` where `outcome IS NULL` permits at most one Active Task Review per Task.
-The Task Review row does not store lifecycle state, reviewer policy, Snapshot Workspace path, reviewer aggregates, abandonment reason, or timestamps.
+The Task Review row does not store a separate lifecycle state, reviewer policy, reviewer aggregates, abandonment reason, or timestamps.
+Its execution workspace state remains part of its owner-held cleanup boundary.
 `task_review_agent_invocations` contains required integer `task_review_id` and `agent_invocation_id` foreign keys with their pair as its primary key.
 Invocation ID supplies their order.
 
@@ -293,7 +307,7 @@ The `validation_runs` table contains:
 
 - `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
 - Required integer `candidate_id` foreign key.
-- Required immutable `policy_snapshot` JSON.
+- Required immutable `validation_input_snapshot` JSON containing the exact Acceptance Context and Change evidence used by the Validation Run, without duplicated reviewer policy.
 - Nullable integer `highest_decision_id` and `highest_blocker_id` foreign keys.
 - Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
 - Nullable `run_tooling_failure` JSON.
@@ -308,6 +322,9 @@ It stores no round number, state, or timestamps.
 `validation_phase_agent_invocations` contains required integer `validation_run_id`, required `phase` and `producer`, and required integer `agent_invocation_id` foreign key.
 Its primary key is `(validation_run_id, phase, producer, agent_invocation_id)` so correction and recovery Invocations remain ordered by Invocation ID.
 It links before dispatch without requiring a Phase Result row.
+
+`candidate_snapshot_workspaces` contains the Validation Run, exact expected Candidate commit, workspace identity and path, workspace state, and cleanup evidence needed for recovery.
+The Candidate execution workspace record is removed only after successful cleanup.
 
 `agent_sessions` contains only a SQLite-allocated safe positive `id INTEGER PRIMARY KEY`.
 Owner and role remain in domain-owned links.
@@ -399,6 +416,7 @@ Changes own:
 - `implementation_blockers`.
 - `candidates`.
 - `validation_runs`.
+- `candidate_snapshot_workspaces`.
 - `validation_phase_results`.
 - `validation_phase_agent_invocations`.
 - `change_agent_sessions`.
@@ -417,7 +435,7 @@ Effect SQL retains its dependency-owned migration ledger.
 
 BY-269 completed the Task and Change coordination boundary, and BY-271 completed the internal numeric identity and operational naming direction described above.
 BY-274 is the one remaining direct Change that establishes the final `0001_baseline` and retires the prerelease representation at the release boundary.
-BY-274 acceptance is bounded to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
+BY-274 acceptance is limited to the exact baseline implementation and disposable tests of candidate source or package artifacts before merge.
 The BY-274 Change must use the approved final physical model without introducing intermediate persistence migrations or splitting implementation into intermediate Tasks.
 
 The BY-274 acceptance must:
@@ -429,28 +447,30 @@ The BY-274 acceptance must:
 - Preserve the domain `input`, `cacheRead`, `cacheWrite`, `output`, and `total` token evidence and its five physical all-present-or-all-absent columns.
 - Preserve independently settled phase results, pre-dispatch phase Invocation links, exactly-once Invocation settlement, correction and recovery Invocations, and their exact token evidence.
 - Preserve owner-held cleanup obligations and retryable Terminal Cleanup, exact Candidate and Validation Run agreement for Publication, and exact merged completion through Task and Change coordination.
-- Preserve the read-only legacy Reviewer boundary until the old state is archived, then leave legacy records in that archive rather than importing or converting them.
+- Preserve distinct Task Review and Candidate execution workspaces with exact provenance and owner-held cleanup obligations.
+- Preserve the read-only legacy Reviewer boundary until the old state is renamed into its archive, then leave legacy records in that archive rather than importing or converting them.
 - Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for historical legacy records and the fixed configuration required for new Change reviewers.
-- Defer Adapter relocation, SQL ownership enforcement, and general cleanup to `post-baseline-hardening.md`.
-- Build and verify the exact old Pinned Predecessor Executable, record its Git commit and SHA-256, and complete the predecessor rehearsal successfully on a disposable repository.
+- Defer existing Adapter relocation, SQL ownership enforcement, and module cleanup to `post-baseline-hardening.md`.
+- Run candidate source and package artifact tests only in disposable repositories before merge.
 
 Every BY-274 Task Context must enumerate the required final-schema changes, retired representations, supported behavior changes, and BY-274 acceptance evidence.
 If implementation discovers necessary work outside that scope, the Implementer must raise an Implementation Blocker before performing or deferring it.
 The Operator decides whether to amend BY-274 or create another bounded Task before acceptance.
 
 BY-274 acceptance does not include the live operator cutover.
-After the merged Change is reconciled in the old state, that reconciliation closes the Change and marks the BY-274 Task Done before archive or fresh initialization.
-The immediately following live operator cutover is separately authorized, is not a second Task or product feature, and is not a condition of BY-274 Task completion.
+The separately authorized live operator cutover follows acceptance and does not create a second Task or product feature.
+The planning update leaves current documentation untouched until implementation changes the supported system.
 
 ## Verification allocation
 
 The BY-274 Change runs the repository's complete required check suite through the owning workflow.
 Acceptance verification must establish the final schema inventory, exact ordered baseline ledger behavior, numeric ID and ordering contracts, retained supported behavior, and removal of retired prerelease representations from the released executable.
 Acceptance verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy read-only evidence, reviewer configuration snapshots, and operational naming behavior.
-Acceptance verification must verify the exact old Pinned Predecessor Executable and successful disposable rehearsal.
+Acceptance verification must cover Task Review and Candidate execution workspace provenance and cleanup boundaries.
+Candidate source and package artifact verification must run only in disposable repositories before merge.
 Live archive, fresh-initialization, and post-reconcile verification are separate operator-cutover evidence and cannot determine BY-274 Task completion.
 Do not add verification for importing, converting, or upgrading the retired prerelease database.
-Adapter relocation, SQL ownership enforcement, and general cleanup are post-baseline hardening concerns rather than BY-274 acceptance gates.
+Existing Adapter relocation, SQL ownership enforcement, and module cleanup are post-baseline hardening concerns rather than BY-274 acceptance gates.
 
 Real SQLite integration tests verify coordination behavior.
 Do not add custom source-scanning tests that duplicate existing architecture checks.
@@ -460,22 +480,29 @@ The live operator cutover follows BY-274 acceptance as a separately authorized o
 ## Prerelease archive
 
 The existing prerelease Shared Repository State remains useful historical evidence but does not need to remain executable by `0.1.0`.
-Archive the complete prerelease operational state separately rather than preserving only `state.sqlite`.
-The archive preserves the old executable revision and sufficient identity and integrity evidence to inspect the historical state reliably.
-It includes the complete Git Common Directory But Why state, repository reviewer files, archive timestamp, repository identity, a SHA-256 manifest, and short instructions for inspecting a copy with the old executable revision.
-It needs no special archive format or signature.
-The released `by` CLI does not read or import the prerelease archive.
+Rename the complete prerelease operational state after the old executable reconciles the merged Change and before fresh initialization.
+The renamed archive includes the complete Git Common Directory But Why state, repository reviewer files, archive time, repository identity, and short inspection instructions.
+The archive has no executable or configuration authority in the released product.
+The released `by` CLI does not read or import the renamed archive.
 
-Keep the existing loose SQLite backups until the final prerelease archive is verified.
-After verification, remove those loose copies and retain only the new active `state.sqlite` and the single final prerelease archive.
+Remove loose state copies after the renamed archive is confirmed and retain only the new active `state.sqlite` and the renamed historical state.
 
 ## Separately authorized live operator cutover
 
-This live operation may begin only after BY-274 acceptance, including the verified old bundle and successful disposable rehearsal, is complete.
+This live operation may begin only after BY-274 acceptance is complete.
 It is separately authorized after acceptance, is not a second Task or product feature, and does not change the BY-274 completion condition.
-Only implementation work required for the direct BY-274 cutover should be recorded in the prerelease database.
+Pause all But Why opens and writes before the transition begins.
+The exact transition order is:
+
+1. Use the old globally installed built `by` executable to reconcile the exact merged BY-274 Change against the old state.
+2. Install the exact merged package globally.
+3. Rename the old Shared Repository State and associated historical files into the prerelease archive.
+4. Initialize new Shared Repository State with the newly installed `by` executable and fresh `0001_baseline` state, then run the new executable's smoke checks before resuming operations.
+
+The old executable reconciliation closes the merged Change and marks the BY-274 Task Done in old state before the old state is renamed.
+Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-baseline work may resume only after the new initialization and smoke checks succeed.
+Only implementation work required for the direct BY-274 cutover should be recorded in the old state before the transition.
 Do not record intermediate persistence work or later release work in the old state.
-Record Candidate Publication presentation, release reassessment, Global Watcher reassessment, and other post-baseline work only after the live operator cutover succeeds and the new baseline state is active.
 
 ### Deferred Candidate Publication presentation Task
 
@@ -485,38 +512,17 @@ The behavior must use the configured publication remote, support initial, revise
 It must not write VS Code GitHub Pull Requests extension metadata or depend on that extension's private state.
 Verification must use standard Git upstream inspection and confirm that the remote commit is unchanged.
 
-## BY-271 authority retired by BY-274
+## Current documentation during planning
 
-Current `docs/tooling.md` contains the BY-271-specific `taskPrefix`-compatible Repo Config overlay and Task 7 predecessor language for prerelease reconciliation.
-That guidance is current BY-271 authority, not a new BY-274 contract.
-BY-274 must retire the overlay and Task 7 language after the final predecessor procedure, preserve and verify the unchanged merged `idPrefix` Repo Config, and must not install a `taskPrefix` overlay.
-This documentation edit does not change `docs/tooling.md`.
+Current documentation may still describe the source bootstrap path and earlier prerelease operation.
+This planning update does not edit current documentation.
+Implementation updates current documentation only after the supported product behavior changes, including the BY-C262 removal of the source bootstrap path.
 
-The archive preserves old Task and Change history, but the new database does not import or convert it.
-Before merging BY-274, build the final Pinned Predecessor Executable from canonical `main` as a pinned production bundle outside the checkout, record its Git commit and SHA-256, and verify that exact bundle on a disposable repository.
-The coding agent performs the approved commands on the Operator's behalf and does not add product maintenance mode or distributed locking for this cutover.
-Then:
-
-1. Submit and merge BY-274 while the canonical main checkout still selects the final predecessor for prerelease state operations.
-2. Pause all But Why opens and writes, including ordinary Shared Repository State reads and writes, before exact predecessor reconciliation.
-3. Verify while paused that the merged `main` commit contains the exact approved `idPrefix` Repo Config, record its value, and reject any change to that value through reconciliation, archive, and fresh initialization.
-4. Verify while paused that no BY-271 `taskPrefix`-compatible Repo Config overlay is installed.
-5. Use the pinned predecessor once to reconcile the exact merged BY-274 Change against the old database while the pause remains in force.
-The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
-6. Keep all But Why opens and writes paused while archiving the old operational state, including the Git Common Directory state and repository reviewer files.
-7. Keep the pause in force through fresh initialization of the new Shared Repository State from merged `main` with the BY-274 executable and fresh `0001_baseline` state.
-8. Verify the new Trusted But Why Executable and state, then end the pause and resume development in the new state.
-Live post-reconcile, archive, and fresh-state verification cannot determine BY-274 Task completion because the merged Change was already reconciled and marked Done in old state.
-Post-baseline Task recording and plan-removal sequencing may resume only after this live operation succeeds.
-
-Verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
-If predecessor reconciliation fails, keep the pause in force, do not archive or initialize, and recover the old state before proceeding.
-If later live verification fails before new work is recorded, the Operator manually restores use of the preserved old state.
+Verification is bounded to old executable reconciliation, the renamed historical state, the new baseline migration, repository identity, and new executable smoke checks.
+If old executable reconciliation fails, keep the pause in force and recover the old state before proceeding.
+If new initialization or smoke checks fail, keep the pause in force and recover through the preserved old state before recording new work.
 After new work is recorded, fix the new state forward and do not merge old and new databases.
 Do not add released rollback or database-conversion commands for this one-time cutover.
-
-A fresh clone may be used for initialization as an operational safety convenience, but it is not required.
-The exact manual operational procedure remains unresolved.
 
 ## Verification direction
 
@@ -536,8 +542,8 @@ Remove verification whose only claim is upgrading or transforming a retired prer
 
 ## Authority change
 
-The planned BY-274 Change explicitly retires and deletes the prerelease migration files, registration, upgrade tests, and active support after the old state is archived.
-Git history and the prerelease archive preserve the old executable revision and migration chain for inspection.
+The planned BY-274 Change explicitly retires and deletes the prerelease migration files, registration, upgrade tests, and active support after the old state is renamed into the archive.
+Git history and the renamed prerelease archive preserve the historical state and migration chain for inspection.
 The new database does not import or convert the archived records.
 This is an accepted one-time exception to ADR 0009's current consequence that the first release ships the complete prerelease chain.
 ADR 0009's governing decision remains applicable: migrations are immutable and schema changes use ordered forward migrations.
@@ -547,10 +553,10 @@ Do not change current architecture or ADR authority before implementation.
 
 ## Implementation-time procedure
 
-Define and test the exact manual trusted-executable cutover commands during baseline implementation, when the implemented baseline CLI and archive layout are available.
-Keep the procedure direct: verify the commands on a disposable repository, present the exact destructive step for one confirmation, and then execute the approved procedure on the Operator's behalf.
-Store the old-state inspection instructions in the archive.
-Do not add product cutover, rollback, or prerelease conversion commands.
+Define the exact direct cutover commands during baseline implementation, when the implemented baseline CLI and archive layout are available.
+Run candidate source or package artifact tests only in disposable repositories before merge.
+Store the old-state inspection instructions in the renamed archive.
+Do not add alternate cutover machinery or released conversion commands.
 
 ## Authorization status
 

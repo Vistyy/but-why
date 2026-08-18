@@ -178,18 +178,19 @@ If a category is truncated, the prompt identifies the omitted category and amoun
 
 ## Agent configuration and continuity
 
-The PR presentation agent has its own optional Agent Profile selection under publication configuration.
-It resolves from Repo Config, then Global Config, then the Global default Agent Profile.
+The PR presentation agent has its own optional Agent Profile selection under the frozen Change policy.
+Change Start resolves that profile from the supported Repo, Global, and package resources before the Change is created.
 No separate profile is required when the Global default is available.
-Submission returns `publication_configuration_invalid` before Validation when no profile can resolve or selected publication guidance is invalid.
+Change Start returns `publication_configuration_invalid` when no profile can resolve or selected publication guidance is invalid.
 This early failure does not create or fail a Validation Run.
 
 But Why ships mandatory publication-synthesis instructions.
 The presentation agent receives the exact workspace and supplied lifecycle evidence.
 Presentation synthesis does not rely on GitHub or other network access, and the agent has no GitHub mutation capability.
 Repo Config may select one publication guidance file, and Global Config may supply fallback guidance.
-Repo guidance takes precedence and resolves from the exact Candidate.
-Global guidance resolves from the Global Config directory.
+Repo guidance takes precedence and resolves from the exact Change Base at Change Start.
+Global guidance resolves from the Global Config directory at Change Start.
+Submit does not reread publication policy or guidance.
 Guidance may shape terminology, reviewer audience, title conventions, diagrams, and explanation emphasis.
 It cannot alter Candidate provenance, Risk values, publication safety, or the structured output contract.
 
@@ -197,7 +198,7 @@ Publication synthesis uses a Change-owned Agent Session for a distinct Publicati
 It does not share an Agent Session with an Acceptance Reviewer, Specialist Reviewer, or another agent role.
 A failed generation retry resumes the compatible session for the same Candidate when possible.
 A revised Candidate resumes the compatible session with the new lifecycle evidence and prior published presentation.
-A changed Agent Profile, instructions, environment, or resources makes the prior session incompatible according to Agent Session rules.
+The stored Change policy fixes the Agent Profile, instructions, environment, and resources for this role.
 An unusable session restarts according to those rules.
 When the Change closes, Publication Agent continuation ends and its transcript is retained through the shared Agent Session cleanup rules.
 
@@ -333,9 +334,9 @@ This is a provisional domain term and is not yet authorized for recording in `do
 A Submission Workspace is one disposable detached Git worktree for the exact Candidate during Submission.
 It is used by fresh Validation when needed and then reused by publication synthesis.
 When Validation evidence is reused, a Submission Workspace can be acquired for synthesis without running Validation.
-The workspace retains configured copied files unchanged between Validation and synthesis.
-But Why does not specially remove or generically clean those files.
-Existing allowed-file integrity semantics continue to apply.
+Version 1 does not support `copyFiles` or retain configured copied files between Validation and synthesis.
+But Why does not create a Change Base scratch or file tree for this purpose.
+Existing allowed-file integrity semantics continue to apply to the exact Candidate workspace.
 
 Each active Submission Workspace requires durable recovery facts:
 
@@ -411,7 +412,7 @@ The current and pending title, body, Risk, and digest are parts of Candidate Pub
 - Keep separate confirmed and pending publication state without adding chronology.
 - Keep generated content internal outside GitHub in version 1.
 - Broaden Snapshot Workspace into Submission Workspace behavior.
-- Retain configured copied files unchanged for synthesis.
+- Exclude `copyFiles` from the first release and defer any local untracked-file injection replacement until evidence establishes a supported need.
 - Require durable workspace recovery facts while deferring physical schema design.
 - Clean the workspace after proposal persistence and before GitHub mutation.
 - Verify the actual Candidate before GitHub mutation without adding a separate post-synthesis workspace check.
