@@ -307,7 +307,7 @@ const runReviewPhases = (
             validationRunId: started.validationRunId,
             phase: "checks",
             producer: "quality",
-            path: "stdout.txt",
+            path: `${started.validationRunId}/checks/quality/stdout.txt`,
             originalBytes: 0,
             storedBytes: 0,
             truncated: false,

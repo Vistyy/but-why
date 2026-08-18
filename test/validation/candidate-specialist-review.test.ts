@@ -184,7 +184,7 @@ const phaseHarness = (): PhaseHarness => {
         listArtifacts: () =>
           Effect.succeed([
             {
-              ref: "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt",
+              ref: "artifact:1/checks/quality/stdout.txt",
             },
           ]),
         listPreviousCandidateReviewerFindings: () => Effect.succeed([]),

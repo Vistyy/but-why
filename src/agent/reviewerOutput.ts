@@ -5,6 +5,7 @@ import {
   formatContractDiagnostics,
 } from "../contracts/contractDiagnostics.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
+import { isValidationArtifactRef } from "../contracts/validationArtifact.js";
 
 export class ReviewerOutputContractFailed extends Data.TaggedError("ReviewerOutputContractFailed")<{
   readonly operationName: string;
@@ -14,11 +15,8 @@ export class ReviewerOutputContractFailed extends Data.TaggedError("ReviewerOutp
   readonly message: string;
 }> {}
 
-const artifactRefPattern =
-  /^artifact:(?:[a-z0-9][a-z0-9-]*-[0-9a-f]{12}\.v[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(prepare|checks|acceptance_review|specialist_review)\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
-
 const artifactRefSchema = Schema.String.pipe(
-  Schema.filter((value) => artifactRefPattern.test(value), {
+  Schema.filter(isValidationArtifactRef, {
     identifier: "artifact:<validation-run-id>/<phase>/<producer>/<filename>",
     message: () => "Expected artifact:<validation-run-id>/<phase>/<producer>/<filename>",
   }),

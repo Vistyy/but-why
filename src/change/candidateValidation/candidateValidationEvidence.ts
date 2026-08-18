@@ -1,19 +1,41 @@
+import {
+  validationArtifactPath,
+  validationArtifactRef,
+} from "../../contracts/validationArtifact.js";
 import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
 
-export type ValidationArtifactMetadata = Pick<
-  ValidationRunArtifactRecord,
-  "path" | "originalBytes" | "storedBytes"
->;
-
-export const assertValidationArtifactMetadata = (artifact: ValidationArtifactMetadata): void => {
+export const assertValidationArtifactRecord = (artifact: ValidationRunArtifactRecord): void => {
+  requireSafePositiveInteger(artifact.validationRunId, "Artifact Validation Run ID");
+  requireNonBlank(artifact.producer, "Artifact producer");
   requireNonBlank(artifact.path, "Artifact path");
   requireSafeNonnegativeInteger(artifact.originalBytes, "Artifact original bytes");
   requireSafeNonnegativeInteger(artifact.storedBytes, "Artifact stored bytes");
   if (artifact.storedBytes > artifact.originalBytes) {
     throw new Error("Artifact stored bytes exceed original bytes");
+  }
+  if (artifact.truncated !== artifact.storedBytes < artifact.originalBytes) {
+    throw new Error("Artifact truncation does not match its byte counts");
+  }
+
+  const segments = artifact.path.split("/");
+  const fileName = segments.length === 4 ? segments[3] : undefined;
+  if (fileName === undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(fileName)) {
+    throw new Error("Artifact path does not contain one valid filename");
+  }
+  const identity = {
+    validationRunId: artifact.validationRunId,
+    phase: artifact.phase,
+    producer: artifact.producer,
+    fileName,
+  };
+  if (artifact.path !== validationArtifactPath(identity)) {
+    throw new Error("Artifact path does not match its Validation Result owner");
+  }
+  if (artifact.ref !== validationArtifactRef(identity)) {
+    throw new Error("Artifact reference does not match its Validation Result owner");
   }
 };
 
@@ -37,6 +59,10 @@ export const assertValidationToolingFailureEvidence = (failure: {
 
 const requireNonBlank = (value: string, name: string): void => {
   if (value.trim().length === 0) throw new Error(`${name} is blank`);
+};
+
+const requireSafePositiveInteger = (value: number, name: string): void => {
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} is invalid`);
 };
 
 const requireSafeNonnegativeInteger = (value: number, name: string): void => {

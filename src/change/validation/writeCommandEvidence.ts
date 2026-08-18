@@ -1,6 +1,7 @@
 import type { PlatformError } from "@effect/platform/Error";
 import type * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
+import { validationArtifactRef } from "../../contracts/validationArtifact.js";
 import type { RecordCandidateValidationPhaseResultInput } from "../candidateValidation/candidateValidationRunStore.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import type { ValidationPhase } from "../validationRun/validationRun.js";
@@ -76,7 +77,12 @@ export const writeCommandEvidence = (input: {
         ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
       });
       artifactRecords.push({
-        ref: artifactRef(input.validationRunId, input.phase, input.producer, artifact.fileName),
+        ref: validationArtifactRef({
+          validationRunId: input.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          fileName: artifact.fileName,
+        }),
         validationRunId: input.validationRunId,
         phase: input.phase,
         producer: input.producer,
@@ -87,14 +93,12 @@ export const writeCommandEvidence = (input: {
     return {
       artifactRecords,
       artifactRefs: artifactFileNames.map((fileName) =>
-        artifactRef(input.validationRunId, input.phase, input.producer, fileName),
+        validationArtifactRef({
+          validationRunId: input.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          fileName,
+        }),
       ),
     };
   });
-
-const artifactRef = (
-  validationRunId: number,
-  phase: ValidationPhase,
-  producer: string,
-  fileName: string,
-): string => `artifact:${validationRunId}/${phase}/${producer}/${fileName}`;

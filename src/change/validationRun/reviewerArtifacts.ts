@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { AgentExecutionEvidence } from "../../agent/agentSession/executeAgentSession.js";
 import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
+import { validationArtifactRef } from "../../contracts/validationArtifact.js";
 
 export type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 
@@ -70,7 +71,12 @@ export const writeReviewerArtifacts = (input: {
         ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
       });
       artifacts.push({
-        ref: `artifact:${input.validationRunId}/${input.phase}/${input.producer}/${fileName}`,
+        ref: validationArtifactRef({
+          validationRunId: input.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          fileName,
+        }),
         validationRunId: input.validationRunId,
         phase: input.phase,
         producer: input.producer,

@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
 import {
-  assertValidationArtifactMetadata,
+  assertValidationArtifactRecord,
   assertValidationFindingEvidence,
   assertValidationToolingFailureEvidence,
 } from "../change/candidateValidation/candidateValidationEvidence.js";
@@ -187,14 +187,18 @@ export const listValidationArtifacts = (
     );
     return yield* decodePersisted("list Candidate validation Artifacts", () =>
       rows.flatMap((row) =>
-        parseArtifacts(row.artifacts).map((artifact) => ({
-          ...artifact,
-          ref: `artifact:${artifact.path}`,
-          truncated: artifact.storedBytes < artifact.originalBytes,
-          validationRunId: assertRunId(row.validationRunId, validationRunId),
-          phase: decodePhase(row.phase),
-          producer: row.producer,
-        })),
+        parseArtifacts(row.artifacts).map((artifact) => {
+          const record = {
+            ...artifact,
+            ref: `artifact:${artifact.path}`,
+            truncated: artifact.storedBytes < artifact.originalBytes,
+            validationRunId: assertRunId(row.validationRunId, validationRunId),
+            phase: decodePhase(row.phase),
+            producer: row.producer,
+          };
+          assertValidationArtifactRecord(record);
+          return record;
+        }),
       ),
     );
   });
@@ -256,7 +260,6 @@ const parseArtifacts = (
       originalBytes: numberValue(field(row, "originalBytes"), "Artifact original bytes"),
       storedBytes: numberValue(field(row, "storedBytes"), "Artifact stored bytes"),
     };
-    assertValidationArtifactMetadata(artifact);
     return artifact;
   });
 

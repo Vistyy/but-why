@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import {
-  assertValidationArtifactMetadata,
+  assertValidationArtifactRecord,
   assertValidationFindingEvidence,
   assertValidationToolingFailureEvidence,
 } from "../change/candidateValidation/candidateValidationEvidence.js";
@@ -468,7 +468,7 @@ const recordPhaseResult = (
       try: () => {
         for (const finding of findings) assertValidationFindingEvidence(finding);
         for (const artifact of input.artifactRecords) {
-          assertValidationArtifactMetadata(artifact);
+          assertValidationArtifactRecord(artifact);
         }
         if (input.toolingFailure !== undefined) {
           assertValidationToolingFailureEvidence(input.toolingFailure);

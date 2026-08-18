@@ -104,7 +104,7 @@ describe("Acceptance Review phase", () => {
           implementationDecisions: [decision],
           blockerHistory,
           previousFindings: [finding("Earlier Acceptance Finding")],
-          availableArtifactRefs: ["artifact:validation-1/checks/quality/stdout.txt"],
+          availableArtifactRefs: ["artifact:1/checks/quality/stdout.txt"],
         },
       );
 
@@ -125,7 +125,7 @@ describe("Acceptance Review phase", () => {
       expect(call?.prompt).toContain(decision.choice);
       expect(call?.prompt).toContain(blockerHistory.resolutions[0]?.content);
       expect(call?.prompt).toContain("Earlier Acceptance Finding");
-      expect(call?.prompt).toContain("artifact:validation-1/checks/quality/stdout.txt");
+      expect(call?.prompt).toContain("artifact:1/checks/quality/stdout.txt");
       expect(call?.prompt).not.toContain("reviewer-output");
       expect(call?.systemPrompt).toContain(
         "The supplied Acceptance Context is the authoritative implementation intent",

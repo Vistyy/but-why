@@ -295,6 +295,33 @@ describe("SQLite Validation ownership", () => {
               outcome: "failed",
               finding: {
                 ...position,
+                title: "Mismatched Artifact owner",
+                description: "The Artifact claims another Validation Result owner.",
+                evidence: "The Artifact reference and path use a different owner tuple.",
+                files: [],
+                artifactRefs: ["artifact:999/specialist_review/other/stdout.txt"],
+              },
+              artifactRecords: [
+                {
+                  ref: "artifact:999/specialist_review/other/stdout.txt",
+                  ...position,
+                  path: "999/specialist_review/other/stdout.txt",
+                  originalBytes: 1,
+                  storedBytes: 1,
+                  truncated: false,
+                },
+              ],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
+              finding: {
+                ...position,
                 title: "   ",
                 description: "The Candidate is invalid.",
                 evidence: "Observed in the Candidate.",
@@ -343,13 +370,13 @@ describe("SQLite Validation ownership", () => {
             description: "The Candidate does not pass the Check.",
             evidence: "The Check output contains an error.",
             files: [],
-            artifactRefs: ["artifact:checks/types/stdout.txt"],
+            artifactRefs: [`artifact:${position.validationRunId}/checks/types/stdout.txt`],
           },
           artifactRecords: [
             {
-              ref: "artifact:checks/types/stdout.txt",
+              ref: `artifact:${position.validationRunId}/checks/types/stdout.txt`,
               ...position,
-              path: "checks/types/stdout.txt",
+              path: `${position.validationRunId}/checks/types/stdout.txt`,
               originalBytes: 3,
               storedBytes: 2,
               truncated: true,
@@ -367,7 +394,12 @@ describe("SQLite Validation ownership", () => {
         expect(
           yield* fixture.validation.reads.listArtifacts(position.validationRunId),
         ).toMatchObject([
-          { path: "checks/types/stdout.txt", originalBytes: 3, storedBytes: 2, truncated: true },
+          {
+            path: `${position.validationRunId}/checks/types/stdout.txt`,
+            originalBytes: 3,
+            storedBytes: 2,
+            truncated: true,
+          },
         ]);
       }),
     ),

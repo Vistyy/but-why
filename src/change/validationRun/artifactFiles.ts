@@ -3,6 +3,7 @@ import type { PlatformError } from "@effect/platform/Error";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 
+import { validationArtifactPath } from "../../contracts/validationArtifact.js";
 import type { ValidationPhase } from "./validationRun.js";
 
 export const maxValidationArtifactBytes = 1_048_576;
@@ -18,7 +19,7 @@ export const writeValidationRunArtifactFile = (input: {
 }): Effect.Effect<ValidationArtifactFile, PlatformError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const path = join(String(input.validationRunId), input.phase, input.producer, input.fileName);
+    const path = validationArtifactPath(input);
     const absolutePath = join(input.artifactsRoot, path);
 
     yield* fileSystem.makeDirectory(dirname(absolutePath), { recursive: true });
