@@ -122,19 +122,50 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       settleAgentInvocationResult: (input) => (sql, invocationId) =>
         Effect.gen(function* () {
-          const links = yield* sql<{ readonly invocationId: number }>`
-            SELECT agent_invocation_id AS invocationId
-            FROM validation_phase_agent_invocations
-            WHERE validation_run_id = ${input.validationRunId}
-              AND phase = ${input.phase}
-              AND producer = ${input.producer}
-              AND agent_invocation_id = ${invocationId}
+          const operationName = "settle Candidate validation Agent Invocation";
+          const links = yield* sql<{
+            readonly invocationId: number;
+            readonly settledAt: string | null;
+            readonly settlementKind: string | null;
+          }>`
+            SELECT link.agent_invocation_id AS invocationId,
+              invocation.settled_at AS settledAt,
+              invocation.settlement_kind AS settlementKind
+            FROM validation_phase_agent_invocations AS link
+            JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+            WHERE link.validation_run_id = ${input.validationRunId}
+              AND link.phase = ${input.phase}
+              AND link.producer = ${input.producer}
+            ORDER BY link.agent_invocation_id
           `;
-          if (links[0]?.invocationId !== invocationId) {
+          const terminal = links.at(-1);
+          if (terminal?.invocationId !== invocationId) {
             return yield* invalidData(
-              "settle Candidate validation Agent Invocation",
-              "Invocation is not linked to the Validation position",
+              operationName,
+              "Only the terminal linked Invocation can settle the Validation position",
             );
+          }
+          if (links.some((link) => link.settledAt === null || link.settlementKind === null)) {
+            return yield* invalidData(
+              operationName,
+              "Every linked reviewer Invocation must be settled before the final Result",
+            );
+          }
+          const hasFindings = input.findings.length > 0;
+          if (
+            (input.outcome === "passed" || hasFindings) &&
+            terminal.settlementKind !== "returned"
+          ) {
+            return yield* invalidData(
+              operationName,
+              "Reviewer Findings and passing Results require a returned terminal Invocation",
+            );
+          }
+          if (
+            (input.outcome === "passed" && (hasFindings || input.toolingFailure !== undefined)) ||
+            (input.outcome === "failed" && hasFindings === (input.toolingFailure !== undefined))
+          ) {
+            return yield* invalidData(operationName, "Reviewer Result evidence is incoherent");
           }
           yield* recordPhaseResult(
             sql,

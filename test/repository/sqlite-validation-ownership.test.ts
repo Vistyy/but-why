@@ -175,6 +175,14 @@ describe("SQLite Validation ownership", () => {
             artifactRecords: [],
           }),
         });
+        expect(
+          yield* beginInvocation(validation, {
+            validationRunId: started.validationRunId,
+            changeId: captured.changeId,
+            producer: "first",
+            agentSessionId: invocation.dispatch.agentSessionId,
+          }).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
         yield* validation.execution.recordCheckResult({
           validationRunId: started.validationRunId,
           producer: "types",
@@ -233,6 +241,70 @@ describe("SQLite Validation ownership", () => {
         );
         expect(
           yield* validation.reads.listAgentInvocations(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      }),
+    ),
+  );
+
+  it.scoped("binds a final reviewer Result to its settled terminal Invocation", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const fixture = yield* createRun(input.commonDirectory, "terminal-invocation");
+        const invocation = yield* beginInvocation(fixture.validation, {
+          validationRunId: fixture.started.validationRunId,
+          changeId: fixture.captured.changeId,
+          producer: "first",
+        });
+        if (!invocation.ok) throw new Error(invocation.code);
+        expect(
+          yield* fixture.validation.agentPersistence
+            .settleInvocation({
+              invocationId: invocation.dispatch.invocation.id,
+              continuationId: invocation.dispatch.continuation.id,
+              settlement: {
+                settledAt: "2026-10-02T10:00:05.000Z",
+                kind: "launch_failed",
+              },
+              settleDomain: fixture.validation.execution.settleAgentInvocationResult({
+                validationRunId: fixture.started.validationRunId,
+                phase: "specialist_review",
+                producer: "first",
+                outcome: "failed",
+                findings: [
+                  {
+                    validationRunId: fixture.started.validationRunId,
+                    phase: "specialist_review",
+                    producer: "first",
+                    title: "Fabricated Finding",
+                    description: "No reviewer response exists.",
+                    evidence: "The Invocation did not return.",
+                    files: [],
+                    artifactRefs: [],
+                  },
+                ],
+                artifactRecords: [],
+              }),
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        yield* fixture.validation.execution.recordToolingFailure({
+          validationRunId: fixture.started.validationRunId,
+          errorKind: "reviewer_process_execution_failed",
+          operationName: "run_specialist_reviewer",
+          errorMessage: "The reviewer Invocation remains unsettled.",
+        });
+        yield* fixture.validation.execution.recordWorkspaceCleanup({
+          validationRunId: fixture.started.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        expect(
+          yield* fixture.validation.execution
+            .complete({
+              validationRunId: fixture.started.validationRunId,
+              outcome: "tooling_failed",
+            })
+            .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),

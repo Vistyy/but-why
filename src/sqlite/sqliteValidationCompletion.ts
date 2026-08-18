@@ -23,8 +23,10 @@ type PhaseResultEvidenceRow = {
 type ReviewerInvocationEvidenceRow = {
   readonly phase: string;
   readonly producer: string;
-  readonly settledCount: number;
-  readonly returnedCount: number;
+  readonly invocationId: number;
+  readonly settledAt: string | null;
+  readonly settlementKind: string | null;
+  readonly changeOwned: number;
 };
 
 type ExpectedPhase = {
@@ -53,19 +55,20 @@ export const requireCoherentValidationCompletion = (
       WHERE validation_run_id = ${validationRunId}
     `;
     const reviewerInvocationRows = yield* sql<ReviewerInvocationEvidenceRow>`
-      SELECT link.phase, link.producer, COUNT(*) AS settledCount,
-        SUM(CASE WHEN invocation.settlement_kind = 'returned' THEN 1 ELSE 0 END) AS returnedCount
+      SELECT link.phase, link.producer, link.agent_invocation_id AS invocationId,
+        invocation.settled_at AS settledAt, invocation.settlement_kind AS settlementKind,
+        CASE WHEN change_session.agent_session_id IS NULL THEN 0 ELSE 1 END AS changeOwned
       FROM validation_phase_agent_invocations AS link
       JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
       JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
       JOIN validation_runs AS run ON run.id = link.validation_run_id
       JOIN candidates AS candidate ON candidate.id = run.candidate_id
-      JOIN change_agent_sessions AS change_session
+      LEFT JOIN change_agent_sessions AS change_session
         ON change_session.change_id = candidate.change_id
         AND change_session.producer = link.producer
         AND change_session.agent_session_id = continuation.agent_session_id
-      WHERE link.validation_run_id = ${validationRunId} AND invocation.settled_at IS NOT NULL
-      GROUP BY link.phase, link.producer
+      WHERE link.validation_run_id = ${validationRunId}
+      ORDER BY link.phase, link.producer, link.agent_invocation_id
     `;
     const runRows = yield* sql<{ readonly toolingFailure: string | null }>`
       SELECT run_tooling_failure AS toolingFailure
@@ -89,12 +92,22 @@ export const requireCoherentValidationCompletion = (
       const evidenceByPosition = new Map(
         evidenceRows.map((row) => [positionKey(row.phase as ValidationPhase, row.producer), row]),
       );
-      const reviewerInvocations = new Map(
-        reviewerInvocationRows.map((row) => [
-          positionKey(row.phase as ValidationPhase, row.producer),
-          row,
-        ]),
-      );
+      const reviewerInvocations = new Map<string, ReviewerInvocationEvidenceRow[]>();
+      for (const row of reviewerInvocationRows) {
+        const key = positionKey(row.phase as ValidationPhase, row.producer);
+        const positionRows = reviewerInvocations.get(key) ?? [];
+        positionRows.push(row);
+        reviewerInvocations.set(key, positionRows);
+        if (
+          (row.phase === validationPhase.acceptanceReview ||
+            row.phase === validationPhase.specialistReview) &&
+          (row.changeOwned !== 1 || row.settledAt === null || row.settlementKind === null)
+        ) {
+          throw new Error(
+            "Every linked reviewer Invocation must be Change-owned and settled before completion",
+          );
+        }
+      }
       if (toolingFailures.length !== toolingPositions.size + (runToolingFailure === null ? 0 : 1)) {
         throw new Error("Validation Tooling Failure evidence is inconsistent");
       }
@@ -106,6 +119,14 @@ export const requireCoherentValidationCompletion = (
         if (result.outcome === "passed" && (hasFinding || hasToolingFailure)) {
           throw new Error("A passing Validation Phase Result contains failure evidence");
         }
+        if (
+          result.outcome === "failed" &&
+          (result.phase === validationPhase.acceptanceReview ||
+            result.phase === validationPhase.specialistReview) &&
+          hasFinding === hasToolingFailure
+        ) {
+          throw new Error("A failed reviewer Result requires either Findings or a Tooling Failure");
+        }
         if (result.outcome === "failed" && !hasFinding && !hasToolingFailure) {
           throw new Error("A failed Validation Phase Result has no failure evidence");
         }
@@ -113,13 +134,19 @@ export const requireCoherentValidationCompletion = (
           result.phase === validationPhase.acceptanceReview ||
           result.phase === validationPhase.specialistReview
         ) {
-          const invocation = reviewerInvocations.get(key);
-          if (result.outcome === "passed" && (invocation?.returnedCount ?? 0) === 0) {
-            throw new Error("A passing reviewer Result has no returned Agent Invocation evidence");
+          const invocations = reviewerInvocations.get(key) ?? [];
+          const terminal = invocations.at(-1);
+          if (
+            (result.outcome === "passed" || hasFinding) &&
+            terminal?.settlementKind !== "returned"
+          ) {
+            throw new Error(
+              "A passing reviewer Result or reviewer Finding requires a returned terminal Invocation",
+            );
           }
           if (
             result.outcome === "failed" &&
-            (invocation?.settledCount ?? 0) === 0 &&
+            terminal === undefined &&
             !isPreDispatchReviewerIntegrityFailure(result.phase, evidenceByPosition.get(key))
           ) {
             throw new Error("A failed reviewer Result has no Agent Invocation evidence");

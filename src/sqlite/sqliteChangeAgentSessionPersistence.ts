@@ -43,6 +43,19 @@ export const openSqliteChangeAgentSessionPort = () =>
             idPrefix: repository.idPrefix,
             active: true,
           });
+          const existingResults = yield* sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count
+            FROM validation_phase_results
+            WHERE validation_run_id = ${input.validationRunId}
+              AND phase = ${input.phase}
+              AND producer = ${input.producer}
+          `;
+          if ((existingResults[0]?.count ?? 0) > 0) {
+            return yield* invalid(
+              operationName,
+              "A reviewer Invocation cannot be linked after its final Phase Result",
+            );
+          }
           const owners = yield* sql<{
             readonly changeId: number;
             readonly closeReason: string | null;
