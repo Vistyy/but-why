@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -40,6 +41,18 @@ let candidateRepoTemplate: string;
 beforeAll(() => {
   candidateRepoTemplate = acquireTestWorkspace();
   candidateReadyRepo(candidateRepoTemplate);
+  const database = new DatabaseSync(join(candidateRepoTemplate, ".git", "but-why", "state.sqlite"));
+  try {
+    database
+      .prepare("INSERT INTO tasks (id, title, description, state) VALUES (1, ?, ?, 'todo')")
+      .run(acceptanceContext.title, acceptanceContext.description);
+    database
+      .prepare("UPDATE changes SET initial_acceptance_context = ? WHERE id = 1")
+      .run(JSON.stringify(acceptanceContext));
+    database.prepare("INSERT INTO task_change_links (task_id, change_id) VALUES (1, 1)").run();
+  } finally {
+    database.close();
+  }
 });
 
 afterAll(() => {

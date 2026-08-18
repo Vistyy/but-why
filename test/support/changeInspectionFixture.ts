@@ -4,6 +4,12 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
+import {
+  deriveAcceptanceContext,
+  readImplementationBlockerHistory,
+} from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
@@ -245,19 +251,41 @@ export const createValidationRunFixture = (
       const repository = yield* RepositorySql;
       const inserted = yield* repository.operation(
         "create Validation Run inspection fixture",
-        (sql) => sql<{ readonly id: number }>`
-          INSERT INTO validation_runs (
-            candidate_id, policy_snapshot, highest_decision_id, highest_blocker_id,
-            outcome, cleanup_pending
-          ) VALUES (
-            ${input.candidateId},
-            '{"checks":[{"id":"types","command":"typecheck","timeoutSeconds":60}],"copyFiles":[]}',
-            (SELECT MAX(id) FROM implementation_decisions WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
-            (SELECT MAX(id) FROM implementation_blockers WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
-            ${input.state === "running" ? null : input.outcome}, 0
-          )
-          RETURNING id
-        `,
+        (sql) =>
+          Effect.gen(function* () {
+            const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+              SELECT initial_acceptance_context AS acceptanceContext
+              FROM changes WHERE id = ${internalChangeId(input.changeId, "BY")}
+            `;
+            const initialContext =
+              changeRows[0]?.acceptanceContext === null || changeRows[0] === undefined
+                ? null
+                : decodeSqliteAcceptanceContextSnapshot(changeRows[0].acceptanceContext);
+            const blockerHistory = yield* readImplementationBlockerHistory(
+              sql,
+              input.changeId,
+              "create Validation Run inspection fixture",
+              "BY",
+            );
+            const acceptanceContext = deriveAcceptanceContext(initialContext, blockerHistory);
+            const policySnapshot = encodeSqliteCandidateValidationPolicy({
+              checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }],
+              copyFiles: [],
+              ...(acceptanceContext === null ? {} : { acceptanceContext }),
+            });
+            return yield* sql<{ readonly id: number }>`
+              INSERT INTO validation_runs (
+                candidate_id, policy_snapshot, highest_decision_id, highest_blocker_id,
+                outcome, cleanup_pending
+              ) VALUES (
+                ${input.candidateId}, ${policySnapshot},
+                (SELECT MAX(id) FROM implementation_decisions WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
+                (SELECT MAX(id) FROM implementation_blockers WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
+                ${input.state === "running" ? null : input.outcome}, 0
+              )
+              RETURNING id
+            `;
+          }),
       );
       const id = inserted[0]?.id;
       if (id === undefined) {

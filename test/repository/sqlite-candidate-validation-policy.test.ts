@@ -5,6 +5,7 @@ import { describe } from "vitest";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { encodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
@@ -100,10 +101,11 @@ const createCandidateOwningChange = (branchRef: string) =>
       (sql) => sql`
       INSERT INTO changes (
         branch_ref, base_ref, base_remote_url, worktree_path,
-        reviewer_configuration, cleanup_pending
+        initial_acceptance_context, reviewer_configuration, cleanup_pending
       ) VALUES (
         ${branchRef}, 'refs/remotes/origin/main',
         'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
+        ${encodeSqliteAcceptanceContextSnapshot(currentPolicy.acceptanceContext)},
         '{"acceptanceReview":null,"specialistReviews":[]}', 0
       )
     `,
