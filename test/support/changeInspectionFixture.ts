@@ -1,5 +1,6 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
@@ -297,6 +298,12 @@ export const createValidationRunFixture = (
       if (id === undefined) {
         return yield* Effect.dieMessage("Validation Run identity was not allocated.");
       }
+      const completedOutcome = input.state === "complete" ? input.outcome : null;
+      if (completedOutcome !== null) {
+        yield* repository.operation("create Validation completion evidence fixture", (sql) =>
+          recordValidationCompletionEvidence(sql, id, completedOutcome),
+        );
+      }
       return { id, validationRunId: id };
     }),
   );
@@ -311,12 +318,52 @@ export const completeValidationRunFixture = (
     root,
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "complete Validation Run inspection fixture",
-        (sql) => sql`UPDATE validation_runs SET outcome = ${outcome} WHERE id = ${validationRunId}`,
+      yield* repository.operation("complete Validation Run inspection fixture", (sql) =>
+        Effect.zipRight(
+          recordValidationCompletionEvidence(sql, validationRunId, outcome),
+          sql`UPDATE validation_runs SET outcome = ${outcome} WHERE id = ${validationRunId}`,
+        ),
       );
     }),
   );
+
+const recordValidationCompletionEvidence = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  outcome: "passed" | "blocked" | "tooling_failed",
+) => {
+  if (outcome === "tooling_failed") {
+    return sql`
+      UPDATE validation_runs SET run_tooling_failure = ${JSON.stringify({
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "set_up_snapshot_workspace",
+        errorMessage: "Snapshot Workspace setup failed.",
+      })}
+      WHERE id = ${validationRunId}
+    `;
+  }
+  return sql`
+    INSERT INTO validation_phase_results (
+      validation_run_id, phase, producer, outcome, findings, artifacts
+    ) VALUES (
+      ${validationRunId}, 'checks', 'types', ${outcome === "passed" ? "passed" : "failed"},
+      ${JSON.stringify(
+        outcome === "passed"
+          ? []
+          : [
+              {
+                title: "Check failed: types",
+                description: "Type checking failed.",
+                evidence: "exitCode: 1",
+                files: ["src/main.ts"],
+                artifactRefs: [],
+              },
+            ],
+      )},
+      '[]'
+    )
+  `;
+};
 
 export const createFindingFixture = (
   root: string,

@@ -1548,16 +1548,48 @@ function completeValidation(
   outcome: "passed" | "blocked" | "tooling_failed" = "passed",
 ) {
   return Effect.gen(function* () {
+    const validationPolicy =
+      outcome === "blocked"
+        ? {
+            ...policy,
+            checks: [{ id: "publication", command: "false", timeoutSeconds: 1 }],
+          }
+        : policy;
     const run = yield* validation.execution.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
-      policy,
+      policy: validationPolicy,
     });
     if (run.reused) {
       if (outcome !== "passed") throw new Error("Expected a new Validation Run");
       return run.validationRunId;
     }
     if ("blocked" in run) throw new Error("Expected a Validation Run");
+    if (outcome === "blocked") {
+      yield* validation.execution.recordCheckResult({
+        validationRunId: run.validationRunId,
+        producer: "publication",
+        outcome: "failed",
+        finding: {
+          validationRunId: run.validationRunId,
+          phase: "checks",
+          producer: "publication",
+          title: "Publication fixture Finding",
+          description: "Keep this Validation Run non-passing.",
+          evidence: "The configured publication check failed.",
+          files: [],
+          artifactRefs: [],
+        },
+        artifactRecords: [],
+      });
+    } else if (outcome === "tooling_failed") {
+      yield* validation.execution.recordToolingFailure({
+        validationRunId: run.validationRunId,
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "set_up_snapshot_workspace",
+        errorMessage: "Snapshot Workspace setup failed.",
+      });
+    }
     yield* validation.execution.recordWorkspaceCleanup({
       validationRunId: run.validationRunId,
       cleanupWorkspace: "not_created",
