@@ -5,16 +5,12 @@ import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
 } from "../../agent/agentSession/agentSession.js";
-import {
-  type AgentExecutionEvidence,
-  executeAgentSession,
-} from "../../agent/agentSession/executeAgentSession.js";
+import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
-import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -130,13 +126,11 @@ type WorkspaceExecution =
   | {
       readonly ok: true;
       readonly output: TaskReviewerOutput;
-      readonly evidence: ReviewerExecutionEvidence;
       readonly sessionReference: string | null;
     }
   | {
       readonly ok: false;
       readonly failure: TaskReviewToolingFailure;
-      readonly evidence?: ReviewerExecutionEvidence;
       readonly sessionReference?: string | null;
       readonly findings?: TaskReviewerOutput["findings"];
     };
@@ -236,7 +230,6 @@ const submitTaskReview = (
     const reviewId = admitted.review.id;
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
-    let taskReviewEvidence: ReviewerExecutionEvidence | undefined;
     const result = yield* runAfterSubmitProgressStarted({
       progress: input.progress,
       started: () => taskReviewProgress,
@@ -370,16 +363,12 @@ const submitTaskReview = (
                     });
                   }),
               });
-              taskReviewEvidence = reviewerEvidenceFromAgent(
-                execution.evidence as AgentExecutionEvidence,
-              );
               const reviewed = execution.result;
               const sessionReference = reviewed.sessionReference ?? null;
               return reviewed.ok
                 ? ({
                     ok: true,
                     output: reviewed.report,
-                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const)
                 : ({
@@ -388,7 +377,6 @@ const submitTaskReview = (
                       operation: reviewed.failure.operationName,
                       message: reviewed.failure.message,
                     },
-                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const);
             }),
@@ -455,13 +443,6 @@ const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfig
   provider: null,
   model: profile.profile.runtimeConfig?.model ?? "",
   thinking: profile.profile.runtimeConfig?.thinking ?? null,
-});
-
-const reviewerEvidenceFromAgent = (
-  evidence: AgentExecutionEvidence,
-): ReviewerExecutionEvidence => ({
-  agentSessionId: evidence.agentSessionId,
-  invocations: evidence.invocations,
 });
 
 const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({

@@ -8,15 +8,19 @@ Usage:
     --fixture-repository <path> \
     --old-state <path> \
     --old-runtime <path> \
+    --expected-candidate-commit <commit> \
+    --expected-old-source-commit <commit> \
+    --expected-old-manifest-sha256 <sha256> \
+    --expected-current-runtime-sha256 <sha256> \
     [--current-runtime <path>]
 
 Rehearse the prerelease state reconciliation, archive, fresh baseline
 initialization, and both recovery boundaries in a disposable repository.
 
-The fixture repository must contain the Git history referenced by the old
-state. The old state must contain one linked, published Change that can be
-reset for reconciliation. The old runtime must contain dist/main.js,
-source-commit.txt, and runtime-SHA256SUMS.
+The fixture repository must be the clean Candidate checkout and contain the
+pre-merge commit. The old state must contain one linked, published Change
+that can be reset for reconciliation. The old runtime must contain dist,
+package.json, source-commit.txt, and runtime-SHA256SUMS.
 
 The command writes detailed transient observations under /tmp and emits one
 compact pass/fail JSON summary on stdout. It never mutates the supplied
@@ -27,6 +31,10 @@ EOF
 FIXTURE_REPOSITORY=""
 OLD_STATE=""
 OLD_RUNTIME=""
+EXPECTED_CANDIDATE_COMMIT=""
+EXPECTED_OLD_SOURCE_COMMIT=""
+EXPECTED_OLD_MANIFEST_SHA256=""
+EXPECTED_CURRENT_RUNTIME_SHA256=""
 SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CURRENT_RUNTIME="$SOURCE_ROOT/dist/main.js"
 
@@ -48,6 +56,22 @@ while (($# > 0)); do
       CURRENT_RUNTIME=${2:-}
       shift 2
       ;;
+    --expected-candidate-commit)
+      EXPECTED_CANDIDATE_COMMIT=${2:-}
+      shift 2
+      ;;
+    --expected-old-source-commit)
+      EXPECTED_OLD_SOURCE_COMMIT=${2:-}
+      shift 2
+      ;;
+    --expected-old-manifest-sha256)
+      EXPECTED_OLD_MANIFEST_SHA256=${2:-}
+      shift 2
+      ;;
+    --expected-current-runtime-sha256)
+      EXPECTED_CURRENT_RUNTIME_SHA256=${2:-}
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -60,8 +84,8 @@ while (($# > 0)); do
   esac
 done
 
-if [[ -z "$FIXTURE_REPOSITORY" || -z "$OLD_STATE" || -z "$OLD_RUNTIME" ]]; then
-  printf 'error: --fixture-repository, --old-state, and --old-runtime are required\n' >&2
+if [[ -z "$FIXTURE_REPOSITORY" || -z "$OLD_STATE" || -z "$OLD_RUNTIME" || -z "$EXPECTED_CANDIDATE_COMMIT" || -z "$EXPECTED_OLD_SOURCE_COMMIT" || -z "$EXPECTED_OLD_MANIFEST_SHA256" || -z "$EXPECTED_CURRENT_RUNTIME_SHA256" ]]; then
+  printf 'error: all expected identity arguments and input paths are required\n' >&2
   usage >&2
   exit 2
 fi
@@ -71,15 +95,15 @@ OLD_STATE=$(realpath "$OLD_STATE")
 OLD_RUNTIME=$(realpath "$OLD_RUNTIME")
 CURRENT_RUNTIME=$(realpath "$CURRENT_RUNTIME")
 
-[[ -d "$FIXTURE_REPOSITORY/.git" ]] || {
-  printf 'error: fixture repository is not a standard Git worktree: %s\n' "$FIXTURE_REPOSITORY" >&2
+git -C "$FIXTURE_REPOSITORY" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  printf 'error: fixture repository is not a Git worktree: %s\n' "$FIXTURE_REPOSITORY" >&2
   exit 2
 }
 [[ -f "$OLD_STATE/state.sqlite" ]] || {
   printf 'error: old state does not contain state.sqlite: %s\n' "$OLD_STATE" >&2
   exit 2
 }
-for required in dist/main.js source-commit.txt runtime-SHA256SUMS; do
+for required in dist/main.js package.json source-commit.txt runtime-SHA256SUMS; do
   [[ -f "$OLD_RUNTIME/$required" ]] || {
     printf 'error: old runtime does not contain %s: %s\n' "$required" "$OLD_RUNTIME" >&2
     exit 2
@@ -109,13 +133,58 @@ log_event() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$DETAILS/sequence.log"
 }
 
-cp -a "$FIXTURE_REPOSITORY/." "$ROOT/"
-cp -a "$OLD_RUNTIME/." "$OLD_RUNTIME_COPY/"
+STEP=runtime_identity_verification
+SOURCE_COMMIT=$(git -C "$SOURCE_ROOT" rev-parse HEAD)
+FIXTURE_COMMIT=$(git -C "$FIXTURE_REPOSITORY" rev-parse HEAD)
+if [[ "$SOURCE_COMMIT" != "$EXPECTED_CANDIDATE_COMMIT" || "$FIXTURE_COMMIT" != "$EXPECTED_CANDIDATE_COMMIT" ]]; then
+  printf 'error: Candidate checkout does not match expected commit %s\n' "$EXPECTED_CANDIDATE_COMMIT" >&2
+  exit 1
+fi
+git -C "$SOURCE_ROOT" diff --quiet HEAD --
+git -C "$SOURCE_ROOT" diff --cached --quiet HEAD --
+git -C "$FIXTURE_REPOSITORY" diff --quiet HEAD --
+git -C "$FIXTURE_REPOSITORY" diff --cached --quiet HEAD --
+git -C "$SOURCE_ROOT" merge-base --is-ancestor "$EXPECTED_OLD_SOURCE_COMMIT" "$EXPECTED_CANDIDATE_COMMIT"
+
+OBSERVED_OLD_SOURCE_COMMIT=$(<"$OLD_RUNTIME/source-commit.txt")
+OBSERVED_OLD_MANIFEST_SHA256=$(sha256sum "$OLD_RUNTIME/runtime-SHA256SUMS" | cut -d' ' -f1)
+OBSERVED_OLD_ENTRYPOINT_SHA256=$(sha256sum "$OLD_RUNTIME/dist/main.js" | cut -d' ' -f1)
+OBSERVED_CURRENT_RUNTIME_SHA256=$(sha256sum "$CURRENT_RUNTIME" | cut -d' ' -f1)
+if [[ "$OBSERVED_OLD_SOURCE_COMMIT" != "$EXPECTED_OLD_SOURCE_COMMIT" ]]; then
+  printf 'error: old runtime source commit differs from the expected pre-merge commit\n' >&2
+  exit 1
+fi
+if [[ "$OBSERVED_OLD_MANIFEST_SHA256" != "$EXPECTED_OLD_MANIFEST_SHA256" ]]; then
+  printf 'error: old runtime manifest SHA-256 differs from the expected identity\n' >&2
+  exit 1
+fi
+if [[ "$OBSERVED_CURRENT_RUNTIME_SHA256" != "$EXPECTED_CURRENT_RUNTIME_SHA256" ]]; then
+  printf 'error: current runtime SHA-256 differs from the expected Candidate runtime\n' >&2
+  exit 1
+fi
+cut -d' ' -f3- "$OLD_RUNTIME/runtime-SHA256SUMS" | sort > "$DETAILS/manifest-runtime-files.txt"
+(
+  cd "$OLD_RUNTIME"
+  {
+    find dist -type f -printf '%p\n'
+    printf '%s\n' package.json source-commit.txt
+  } | sort
+) > "$DETAILS/observed-runtime-files.txt"
+if ! cmp -s "$DETAILS/manifest-runtime-files.txt" "$DETAILS/observed-runtime-files.txt"; then
+  printf 'error: old runtime manifest does not cover the exact runtime inventory\n' >&2
+  exit 1
+fi
+log_event exact_runtime_identities_verified
+
+rmdir "$ROOT"
+git clone --quiet --no-hardlinks "$FIXTURE_REPOSITORY" "$ROOT"
+git -C "$ROOT" checkout --quiet --detach "$EXPECTED_CANDIDATE_COMMIT"
+mkdir -p "$OLD_RUNTIME_COPY/dist"
+cp -a "$OLD_RUNTIME/dist/." "$OLD_RUNTIME_COPY/dist/"
+cp "$OLD_RUNTIME/package.json" "$OLD_RUNTIME/source-commit.txt" "$OLD_RUNTIME/runtime-SHA256SUMS" "$OLD_RUNTIME_COPY/"
 rm -rf "$ROOT/.git"/but-why*
-mkdir -p "$ROOT/.git/but-why" "$ROOT/.but-why/reviewers"
+mkdir -p "$ROOT/.git/but-why"
 cp -a "$OLD_STATE/." "$ROOT/.git/but-why/"
-cp "$SOURCE_ROOT/.but-why/reviewers/standards.md" "$ROOT/.but-why/reviewers/standards.md"
-cp "$SOURCE_ROOT/.but-why/reviewers/verification.md" "$ROOT/.but-why/reviewers/verification.md"
 
 mapfile -t CHANGE_FACTS < <(
   python3 - "$ROOT/.git/but-why/state.sqlite" <<'PY'
@@ -149,16 +218,21 @@ PUBLICATION_OWNER=${CHANGE_FACTS[2]}
 PUBLICATION_REPOSITORY=${CHANGE_FACTS[3]}
 BASE_BRANCH=${CHANGE_FACTS[4]}
 HEAD_BRANCH=${CHANGE_FACTS[5]}
-EXPECTED_HEAD_SHA=${CHANGE_FACTS[6]}
 PULL_REQUEST_NUMBER=${CHANGE_FACTS[7]}
 ID_PREFIX=${CHANGE_FACTS[8]}
+EXPECTED_HEAD_SHA=$EXPECTED_CANDIDATE_COMMIT
 CHANGE_ID="${ID_PREFIX}-C${CHANGE_INTEGER}"
 CHANGE_BRANCH=${CHANGE_BRANCH_REF#refs/heads/}
 WORKTREE="${ROOT}-worktrees/but-why/${CHANGE_ID}"
 
+git -C "$ROOT" branch -f "$BASE_BRANCH" "$EXPECTED_CANDIDATE_COMMIT"
+git -C "$ROOT" update-ref "refs/remotes/origin/$BASE_BRANCH" "$EXPECTED_CANDIDATE_COMMIT"
 STEP=merged_repo_config_verification
 MERGED_COMMIT=$(git -C "$ROOT" rev-parse "refs/heads/${BASE_BRANCH}^{commit}")
-git -C "$ROOT" merge-base --is-ancestor "$EXPECTED_HEAD_SHA" "$MERGED_COMMIT"
+if [[ "$MERGED_COMMIT" != "$EXPECTED_CANDIDATE_COMMIT" ]]; then
+  printf 'error: merged fixture commit differs from the exact Candidate\n' >&2
+  exit 1
+fi
 git -C "$ROOT" show "$MERGED_COMMIT:.but-why/config.json" > "$DETAILS/merged-repo-config.json"
 if ! cmp -s "$DETAILS/merged-repo-config.json" "$ROOT/.but-why/config.json"; then
   printf 'error: fixture Repo Config differs from merged commit %s\n' "$MERGED_COMMIT" >&2
@@ -180,12 +254,41 @@ if [[ "$COMMITTED_ID_PREFIX" != "$ID_PREFIX" ]]; then
   printf 'error: merged Repo Config idPrefix %s differs from old state idPrefix %s\n' "$COMMITTED_ID_PREFIX" "$ID_PREFIX" >&2
   exit 1
 fi
-log_event merged_repo_config_verified
+mapfile -t REVIEWER_INSTRUCTION_FILES < <(
+  python3 - "$DETAILS/merged-repo-config.json" <<'PY'
+import json
+import pathlib
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    config = json.load(source)
+reviewers = config.get("reviewers", {})
+if not isinstance(reviewers, dict):
+    raise SystemExit("merged Repo Config reviewers must be an object")
+paths = []
+for name, reviewer in reviewers.items():
+    if not isinstance(reviewer, dict):
+        raise SystemExit(f"reviewer {name} must be an object")
+    path = reviewer.get("instructionsFile")
+    if not isinstance(path, str) or not path:
+        raise SystemExit(f"reviewer {name} has no instructionsFile")
+    candidate = pathlib.PurePosixPath(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise SystemExit(f"reviewer {name} instructionsFile is not repository-relative")
+    paths.append(path)
+for path in sorted(set(paths)):
+    print(path)
+PY
+)
+for reviewer_file in "${REVIEWER_INSTRUCTION_FILES[@]}"; do
+  git -C "$ROOT" cat-file -e "$MERGED_COMMIT:$reviewer_file"
+done
+log_event merged_repo_config_and_reviewer_files_verified
 
 mkdir -p "$(dirname "$WORKTREE")"
 git -C "$ROOT" branch "$CHANGE_BRANCH" "$EXPECTED_HEAD_SHA"
 git -C "$ROOT" worktree add "$WORKTREE" "$CHANGE_BRANCH" > "$DETAILS/worktree-create.txt"
-python3 - "$ROOT/.git/but-why/state.sqlite" "$ROOT/.git" "$WORKTREE" "$CHANGE_INTEGER" <<'PY'
+python3 - "$ROOT/.git/but-why/state.sqlite" "$ROOT/.git" "$WORKTREE" "$CHANGE_INTEGER" "$EXPECTED_HEAD_SHA" "$EXPECTED_OLD_SOURCE_COMMIT" <<'PY'
 import sqlite3
 import sys
 
@@ -209,10 +312,11 @@ with sqlite3.connect(sys.argv[1]) as connection:
         UPDATE changes
         SET repository_common_directory = ?, worktree_path = ?, state = 'open',
             close_reason = NULL, closed_at = NULL, cleanup_state = 'complete',
-            cleanup_blocking_reason = NULL
+            cleanup_blocking_reason = NULL, publication_expected_head_sha = ?,
+            starting_commit = ?
         WHERE id = ?
         """,
-        (sys.argv[2], sys.argv[3], change_id),
+        (sys.argv[2], sys.argv[3], sys.argv[5], sys.argv[6], change_id),
     )
 PY
 
@@ -291,6 +395,10 @@ printf '%s\n' "$RECONCILIATION_STATUS" > "$DETAILS/reconciliation.status"
 [[ ! -e "$WORKTREE" ]]
 git -C "$ROOT" worktree list --porcelain > "$DETAILS/worktrees-after-reconciliation.txt"
 ! rg -F "$WORKTREE" "$DETAILS/worktrees-after-reconciliation.txt"
+if git -C "$ROOT" show-ref --verify --quiet "$CHANGE_BRANCH_REF"; then
+  printf 'error: managed Repository Branch remains after reconciliation: %s\n' "$CHANGE_BRANCH_REF" >&2
+  exit 1
+fi
 python3 - "$ROOT/.git/but-why/state.sqlite" "$CHANGE_INTEGER" <<'PY' > "$DETAILS/reconciled-state.json"
 import json
 import sqlite3
@@ -318,11 +426,13 @@ log_event old_runtime_reconciliation_completed
 
 STEP=archive_verification
 ARCHIVE="$ROOT/.git/but-why-prerelease-archive"
-mkdir -p "$ARCHIVE/repository/reviewers" "$ARCHIVE/old-runtime"
+mkdir -p "$ARCHIVE/repository/.but-why" "$ARCHIVE/old-runtime"
 cp -a "$ROOT/.git/but-why" "$ARCHIVE/git-common-but-why"
-cp "$ROOT/.but-why/config.json" "$ARCHIVE/repository/config.json"
-cp "$ROOT/.but-why/reviewers/standards.md" "$ARCHIVE/repository/reviewers/standards.md"
-cp "$ROOT/.but-why/reviewers/verification.md" "$ARCHIVE/repository/reviewers/verification.md"
+cp "$DETAILS/merged-repo-config.json" "$ARCHIVE/repository/.but-why/config.json"
+for reviewer_file in "${REVIEWER_INSTRUCTION_FILES[@]}"; do
+  mkdir -p "$ARCHIVE/repository/$(dirname "$reviewer_file")"
+  git -C "$ROOT" show "$MERGED_COMMIT:$reviewer_file" > "$ARCHIVE/repository/$reviewer_file"
+done
 cp -a "$OLD_RUNTIME_COPY/dist" "$ARCHIVE/old-runtime/dist"
 cp "$OLD_RUNTIME_COPY/package.json" "$ARCHIVE/old-runtime/package.json"
 cp "$OLD_RUNTIME_COPY/source-commit.txt" "$ARCHIVE/old-runtime/source-commit.txt"
@@ -336,6 +446,8 @@ old_runtime_entrypoint=old-runtime/dist/main.js
 old_runtime_source_commit=$(cat "$OLD_RUNTIME_COPY/source-commit.txt")
 old_runtime_entrypoint_sha256=$(sha256sum "$OLD_RUNTIME_COPY/dist/main.js" | cut -d' ' -f1)
 old_runtime_manifest_sha256=$(sha256sum "$OLD_RUNTIME_COPY/runtime-SHA256SUMS" | cut -d' ' -f1)
+merged_candidate_commit=$MERGED_COMMIT
+current_runtime_sha256=$OBSERVED_CURRENT_RUNTIME_SHA256
 EOF
 cat > "$ARCHIVE/INSPECTING.md" <<'EOF'
 # Inspecting this prerelease archive
@@ -533,5 +645,31 @@ find "$ROOT/.git" -maxdepth 1 -type d -name '*archive*' -printf '%f\n' | sort > 
 log_event final_archive_verified
 
 trap - EXIT
-printf '%s\n' '{"outcome":"passed","mergedRepoConfig":"passed","oldBundleReconciliation":"passed","archive":"passed","freshInitialization":"passed","beforeNewWorkRecovery":"passed","afterNewWorkRecovery":"passed"}'
+python3 - "$EXPECTED_CANDIDATE_COMMIT" "$EXPECTED_OLD_SOURCE_COMMIT" "$OBSERVED_OLD_MANIFEST_SHA256" "$OBSERVED_OLD_ENTRYPOINT_SHA256" "$OBSERVED_CURRENT_RUNTIME_SHA256" <<'PY'
+import json
+import sys
+
+candidate, pre_merge, old_manifest, old_entrypoint, current_runtime = sys.argv[1:]
+print(
+    json.dumps(
+        {
+            "outcome": "passed",
+            "candidateCommit": candidate,
+            "preMergeCommit": pre_merge,
+            "oldRuntimeManifestSha256": old_manifest,
+            "oldRuntimeEntrypointSha256": old_entrypoint,
+            "currentRuntimeSha256": current_runtime,
+            "runtimeManifestInventory": "passed",
+            "mergedRepoConfig": "passed",
+            "oldBundleReconciliation": "passed",
+            "managedBranchCleanup": "passed",
+            "archive": "passed",
+            "freshInitialization": "passed",
+            "beforeNewWorkRecovery": "passed",
+            "afterNewWorkRecovery": "passed",
+        },
+        separators=(",", ":"),
+    )
+)
+PY
 printf 'Detailed transient observations: %s\n' "$DETAILS" >&2

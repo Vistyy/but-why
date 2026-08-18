@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -328,15 +328,19 @@ describe("Acceptance Review phase", () => {
   it.scoped("keeps every valid reported Finding in the failed Acceptance result", () =>
     Effect.gen(function* () {
       const findings = [finding("First mismatch"), finding("Second mismatch")];
-      const fixture = acceptancePhaseFixture({
-        review: () =>
-          Effect.succeed({
-            ok: true,
-            report: { findings },
-            attempts: 1,
-            stdout: "review evidence",
-          }),
-      });
+      const artifactsRoot = createTestWorkspace();
+      const fixture = acceptancePhaseFixture(
+        {
+          review: () =>
+            Effect.succeed({
+              ok: true,
+              report: { findings },
+              attempts: 1,
+              stdout: "review evidence",
+            }),
+        },
+        { artifactsRoot },
+      );
 
       const result = yield* fixture.run();
 
@@ -356,6 +360,36 @@ describe("Acceptance Review phase", () => {
           expect.objectContaining({ path: expect.stringContaining("execution.json") }),
         ]),
       );
+      const executionArtifact = fixture.results[0]?.artifactRecords.find((artifact) =>
+        artifact.path.endsWith("execution.json"),
+      );
+      expect(executionArtifact).toBeDefined();
+      const execution = JSON.parse(
+        readFileSync(join(artifactsRoot, executionArtifact?.path ?? "missing"), "utf8"),
+      );
+      expect(execution).toEqual({
+        agentSessionId: 1,
+        invocations: [
+          {
+            id: 1,
+            continuationId: 1,
+            createdAt: expect.any(String),
+            settledAt: expect.any(String),
+            settlementKind: "returned",
+            usage: null,
+            continuation: {
+              id: 1,
+              agentSessionId: 1,
+              harness: "pi",
+              provider: null,
+              model: "review-model",
+              thinking: "high",
+              transcriptPath: null,
+              unusableReason: "transcript_capture_unavailable",
+            },
+          },
+        ],
+      });
     }),
   );
 
