@@ -5,13 +5,14 @@ import { Either } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { resolveCandidateValidationPolicy } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
+import { validateChangeReviewerConfigurationResources } from "../../src/change/changeReviewerConfiguration.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import { decodeRepoConfig } from "../../src/contracts/repoConfig.js";
 import { readGlobalConfig } from "../../src/init/adapters/globalConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Candidate validation policy configuration", () => {
-  it("rejects missing reviewer resources before resolving a Validation Run policy", () => {
+  it("defers reviewer resource validation until the effective Change configuration is selected", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global-config.json");
     writeFileSync(
@@ -56,15 +57,21 @@ describe("Candidate validation policy configuration", () => {
     });
 
     expect(result).toMatchObject({
-      ok: false,
-      error: {
-        _tag: "MissingAgentProfileResource",
-        profileName: "acceptance",
-        scope: "global",
-        resourceType: "skill",
-        path: join(root, "skills/missing"),
-        message: `Agent Profile "acceptance" in global scope has a missing skill resource at resolved path "${join(root, "skills/missing")}".`,
+      ok: true,
+      resolved: {
+        reviewerConfiguration: {
+          acceptanceReview: {
+            profile: { profile: { runtimeConfig: { skills: ["skills/missing"] } } },
+          },
+        },
       },
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(
+      validateChangeReviewerConfigurationResources(result.resolved.reviewerConfiguration, root),
+    ).toMatchObject({
+      ok: false,
+      message: `Agent Profile "acceptance" in global scope has a missing skill resource at resolved path "${join(root, "skills/missing")}".`,
     });
   });
 

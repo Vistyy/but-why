@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
+import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
 import { configNameSchema, nonBlankStringSchema } from "../contracts/agentConfig.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 
@@ -47,6 +48,21 @@ export const encodeSqliteChangeReviewerConfiguration = (
 export type ChangeReviewerPolicy =
   | NonNullable<ChangeReviewerConfiguration["acceptanceReview"]>
   | ChangeReviewerConfiguration["specialistReviews"][number];
+
+export const validateChangeReviewerConfigurationResources = (
+  configuration: ChangeReviewerConfiguration,
+  repoRoot: string,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
+  const policies = [
+    ...(configuration.acceptanceReview === null ? [] : [configuration.acceptanceReview]),
+    ...configuration.specialistReviews,
+  ];
+  for (const policy of policies) {
+    const result = validatePiAgentProfileResources(policy.profile, repoRoot);
+    if (!result.ok) return { ok: false, message: result.error.message };
+  }
+  return { ok: true };
+};
 
 export const sameChangeReviewerPolicy = (
   producer: string,

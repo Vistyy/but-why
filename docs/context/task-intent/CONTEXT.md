@@ -53,7 +53,8 @@ A Task Review captures dependency evidence and a Review Base, and it ends as pas
 The Task stores the resolved Task Reviewer configuration and Task Agent Session atomically with the first linked Agent Invocation.
 The configuration contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
 A Review that fails before any Invocation used no executed reviewer configuration, so inspection reports no reviewer configuration or Agent Session for that Review.
-After permitted pre-conversation correction, an earlier Review retains its exact Invocation evidence and does not project the corrected Task configuration.
+Inspection attributes the current Task configuration only to the Review that contains the Task's most recent linked Invocation.
+Other earlier Reviews retain exact Invocation evidence and omit reviewer configuration because the schema cannot prove complete historical configuration provenance without prohibited per-Review storage.
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Agent Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 Ordinary Task Submission selects the newest completed Review for the exact unchanged New Task proposal and reuses it only when it passed.

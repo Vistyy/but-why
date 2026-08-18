@@ -193,8 +193,8 @@ Repository initialization stores it in Shared Repository State, where it remains
 Because But Why is unreleased, the first-release configuration uses only `idPrefix`, rejects conflict with initialized state, and provides no `taskPrefix` compatibility behavior.
 Tasks and Changes select and store the resolved Agent Profile required by their reviewer policy.
 A Task stores its resolved Task Reviewer configuration and Task Reviewer Agent Session atomically with the first linked Agent Invocation.
-A Change fixes its reviewer roster and stores all resolved role configurations at Change Start, even though their Agent Sessions are created lazily.
-The approved no-conversation `launch_failed` correction may replace only the affected owner-role configuration and never changes the Change roster.
+A Change fixes its reviewer roster and stores all role configurations resolved from the exact fetched starting Change Base and current Global Config at Change Start, even though their Agent Sessions are created lazily.
+The approved no-conversation `launch_failed` correction may replace only the affected owner-role configuration, resolves it from the exact fetched current Change Base and current Global Config, and never changes the Change roster.
 After a conversation is established, later Repo or Global Config changes do not alter that stored owner-role configuration.
 Agent infrastructure applies the stored profile as the exact Pi model, tools, skills, extensions, and runtime settings.
 
@@ -204,7 +204,8 @@ CLI modules only map commands to supported operations and their results.
 Public output may retain lifecycle fields derived from authoritative owner data: Change derives `open` or `closed` from its close reason, and Task Review and Validation Run derive `active` or `complete` from nullable outcome.
 Public histories use immutable integer order and do not retain creation, update, closure, or age fields whose source timestamps are removed.
 Task Review and Validation Run inspection expose exact Agent Invocation evidence without copying reviewer configuration into the Review or Run.
-A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session, and an earlier Review does not project a later corrected Task configuration.
+A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session.
+Inspection attributes current Task reviewer configuration only to the Review containing the Task's most recent linked Invocation; earlier Reviews retain exact Invocation evidence and omit an unprovable complete configuration.
 Validation Run inspection joins Change-owned reviewer configuration separately from Run policy.
 Snapshot Workspace inspection may expose its deterministic derived path together with cleanup evidence even though the path is not stored.
 

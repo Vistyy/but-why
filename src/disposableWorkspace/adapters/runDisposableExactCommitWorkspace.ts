@@ -38,7 +38,11 @@ export const runDisposableExactCommitWorkspace = <WorkspaceResult, Error>(
   input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
 ): Effect.Effect<RunDisposableExactCommitWorkspaceResult<WorkspaceResult>, Error> =>
   Effect.gen(function* () {
-    const worktreePath = expectedDisposableWorkspacePath(input.repoRoot, input.workspaceId);
+    const worktreePath = expectedDisposableWorkspacePath(
+      input.repoRoot,
+      input.workspaceId,
+      input.workspaceContainerRoot,
+    );
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
 
     const workspaceExit = yield* Effect.exit(
@@ -90,15 +94,22 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
 ): Effect.Effect<SetupAttempt<WorkspaceResult>, Error, Scope.Scope> =>
   Effect.gen(function* () {
-    const parent = yield* prepareDisposableWorkspaceParent(input.repoRoot);
+    const parent = yield* prepareDisposableWorkspaceParent(
+      input.repoRoot,
+      input.workspaceContainerRoot,
+    );
     if (!parent.ok) return setupFailed("create_disposable_workspace", parent.message);
 
     yield* Effect.acquireRelease(Effect.succeed(worktreePath), () =>
-      cleanupExactDisposableWorkspace(input.repoRoot, {
-        workspaceId: input.workspaceId,
-        expectedCommitSha: input.commitSha,
-        recordedWorktreePath: worktreePath,
-      }).pipe(
+      cleanupExactDisposableWorkspace(
+        input.repoRoot,
+        {
+          workspaceId: input.workspaceId,
+          expectedCommitSha: input.commitSha,
+          recordedWorktreePath: worktreePath,
+        },
+        input.workspaceContainerRoot,
+      ).pipe(
         Effect.flatMap((cleanup) =>
           Ref.set(cleanupResult, {
             workspace: cleanup.workspace,
@@ -120,16 +131,21 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
       input.workspaceId,
       input.commitSha,
       worktreePath,
+      input.workspaceContainerRoot,
     );
     if (existing.state === "unproven") {
       return setupFailed("create_disposable_workspace", existing.message);
     }
     if (existing.state === "matching" && existing.dirty) {
-      const removed = yield* cleanupExactDisposableWorkspace(input.repoRoot, {
-        workspaceId: input.workspaceId,
-        expectedCommitSha: input.commitSha,
-        recordedWorktreePath: worktreePath,
-      });
+      const removed = yield* cleanupExactDisposableWorkspace(
+        input.repoRoot,
+        {
+          workspaceId: input.workspaceId,
+          expectedCommitSha: input.commitSha,
+          recordedWorktreePath: worktreePath,
+        },
+        input.workspaceContainerRoot,
+      );
       if (removed.workspace !== "removed") {
         return setupFailed(
           "create_disposable_workspace",
@@ -151,6 +167,7 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
       input.workspaceId,
       input.commitSha,
       worktreePath,
+      input.workspaceContainerRoot,
     );
     if (verified.state !== "matching") {
       return setupFailed(

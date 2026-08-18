@@ -1,5 +1,4 @@
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
-import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import {
   type GlobalConfigValidationFailed,
   RepoConfigValidationFailed,
@@ -64,10 +63,6 @@ export const resolveCandidateValidationPolicy = (
 
   const reviewerConfiguration = resolveReviewerConfiguration(input, repoConfig, repoRoot);
   if (!reviewerConfiguration.ok) return reviewerConfiguration;
-  for (const specialist of reviewerConfiguration.configuration.specialistReviews) {
-    const resources = validatePiAgentProfileResources(specialist.profile, repoRoot);
-    if (!resources.ok) return resources;
-  }
   const acceptance = reviewerConfiguration.configuration.acceptanceReview;
   if (input.acceptanceContextSupplied && acceptance === null) {
     return {
@@ -77,11 +72,6 @@ export const resolveCandidateValidationPolicy = (
       }),
     };
   }
-  if (acceptance !== null) {
-    const resources = validatePiAgentProfileResources(acceptance.profile, repoRoot);
-    if (!resources.ok) return resources;
-  }
-
   const agentEnvironment = repoAgentEnvironment(repoConfig);
   const policy: CandidateValidationPolicy = {
     ...(agentEnvironment === undefined ? {} : { agentEnvironment }),

@@ -9,6 +9,7 @@ import type {
 export type RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error> = {
   readonly repoRoot: string;
   readonly workspaceId: string;
+  readonly workspaceContainerRoot?: string;
   readonly commitSha: string;
   readonly copyFiles: readonly string[];
   readonly recordWorkspaceCleanup?: (

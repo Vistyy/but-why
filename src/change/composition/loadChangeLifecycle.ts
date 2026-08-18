@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
@@ -31,7 +32,7 @@ import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
-import { resolveChangeReviewerConfiguration } from "./resolveChangeReviewerConfiguration.js";
+import { resolveChangeReviewerConfigurationAtCommit } from "./resolveChangeReviewerConfiguration.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =
@@ -91,22 +92,20 @@ export const withChangeStart = <A, E, R>(
             if (command.taskId !== undefined) {
               return yield* taskStart(command);
             }
-            const reviewerConfiguration = resolveChangeReviewerConfiguration(
-              context.config,
-              input.globalConfigPath,
-              context.root,
-              false,
-            );
-            if (!reviewerConfiguration.ok) {
-              return {
-                ok: false as const,
-                code: "reviewer_configuration_invalid" as const,
-                message: reviewerConfiguration.message,
-              };
-            }
             return yield* startChange(changes, git, executeLocalRepositoryPreparation, {
               ...command,
-              reviewerConfiguration: reviewerConfiguration.configuration,
+              resolveReviewerConfiguration: (startingCommit) =>
+                resolveChangeReviewerConfigurationAtCommit({
+                  repoRoot: context.mainCheckoutRoot,
+                  workspaceContainerRoot: join(
+                    context.paths.operationalDir,
+                    "exact-change-base-workspaces",
+                  ),
+                  commit: startingCommit,
+                  globalConfigPath: input.globalConfigPath,
+                  acceptanceContextSupplied: false,
+                  expectedIdPrefix: context.idPrefix,
+                }),
             });
           }),
         ),

@@ -43,11 +43,20 @@ export const startChange = <CreationFailure extends object = never>(
   input: {
     readonly baseBranch?: string;
     readonly reviewerConfiguration?: ChangeReviewerConfiguration;
+    readonly resolveReviewerConfiguration?: (
+      startingCommit: string,
+    ) => Effect.Effect<
+      | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+      | { readonly ok: false; readonly message: string }
+    >;
     readonly now: string;
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (input.reviewerConfiguration === undefined) {
+    if (
+      input.reviewerConfiguration === undefined &&
+      input.resolveReviewerConfiguration === undefined
+    ) {
       return {
         ok: false as const,
         code: "reviewer_configuration_invalid" as const,
@@ -57,10 +66,26 @@ export const startChange = <CreationFailure extends object = never>(
 
     const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
+    const resolveReviewerConfiguration = input.resolveReviewerConfiguration;
+    const reviewerConfiguration =
+      input.reviewerConfiguration !== undefined
+        ? { ok: true as const, configuration: input.reviewerConfiguration }
+        : resolveReviewerConfiguration === undefined
+          ? undefined
+          : yield* resolveReviewerConfiguration(gitIntent.intent.startingCommit);
+    if (reviewerConfiguration === undefined || !reviewerConfiguration.ok) {
+      return {
+        ok: false as const,
+        code: "reviewer_configuration_invalid" as const,
+        message:
+          reviewerConfiguration?.message ??
+          "A reviewer configuration is required to create a Change.",
+      };
+    }
     const created = yield* store.create({
       id: "pending-change-start",
       ...gitIntent.intent,
-      reviewerConfiguration: input.reviewerConfiguration,
+      reviewerConfiguration: reviewerConfiguration.configuration,
       now: input.now,
     });
     if (!("ok" in created)) return created;

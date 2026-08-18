@@ -23,6 +23,7 @@ import { openChangeSubmit } from "../../src/change/submitChange.js";
 import { GlobalConfigValidationFailed } from "../../src/contracts/configErrors.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
+import type { RunDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -449,6 +450,90 @@ describe("Change Submit orchestration", () => {
         message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
       });
       expect(events).toEqual(["capture"]);
+    }),
+  );
+
+  it.effect("selects an eligible correction before validating effective reviewer resources", () =>
+    Effect.gen(function* () {
+      const staleReviewer = {
+        ...storedAcceptanceReviewer,
+        profile: {
+          ...storedAcceptanceReviewer.profile,
+          scope: "repo" as const,
+          profile: {
+            agentRuntime: "pi" as const,
+            runtimeConfig: {
+              model: "stale/model",
+              extensions: ["extensions/removed.ts"],
+            },
+          },
+        },
+      };
+      const correctedReviewer = {
+        ...storedAcceptanceReviewer,
+        profile: {
+          ...storedAcceptanceReviewer.profile,
+          profile: {
+            agentRuntime: "pi" as const,
+            runtimeConfig: { model: "corrected/model" },
+          },
+        },
+      };
+      const change = readyChange({
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+        },
+        reviewerConfiguration: {
+          acceptanceReview: staleReviewer,
+          specialistReviews: [],
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          change,
+          acceptanceContextSupplied: true,
+          canCorrectReviewer: (producer) => producer === "acceptance",
+          resolvePolicy: (acceptanceContextSupplied, _repoConfig, worktreePath, configuration) => {
+            expect(worktreePath).toBe("/repo/exact-change-base");
+            return {
+              ok: true,
+              resolved: {
+                acceptanceContextSupplied,
+                policy: changeWithoutTaskPolicy,
+                reviewerConfiguration: configuration ?? {
+                  acceptanceReview: correctedReviewer,
+                  specialistReviews: [],
+                },
+              },
+            };
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Task-linked validation was expected"),
+        validateAcceptanceContextCandidate: (input) =>
+          Effect.sync(() => {
+            expect(input.reviewerConfiguration).toEqual({
+              acceptanceReview: correctedReviewer,
+              specialistReviews: [],
+            });
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: 1,
+              outcome: "passed",
+            } as const;
+          }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({ ok: true, status: "published" });
     }),
   );
 
@@ -1493,6 +1578,16 @@ type PullRequestObservation =
   | "exact_merged"
   | "unavailable";
 
+const runExactChangeBaseWorkspace: RunDisposableExactCommitWorkspace = (workspaceInput) =>
+  workspaceInput.runInWorkspace === undefined
+    ? Effect.succeed({ ok: true as const })
+    : workspaceInput
+        .runInWorkspace({
+          worktreePath: "/repo/exact-change-base",
+          commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+        })
+        .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult })));
+
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
@@ -1505,7 +1600,9 @@ const dependencies = (input: {
     acceptanceContextSupplied: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
+    reviewerConfiguration?: ChangeRecord["reviewerConfiguration"],
   ) => CandidateValidationPolicyResolution;
+  readonly canCorrectReviewer?: (producer: string) => boolean;
   readonly policyRejection?: SubmitRejectionError | GlobalConfigValidationFailed;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
@@ -1547,9 +1644,11 @@ const dependencies = (input: {
   return {
     repositoryCommonDirectory: "/repo/.git",
     repositoryPath: "/repo",
+    exactCommitWorkspaceRoot: "/repo/.git/but-why/exact-change-base-workspaces",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
-      agentSessionConfigurationCanBeCorrected: () => Effect.succeed(false),
+      agentSessionConfigurationCanBeCorrected: (_changeId, producer) =>
+        Effect.succeed(input.canCorrectReviewer?.(producer) ?? false),
       getChangeForOutputById: () => Effect.succeed(input.change),
       getCompletedPublicationEvidence: () =>
         Effect.sync(() => {
@@ -1586,10 +1685,16 @@ const dependencies = (input: {
       acceptanceContextSupplied: boolean,
       repoConfig: RepoConfig,
       worktreePath: string,
+      reviewerConfiguration?: ChangeRecord["reviewerConfiguration"],
     ) => {
       if (input.trackPolicyResolution) events.push("resolve_policy");
       if (input.resolvePolicy !== undefined) {
-        return input.resolvePolicy(acceptanceContextSupplied, repoConfig, worktreePath);
+        return input.resolvePolicy(
+          acceptanceContextSupplied,
+          repoConfig,
+          worktreePath,
+          reviewerConfiguration,
+        );
       }
       if (input.policyRejection !== undefined) {
         return { ok: false as const, error: input.policyRejection };
@@ -1670,6 +1775,7 @@ const dependencies = (input: {
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
+    runDisposableExactCommitWorkspace: runExactChangeBaseWorkspace,
     executionLock: input.executionLock ?? { withLock: ({ effect }) => effect },
   };
 };

@@ -70,7 +70,8 @@ Final physical schema and settled contracts:
   Keep direct Task Dependency relationships in `task_dependencies`.
   Store each Task Review's exact proposal and dependency evidence as immutable JSON snapshots, with its Review Base ref and commit, nullable outcome, Findings, optional Tooling Failure, and cleanup obligation directly on `task_reviews`.
   The Task stores reviewer configuration and its Agent Session atomically with the first linked Invocation, and Task Reviews do not duplicate that configuration.
-  A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session, and an earlier Review does not project a later corrected Task configuration.
+  A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session.
+  Inspection attributes current Task reviewer configuration only to the Review containing the Task's most recent linked Invocation; earlier Reviews retain exact Invocation evidence and omit an unprovable complete configuration.
   Do not add separate proposal, dependency-evidence, policy, Finding, or Tooling Failure tables.
 - Give `tasks` and `changes` independent SQLite-allocated table-local `INTEGER PRIMARY KEY` identities.
   Store the repository's immutable `id_prefix` once in `shared_state_identity` and derive public Task and Change IDs at the application boundary as `<id-prefix>-<task-number>` and `<id-prefix>-C<change-number>`.
@@ -161,7 +162,7 @@ Final physical schema and settled contracts:
 - Shared Agent storage retains Agent Sessions, physical continuations, and Invocations.
   Store no compatibility fingerprint.
   The Task stores its resolved Task Reviewer configuration and Task Reviewer Agent Session atomically when the first Agent Invocation links.
-  The Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
+  The Change stores its fixed reviewer roster and each role's configuration resolved from the exact fetched starting Change Base and current Global Config as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
   These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
   Validate a resolved snapshot before storage.
   Later Repo or Global Config changes do not alter stored configurations after a usable continuation exists, and replacement continuations reuse them.

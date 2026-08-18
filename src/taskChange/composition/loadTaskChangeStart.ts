@@ -1,10 +1,11 @@
+import { join } from "node:path";
 import { Effect } from "effect";
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
 } from "../../change/adapters/changeStartGit.js";
 import type { ChangeStartGitOperations } from "../../change/changeStartGitOperations.js";
-import { resolveChangeReviewerConfiguration } from "../../change/composition/resolveChangeReviewerConfiguration.js";
+import { resolveChangeReviewerConfigurationAtCommit } from "../../change/composition/resolveChangeReviewerConfiguration.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
@@ -39,13 +40,18 @@ export const openTaskChangeStartOperation = (input: {
               git,
               executeLocalRepositoryPreparation,
               command,
-              () =>
-                resolveChangeReviewerConfiguration(
-                  input.context.config,
-                  input.globalConfigPath,
-                  input.context.root,
-                  true,
-                ),
+              (startingCommit) =>
+                resolveChangeReviewerConfigurationAtCommit({
+                  repoRoot: input.context.mainCheckoutRoot,
+                  workspaceContainerRoot: join(
+                    input.context.paths.operationalDir,
+                    "exact-change-base-workspaces",
+                  ),
+                  commit: startingCommit,
+                  globalConfigPath: input.globalConfigPath,
+                  acceptanceContextSupplied: true,
+                  expectedIdPrefix: input.context.idPrefix,
+                }),
             );
           }),
     ),

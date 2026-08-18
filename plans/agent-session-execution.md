@@ -41,7 +41,7 @@ Past Invocations and continuations remain history without separate replacement m
 The owning domain resolves and stores the Agent Profile, role instructions, tools, skills, and extensions once for the applicable owner lifecycle.
 Agent Environment remains Run-specific Validation policy.
 A Task stores its resolved Task Reviewer configuration and Task Reviewer Agent Session atomically with the first linked Agent Invocation.
-A Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
+A Change stores its fixed reviewer roster and each role's configuration resolved from the exact fetched starting Change Base and current Global Config as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
 These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
 Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
 A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session, and an earlier Review does not project a later corrected Task configuration.
@@ -226,7 +226,7 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 - Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
 - Invocation and transcript evidence is limited to the fields defined above, including `cacheRead` and `cacheWrite` token evidence; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
-- Task Review inspection reports Task-owned reviewer configuration only when the Review has compatible linked Invocation evidence, and Validation Run inspection joins Change-owned reviewer configuration separately from Run policy without copying it into each Review or Run.
+- Task Review inspection attributes current Task-owned reviewer configuration only to the Review containing the Task's most recent linked Invocation, while earlier Reviews retain exact Invocation evidence without an unprovable complete configuration; Validation Run inspection joins Change-owned reviewer configuration separately from Run policy without copying it into each Review or Run.
 - Use owner-role configuration, Agent Sessions, Agent Continuations, Agent Invocations, domain Tooling Failures, and cleanup evidence instead of the prerelease generic reviewer representation and aggregates.
 - The direct BY-274 baseline conforms to this exact physical schema without importing or converting legacy Reviewer records.
 

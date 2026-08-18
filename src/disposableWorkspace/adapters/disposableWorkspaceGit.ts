@@ -16,9 +16,10 @@ import {
 
 export const prepareDisposableWorkspaceParent = (
   mainCheckoutRoot: string,
+  workspaceContainerRoot?: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
   Effect.sync(() => {
-    const root = disposableWorkspaceRoot(mainCheckoutRoot);
+    const root = disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot);
     const containers = [dirname(dirname(root)), dirname(root), root];
     try {
       for (const container of containers) {
@@ -43,9 +44,17 @@ export const inspectDisposableWorktree = (
   workspaceId: string,
   expectedCommitSha: string,
   worktreePath: string,
+  workspaceContainerRoot?: string,
 ): Effect.Effect<DisposableWorktreeInspection> =>
   Effect.gen(function* () {
-    if (!isExpectedDisposableWorkspacePath(mainCheckoutRoot, workspaceId, worktreePath)) {
+    if (
+      !isExpectedDisposableWorkspacePath(
+        mainCheckoutRoot,
+        workspaceId,
+        worktreePath,
+        workspaceContainerRoot,
+      )
+    ) {
       return {
         state: "unproven",
         message:
@@ -142,11 +151,13 @@ export const copyDisposableWorkspaceFiles = (
 export const cleanupExactDisposableWorkspace = (
   mainCheckoutRoot: string,
   input: ExactDisposableWorkspaceCleanupInput,
+  workspaceContainerRoot?: string,
 ): Effect.Effect<ExactDisposableWorkspaceCleanupResult> =>
   Effect.gen(function* () {
     const expectedWorktreePath = expectedDisposableWorkspacePath(
       mainCheckoutRoot,
       input.workspaceId,
+      workspaceContainerRoot,
     );
     if (
       input.recordedWorktreePath === undefined ||
@@ -154,13 +165,14 @@ export const cleanupExactDisposableWorkspace = (
         mainCheckoutRoot,
         input.workspaceId,
         input.recordedWorktreePath,
+        workspaceContainerRoot,
       )
     ) {
       return cleanupFailed(
         `Recorded Snapshot Workspace identity does not match the expected workspace identity. Expected ${expectedWorktreePath}; received ${input.recordedWorktreePath ?? "<missing>"}.`,
       );
     }
-    const parent = yield* inspectSafeWorkspaceContainers(mainCheckoutRoot);
+    const parent = yield* inspectSafeWorkspaceContainers(mainCheckoutRoot, workspaceContainerRoot);
     if (!parent.ok) return cleanupFailed(parent.message);
 
     const inspected = yield* inspectDisposableWorktree(
@@ -168,6 +180,7 @@ export const cleanupExactDisposableWorkspace = (
       input.workspaceId,
       input.expectedCommitSha,
       expectedWorktreePath,
+      workspaceContainerRoot,
     );
     if (inspected.state === "absent") return { workspace: "removed" } as const;
     if (inspected.state === "unproven") return cleanupFailed(inspected.message);
@@ -184,6 +197,7 @@ export const cleanupExactDisposableWorkspace = (
       input.workspaceId,
       input.expectedCommitSha,
       expectedWorktreePath,
+      workspaceContainerRoot,
     );
     if (verified.state === "absent") return { workspace: "removed" } as const;
     return cleanupFailed(
@@ -193,10 +207,11 @@ export const cleanupExactDisposableWorkspace = (
 
 const inspectSafeWorkspaceContainers = (
   mainCheckoutRoot: string,
+  workspaceContainerRoot?: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
   Effect.sync(() => {
     try {
-      const root = disposableWorkspaceRoot(mainCheckoutRoot);
+      const root = disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot);
       for (const container of [dirname(dirname(root)), dirname(root), root]) {
         if (!pathExists(container)) continue;
         const entry = lstatSync(container);

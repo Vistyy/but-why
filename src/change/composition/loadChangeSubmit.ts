@@ -1,9 +1,11 @@
+import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
@@ -98,6 +100,7 @@ export const loadChangeSubmit = (input: {
       },
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
+      exactCommitWorkspaceRoot: join(context.paths.operationalDir, "exact-change-base-workspaces"),
       persistence: submission,
       resolvePolicy: (
         acceptanceContextSupplied,
@@ -142,6 +145,7 @@ export const loadChangeSubmit = (input: {
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
       }).capture,
+      runDisposableExactCommitWorkspace,
       executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
     });
   };

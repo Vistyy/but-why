@@ -125,13 +125,7 @@ it.scoped("does not project corrected Task reviewer configuration onto earlier R
 
       const correctedPolicy = {
         ...policy,
-        profile: {
-          ...policy.profile,
-          profile: {
-            ...policy.profile.profile,
-            runtimeConfig: { model: "corrected-model" },
-          },
-        },
+        guidance: { content: "Use corrected guidance.\n", source: "repo" as const },
       };
       const second = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
@@ -143,7 +137,7 @@ it.scoped("does not project corrected Task reviewer configuration onto earlier R
       if (!second.ok) throw new Error(second.code);
       const correctedInvocation = yield* agents.beginInvocation({
         agentSessionId: failedInvocation.dispatch.agentSessionId,
-        configuration: { harness: "pi", model: "corrected-model" },
+        configuration: { harness: "pi", model: "test-model" },
         createdAt: later,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),

@@ -133,8 +133,9 @@ _Avoid_: Mutable current report
 **Validation Policy Snapshot**:
 The immutable resolved Acceptance Context, Agent Environment, Prepare, Checks, copied local files, and other Run-specific policy used by one Validation Run.
 The Validation Policy Snapshot does not duplicate Acceptance or Specialist reviewer configuration.
-Validation joins the Change-owned reviewer roster, instructions, and resolved Agent Profiles that Change Start froze.
+Validation joins the Change-owned reviewer roster, instructions, and resolved Agent Profiles that Change Start froze from the exact fetched starting Change Base and current Global Config.
 Change Submit resolves Run-specific policy from the exact fetched Change Base and does not read Candidate Repo Config as policy.
+An eligible pre-conversation correction resolves replacement authority from the exact fetched current Change Base and current Global Config before the effective configuration's resources are validated.
 Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
 _Avoid_: Mutable current config, Candidate-controlled policy, raw config hash, retroactive policy
 

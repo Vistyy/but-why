@@ -15,9 +15,10 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 Both files are validated when But Why reads them.
 
 Task Submit reads Repo Config from the exact captured Review Base.
-Change Start stores reviewer policy and Repo Agent Profiles for the Change.
+Change Start stores reviewer policy and Repo Agent Profiles resolved from the exact fetched starting Change Base and current Global Config.
 Change Submit reads current validation policy from the exact fetched Change Base and retains the stored Change reviewer configuration.
-The caller checkout's and Candidate's Repo Config do not supply submission policy.
+An eligible pre-conversation correction resolves its replacement from that exact fetched Change Base and current Global Config before validating the effective reviewer resources.
+The caller checkout's and Candidate's Repo Config do not supply Change reviewer authority or submission policy.
 Global Config resolves from the configured user path.
 
 ## Repo Config
