@@ -2,6 +2,11 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
+import {
+  assertValidationArtifactMetadata,
+  assertValidationFindingEvidence,
+  assertValidationToolingFailureEvidence,
+} from "../change/candidateValidation/candidateValidationEvidence.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -230,13 +235,15 @@ const parseFindings = (
 ): readonly Omit<CandidateValidationFinding, "validationRunId" | "phase" | "producer">[] =>
   parseArray(source).map((value) => {
     const row = objectValue(value, "Finding");
-    return {
+    const finding = {
       title: stringValue(field(row, "title"), "Finding title"),
       description: stringValue(field(row, "description"), "Finding description"),
       evidence: stringValue(field(row, "evidence"), "Finding evidence"),
       files: stringArray(field(row, "files"), "Finding files"),
       artifactRefs: stringArray(field(row, "artifactRefs"), "Finding Artifact refs"),
     };
+    assertValidationFindingEvidence(finding);
+    return finding;
   });
 
 const parseArtifacts = (
@@ -244,21 +251,20 @@ const parseArtifacts = (
 ): readonly Pick<CandidateValidationArtifact, "path" | "originalBytes" | "storedBytes">[] =>
   parseArray(source).map((value) => {
     const row = objectValue(value, "Artifact");
-    const originalBytes = integerValue(field(row, "originalBytes"), "Artifact original bytes");
-    const storedBytes = integerValue(field(row, "storedBytes"), "Artifact stored bytes");
-    if (storedBytes > originalBytes) throw new Error("Artifact stored bytes exceed original bytes");
-    return {
+    const artifact = {
       path: stringValue(field(row, "path"), "Artifact path"),
-      originalBytes,
-      storedBytes,
+      originalBytes: numberValue(field(row, "originalBytes"), "Artifact original bytes"),
+      storedBytes: numberValue(field(row, "storedBytes"), "Artifact stored bytes"),
     };
+    assertValidationArtifactMetadata(artifact);
+    return artifact;
   });
 
 const parseToolingFailure = (
   source: string,
 ): Omit<CandidateValidationToolingFailure, "sequence" | "validationRunId"> => {
   const row = objectValue(JSON.parse(source) as unknown, "Tooling Failure");
-  return {
+  const failure = {
     errorKind: stringValue(
       field(row, "errorKind"),
       "Tooling Failure kind",
@@ -266,6 +272,8 @@ const parseToolingFailure = (
     operationName: stringValue(field(row, "operationName"), "Tooling Failure operation"),
     errorMessage: stringValue(field(row, "errorMessage"), "Tooling Failure message"),
   };
+  assertValidationToolingFailureEvidence(failure);
+  return failure;
 };
 
 const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentInvocationRecord => {
@@ -374,9 +382,9 @@ const stringArray = (value: unknown, name: string): readonly string[] => {
   }
   return value as readonly string[];
 };
-const integerValue = (value: unknown, name: string): number => {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(`${name} is invalid`);
-  return value as number;
+const numberValue = (value: unknown, name: string): number => {
+  if (typeof value !== "number") throw new Error(`${name} is not a number`);
+  return value;
 };
 const invalidHarness = (value: string): never => {
   throw new Error(`Invalid Agent Harness: ${value}`);

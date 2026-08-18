@@ -1,10 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { type Effect, Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../../agent/adapters/piReviewerProcessExecutor.js";
-import type {
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
-} from "../../../agent/agentSession/agentSession.js";
+import type { AgentSessionPersistence } from "../../../agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -12,6 +9,7 @@ import {
 import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import type { ChangeAgentSessionPort } from "../../changePorts.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
 import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";
 import {
@@ -34,12 +32,7 @@ export const candidateValidationLayer = (input: {
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: number;
-    readonly phase: string;
-  }) => AgentSessionSqlLink;
+  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(

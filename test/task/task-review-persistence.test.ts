@@ -117,7 +117,6 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
       const configuration = {
         harness: "pi" as const,
         model: "test-model",
-        thinking: "off" as const,
       };
       const started = yield* agents.beginInvocation({
         configuration,
@@ -125,7 +124,6 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
-          configuration,
           configurationSnapshot: policy,
         }),
       });
@@ -197,7 +195,6 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
-          configuration,
           configurationSnapshot: policy,
         }),
       });
@@ -259,7 +256,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: first.review.id,
-          configuration,
           configurationSnapshot: policy,
         }),
       });
@@ -318,7 +314,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: second.review.id,
-          configuration,
           configurationSnapshot: policy,
         }),
       });

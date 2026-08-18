@@ -6,6 +6,7 @@ import { type ValidationPhase, validationPhase } from "../change/validationRun/v
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
+  listValidationArtifacts,
   listValidationFindings,
   listValidationPhaseResults,
   listValidationToolingFailures,
@@ -48,6 +49,7 @@ export const requireCoherentValidationCompletion = (
     }
     const results = yield* listValidationPhaseResults(sql, validationRunId, idPrefix);
     const findings = yield* listValidationFindings(sql, validationRunId, idPrefix);
+    yield* listValidationArtifacts(sql, validationRunId, idPrefix);
     const toolingFailures = yield* listValidationToolingFailures(sql, validationRunId, idPrefix);
     const evidenceRows = yield* sql<PhaseResultEvidenceRow>`
       SELECT phase, producer, findings, artifacts, tooling_failure AS toolingFailure

@@ -1,10 +1,7 @@
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type {
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
-} from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
@@ -12,6 +9,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { ChangeAgentSessionPort } from "../changePorts.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
@@ -92,12 +90,7 @@ type CandidateValidationPathsValue = {
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: number;
-    readonly phase: string;
-  }) => AgentSessionSqlLink;
+  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
 };
 
 export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<

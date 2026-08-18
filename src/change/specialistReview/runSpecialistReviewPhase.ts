@@ -73,7 +73,7 @@ export type RunSpecialistReviewPhaseInput = {
     readonly producer: string;
     readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: SpecialistReviewPolicy;
   }) => AgentSessionSqlLink;
   readonly settleAgentInvocationResult: NonNullable<
     CandidateValidationExecutionPort["settleAgentInvocationResult"]

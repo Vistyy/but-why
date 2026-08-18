@@ -13,6 +13,7 @@ import type {
 
 export type { TerminalCleanupChange } from "./change.js";
 
+import type { ChangeReviewerPolicy } from "./changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
@@ -132,7 +133,7 @@ export type ChangeAgentSessionPort = {
     readonly producer: string;
     readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: ChangeReviewerPolicy;
   }) => AgentSessionSqlLink;
 };
 

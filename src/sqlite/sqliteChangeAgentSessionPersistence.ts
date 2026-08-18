@@ -83,9 +83,6 @@ export const openSqliteChangeAgentSessionPort = () =>
               );
               const expected = reviewerPolicyForPosition(run.policy, input.phase, input.producer);
               const stored = changeReviewerPolicy(configuration, input.phase, input.producer);
-              if (input.configurationSnapshot === undefined) {
-                throw new Error("Change reviewer Invocation requires a configuration Snapshot");
-              }
               const snapshot = decodeReviewerPolicySnapshot(
                 input.configurationSnapshot,
                 input.phase,

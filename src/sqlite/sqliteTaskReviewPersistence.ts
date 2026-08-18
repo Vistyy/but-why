@@ -675,15 +675,50 @@ const linkAgentInvocation = (
         "Task Review does not belong to the Task or is not active",
       );
     }
-    const sessions = yield* sql<{ readonly agentSessionId: number }>`
-      SELECT continuation.agent_session_id AS agentSessionId
+    const sessions = yield* sql<{
+      readonly agentSessionId: number;
+      readonly harness: string;
+      readonly provider: string | null;
+      readonly model: string;
+      readonly thinking: string | null;
+    }>`
+      SELECT continuation.agent_session_id AS agentSessionId, continuation.harness,
+        continuation.provider, continuation.model, continuation.thinking
       FROM agent_invocations AS invocation
       JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
       WHERE invocation.id = ${invocationId}
     `;
-    const sessionId = sessions[0]?.agentSessionId;
-    if (sessionId === undefined)
+    const session = sessions[0];
+    if (session === undefined)
       return yield* invalid("link Task Agent Invocation", "Invocation Session is missing");
+    const sessionId = session.agentSessionId;
+    const snapshot = yield* Effect.try({
+      try: () => parsePolicy(JSON.stringify(input.configurationSnapshot)),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "link Task Agent Invocation",
+          cause,
+        }),
+    });
+    const profile = snapshot.profile.profile;
+    if (profile === null) {
+      return yield* invalid(
+        "link Task Agent Invocation",
+        "Task Reviewer configuration has no Agent Profile",
+      );
+    }
+    const runtimeConfig = profile.runtimeConfig;
+    if (
+      session.harness !== "pi" ||
+      session.provider !== null ||
+      session.model !== (runtimeConfig?.model ?? "") ||
+      session.thinking !== (runtimeConfig?.thinking ?? null)
+    ) {
+      return yield* invalid(
+        "link Task Agent Invocation",
+        "Agent Continuation configuration does not match the Task Reviewer",
+      );
+    }
     const taskSession = yield* sql<{ readonly agentSessionId: number | null }>`
       SELECT reviewer_agent_session_id AS agentSessionId FROM tasks
       WHERE id = ${internalTaskId(input.taskId, idPrefix)}
@@ -719,10 +754,30 @@ const linkAgentInvocation = (
       idPrefix,
       invocationId,
     );
+    const storedConfiguration = stored[0]?.configuration;
+    const existing =
+      storedConfiguration === undefined || storedConfiguration === null
+        ? undefined
+        : yield* Effect.try({
+            try: () => parsePolicy(storedConfiguration),
+            catch: (cause) =>
+              new RepositoryPersistedDataInvalid({
+                operationName: "link Task Agent Invocation",
+                cause,
+              }),
+          });
+    if (
+      existing !== undefined &&
+      !canCorrect &&
+      JSON.stringify(existing) !== JSON.stringify(snapshot)
+    ) {
+      return yield* invalid(
+        "link Task Agent Invocation",
+        "Task Reviewer configuration cannot change for this Agent Session",
+      );
+    }
     const configuration =
-      stored[0]?.configuration === undefined || stored[0].configuration === null || canCorrect
-        ? JSON.stringify(input.configurationSnapshot ?? input.configuration)
-        : stored[0].configuration;
+      existing === undefined || canCorrect ? JSON.stringify(snapshot) : JSON.stringify(existing);
     yield* sql`
       UPDATE tasks SET reviewer_configuration = ${configuration},
         reviewer_agent_session_id = COALESCE(reviewer_agent_session_id, ${sessionId})

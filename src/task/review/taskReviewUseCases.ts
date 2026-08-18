@@ -310,7 +310,6 @@ const submitTaskReview = (
                 linkInvocation: input.persistence.linkAgentInvocation({
                   taskId,
                   reviewId,
-                  configuration: agentConfiguration(resolvedPolicy.policy.profile),
                   configurationSnapshot: resolvedPolicy.policy.snapshot,
                 }),
                 reviewerRuntime: input.reviewerRuntime,

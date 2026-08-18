@@ -50,7 +50,6 @@ export const passTaskReviewFixture = (
       linkInvocation: reviews.linkAgentInvocation({
         taskId,
         reviewId,
-        configuration,
         configurationSnapshot: taskReviewPolicyFixture,
       }),
     });

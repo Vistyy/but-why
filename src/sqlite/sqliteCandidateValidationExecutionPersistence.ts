@@ -1,5 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import {
+  assertValidationArtifactMetadata,
+  assertValidationFindingEvidence,
+  assertValidationToolingFailureEvidence,
+} from "../change/candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
   CandidateValidationFinding,
@@ -459,6 +464,18 @@ const recordPhaseResult = (
     ) {
       return yield* invalidData(operationName, "Validation evidence does not match its position");
     }
+    yield* Effect.try({
+      try: () => {
+        for (const finding of findings) assertValidationFindingEvidence(finding);
+        for (const artifact of input.artifactRecords) {
+          assertValidationArtifactMetadata(artifact);
+        }
+        if (input.toolingFailure !== undefined) {
+          assertValidationToolingFailureEvidence(input.toolingFailure);
+        }
+      },
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    });
     const artifacts = input.artifactRecords.map((artifact) => ({
       path: artifact.path,
       originalBytes: artifact.originalBytes,

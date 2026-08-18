@@ -1,8 +1,5 @@
 import type { Effect } from "effect";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionSqlLink,
-} from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionSqlLink } from "../../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskState } from "../lifecycle.js";
@@ -140,8 +137,7 @@ export type TaskReviewPersistence = {
   readonly linkAgentInvocation: (input: {
     readonly taskId: string;
     readonly reviewId: number;
-    readonly configuration: AgentSessionConfiguration;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: TaskReviewPolicySnapshot;
   }) => AgentSessionSqlLink;
   readonly settleAgentReview: (input: {
     readonly reviewId: number;

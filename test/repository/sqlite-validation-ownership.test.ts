@@ -37,6 +37,19 @@ const policy = {
   specialistReviews: [specialist("first"), specialist("second")],
 };
 
+const taskReviewPolicy = {
+  profile: {
+    agentProfile: "review",
+    scope: "repo" as const,
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "claimed-model", thinking: "medium" as const },
+    },
+  },
+  builtInInstructions: "Review the Task proposal.",
+  guidance: null,
+};
+
 const createRun = (commonDirectory: string, branch: string) =>
   Effect.gen(function* () {
     const repository = yield* RepositorySql;
@@ -246,6 +259,120 @@ describe("SQLite Validation ownership", () => {
     ),
   );
 
+  it.scoped("validates embedded phase evidence before persisting its final Result", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const fixture = yield* createRun(input.commonDirectory, "phase-evidence");
+        const position = {
+          validationRunId: fixture.started.validationRunId,
+          phase: "checks" as const,
+          producer: "types",
+        };
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "passed",
+              artifactRecords: [
+                {
+                  ref: "artifact:invalid",
+                  ...position,
+                  path: "checks/types/stdout.txt",
+                  originalBytes: 1,
+                  storedBytes: 2,
+                  truncated: false,
+                },
+              ],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
+              finding: {
+                ...position,
+                title: "   ",
+                description: "The Candidate is invalid.",
+                evidence: "Observed in the Candidate.",
+                files: [],
+                artifactRefs: [],
+              },
+              artifactRecords: [],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
+              artifactRecords: [],
+              toolingFailure: {
+                validationRunId: position.validationRunId,
+                errorKind: "check_command_execution_tooling_failed",
+                operationName: "   ",
+                errorMessage: "The Check command failed.",
+              },
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const repository = yield* RepositorySql;
+        expect(
+          yield* repository.operation(
+            "inspect rejected Validation Phase Results",
+            (sql) => sql<{ readonly count: number }>`
+              SELECT COUNT(*) AS count FROM validation_phase_results
+              WHERE validation_run_id = ${position.validationRunId}
+            `,
+          ),
+        ).toEqual([{ count: 0 }]);
+
+        yield* fixture.validation.execution.recordCheckResult({
+          validationRunId: position.validationRunId,
+          producer: position.producer,
+          outcome: "failed",
+          finding: {
+            ...position,
+            title: "Fix the Check",
+            description: "The Candidate does not pass the Check.",
+            evidence: "The Check output contains an error.",
+            files: [],
+            artifactRefs: ["artifact:checks/types/stdout.txt"],
+          },
+          artifactRecords: [
+            {
+              ref: "artifact:checks/types/stdout.txt",
+              ...position,
+              path: "checks/types/stdout.txt",
+              originalBytes: 3,
+              storedBytes: 2,
+              truncated: true,
+            },
+          ],
+        });
+        yield* fixture.validation.execution.recordWorkspaceCleanup({
+          validationRunId: position.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        yield* fixture.validation.execution.complete({
+          validationRunId: position.validationRunId,
+          outcome: "blocked",
+        });
+        expect(
+          yield* fixture.validation.reads.listArtifacts(position.validationRunId),
+        ).toMatchObject([
+          { path: "checks/types/stdout.txt", originalBytes: 3, storedBytes: 2, truncated: true },
+        ]);
+      }),
+    ),
+  );
+
   it.scoped("binds a final reviewer Result to its settled terminal Invocation", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
@@ -346,6 +473,7 @@ describe("SQLite Validation ownership", () => {
                 changeId: fixture.captured.changeId,
                 phase: "checks",
                 producer: "types",
+                configurationSnapshot: specialist("first"),
               }),
             })
             .pipe(Effect.flip),
@@ -666,7 +794,7 @@ describe("SQLite Validation ownership", () => {
     ),
   );
 
-  it.scoped("links an active Task Review only to its owning Task", () =>
+  it.scoped("links an active Task Review only to its owning Task and configuration", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
@@ -693,11 +821,46 @@ describe("SQLite Validation ownership", () => {
               linkInvocation: reviews.linkAgentInvocation({
                 taskId: `${repository.idPrefix}-2`,
                 reviewId: 1,
-                configuration,
+                configurationSnapshot: taskReviewPolicy,
               }),
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* validation.agentPersistence
+            .beginInvocation({
+              configuration,
+              createdAt: "2026-10-02T10:02:01.000Z",
+              linkInvocation: reviews.linkAgentInvocation({
+                taskId: `${repository.idPrefix}-1`,
+                reviewId: 1,
+                configurationSnapshot: taskReviewPolicy,
+              }),
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const retained = yield* repository.operation(
+          "inspect rejected Task Agent Invocation link",
+          (sql) => sql<{
+            readonly reviewerConfiguration: string | null;
+            readonly reviewerAgentSessionId: number | null;
+            readonly invocationLinks: number;
+          }>`
+            SELECT task.reviewer_configuration AS reviewerConfiguration,
+              task.reviewer_agent_session_id AS reviewerAgentSessionId,
+              (SELECT COUNT(*) FROM task_review_agent_invocations
+                WHERE task_review_id = 1) AS invocationLinks
+            FROM tasks AS task WHERE task.id = 1
+          `,
+        );
+        expect(retained).toEqual([
+          {
+            reviewerConfiguration: null,
+            reviewerAgentSessionId: null,
+            invocationLinks: 0,
+          },
+        ]);
       }),
     ),
   );

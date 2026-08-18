@@ -77,7 +77,7 @@ export type RunAcceptanceReviewPhaseInput = {
     readonly producer: string;
     readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: AcceptanceReviewPolicy;
   }) => AgentSessionSqlLink;
   readonly settleAgentInvocationResult: NonNullable<
     CandidateValidationExecutionPort["settleAgentInvocationResult"]
