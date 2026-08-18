@@ -29,13 +29,13 @@ import {
 } from "./sqliteChangeAuthorityHistory.js";
 import { latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
-import { requireValidationPosition } from "./sqliteValidationPosition.js";
 import {
   listValidationArtifacts,
   listValidationFindings,
   listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
+import { requireValidationPosition } from "./sqliteValidationPosition.js";
 import {
   readActiveValidationRunForChange,
   readValidationRunById,

@@ -11,8 +11,8 @@ import type {
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
-import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
+import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 type StoredPhaseResultRow = {
   readonly validationRunId: number;

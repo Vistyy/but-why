@@ -1,10 +1,9 @@
 import { Schema } from "effect";
-
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import {
   acceptanceReviewPolicySnapshotSchema,
   specialistReviewPolicySnapshotSchema,
 } from "./candidateValidation/candidateValidationPolicySnapshot.js";
+import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 
 const changeReviewerConfigurationSchema = Schema.Struct({
   acceptanceReview: Schema.NullOr(acceptanceReviewPolicySnapshotSchema),
