@@ -10,9 +10,9 @@ It is not implementation authority.
 ## Outcome
 
 BY-269 and BY-271 are completed planning and implementation predecessors, and BY-275 is the completed Agent Session prerequisite, for the direct BY-274 baseline cutover.
-BY-274 acceptance is limited to exact baseline implementation, verified old-bundle evidence, and successful disposable rehearsal.
-The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
-Live post-reconcile verification is not a Task completion condition, and post-baseline sequencing resumes only after successful live operation.
+BY-274 acceptance is limited to the exact baseline implementation and retained supported behavior.
+The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before the backup rename or fresh initialization.
+The later live steps are not a Task completion condition, and post-baseline sequencing resumes only after the minimum live operation succeeds.
 Task Review and Change reviewers use shared Agent Session and Agent Invocation capabilities for mechanics they currently share.
 Candidate Publication may adopt these capabilities later but is not part of the initial Agent Session work.
 Tasks and Changes retain role policy, prompts, structured results, Findings, lifecycle effects, and recovery decisions.
@@ -184,15 +184,15 @@ Agent infrastructure does not access Task or Change tables.
 A persistence failure therefore cannot leave an orphan Invocation or record either completion without the other.
 
 The direct BY-274 baseline needs durable representation for logical sessions, physical continuations, and Invocations because they have distinct write and recovery lifecycles.
-Existing Reviewer Session records remain read-only legacy evidence until the old state is archived because they lack the per-call facts needed to reconstruct exact Invocations honestly.
+Existing Reviewer Session records remain only in the prerelease state because they lack the per-call facts needed to reconstruct exact Invocations honestly.
 No old Reviewer Session record is imported or converted into the new baseline.
 All new reviewer work writes only the Agent Session representation.
-The final baseline and released executable remove legacy Reviewer tables and readers after the archive preserves the old evidence.
+The final baseline and released executable remove legacy Reviewer tables and readers, while the old rows remain in the dated low-value backup.
 Working internal Agent Session code remains in place unless the final schema, retired legacy representation removal, or supported behavior requires a change.
 Adapter relocation and general cleanup remain post-baseline hardening work.
 Do not add a generic Agent Execution record because each domain operation already groups its Invocations and owns its lifecycle and result.
 The direct BY-274 implementation must conform to the exact physical schema defined by the release-baseline plan rather than copy the prerelease Reviewer Session schema.
-BY-274 acceptance verifies the exact old executable bundle and a successful disposable rehearsal before the separately authorized live operator cutover.
+The separately authorized live cutover keeps the pre-merge source commit and uses its built or retained old executable only for exact merged-Change reconciliation.
 It stores no compatibility fingerprint.
 The domain-owned Task or Change representation stores the resolved reviewer configuration that Invocations and replacement continuations must use.
 

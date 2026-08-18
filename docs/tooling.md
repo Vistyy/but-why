@@ -47,37 +47,18 @@ After publication, packaged commands use the published But Why Executable and th
 ### Prerelease release-baseline cutover
 
 The release-ready runtime supports only `0001_baseline` and does not open prerelease Shared Repository State.
-Use this ordered procedure for the one-time live cutover.
+Use this minimum procedure for the one-time live cutover.
 
-1. Immediately before the baseline Change is merged, build a self-contained old executable bundle from canonical `main` and keep it outside the checkout.
-   Record the source commit, the actual runtime entrypoint, and every bundled runtime file in an integrity-checked SHA-256 manifest.
-2. Before the live cutover, verify every old runtime file against the manifest, verify the manifest integrity, and rehearse the exact direct `change reconcile <merged-change-id>` invocation on a disposable repository.
-   Use `just rehearse-release-baseline-cutover --help` for the reproducible rehearsal interface.
-   The script emits a compact pass/fail summary and keeps detailed observations in a temporary directory for Validation.
-   Verify the entrypoint that the reconciliation command actually invokes rather than a dispatcher that can select another executable.
-3. After the merged baseline Change is available, pause all But Why opens and writes.
-4. Verify the merged `idPrefix` Repo Config against the merged commit, and verify that no `taskPrefix` compatibility overlay is installed.
-5. Invoke the verified old runtime entrypoint directly from canonical `main`, with canonical `main` assigned as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID and unchanged merged `idPrefix`.
-   Do not use the merged executable, a Candidate executable, or a source-checkout dispatcher for old-state reconciliation.
-   If reconciliation fails, verify the merged `idPrefix` against the merged commit again before any retry or new-runtime open.
-   If the reconciliation result is uncertain, determine whether the exact Change and cleanup mutations committed before retrying.
-   Do not retry while the old-state result is unknown.
-6. After successful reconciliation, archive the complete Git Common Directory But Why state and repository reviewer files under an operator-selected unique path.
-   Include the archive timestamp, repository and executable identity, the complete manifest-covered old runtime, archive integrity metadata, and instructions that invoke that archived runtime directly when inspecting a state copy.
-   Include every archived runtime and reviewer file in the archive integrity manifest.
-   Keep existing loose SQLite backups until the archive checksums and old-state SQLite readability verify.
-   Do not overwrite or delete the verified archive.
-7. Remove the external temporary old bundle and manifest after the self-contained archive verifies.
-8. Initialize fresh Shared Repository State with the merged executable and the unchanged merged `idPrefix` Repo Config.
-   Verify the baseline ledger, the supported product table inventory, repository identity, and a normal read-only command before resuming operations.
-9. After fresh-state verification, remove the loose SQLite backups.
-   Retain only the active new `state.sqlite` and the single verified final prerelease archive.
+1. Keep the pre-merge source commit and build or retain its old executable before the baseline Change is merged.
+2. After the merged baseline Change is available, pause But Why operations that can open or write Shared Repository State.
+3. Invoke the old executable directly with canonical `main` as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
+   Leave the merged `idPrefix` unchanged.
+4. Rename the old Git Common Directory But Why state directory as a dated low-value backup.
+5. Initialize fresh Shared Repository State from `0001_baseline` with the merged executable and unchanged `idPrefix`.
+   Do not import or convert old rows.
+6. Run one basic supported CLI smoke check, such as `task list`, and then resume work.
 
-If interruption leaves the old operational state in place, continue with the old bundle or finish the archive move before initialization.
-If interruption occurs after the archive move, rerun fresh initialization with the merged executable.
-If verification fails before new work is recorded, restore the complete old operational state and use only the old bundle.
-If verification fails after new work is recorded, preserve the new state and repair it forward.
-Do not merge old and new Shared Repository State.
+This procedure requires no checksum, manifest, rehearsal, backup verification, archive reader, rollback command, or migration command.
 
 ## Check ownership
 

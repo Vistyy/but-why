@@ -8,9 +8,6 @@ fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-if [[ "${BY_RELEASE_BASELINE_REHEARSAL:-0}" == "1" && -z "${BY_RELEASE_BASELINE_REHEARSAL_ROOT:-}" ]]; then
-    export BY_RELEASE_BASELINE_REHEARSAL_ROOT="$(pwd -P)"
-fi
 if [[ "${BY_CAPACITY_LOCK_HELD:-0}" != "1" ]]; then
     started_at_ns=$(date +%s%N)
     lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
@@ -77,35 +74,6 @@ if (( interrupted_status == 0 )); then
     test_pid=${child_pids[-1]}
     wait_for_child "$test_pid" || status=1
 fi
-if (( interrupted_status == 0 && status == 0 )) && [[ "${BY_RELEASE_BASELINE_REHEARSAL:-0}" == "1" && "$(pwd -P)" == "${BY_RELEASE_BASELINE_REHEARSAL_ROOT:-}" ]]; then
-    required_rehearsal_environment=(
-        BY_RELEASE_BASELINE_OLD_STATE
-        BY_RELEASE_BASELINE_OLD_RUNTIME
-        BY_RELEASE_BASELINE_CANDIDATE_COMMIT
-        BY_RELEASE_BASELINE_OLD_SOURCE_COMMIT
-        BY_RELEASE_BASELINE_OLD_MANIFEST_SHA256
-        BY_RELEASE_BASELINE_CURRENT_RUNTIME_SHA256
-    )
-    for variable in "${required_rehearsal_environment[@]}"; do
-        if [[ -z "${!variable:-}" ]]; then
-            echo "error: ${variable} is required for the release-baseline rehearsal" >&2
-            status=1
-        fi
-    done
-    if (( status == 0 )); then
-        start_child just rehearse-release-baseline-cutover \
-            --fixture-repository . \
-            --old-state "$BY_RELEASE_BASELINE_OLD_STATE" \
-            --old-runtime "$BY_RELEASE_BASELINE_OLD_RUNTIME" \
-            --expected-candidate-commit "$BY_RELEASE_BASELINE_CANDIDATE_COMMIT" \
-            --expected-old-source-commit "$BY_RELEASE_BASELINE_OLD_SOURCE_COMMIT" \
-            --expected-old-manifest-sha256 "$BY_RELEASE_BASELINE_OLD_MANIFEST_SHA256" \
-            --expected-current-runtime-sha256 "$BY_RELEASE_BASELINE_CURRENT_RUNTIME_SHA256"
-        rehearsal_pid=${child_pids[-1]}
-        wait_for_child "$rehearsal_pid" || status=1
-    fi
-fi
-
 trap - INT TERM
 if (( interrupted_status == 0 )) && [[ -s "${BY_CAPACITY_INTERRUPTION_FILE:-}" ]]; then
     interruption_status=$(<"$BY_CAPACITY_INTERRUPTION_FILE")

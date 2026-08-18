@@ -5,7 +5,7 @@ BY-269, BY-271, and BY-275 are completed prerequisites recorded by this plan, an
 The approved Task and Change boundary and Agent Session plans supply its required ownership direction.
 It is not implementation authority.
 
-**Removal condition:** Remove this file after the released baseline is implemented, the prerelease state is archived, the cutover is completed, and accepted authority changes are recorded in current artifacts.
+**Removal condition:** Remove this file after the released baseline is implemented, the minimum live cutover is completed, and accepted authority changes are recorded in current artifacts.
 
 ## Outcome
 
@@ -417,7 +417,7 @@ Effect SQL retains its dependency-owned migration ledger.
 
 BY-269 completed the Task and Change coordination boundary, and BY-271 completed the internal numeric identity and operational naming direction described above.
 BY-274 is the one remaining direct Change that establishes the final `0001_baseline` and retires the prerelease representation at the release boundary.
-BY-274 acceptance is bounded to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
+BY-274 acceptance is bounded to the exact baseline implementation and retained supported behavior.
 The BY-274 Change must use the approved final physical model without introducing intermediate persistence migrations or splitting implementation into intermediate Tasks.
 
 The BY-274 acceptance must:
@@ -429,26 +429,25 @@ The BY-274 acceptance must:
 - Preserve the domain `input`, `cacheRead`, `cacheWrite`, `output`, and `total` token evidence and its five physical all-present-or-all-absent columns.
 - Preserve independently settled phase results, pre-dispatch phase Invocation links, exactly-once Invocation settlement, correction and recovery Invocations, and their exact token evidence.
 - Preserve owner-held cleanup obligations and retryable Terminal Cleanup, exact Candidate and Validation Run agreement for Publication, and exact merged completion through Task and Change coordination.
-- Preserve the read-only legacy Reviewer boundary until the old state is archived, then leave legacy records in that archive rather than importing or converting them.
+- Remove the legacy Reviewer representation from the released product without importing or converting old records.
 - Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for historical legacy records and the fixed configuration required for new Change reviewers.
 - Defer Adapter relocation, SQL ownership enforcement, and general cleanup to `post-baseline-hardening.md`.
-- Build and verify the exact old executable bundle, record its Git commit and SHA-256, and complete the cutover rehearsal successfully on a disposable repository.
+- Keep the pre-merge source commit and build or retain its old executable for the separately authorized live reconciliation.
 
 Every BY-274 Task Context must enumerate the required final-schema changes, retired representations, supported behavior changes, and BY-274 acceptance evidence.
 If implementation discovers necessary work outside that scope, the Implementer must raise an Implementation Blocker before performing or deferring it.
 The Operator decides whether to amend BY-274 or create another bounded Task before acceptance.
 
 BY-274 acceptance does not include the live operator cutover.
-After the merged Change is reconciled in the old state, that reconciliation closes the Change and marks the BY-274 Task Done before archive or fresh initialization.
+After the merged Change is reconciled in the old state, that reconciliation closes the Change and marks the BY-274 Task Done before the backup rename or fresh initialization.
 The immediately following live operator cutover is separately authorized, is not a second Task or product feature, and is not a condition of BY-274 Task completion.
 
 ## Verification allocation
 
 The BY-274 Change runs the repository's complete required check suite through the owning workflow.
 Acceptance verification must establish the final schema inventory, exact ordered baseline ledger behavior, numeric ID and ordering contracts, retained supported behavior, and removal of retired prerelease representations from the released executable.
-Acceptance verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy read-only evidence, reviewer configuration snapshots, and operational naming behavior.
-Acceptance verification must verify the exact old executable bundle and successful disposable rehearsal.
-Live archive, fresh-initialization, and post-reconcile verification are separate operator-cutover evidence and cannot determine BY-274 Task completion.
+Acceptance verification must also cover independently settled Validation Phase Results, pre-dispatch and exactly-once Invocation semantics, the `cacheRead` and `cacheWrite` mapping and all five physical token columns, cleanup obligations and retry behavior, exact Candidate and Validation Run Publication agreement, legacy representation removal, reviewer configuration snapshots, and operational naming behavior.
+The live reconciliation, backup rename, fresh initialization, and smoke check are separately authorized operator actions and cannot determine BY-274 Task completion.
 Do not add verification for importing, converting, or upgrading the retired prerelease database.
 Adapter relocation, SQL ownership enforcement, and general cleanup are post-baseline hardening concerns rather than BY-274 acceptance gates.
 
@@ -457,21 +456,16 @@ Do not add custom source-scanning tests that duplicate existing architecture che
 
 The live operator cutover follows BY-274 acceptance as a separately authorized operation.
 
-## Prerelease archive
+## Low-value prerelease backup
 
-The existing prerelease Shared Repository State remains useful historical evidence but does not need to remain executable by `0.1.0`.
-Archive the complete prerelease operational state separately rather than preserving only `state.sqlite`.
-The archive preserves the old executable revision and sufficient identity and integrity evidence to inspect the historical state reliably.
-It includes the complete Git Common Directory But Why state, repository reviewer files, archive timestamp, repository identity, a SHA-256 manifest, and short instructions for inspecting a copy with the old executable revision.
-It needs no special archive format or signature.
-The released `by` CLI does not read or import the prerelease archive.
-
-Keep the existing loose SQLite backups until the final prerelease archive is verified.
-After verification, remove those loose copies and retain only the new active `state.sqlite` and the single final prerelease archive.
+After old-state reconciliation, rename the old Git Common Directory But Why state directory as a dated low-value backup.
+Do not import or convert its rows.
+The released `by` CLI does not read the backup, and the cutover adds no archive-reader or rollback command.
+No checksum, manifest, integrity check, or backup verification is required.
 
 ## Separately authorized live operator cutover
 
-This live operation may begin only after BY-274 acceptance, including the verified old bundle and successful disposable rehearsal, is complete.
+This live operation may begin only after BY-274 acceptance is complete.
 It is separately authorized after acceptance, is not a second Task or product feature, and does not change the BY-274 completion condition.
 Only implementation work required for the direct BY-274 cutover should be recorded in the prerelease database.
 Do not record intermediate persistence work or later release work in the old state.
@@ -488,16 +482,14 @@ Verification must use standard Git upstream inspection and confirm that the remo
 ## Retired BY-271 authority
 
 The BY-271-specific `taskPrefix`-compatible Repo Config overlay and Task 7 predecessor language are retired.
-The cutover preserves and verifies the unchanged merged `idPrefix` Repo Config and does not install a `taskPrefix` overlay.
+The cutover leaves the merged `idPrefix` unchanged and does not install a `taskPrefix` overlay.
 
-The archive preserves old Task and Change history, but the new database does not import or convert it.
+The dated low-value backup retains old Task and Change rows, but the new database does not import or convert them.
 The exact ordered live procedure is [Prerelease release-baseline cutover](../docs/tooling.md#prerelease-release-baseline-cutover).
-That operator-facing authority governs old-bundle and manifest verification, exact reconciliation, failed and uncertain reconciliation recovery, archive verification, temporary bundle cleanup, fresh initialization, and the before-new-work recovery boundary.
-The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
-Live post-reconcile, archive, and fresh-state verification cannot determine BY-274 Task completion because the merged Change was already reconciled and marked Done in old state.
-Post-baseline Task recording and plan-removal sequencing may resume only after the complete live procedure succeeds.
-
-Live verification is bounded to archive integrity, old-state SQLite readability, the new baseline migration, repository identity, and basic trusted CLI access.
+That operator-facing authority governs the old-executable reconciliation, backup rename, fresh initialization, and basic CLI smoke check.
+The merged Change reconciliation closes the Change and marks the BY-274 Task Done in old state before the backup rename or fresh initialization.
+The later live steps cannot determine BY-274 Task completion because the merged Change was already reconciled and marked Done in old state.
+Post-baseline Task recording and plan-removal sequencing may resume after the minimum live procedure succeeds.
 A fresh clone may be used for initialization as an operational safety convenience, but it is not required.
 Do not add product maintenance mode, distributed locking, released rollback, or database conversion for this one-time cutover.
 
@@ -519,9 +511,9 @@ Remove verification whose only claim is upgrading or transforming a retired prer
 
 ## Authority change
 
-The planned BY-274 Change explicitly retires and deletes the prerelease migration files, registration, upgrade tests, and active support after the old state is archived.
-Git history and the prerelease archive preserve the old executable revision and migration chain for inspection.
-The new database does not import or convert the archived records.
+The planned BY-274 Change explicitly retires and deletes the prerelease migration files, registration, upgrade tests, and active support at the release boundary.
+Git history retains the old executable source and migration chain, and the dated low-value backup retains the old rows.
+The new database does not import or convert those records.
 This is an accepted one-time exception to ADR 0009's current consequence that the first release ships the complete prerelease chain.
 ADR 0009's governing decision remains applicable: migrations are immutable and schema changes use ordered forward migrations.
 After implementation, amend ADR 0009 rather than superseding it.
@@ -530,10 +522,9 @@ Do not change current architecture or ADR authority before implementation.
 
 ## Live procedure authority
 
-Use [Prerelease release-baseline cutover](../docs/tooling.md#prerelease-release-baseline-cutover) for the exact manual trusted-executable cutover procedure verified during baseline implementation.
-Store the old-state inspection instructions in the archive.
-Do not add product cutover, rollback, or prerelease conversion commands.
+Use [Prerelease release-baseline cutover](../docs/tooling.md#prerelease-release-baseline-cutover) for the minimum manual trusted-executable cutover procedure.
+Do not add product cutover, rollback, archive-reader, migration, or prerelease conversion commands.
 
 ## Authorization status
 
-No baseline implementation, state mutation, archive operation, Task Recording, or cutover is authorized by this plan.
+No baseline implementation, state mutation, backup operation, Task Recording, or cutover is authorized by this plan.

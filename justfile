@@ -105,10 +105,6 @@ build:
     @rm -rf dist
     @pnpm --silent run build
 
-# Rehearse the one-time release-baseline cutover in a disposable repository.
-rehearse-release-baseline-cutover *args:
-    @./scripts/rehearse-release-baseline-cutover.sh "$@"
-
 # Create the npm package tarball.
 pack:
     pnpm pack

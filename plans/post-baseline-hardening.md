@@ -11,10 +11,10 @@ It is not implementation authority and is not a substitute for SQLite Tasks.
 
 BY-269 completed the Task and Change coordination direction, BY-271 completed the internal numeric identity and operational naming direction, and BY-275 completed the Agent Session design prerequisite.
 BY-274 is the one remaining direct first-release baseline and operational cutover.
-BY-274 acceptance is limited to the exact baseline implementation, verified old bundle, and successful disposable rehearsal.
-The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before archive or fresh initialization.
-Live post-reconcile verification is not a Task completion condition.
-Post-baseline sequencing begins only after the live operator cutover succeeds.
+BY-274 acceptance is limited to the exact baseline implementation and retained supported behavior.
+The separately authorized live operator cutover follows merged Change reconciliation, which closes the Change and marks the BY-274 Task Done in old state before the backup rename or fresh initialization.
+The later live steps are not a Task completion condition.
+Post-baseline sequencing begins only after the minimum live operator cutover succeeds.
 BY-274 does not import or convert old data, and it retains working internal code unless the final schema, retired representation removal, or supported behavior requires a change.
 This plan owns the post-baseline hardening concerns that do not belong in that direct cutover, including Adapter relocation, SQL ownership enforcement, and general cleanup.
 Creating durable follow-up Tasks against transient structures before the baseline would create avoidable rework.
