@@ -307,7 +307,11 @@ const submitTaskReview = (
                 ...(agentSessionId === undefined ? {} : { agentSessionId }),
                 configuration: agentConfiguration(resolvedPolicy.policy.profile),
                 agentPersistence: input.agentPersistence,
-                linkInvocation: input.persistence.linkAgentInvocation({ taskId, reviewId }),
+                linkInvocation: input.persistence.linkAgentInvocation({
+                  taskId,
+                  reviewId,
+                  admittedPolicy: admitted.policy,
+                }),
                 reviewerRuntime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
                 decodeOutput,
@@ -417,20 +421,10 @@ const submitTaskReview = (
 
 const taskReviewPolicyFromSnapshot = (
   snapshot: TaskReviewPolicySnapshot,
-): TaskReviewPolicyResolutionResult =>
-  snapshot.profile.profile === null
-    ? { ok: false, message: "Stored Task Reviewer configuration has no Agent Profile." }
-    : {
-        ok: true,
-        policy: {
-          snapshot,
-          profile: {
-            agentProfile: snapshot.profile.agentProfile,
-            scope: snapshot.profile.scope,
-            profile: snapshot.profile.profile,
-          },
-        },
-      };
+): TaskReviewPolicyResolutionResult => ({
+  ok: true,
+  policy: { snapshot, profile: snapshot.profile },
+});
 
 const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfiguration => ({
   harness: "pi",

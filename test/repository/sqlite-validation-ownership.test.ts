@@ -965,20 +965,45 @@ describe("SQLite Validation ownership", () => {
           now: "2026-10-02T10:02:01.000Z",
         });
         if (!admitted.ok) throw new Error(admitted.code);
-        const agentSessionId = yield* reviews.getReviewerAgentSession(
-          publicTaskId(`${repository.idPrefix}-1`),
-        );
-        if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
-
+        expect(
+          yield* reviews.getReviewerAgentSession(publicTaskId(`${repository.idPrefix}-1`)),
+        ).toBeUndefined();
+        const firstInvocation = yield* validation.agentPersistence.beginInvocation({
+          configuration,
+          createdAt: "2026-10-02T10:02:02.000Z",
+          linkInvocation: reviews.linkAgentInvocation({
+            taskId: publicTaskId(`${repository.idPrefix}-1`),
+            reviewId: admitted.review.id,
+            admittedPolicy: admitted.policy,
+          }),
+        });
+        if (!firstInvocation.ok) throw new Error(firstInvocation.code);
+        yield* validation.agentPersistence.settleInvocation({
+          invocationId: firstInvocation.dispatch.invocation.id,
+          continuationId: firstInvocation.dispatch.continuation.id,
+          settlement: { settledAt: "2026-10-02T10:02:03.000Z", kind: "returned" },
+        });
+        const agentSessionId = firstInvocation.dispatch.agentSessionId;
+        const competingPolicy = {
+          ...taskReviewPolicy,
+          profile: {
+            ...taskReviewPolicy.profile,
+            profile: {
+              ...taskReviewPolicy.profile.profile,
+              runtimeConfig: { model: "competing-model", thinking: "medium" as const },
+            },
+          },
+        };
         expect(
           yield* validation.agentPersistence
             .beginInvocation({
               agentSessionId,
               configuration: { ...configuration, model: "competing-model" },
-              createdAt: "2026-10-02T10:02:02.000Z",
+              createdAt: "2026-10-02T10:02:04.000Z",
               linkInvocation: reviews.linkAgentInvocation({
                 taskId: publicTaskId(`${repository.idPrefix}-1`),
                 reviewId: admitted.review.id,
+                admittedPolicy: competingPolicy,
               }),
             })
             .pipe(Effect.flip),
@@ -1006,9 +1031,9 @@ describe("SQLite Validation ownership", () => {
           {
             reviewerConfiguration: JSON.stringify(taskReviewPolicy),
             reviewerAgentSessionId: agentSessionId,
-            continuationCount: 0,
-            invocationCount: 0,
-            invocationLinks: 0,
+            continuationCount: 1,
+            invocationCount: 1,
+            invocationLinks: 1,
           },
         ]);
       }),

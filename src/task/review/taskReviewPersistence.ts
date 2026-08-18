@@ -35,6 +35,7 @@ export type AdmitTaskReviewResult =
   | {
       readonly ok: true;
       readonly review: TaskReviewRecord;
+      readonly policy: TaskReviewPolicySnapshot;
       readonly proposal: TaskReviewProposal;
       readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
     }
@@ -137,6 +138,7 @@ export type TaskReviewPersistence = {
   readonly linkAgentInvocation: (input: {
     readonly taskId: string;
     readonly reviewId: number;
+    readonly admittedPolicy: TaskReviewPolicySnapshot;
   }) => AgentSessionSqlLink;
   readonly settleAgentReview: (input: {
     readonly reviewId: number;

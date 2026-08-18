@@ -80,7 +80,7 @@ it.effect("returns a reused judgment before every repository and reviewer collab
         profile: {
           agentProfile: "review",
           scope: "global",
-          profile: { agentRuntime: "pi" },
+          profile: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } },
         },
         builtInInstructions: taskReviewBuiltInInstructions,
         guidance: null,

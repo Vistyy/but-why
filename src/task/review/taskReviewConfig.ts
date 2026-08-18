@@ -1,12 +1,15 @@
 import { dirname, join } from "node:path";
-import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/agentProfiles.js";
+import {
+  type ResolvedReviewerPiAgentProfile,
+  resolveAgentProfile,
+} from "../../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type ResolvedTaskReviewPolicy = {
-  readonly profile: ResolvedPiAgentProfile;
+  readonly profile: ResolvedReviewerPiAgentProfile;
   readonly snapshot: TaskReviewPolicySnapshot;
 };
 
@@ -69,6 +72,9 @@ export const resolveTaskReviewPolicy = (input: {
           agentProfile: profile.agentProfile,
           scope: profile.scope,
           profile: profile.profile,
+          ...(profile.globalConfigDirectory === undefined
+            ? {}
+            : { globalConfigDirectory: profile.globalConfigDirectory }),
         },
         builtInInstructions: input.builtInInstructions,
         guidance: guidance.guidance,
@@ -129,7 +135,7 @@ const nonEmptyGuidance = (
     : { ok: true, guidance: { content, source } };
 
 const validateTaskReviewResources = (
-  profile: ResolvedPiAgentProfile,
+  profile: ResolvedReviewerPiAgentProfile,
   repoResourceExists: (path: string) => boolean,
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
   if (profile.scope === "global") {

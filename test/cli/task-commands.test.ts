@@ -54,7 +54,7 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
     profile: {
       agentProfile: "review",
       scope: "global",
-      profile: { agentRuntime: "pi" },
+      profile: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } },
     },
     builtInInstructions: "Review the exact proposal.",
     guidance: null,

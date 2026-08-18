@@ -1,12 +1,7 @@
 import { Schema } from "effect";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import { resolvedReviewerPiAgentProfileSchema } from "../../agent/agentProfiles.js";
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
-import {
-  agentProfileSchema,
-  configNameSchema,
-  nonBlankStringSchema,
-  type PiAgentProfileConfig,
-} from "../../contracts/agentConfig.js";
+import { nonBlankStringSchema } from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
@@ -27,11 +22,7 @@ export type TaskReviewDependencyEvidence = {
 };
 
 const taskReviewPolicySnapshotSchema = Schema.Struct({
-  profile: Schema.Struct({
-    agentProfile: configNameSchema,
-    scope: Schema.Literal("repo", "global"),
-    profile: Schema.NullOr(agentProfileSchema),
-  }),
+  profile: resolvedReviewerPiAgentProfileSchema,
   builtInInstructions: nonBlankStringSchema,
   guidance: Schema.NullOr(
     Schema.Struct({
@@ -48,21 +39,21 @@ const decodePolicySnapshot = Schema.decodeUnknownSync(taskReviewPolicySnapshotSc
 export const decodeTaskReviewPolicySnapshot = (value: unknown): TaskReviewPolicySnapshot =>
   decodePolicySnapshot(value);
 
-export type TaskReviewPolicySnapshot = {
-  readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope"> & {
-    readonly profile: PiAgentProfileConfig | null;
-  };
-  readonly builtInInstructions: string;
-  readonly guidance: {
-    readonly content: string;
-    readonly source: "repo" | "global";
-  } | null;
-};
+export type TaskReviewPolicySnapshot = Schema.Schema.Type<typeof taskReviewPolicySnapshotSchema>;
 
-export type TaskReviewToolingFailure = {
-  readonly operation: string;
-  readonly message: string;
-};
+const taskReviewToolingFailureSchema = Schema.Struct({
+  operation: nonBlankStringSchema,
+  message: nonBlankStringSchema,
+});
+
+const decodeToolingFailure = Schema.decodeUnknownSync(taskReviewToolingFailureSchema, {
+  onExcessProperty: "error",
+});
+
+export const decodeTaskReviewToolingFailure = (value: unknown): TaskReviewToolingFailure =>
+  decodeToolingFailure(value);
+
+export type TaskReviewToolingFailure = Schema.Schema.Type<typeof taskReviewToolingFailureSchema>;
 
 export type TaskReviewFinding = ReviewerFindingCore;
 

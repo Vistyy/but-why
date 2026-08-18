@@ -7,6 +7,7 @@ import {
   prepareDisposableWorkspaceParent,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
@@ -27,6 +28,7 @@ const policy = {
       agentRuntime: "pi" as const,
       runtimeConfig: { model: "test-model" },
     },
+    globalConfigDirectory: "/global/config",
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
@@ -118,15 +120,13 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
         harness: "pi" as const,
         model: "test-model",
       };
-      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
-      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const started = yield* agents.beginInvocation({
-        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
+          admittedPolicy: admitted.policy,
         }),
       });
       if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -180,6 +180,7 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
       const agents = yield* openSqliteAgentSessionPersistence();
+      const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
         taskId: publicTaskId("BY-1"),
@@ -189,20 +190,45 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
         now,
       });
       if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
+      expect(
+        yield* reviews
+          .recordActiveFailure(
+            admitted.review.id,
+            { operation: " ", message: "This malformed failure must not persist." },
+            now,
+          )
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      expect(yield* reviews.getById(admitted.review.id)).toMatchObject({ toolingFailure: null });
+      yield* repository.operation(
+        "inject malformed Task Review Tooling Failure",
+        (sql) => sql`
+          UPDATE task_reviews
+          SET tooling_failure = '{"operation":"run_task_review","message":"Failed.","extra":true}'
+          WHERE id = ${admitted.review.id}
+        `,
+      );
+      expect(yield* reviews.getById(admitted.review.id).pipe(Effect.flip)).toBeInstanceOf(
+        RepositoryPersistedDataInvalid,
+      );
+      yield* repository.operation(
+        "remove malformed Task Review Tooling Failure",
+        (sql) =>
+          sql`UPDATE task_reviews SET tooling_failure = NULL WHERE id = ${admitted.review.id}`,
+      );
       yield* reviews.recordCleanup(admitted.review.id, "removed", now);
       const configuration = { harness: "pi" as const, model: "test-model" };
-      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
-      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const invocation = yield* agents.beginInvocation({
-        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
+          admittedPolicy: admitted.policy,
         }),
       });
       if (!invocation.ok) throw new Error(invocation.code);
+      const agentSessionId = invocation.dispatch.agentSessionId;
       expect(
         yield* agents
           .settleInvocation({
@@ -274,15 +300,13 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       const configuration = { harness: "pi" as const, model: "test-model" };
-      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
-      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const blockedInvocation = yield* agents.beginInvocation({
-        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: first.review.id,
+          admittedPolicy: first.policy,
         }),
       });
       if (!blockedInvocation.ok) throw new Error(blockedInvocation.code);
@@ -340,6 +364,7 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: second.review.id,
+          admittedPolicy: second.policy,
         }),
       });
       if (!passedInvocation.ok) throw new Error(passedInvocation.code);

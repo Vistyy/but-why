@@ -54,7 +54,15 @@ describe("Task Review configuration", () => {
     });
     expect(resolve({ idPrefix: "BY" }, globalConfig)).toMatchObject({
       ok: true,
-      policy: { snapshot: { profile: { agentProfile: "global", scope: "global" } } },
+      policy: {
+        snapshot: {
+          profile: {
+            agentProfile: "global",
+            scope: "global",
+            globalConfigDirectory: "/global",
+          },
+        },
+      },
     });
     expect(
       resolve(

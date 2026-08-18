@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import type { ResolvedPiAgentProfile } from "../../src/agent/agentProfiles.js";
+import type { ResolvedReviewerPiAgentProfile } from "../../src/agent/agentProfiles.js";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   cleanupExactDisposableWorkspace,
@@ -41,7 +41,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
 
     const loaded = openRepositoryRuntime(root);
     if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
-    const profile: ResolvedPiAgentProfile = {
+    const profile: ResolvedReviewerPiAgentProfile = {
       agentProfile: "review",
       scope: "global",
       profile: {

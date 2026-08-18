@@ -18,7 +18,10 @@ const policy = {
   profile: {
     agentProfile: "review",
     scope: "global" as const,
-    profile: { agentRuntime: "pi" as const },
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "test-model" },
+    },
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,

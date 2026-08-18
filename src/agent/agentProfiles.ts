@@ -1,7 +1,9 @@
-import type {
-  AgentProfileReference,
-  PiAgentProfileConfig,
-  PiRuntimeConfig,
+import { Schema } from "effect";
+import {
+  type AgentProfileReference,
+  configNameSchema,
+  nonBlankStringSchema,
+  type PiAgentProfileConfig,
 } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
@@ -21,11 +23,28 @@ export type ResolvedPiAgentProfile = {
 
 export type InteractiveSessionAgentProfile = ResolvedPiAgentProfile;
 
-export type ResolvedReviewerPiAgentProfile = Omit<ResolvedPiAgentProfile, "profile"> & {
-  readonly profile: PiAgentProfileConfig & {
-    readonly runtimeConfig: PiRuntimeConfig & { readonly model: string };
-  };
-};
+const resolvedReviewerRuntimeConfigSchema = Schema.Struct({
+  model: nonBlankStringSchema,
+  thinking: Schema.optional(Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh")),
+  extensions: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  skills: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  tools: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  contextFileDiscovery: Schema.optional(Schema.Boolean),
+});
+
+export const resolvedReviewerPiAgentProfileSchema = Schema.Struct({
+  agentProfile: configNameSchema,
+  scope: Schema.Literal("repo", "global"),
+  profile: Schema.Struct({
+    agentRuntime: Schema.Literal("pi"),
+    runtimeConfig: resolvedReviewerRuntimeConfigSchema,
+  }),
+  globalConfigDirectory: Schema.optionalWith(nonBlankStringSchema, { exact: true }),
+});
+
+export type ResolvedReviewerPiAgentProfile = Schema.Schema.Type<
+  typeof resolvedReviewerPiAgentProfileSchema
+>;
 
 type ProfileResolutionInput = {
   readonly repoSelection?: AgentProfileReference;

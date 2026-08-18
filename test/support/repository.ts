@@ -44,13 +44,14 @@ export const passTaskReviewFixture = (
     const reviewId = admitted.review.id;
     yield* reviews.recordCleanup(reviewId, "removed", now);
     const configuration = { harness: "pi" as const, model: "test-model" };
-    const agentSessionId = yield* reviews.getReviewerAgentSession(taskId);
-    if (agentSessionId === undefined) throw new Error("Task Review fixture has no Agent Session");
     const invocation = yield* agents.beginInvocation({
-      agentSessionId,
       configuration,
       createdAt: now,
-      linkInvocation: reviews.linkAgentInvocation({ taskId, reviewId }),
+      linkInvocation: reviews.linkAgentInvocation({
+        taskId,
+        reviewId,
+        admittedPolicy: admitted.policy,
+      }),
     });
     if (!invocation.ok)
       throw new Error(`Could not dispatch Task Review fixture: ${invocation.code}`);

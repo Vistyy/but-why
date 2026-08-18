@@ -10,6 +10,7 @@ import { decodeReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { TaskState } from "../task/lifecycle.js";
 import {
   decodeTaskReviewPolicySnapshot,
+  decodeTaskReviewToolingFailure,
   type TaskReviewDependencyEvidence,
   type TaskReviewFinding,
   type TaskReviewPolicySnapshot,
@@ -179,6 +180,10 @@ export const openSqliteTaskReviewPersistence = (
       (sql, invocationId) =>
         Effect.gen(function* () {
           const operationName = "settle Task Review with Agent Invocation";
+          const toolingFailure =
+            input.toolingFailure === undefined
+              ? undefined
+              : yield* decodeTaskReviewToolingFailureEffect(operationName, input.toolingFailure);
           const invocations = yield* readTaskReviewInvocationEvidence(sql, input.reviewId);
           const terminal = invocations.at(-1);
           if (terminal?.invocationId !== invocationId) {
@@ -200,7 +205,7 @@ export const openSqliteTaskReviewPersistence = (
               "Every Task Review Invocation must be Task-owned and settled",
             );
           }
-          if (input.complete && input.toolingFailure !== undefined) {
+          if (input.complete && toolingFailure !== undefined) {
             return yield* invalid(
               operationName,
               "A completed Agent Task Review settlement cannot contain a Tooling Failure",
@@ -217,7 +222,7 @@ export const openSqliteTaskReviewPersistence = (
               sql,
               input.reviewId,
               input.findings,
-              input.toolingFailure,
+              toolingFailure,
               repository.idPrefix,
               mainCheckoutRoot,
               "agent_settlement",
@@ -228,23 +233,29 @@ export const openSqliteTaskReviewPersistence = (
                 `Task Review did not complete: ${completed.code}`,
               );
           } else {
-            if (input.toolingFailure === undefined)
+            if (toolingFailure === undefined)
               return yield* invalid(
                 "settle Task Review with Agent Invocation",
                 "Active Agent Task Review settlement requires a Tooling Failure",
               );
             yield* sql`
-              UPDATE task_reviews SET tooling_failure = ${JSON.stringify(input.toolingFailure)}
+              UPDATE task_reviews SET tooling_failure = ${JSON.stringify(toolingFailure)}
               WHERE id = ${input.reviewId} AND outcome IS NULL
             `;
           }
         }).pipe(Effect.asVoid),
     recordActiveFailure: (reviewId, failure) =>
       repository.transactionImmediate("record active Task Review failure", (sql) =>
-        Effect.asVoid(sql`
-          UPDATE task_reviews SET tooling_failure = ${JSON.stringify(failure)}
-          WHERE id = ${reviewId} AND outcome IS NULL
-        `),
+        Effect.gen(function* () {
+          const validated = yield* decodeTaskReviewToolingFailureEffect(
+            "record active Task Review failure",
+            failure,
+          );
+          yield* sql`
+            UPDATE task_reviews SET tooling_failure = ${JSON.stringify(validated)}
+            WHERE id = ${reviewId} AND outcome IS NULL
+          `;
+        }).pipe(Effect.asVoid),
       ),
     getLatestForTask: (taskId) =>
       repository.transaction("read current Task Review", (sql) =>
@@ -315,9 +326,6 @@ export const admitTaskReview = (
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({ operationName: "admit Task Review", cause }),
     });
-    if (policy.profile.profile === null) {
-      return yield* invalid("admit Task Review", "Task Reviewer policy has no Agent Profile");
-    }
     const tasks = yield* sql<{
       readonly title: string;
       readonly description: string;
@@ -330,23 +338,10 @@ export const admitTaskReview = (
     `;
     const task = tasks[0];
     if (task === undefined) return yield* invalid("admit Task Review", "Task disappeared");
-    if (task.reviewerConfiguration === null || task.reviewerAgentSessionId === null) {
-      if (task.reviewerConfiguration !== null || task.reviewerAgentSessionId !== null) {
-        return yield* invalid("admit Task Review", "Task Reviewer authority is incomplete");
-      }
-      const insertedSession = yield* sql<{ readonly id: number }>`
-        INSERT INTO agent_sessions DEFAULT VALUES RETURNING id
-      `;
-      const agentSessionId = insertedSession[0]?.id;
-      if (agentSessionId === undefined) {
-        return yield* invalid("admit Task Review", "Task Agent Session ID is missing");
-      }
-      yield* sql`
-        UPDATE tasks SET reviewer_configuration = ${JSON.stringify(policy)},
-          reviewer_agent_session_id = ${agentSessionId}
-        WHERE id = ${internalTaskId(input.taskId, idPrefix)}
-      `;
-    } else {
+    if ((task.reviewerConfiguration === null) !== (task.reviewerAgentSessionId === null)) {
+      return yield* invalid("admit Task Review", "Task Reviewer authority is incomplete");
+    }
+    if (task.reviewerConfiguration !== null) {
       const existing = yield* decodeTaskReviewPolicy(
         "admit Task Review",
         task.reviewerConfiguration,
@@ -357,12 +352,6 @@ export const admitTaskReview = (
           "admit Task Review",
           "Task Reviewer policy cannot change for this Agent Session",
         );
-      }
-      if (canCorrect) {
-        yield* sql`
-          UPDATE tasks SET reviewer_configuration = ${JSON.stringify(policy)}
-          WHERE id = ${internalTaskId(input.taskId, idPrefix)}
-        `;
       }
     }
     const dependencies = yield* dependencyEvidence(sql, input.taskId, idPrefix);
@@ -388,6 +377,7 @@ export const admitTaskReview = (
     return {
       ok: true as const,
       review: stored,
+      policy,
       proposal,
       dependencyEvidence: dependencies,
     };
@@ -451,6 +441,10 @@ const completeReview = (
   authority: "agent_settlement" | "tooling_failure",
 ) =>
   Effect.gen(function* () {
+    const validatedToolingFailure =
+      toolingFailure === undefined
+        ? undefined
+        : yield* decodeTaskReviewToolingFailureEffect("complete Task Review", toolingFailure);
     const current = yield* getReview(sql, reviewId, idPrefix, mainCheckoutRoot);
     if (current === undefined) {
       return { ok: false as const, code: "task_review_not_found" as const };
@@ -473,7 +467,7 @@ const completeReview = (
         new RepositoryPersistedDataInvalid({ operationName: "complete Task Review", cause }),
     });
     const admission = yield* inspectCurrentAdmission(sql, current, idPrefix);
-    const failure = admission.ok ? toolingFailure : admission.failure;
+    const failure = admission.ok ? validatedToolingFailure : admission.failure;
     const outcome =
       failure !== undefined
         ? "tooling_failed"
@@ -761,33 +755,44 @@ const linkAgentInvocation = (
       FROM tasks WHERE id = ${internalTaskId(input.taskId, idPrefix)}
     `;
     const authority = taskAuthority[0];
-    if (
-      authority?.agentSessionId === undefined ||
-      authority.agentSessionId === null ||
-      authority.configuration === null
-    ) {
+    if (authority === undefined) {
       return yield* invalid("link Task Agent Invocation", "Task Reviewer authority is missing");
     }
-    if (authority.agentSessionId !== sessionId) {
+    if ((authority.configuration === null) !== (authority.agentSessionId === null)) {
+      return yield* invalid("link Task Agent Invocation", "Task Reviewer authority is incomplete");
+    }
+    const admittedPolicy = yield* Effect.try({
+      try: () => decodeTaskReviewPolicySnapshot(input.admittedPolicy),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "link Task Agent Invocation",
+          cause,
+        }),
+    });
+    const storedPolicy =
+      authority.configuration === null
+        ? undefined
+        : yield* decodeTaskReviewPolicy("link Task Agent Invocation", authority.configuration);
+    const configurationChanged =
+      storedPolicy !== undefined && JSON.stringify(storedPolicy) !== JSON.stringify(admittedPolicy);
+    if (authority.agentSessionId !== null && authority.agentSessionId !== sessionId) {
       return yield* invalid("link Task Agent Invocation", "Task already has another Agent Session");
     }
-    const policy = yield* decodeTaskReviewPolicy(
-      "link Task Agent Invocation",
-      authority.configuration,
-    );
-    const profile = policy.profile.profile;
-    if (profile === null) {
+    if (
+      configurationChanged &&
+      !(yield* reviewerConfigurationCanBeCorrected(sql, input.taskId, idPrefix, invocationId))
+    ) {
       return yield* invalid(
         "link Task Agent Invocation",
-        "Task Reviewer configuration has no Agent Profile",
+        "Task Reviewer policy cannot change for this Agent Session",
       );
     }
-    const runtimeConfig = profile.runtimeConfig;
+    const runtimeConfig = admittedPolicy.profile.profile.runtimeConfig;
     if (
       session.harness !== "pi" ||
       session.provider !== null ||
-      session.model !== (runtimeConfig?.model ?? "") ||
-      session.thinking !== (runtimeConfig?.thinking ?? null)
+      session.model !== runtimeConfig.model ||
+      session.thinking !== (runtimeConfig.thinking ?? null)
     ) {
       return yield* invalid(
         "link Task Agent Invocation",
@@ -808,6 +813,18 @@ const linkAgentInvocation = (
         "Agent Session already has another owner",
       );
     }
+    if (authority.configuration === null) {
+      yield* sql`
+        UPDATE tasks SET reviewer_configuration = ${JSON.stringify(admittedPolicy)},
+          reviewer_agent_session_id = ${sessionId}
+        WHERE id = ${internalTaskId(input.taskId, idPrefix)}
+      `;
+    } else if (configurationChanged) {
+      yield* sql`
+        UPDATE tasks SET reviewer_configuration = ${JSON.stringify(admittedPolicy)}
+        WHERE id = ${internalTaskId(input.taskId, idPrefix)}
+      `;
+    }
     yield* sql`
       INSERT INTO task_review_agent_invocations (task_review_id, agent_invocation_id)
       VALUES (${input.reviewId}, ${invocationId})
@@ -818,6 +835,7 @@ const reviewerConfigurationCanBeCorrected = (
   sql: SqlClient.SqlClient,
   taskId: string,
   idPrefix: string,
+  excludingInvocationId?: number,
 ) =>
   Effect.gen(function* () {
     const sessions = yield* sql<{ readonly agentSessionId: number | null }>`
@@ -826,7 +844,9 @@ const reviewerConfigurationCanBeCorrected = (
     `;
     const sessionId = sessions[0]?.agentSessionId;
     if (sessionId === undefined || sessionId === null) return false;
-    const params = [sessionId];
+    const exclusion = excludingInvocationId === undefined ? "" : "AND invocation.id <> ?";
+    const params =
+      excludingInvocationId === undefined ? [sessionId] : [sessionId, excludingInvocationId];
     const latest = yield* sql.unsafe<{
       readonly settlementKind: string | null;
       readonly transcriptPath: string | null;
@@ -835,7 +855,7 @@ const reviewerConfigurationCanBeCorrected = (
         continuation.transcript_path AS transcriptPath
        FROM agent_invocations AS invocation
        JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
-       WHERE continuation.agent_session_id = ?
+       WHERE continuation.agent_session_id = ? ${exclusion}
        ORDER BY invocation.id DESC LIMIT 1`,
       params,
     );
@@ -845,7 +865,7 @@ const reviewerConfigurationCanBeCorrected = (
         SUM(CASE WHEN invocation.settlement_kind = 'returned' THEN 1 ELSE 0 END) AS returned
        FROM agent_continuations AS continuation
        LEFT JOIN agent_invocations AS invocation ON invocation.continuation_id = continuation.id
-       WHERE continuation.agent_session_id = ?`,
+       WHERE continuation.agent_session_id = ? ${exclusion}`,
       params,
     );
     return (
@@ -1086,19 +1106,19 @@ const parseFindings = (source: string): readonly TaskReviewFinding[] => {
   if (!Array.isArray(value)) throw new Error("Expected Findings array");
   return value.map(decodeReviewerFindingCore);
 };
-const parseFailure = (source: string): TaskReviewToolingFailure => {
-  const value = parseObject(source);
-  return {
-    operation: requiredString(field(value, "operation")),
-    message: requiredString(field(value, "message")),
-  };
-};
+const parseFailure = (source: string): TaskReviewToolingFailure =>
+  decodeTaskReviewToolingFailure(JSON.parse(source) as unknown);
 const parsePolicy = (source: string): TaskReviewPolicySnapshot =>
   decodeTaskReviewPolicySnapshot(JSON.parse(source) as unknown);
 
 const decodeTaskReviewPolicy = (operationName: string, source: string) =>
   Effect.try({
     try: () => parsePolicy(source),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+const decodeTaskReviewToolingFailureEffect = (operationName: string, value: unknown) =>
+  Effect.try({
+    try: () => decodeTaskReviewToolingFailure(value),
     catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 const decodeBoolean = (value: number, name: string): boolean => {
