@@ -318,6 +318,14 @@ with sqlite3.connect(sys.argv[1]) as connection:
         """,
         (sys.argv[2], sys.argv[3], sys.argv[5], sys.argv[6], change_id),
     )
+    connection.execute(
+        """
+        UPDATE candidates
+        SET change_base_sha = ?, head_sha = ?
+        WHERE id = (SELECT publication_candidate_id FROM changes WHERE id = ?)
+        """,
+        (sys.argv[6], sys.argv[5], change_id),
+    )
 PY
 
 python3 - "$FAKE_BIN/pull-request.json" "$PUBLICATION_OWNER" "$PUBLICATION_REPOSITORY" "$PULL_REQUEST_NUMBER" "$BASE_BRANCH" "$HEAD_BRANCH" "$EXPECTED_HEAD_SHA" <<'PY'
