@@ -11,6 +11,7 @@ import type {
 import { piSessionIdForContinuation } from "../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 const positiveIntegerMax = 9_007_199_254_740_991;
 
@@ -103,15 +104,18 @@ const beginInvocation = (
       ORDER BY id DESC LIMIT 1
     `;
     const current = currentRows[0];
-    const currentConfiguration: AgentSessionConfiguration | undefined =
-      current === undefined
-        ? undefined
-        : {
-            harness: decodeHarness(current.harness),
-            provider: current.provider,
-            model: current.model,
-            thinking: current.thinking === null ? null : decodeThinking(current.thinking),
-          };
+    const currentConfiguration = yield* decodePersisted(
+      "dispatch Agent Invocation",
+      (): AgentSessionConfiguration | undefined =>
+        current === undefined
+          ? undefined
+          : {
+              harness: decodeHarness(current.harness),
+              provider: current.provider,
+              model: current.model,
+              thinking: current.thinking === null ? null : decodeThinking(current.thinking),
+            },
+    );
     if (
       current !== undefined &&
       currentConfiguration !== undefined &&
@@ -156,7 +160,7 @@ const beginInvocation = (
       current.unusableReason === null &&
       currentConfiguration !== undefined &&
       sameConfiguration(currentConfiguration, input.configuration)
-        ? decodeContinuation(current)
+        ? yield* decodePersisted("dispatch Agent Invocation", () => decodeContinuation(current))
         : yield* createContinuation(sql, sessionId, normalizeConfiguration(input.configuration));
 
     const created = yield* sql<{ readonly id: number }>`
@@ -353,7 +357,9 @@ const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number)
       WHERE continuation.agent_session_id = ${agentSessionId}
       ORDER BY invocation.id
     `;
-    return rows.map(decodeInvocation);
+    return yield* decodePersisted("read Agent Invocation history", () =>
+      rows.map(decodeInvocation),
+    );
   });
 
 const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({

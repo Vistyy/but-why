@@ -47,8 +47,6 @@ type StoredAbandonmentContextRow = {
   readonly storedChangeId: number;
   readonly candidateId: number;
   readonly submittedSha: string;
-  readonly cleanupPending: number;
-  readonly cleanupBlockingReason: string | null;
 };
 
 const getAbandonmentContext = (
@@ -60,9 +58,7 @@ const getAbandonmentContext = (
     sql<StoredAbandonmentContextRow>`
       SELECT run.id AS validationRunId, run.candidate_id AS runCandidateId,
         candidate.change_id AS changeId, change_row.id AS storedChangeId,
-        candidate.id AS candidateId, candidate.head_commit AS submittedSha,
-        run.cleanup_pending AS cleanupPending,
-        run.cleanup_blocking_reason AS cleanupBlockingReason
+        candidate.id AS candidateId, candidate.head_commit AS submittedSha
       FROM validation_runs AS run
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
@@ -122,20 +118,11 @@ const decodeAbandonmentContext = (
   if (row.changeId !== row.storedChangeId) {
     throw new Error("Validation Run Candidate belongs to an unknown Change");
   }
-  if (row.cleanupPending !== 0 && row.cleanupPending !== 1) {
-    throw new Error("Validation Run cleanup state is invalid");
-  }
   return {
     validationRunId: row.validationRunId,
     changeId: publicChangeId(idPrefix, row.changeId),
     candidateId: row.candidateId,
     submittedSha: row.submittedSha,
-    cleanupWorkspace:
-      row.cleanupPending === 0
-        ? "removed"
-        : row.cleanupBlockingReason === null
-          ? "not_created"
-          : "failed",
   };
 };
 

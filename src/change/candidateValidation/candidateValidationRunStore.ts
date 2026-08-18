@@ -57,7 +57,6 @@ export type StartCandidateValidationRunResult =
       readonly reused: true;
       readonly validationRunId: number;
       readonly outcome: "passed";
-      readonly authority: CandidateValidationAuthority;
     }
   | {
       readonly reused: false;
@@ -116,7 +115,6 @@ export type CandidateValidationRunAbandonmentContext = {
   readonly candidateId: number;
   readonly submittedSha: string;
   readonly worktreePath?: string;
-  readonly cleanupWorkspace: "removed" | "not_created" | "failed" | null;
 };
 
 export type CandidateValidationRunRecord = {
@@ -126,8 +124,10 @@ export type CandidateValidationRunRecord = {
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";
   readonly outcome: CandidateValidationOutcome | null;
-  readonly workspaceCleanup: "not_created" | "removed" | "failed";
-  readonly cleanupBlockingReason: string | null;
+  readonly cleanup: {
+    readonly state: "pending" | "complete";
+    readonly blockingReason: string | null;
+  };
 };
 
 export type CandidateValidationAgentInvocation = AgentInvocationRecord & {

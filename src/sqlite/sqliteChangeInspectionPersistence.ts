@@ -7,13 +7,13 @@ import type { ListChangesInput } from "../change/changeStore.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   readImplementationBlockerHistory,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
 import {
   changeReadColumns,
   decodeChangeRow,
-  deriveAcceptanceContext,
   type StoredChangeRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";

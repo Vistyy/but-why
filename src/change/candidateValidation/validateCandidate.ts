@@ -200,7 +200,14 @@ const makeCandidateValidation = (dependencies: {
         validationRunId: started.validationRunId,
       } as const;
     }
-    if (started.reused) return { ok: true, ...started } as const;
+    if (started.reused) {
+      return {
+        ok: true,
+        reused: true,
+        validationRunId: started.validationRunId,
+        outcome: started.outcome,
+      } as const;
+    }
 
     const workspace = yield* dependencies.createSnapshotWorkspace({
       repoRoot: dependencies.localRepositoryMainCheckoutRoot,

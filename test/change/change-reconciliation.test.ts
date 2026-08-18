@@ -8,6 +8,8 @@ import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js"
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
@@ -27,6 +29,19 @@ const installPublicationIdentity = (changeId: string) =>
     const repository = yield* RepositorySql;
     yield* repository.operation("install reconciliation publication identity", (sql) =>
       Effect.gen(function* () {
+        const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+          SELECT initial_acceptance_context AS acceptanceContext
+          FROM changes WHERE id = ${internalChangeId(changeId, "BY")}
+        `;
+        const acceptanceContext =
+          changeRows[0]?.acceptanceContext === null || changeRows[0] === undefined
+            ? null
+            : decodeSqliteAcceptanceContextSnapshot(changeRows[0].acceptanceContext);
+        const policySnapshot = encodeSqliteCandidateValidationPolicy({
+          checks: [],
+          copyFiles: [],
+          ...(acceptanceContext === null ? {} : { acceptanceContext }),
+        });
         yield* sql`
           INSERT INTO candidates (id, change_id, base_commit, head_commit)
           VALUES (1, ${internalChangeId(changeId, "BY")}, 'base', 'head')
@@ -36,7 +51,7 @@ const installPublicationIdentity = (changeId: string) =>
             id, candidate_id, policy_snapshot, highest_decision_id,
             highest_blocker_id, outcome, cleanup_pending
           ) VALUES (
-            2, 1, '{"checks":[],"copyFiles":[]}', NULL, NULL, 'passed', 0
+            2, 1, ${policySnapshot}, NULL, NULL, 'passed', 0
           )
         `;
       }),

@@ -22,11 +22,12 @@ import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidati
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
-import { deriveAcceptanceContext, latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
+import { latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   listValidationArtifacts,
@@ -185,15 +186,6 @@ const startOrReuse = (
             : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
       };
     });
-    const decisionRows = yield* sql<StoredImplementationDecisionRow>`
-      SELECT id, change_id AS changeId, choice, rationale
-      FROM implementation_decisions
-      WHERE change_id = ${internalChangeId(candidate.changeId, idPrefix)}
-      ORDER BY id
-    `;
-    const implementationDecisions = yield* decodePersisted(operationName, () =>
-      decodeImplementationDecisions(decisionRows, candidate.changeId, idPrefix),
-    );
     const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
       `SELECT ${implementationBlockerReadColumns}
        FROM implementation_blockers WHERE change_id = ? ORDER BY id`,
@@ -205,28 +197,6 @@ const startOrReuse = (
     if (blockerHistory.active !== null) {
       return { reused: false, blocked: true } satisfies StartCandidateValidationRunResult;
     }
-    const highestDecisionId = implementationDecisions.at(-1)?.id ?? null;
-    const highestBlockerId = blockerHistory.blockers.at(-1)?.id ?? null;
-    const acceptanceContext = deriveAcceptanceContext(
-      changeAuthority.acceptanceContext,
-      blockerHistory,
-    );
-    const policy = {
-      ...input.policy,
-      ...(acceptanceContext === null ? {} : { acceptanceContext }),
-    };
-    const policySnapshot = yield* Effect.try({
-      try: () => encodeSqliteCandidateValidationPolicy(policy),
-      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
-    });
-    const authority = {
-      candidate,
-      policy,
-      implementationDecisions,
-      blockerHistory,
-      latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
-    };
-
     const latestRows = yield* sql.unsafe<StoredValidationRunRow>(
       `SELECT ${validationRunReadColumns}
        FROM validation_runs WHERE candidate_id = ? ORDER BY id DESC LIMIT 1`,
@@ -249,9 +219,39 @@ const startOrReuse = (
         reused: true,
         validationRunId: decoded.id,
         outcome: "passed",
-        authority,
       } satisfies StartCandidateValidationRunResult;
     }
+
+    const decisionRows = yield* sql<StoredImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, choice, rationale
+      FROM implementation_decisions
+      WHERE change_id = ${internalChangeId(candidate.changeId, idPrefix)}
+      ORDER BY id
+    `;
+    const implementationDecisions = yield* decodePersisted(operationName, () =>
+      decodeImplementationDecisions(decisionRows, candidate.changeId, idPrefix),
+    );
+    const highestDecisionId = implementationDecisions.at(-1)?.id ?? null;
+    const highestBlockerId = blockerHistory.blockers.at(-1)?.id ?? null;
+    const acceptanceContext = deriveAcceptanceContext(
+      changeAuthority.acceptanceContext,
+      blockerHistory,
+    );
+    const policy = {
+      ...input.policy,
+      ...(acceptanceContext === null ? {} : { acceptanceContext }),
+    };
+    const policySnapshot = yield* Effect.try({
+      try: () => encodeSqliteCandidateValidationPolicy(policy),
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    });
+    const authority = {
+      candidate,
+      policy,
+      implementationDecisions,
+      blockerHistory,
+      latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
+    };
 
     const inserted = yield* sql<{ readonly id: number }>`
       INSERT INTO validation_runs (

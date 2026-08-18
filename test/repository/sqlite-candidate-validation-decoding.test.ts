@@ -221,10 +221,32 @@ describe("SQLite Candidate and Validation read decoding", () => {
           now,
         });
 
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "corrupt completed Validation Run cleanup obligation",
+          (sql) => sql`
+            UPDATE validation_runs SET cleanup_pending = 1
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+        yield* expectInvalidRunAuthority(
+          captured.changeId,
+          captured.candidateId,
+          started.validationRunId,
+          validation,
+          "invalid",
+        );
+        yield* repository.operation(
+          "restore completed Validation Run cleanup obligation",
+          (sql) => sql`
+            UPDATE validation_runs SET cleanup_pending = 0
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+
         const otherChangeId = yield* createCandidateOwningChange(
           "refs/heads/other-authority-boundary",
         );
-        const repository = yield* RepositorySql;
         const decisionRows = yield* repository.operation(
           "create foreign Validation Run Decision boundary",
           (sql) => sql<{ readonly id: number }>`
@@ -277,6 +299,30 @@ describe("SQLite Candidate and Validation read decoding", () => {
           "invalid",
         );
 
+        const forgedPolicy = JSON.stringify({
+          ...policy,
+          acceptanceContext: {
+            version: 1,
+            title: "Foreign Acceptance Context",
+            description: "This Change has no accepted implementation intent.",
+          },
+        });
+        yield* repository.operation(
+          "forge Validation Run Acceptance Context",
+          (sql) => sql`
+            UPDATE validation_runs
+            SET highest_blocker_id = NULL, policy_snapshot = ${forgedPolicy}
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+        yield* expectInvalidRunAuthority(
+          captured.changeId,
+          captured.candidateId,
+          started.validationRunId,
+          validation,
+          "invalid",
+        );
+
         const unresolvedBlockerRows = yield* repository.operation(
           "create unresolved Validation Run Blocker boundary",
           (sql) => sql<{ readonly id: number }>`
@@ -295,7 +341,8 @@ describe("SQLite Candidate and Validation read decoding", () => {
           "bind unresolved Validation Run Blocker boundary",
           (sql) => sql`
             UPDATE validation_runs
-            SET highest_blocker_id = ${unresolvedBlockerId}
+            SET highest_blocker_id = ${unresolvedBlockerId},
+              policy_snapshot = ${JSON.stringify(policy)}
             WHERE id = ${started.validationRunId}
           `,
         );

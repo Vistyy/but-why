@@ -232,8 +232,10 @@ describe("Candidate-owned Validation Run inspection", () => {
       expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
         state: "running",
         outcome: null,
-        workspaceCleanup: "failed",
-        cleanupBlockingReason: "Snapshot Workspace cleanup failed.",
+        cleanup: {
+          state: "pending",
+          blockingReason: "Snapshot Workspace cleanup failed.",
+        },
       });
       const inspected = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
@@ -243,7 +245,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       expect(inspected.status).toBe(0);
       expect(JSON.parse(inspected.stdout)).toMatchObject({
         workspace: {
-          cleanup: "failed",
+          cleanup: "pending",
           blockingReason: "Snapshot Workspace cleanup failed.",
         },
       });
@@ -332,7 +334,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now: later,
       });
 
-      expect(reused).toMatchObject({
+      expect(reused).toEqual({
         reused: true,
         validationRunId: fixture.validationRunId,
         outcome: "passed",
@@ -472,7 +474,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           changeBaseSha: "target-sha",
           headSha: "head-sha",
         },
-        workspace: { cleanup: "removed", blockingReason: null },
+        workspace: { cleanup: "complete", blockingReason: null },
         policy,
         phases: [
           { phase: "prepare", results: [{ producer: "prepare", outcome: "passed" }] },

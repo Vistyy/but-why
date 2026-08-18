@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
 import { publicChangeId } from "../change/changeId.js";
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
-import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -117,24 +116,6 @@ export const decodeChangeRow = (
     state: closeReason === null ? "open" : "closed",
     closeReason,
     cancelReason,
-  };
-};
-
-export const deriveAcceptanceContext = (
-  initial: AcceptanceContextSnapshotV1 | null,
-  history: ImplementationBlockerHistory,
-): AcceptanceContextSnapshotV1 | null => {
-  if (initial === null) return null;
-  const resolutions = [
-    ...(initial.resolutions ?? []),
-    ...history.resolutions.map((resolution) => resolution.content),
-  ];
-  return {
-    version: initial.version,
-    title: initial.title,
-    description: initial.description,
-    ...(initial.comments === undefined ? {} : { comments: [...initial.comments] }),
-    ...(resolutions.length === 0 ? {} : { resolutions }),
   };
 };
 

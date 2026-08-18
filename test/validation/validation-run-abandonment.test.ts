@@ -21,8 +21,7 @@ const runningRun: CandidateValidationRunRecord = {
   implementationDecisions: [],
   state: "running",
   outcome: null,
-  workspaceCleanup: "not_created",
-  cleanupBlockingReason: null,
+  cleanup: { state: "pending", blockingReason: null },
 };
 
 const abandonmentContext: CandidateValidationRunAbandonmentContext = {
@@ -31,7 +30,6 @@ const abandonmentContext: CandidateValidationRunAbandonmentContext = {
   candidateId: runningRun.candidateId,
   submittedSha: "head-sha",
   worktreePath,
-  cleanupWorkspace: "not_created",
 };
 
 const passThroughLock: ExecutionLock = {

@@ -116,6 +116,86 @@ it.effect("records and resumes a usable Agent Continuation with exact token evid
   }),
 );
 
+it.effect("reports malformed persisted Agent evidence as repository data errors", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const createSettledSession = Effect.gen(function* () {
+          const started = yield* persistence.beginInvocation({
+            configuration,
+            createdAt: "2026-08-14T12:00:00.000Z",
+            linkInvocation: noOpLink,
+          });
+          if (!started.ok) throw new Error(started.code);
+          yield* persistence.settleInvocation({
+            invocationId: started.dispatch.invocation.id,
+            continuationId: started.dispatch.continuation.id,
+            settlement: {
+              settledAt: "2026-08-14T12:00:01.000Z",
+              kind: "returned",
+            },
+          });
+          return started.dispatch;
+        });
+
+        const invalidSettlement = yield* createSettledSession;
+        yield* repository.operation(
+          "corrupt Agent Invocation settlement kind",
+          (sql) => sql`
+            UPDATE agent_invocations SET settlement_kind = 'impossible'
+            WHERE id = ${invalidSettlement.invocation.id}
+          `,
+        );
+        expect(
+          yield* persistence
+            .readInvocationHistory(invalidSettlement.agentSessionId)
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const invalidHarness = yield* createSettledSession;
+        yield* repository.operation(
+          "corrupt Agent Continuation Harness",
+          (sql) => sql`
+            UPDATE agent_continuations SET harness = 'impossible'
+            WHERE id = ${invalidHarness.continuation.id}
+          `,
+        );
+        expect(
+          yield* persistence
+            .beginInvocation({
+              agentSessionId: invalidHarness.agentSessionId,
+              configuration,
+              createdAt: "2026-08-14T12:00:02.000Z",
+              linkInvocation: noOpLink,
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const invalidThinking = yield* createSettledSession;
+        yield* repository.operation(
+          "corrupt Agent Continuation thinking level",
+          (sql) => sql`
+            UPDATE agent_continuations SET thinking = 'impossible'
+            WHERE id = ${invalidThinking.continuation.id}
+          `,
+        );
+        expect(
+          yield* persistence
+            .beginInvocation({
+              agentSessionId: invalidThinking.agentSessionId,
+              configuration,
+              createdAt: "2026-08-14T12:00:02.000Z",
+              linkInvocation: noOpLink,
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      }),
+    );
+  }),
+);
+
 it.effect("rejects concurrent unsettled dispatch and rolls back failed domain settlement", () =>
   Effect.gen(function* () {
     const root = yield* initializedRepository();

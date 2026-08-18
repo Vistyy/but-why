@@ -330,9 +330,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               `;
           }),
         );
-        const validationRunId = yield* completeValidation(
-          fixture.validation,
-          fixture.captured,
+        const linked = yield* nextCandidate(
+          fixture,
+          "Linked Candidate",
           "2026-07-22T10:03:00.000Z",
         );
         const requests: unknown[] = [];
@@ -340,7 +340,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           changePersistence: fixture.changes.publication,
           git: {
             ...publicationGitDefaults,
-            readBranchHead: () => fixture.captured.headSha,
+            readBranchHead: () => linked.captured.headSha,
             readFirstNonMergeCommitSubject: () => {
               throw new Error(
                 "metadata for a Change linked to a Task must not read commit history",
@@ -352,7 +352,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(
           yield* publication.publish({
             ...input(fixture),
-            validationRunId,
+            candidateId: linked.captured.candidateId,
+            validationRunId: linked.validationRunId,
           }),
         ).toMatchObject({ ok: true });
         expect(requests).toContainEqual(

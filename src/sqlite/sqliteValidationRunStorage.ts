@@ -7,10 +7,15 @@ import type {
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import {
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationDecisions,
+  deriveAcceptanceContext,
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
@@ -42,6 +47,7 @@ type DecodedValidationRun = {
 
 const decodeValidationRunRow = (
   row: StoredValidationRunRow,
+  policy: CandidateValidationRunRecord["policy"],
   implementationDecisions: CandidateValidationRunRecord["implementationDecisions"],
 ): DecodedValidationRun => {
   if (
@@ -55,24 +61,24 @@ const decodeValidationRunRow = (
   if (row.cleanupPending !== 0 && row.cleanupPending !== 1) {
     throw new Error("Validation Run cleanup obligation is unsupported");
   }
-  if (row.cleanupPending === 0 && row.cleanupBlockingReason !== null) {
+  if (
+    (row.cleanupPending === 0 && row.cleanupBlockingReason !== null) ||
+    (row.outcome !== null && row.cleanupPending === 1)
+  ) {
     throw new Error("Validation Run cleanup relationship is invalid");
   }
   return {
     record: {
       id: row.id,
       candidateId: row.candidateId,
-      policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
+      policy,
       implementationDecisions,
       state: row.outcome === null ? "running" : "complete",
       outcome: row.outcome,
-      workspaceCleanup:
-        row.cleanupPending === 0
-          ? "removed"
-          : row.cleanupBlockingReason === null
-            ? "not_created"
-            : "failed",
-      cleanupBlockingReason: row.cleanupBlockingReason,
+      cleanup: {
+        state: row.cleanupPending === 0 ? "complete" : "pending",
+        blockingReason: row.cleanupBlockingReason,
+      },
     },
     policySnapshot: row.policySnapshot,
     highestDecisionId: row.highestDecisionId,
@@ -120,10 +126,31 @@ export const readValidationRunById = (
         "Validation Run includes an unresolved Implementation Blocker",
       );
     }
-    return yield* decodePersisted(
-      operationName,
-      () => decodeValidationRunRow(row, decisions).record,
-    );
+    const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+      SELECT initial_acceptance_context AS acceptanceContext
+      FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
+    `;
+    return yield* decodePersisted(operationName, () => {
+      const change = changeRows[0];
+      if (change === undefined) throw new Error("Validation Run owning Change was not selected");
+      const policy = decodeSqliteCandidateValidationPolicy(row.policySnapshot);
+      const initialContext =
+        change.acceptanceContext === null
+          ? null
+          : decodeSqliteAcceptanceContextSnapshot(change.acceptanceContext);
+      const expectedContext = deriveAcceptanceContext(initialContext, blockers);
+      const policyContext = policy.acceptanceContext ?? null;
+      if (
+        (expectedContext === null) !== (policyContext === null) ||
+        (expectedContext !== null &&
+          policyContext !== null &&
+          encodeSqliteAcceptanceContextSnapshot(expectedContext) !==
+            encodeSqliteAcceptanceContextSnapshot(policyContext))
+      ) {
+        throw new Error("Validation Run Acceptance Context does not match its Change authority");
+      }
+      return decodeValidationRunRow(row, policy, decisions).record;
+    });
   });
 
 export const readActiveValidationRunForChange = (

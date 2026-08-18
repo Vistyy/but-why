@@ -486,6 +486,33 @@ EOF
   find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
   sha256sum -c SHA256SUMS
 ) > "$DETAILS/archive-initial-verification.txt"
+python3 - "$ARCHIVE/git-common-but-why/state.sqlite" "$CHANGE_INTEGER" <<'PY' > "$DETAILS/archived-state-readability.json"
+import json
+import sqlite3
+import sys
+
+state_path = sys.argv[1]
+change_id = int(sys.argv[2])
+with sqlite3.connect(f"file:{state_path}?mode=ro", uri=True) as connection:
+    integrity = connection.execute("PRAGMA quick_check").fetchone()
+    change = connection.execute(
+        "SELECT state, close_reason, cleanup_state FROM changes WHERE id = ?",
+        (change_id,),
+    ).fetchone()
+    task = connection.execute(
+        """
+        SELECT t.state FROM tasks t
+        JOIN task_change_links l ON l.task_id = t.id
+        WHERE l.change_id = ?
+        """,
+        (change_id,),
+    ).fetchone()
+    assert integrity == ("ok",), integrity
+    assert change == ("closed", "completed", "complete"), change
+    assert task == ("done",), task
+    print(json.dumps({"integrity": integrity[0], "change": change, "task": task}, separators=(",", ":")))
+PY
+log_event archived_state_readability_verified_before_fresh_initialization
 rm -rf "$OLD_RUNTIME_COPY"
 [[ ! -e "$OLD_RUNTIME_COPY" ]]
 log_event complete_archive_verified_and_external_bundle_removed
