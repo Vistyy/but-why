@@ -169,6 +169,33 @@ export const readImplementationBlockerHistory = (
       ),
   );
 
+export const readImplementationBlockerPrefix = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  highestBlockerId: number | null,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.flatMap(
+    highestBlockerId === null
+      ? Effect.succeed([] as readonly StoredImplementationBlockerRow[])
+      : sql.unsafe<StoredImplementationBlockerRow>(
+          `SELECT ${implementationBlockerReadColumns}
+           FROM implementation_blockers
+           WHERE change_id = ? AND id <= ?
+           ORDER BY id`,
+          [internalChangeId(changeId, idPrefix), highestBlockerId],
+        ),
+    (rows) =>
+      decodePersisted(operationName, () => {
+        const history = decodeImplementationBlockerHistory(rows, changeId, idPrefix);
+        if ((history.blockers.at(-1)?.id ?? null) !== highestBlockerId) {
+          throw new Error("Validation Run Blocker high-water identity is unknown");
+        }
+        return history;
+      }),
+  );
+
 export const deriveAcceptanceContext = (
   initial: AcceptanceContextSnapshotV1 | null,
   history: ImplementationBlockerHistory,
@@ -241,40 +268,49 @@ export const validateChangePublicationRelationships = (
 ) =>
   publication === null
     ? Effect.void
-    : Effect.flatMap(
-        sql<{
+    : Effect.gen(function* () {
+        const rows = yield* sql<{
           readonly candidateChangeId: number;
           readonly candidateHeadSha: string;
           readonly validationRunCandidateId: number | null;
+          readonly validationRunHighestBlockerId: number | null;
           readonly validationRunOutcome: string | null;
         }>`
           SELECT candidate.change_id AS candidateChangeId,
             candidate.head_commit AS candidateHeadSha,
             validation_run.candidate_id AS validationRunCandidateId,
+            validation_run.highest_blocker_id AS validationRunHighestBlockerId,
             validation_run.outcome AS validationRunOutcome
           FROM candidates AS candidate
           LEFT JOIN validation_runs AS validation_run
             ON validation_run.id = ${publication.validationRunId}
           WHERE candidate.id = ${publication.candidateId}
-        `,
-        (rows) =>
-          decodePersisted(operationName, () => {
-            const row = rows[0];
-            if (row === undefined) throw new Error("Publication Candidate was not selected");
-            if (publicChangeId(idPrefix, row.candidateChangeId) !== changeId) {
-              throw new Error("Publication Candidate belongs to another Change");
-            }
-            if (row.validationRunCandidateId !== publication.candidateId) {
-              throw new Error("Publication Validation Run belongs to another Candidate");
-            }
-            if (row.validationRunOutcome !== "passed") {
-              throw new Error("Publication Validation Run did not pass");
-            }
-            if (row.candidateHeadSha !== publication.expectedHeadSha) {
-              throw new Error("Publication expected head does not match its Candidate");
-            }
-          }),
-      );
+        `;
+        const row = yield* decodePersisted(operationName, () => {
+          const selected = rows[0];
+          if (selected === undefined) throw new Error("Publication Candidate was not selected");
+          if (publicChangeId(idPrefix, selected.candidateChangeId) !== changeId) {
+            throw new Error("Publication Candidate belongs to another Change");
+          }
+          if (selected.validationRunCandidateId !== publication.candidateId) {
+            throw new Error("Publication Validation Run belongs to another Candidate");
+          }
+          if (selected.validationRunOutcome !== "passed") {
+            throw new Error("Publication Validation Run did not pass");
+          }
+          if (selected.candidateHeadSha !== publication.expectedHeadSha) {
+            throw new Error("Publication expected head does not match its Candidate");
+          }
+          return selected;
+        });
+        yield* readImplementationBlockerPrefix(
+          sql,
+          changeId,
+          row.validationRunHighestBlockerId,
+          operationName,
+          idPrefix,
+        );
+      });
 
 export const decodeChangePublication = (row: SqliteChangePublicationRow) =>
   decodeSqliteChangePublication(row);

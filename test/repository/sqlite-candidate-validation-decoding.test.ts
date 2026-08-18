@@ -4,6 +4,7 @@ import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
@@ -26,19 +27,23 @@ const now = "2026-08-10T00:00:00.000Z";
 const createCandidateOwningChange = (branchRef: string) =>
   Effect.gen(function* () {
     const repository = yield* RepositorySql;
-    yield* repository.operation(
+    const rows = yield* repository.operation(
       "create Candidate-owning Change",
-      (sql) => sql`
-      INSERT INTO changes (
-        branch_ref, base_ref, base_remote_url, worktree_path,
-        reviewer_configuration, cleanup_pending
-      ) VALUES (
-        ${branchRef}, 'refs/remotes/origin/main',
-        'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
-        '{"acceptanceReview":null,"specialistReviews":[]}', 0
-      )
-    `,
+      (sql) => sql<{ readonly id: number }>`
+        INSERT INTO changes (
+          branch_ref, base_ref, base_remote_url, worktree_path,
+          reviewer_configuration, cleanup_pending
+        ) VALUES (
+          ${branchRef}, 'refs/remotes/origin/main',
+          'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
+          '{"acceptanceReview":null,"specialistReviews":[]}', 0
+        )
+        RETURNING id
+      `,
     );
+    const changeId = rows[0]?.id;
+    if (changeId === undefined) throw new Error("Change identity was not allocated");
+    return changeId;
   });
 
 const createRun = (commonDirectory: string, branchRef: string) =>
@@ -133,6 +138,87 @@ describe("SQLite Candidate and Validation read decoding", () => {
         expect(yield* validation.reads.listArtifacts(started.validationRunId)).toMatchObject([
           { originalBytes: 10, storedBytes: 7, truncated: true },
         ]);
+      }),
+    ),
+  );
+
+  it.scoped("rejects a Validation Run Blocker boundary from another Change", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const { captured, started, validation } = yield* createRun(
+          input.commonDirectory,
+          "refs/heads/blocker-boundary",
+        );
+        yield* validation.execution.recordWorkspaceCleanup({
+          validationRunId: started.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        yield* validation.execution.complete({
+          validationRunId: started.validationRunId,
+          outcome: "passed",
+          now,
+        });
+
+        const otherChangeId = yield* createCandidateOwningChange(
+          "refs/heads/other-blocker-boundary",
+        );
+        const repository = yield* RepositorySql;
+        const blockerRows = yield* repository.operation(
+          "create foreign Validation Run Blocker boundary",
+          (sql) => sql<{ readonly id: number }>`
+            INSERT INTO implementation_blockers (change_id, content, resolution_content)
+            VALUES (${otherChangeId}, 'Foreign blocker', NULL)
+            RETURNING id
+          `,
+        );
+        const foreignBlockerId = blockerRows[0]?.id;
+        if (foreignBlockerId === undefined) throw new Error("Blocker identity was not allocated");
+        yield* repository.operation(
+          "bind foreign Validation Run Blocker boundary",
+          (sql) => sql`
+            UPDATE validation_runs
+            SET highest_blocker_id = ${foreignBlockerId}
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+
+        expect(
+          yield* validation.reads.getRunById(started.validationRunId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* validation.execution
+            .startOrReuse({
+              candidateId: captured.candidateId,
+              changeBaseSha: "base",
+              headSha: "head",
+              policy,
+              now,
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+        const changes = yield* openSqliteChangeTestDependencies();
+        expect(
+          yield* changes.publication.getCurrentPassingEvidence(captured.changeId).pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* changes.publication
+            .beginPublication({
+              changeId: captured.changeId,
+              candidateId: captured.candidateId,
+              validationRunId: started.validationRunId,
+              target: {
+                owner: "acme",
+                repo: "widgets",
+                baseBranch: "main",
+                remoteName: "origin",
+              },
+              headBranch: "blocker-boundary",
+              expectedHeadSha: "head",
+              now,
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),
   );

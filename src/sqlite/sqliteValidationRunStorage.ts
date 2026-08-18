@@ -11,6 +11,7 @@ import { readCandidateById } from "./sqliteCandidateStorage.js";
 import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationDecisions,
+  readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
@@ -88,6 +89,13 @@ export const readValidationRunById = (
       sql,
       candidate.changeId,
       row.highestDecisionId,
+      operationName,
+      idPrefix,
+    );
+    yield* readImplementationBlockerPrefix(
+      sql,
+      candidate.changeId,
+      row.highestBlockerId,
       operationName,
       idPrefix,
     );
