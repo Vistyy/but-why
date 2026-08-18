@@ -272,11 +272,25 @@ for name, reviewer in reviewers.items():
     path = reviewer.get("instructionsFile")
     if not isinstance(path, str) or not path:
         raise SystemExit(f"reviewer {name} has no instructionsFile")
+    paths.append(path)
+review = config.get("review", {})
+if not isinstance(review, dict):
+    raise SystemExit("merged Repo Config review must be an object")
+for role in ("task", "acceptance"):
+    role_config = review.get(role)
+    if role_config is None:
+        continue
+    if not isinstance(role_config, dict):
+        raise SystemExit(f"review role {role} must be an object")
+    path = role_config.get("instructionsFile")
+    if path is not None:
+        if not isinstance(path, str) or not path:
+            raise SystemExit(f"review role {role} has an invalid instructionsFile")
+        paths.append(path)
+for path in sorted(set(paths)):
     candidate = pathlib.PurePosixPath(path)
     if candidate.is_absolute() or ".." in candidate.parts:
-        raise SystemExit(f"reviewer {name} instructionsFile is not repository-relative")
-    paths.append(path)
-for path in sorted(set(paths)):
+        raise SystemExit(f"reviewer instructionsFile is not repository-relative: {path}")
     print(path)
 PY
 )

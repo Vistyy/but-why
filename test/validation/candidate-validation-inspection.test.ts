@@ -136,7 +136,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("projects measured Agent Invocation usage with public token names", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
-      yield* withTestRepository(
+      const dispatch = yield* withTestRepository(
         fixture.root,
         Effect.gen(function* () {
           const agents = yield* openSqliteAgentSessionPersistence();
@@ -171,6 +171,7 @@ describe("Candidate-owned Validation Run inspection", () => {
               },
             },
           });
+          return started.dispatch;
         }),
       );
       yield* fixture.runStore.completeAfterCleanup({
@@ -186,10 +187,26 @@ describe("Candidate-owned Validation Run inspection", () => {
       ]);
 
       expect(shown.status, shown.stdout).toBe(0);
-      expect(JSON.parse(shown.stdout).agentInvocations).toMatchObject([
+      expect(JSON.parse(shown.stdout).agentInvocations).toEqual([
         {
+          id: dispatch.invocation.id,
+          phase: "acceptance_review",
+          producer: "acceptance",
+          continuationId: dispatch.continuation.id,
+          createdAt: now,
+          settledAt: later,
           settlementKind: "returned",
           usage: { input: 10, cacheRead: 2, cacheWrite: 3, output: 4, total: 19 },
+          continuation: {
+            id: dispatch.continuation.id,
+            agentSessionId: dispatch.agentSessionId,
+            harness: "pi",
+            provider: null,
+            model: "test-model",
+            thinking: "off",
+            transcriptPath: null,
+            unusableReason: null,
+          },
         },
       ]);
     }),

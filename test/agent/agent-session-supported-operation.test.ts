@@ -137,8 +137,22 @@ it.effect("submits through the supported Task Review operation with a real Agent
           id: expect.any(Number),
           invocations: [
             {
+              id: expect.any(Number),
+              continuationId: expect.any(Number),
+              createdAt: expect.any(String),
+              settledAt: expect.any(String),
               settlementKind: "returned",
               usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1, total: 2 },
+              continuation: {
+                id: expect.any(Number),
+                agentSessionId: expect.any(Number),
+                harness: "pi",
+                provider: null,
+                model: "but-why-test/deterministic-reviewer",
+                thinking: "off",
+                transcriptPath: expect.any(String),
+                unusableReason: null,
+              },
             },
           ],
         },
