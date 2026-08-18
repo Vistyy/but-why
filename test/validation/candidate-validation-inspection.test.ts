@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
+import type { ChangeReviewerPolicy } from "../../src/change/changeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
@@ -35,6 +35,9 @@ const policy = {
     { id: "tests", command: "pnpm test", timeoutSeconds: 30 },
   ],
   copyFiles: [".env.test"],
+};
+
+const reviewerConfiguration = {
   acceptanceReview: {
     instructions: "Review acceptance.",
     instructionsSource: "built_in" as const,
@@ -115,7 +118,7 @@ describe("Candidate-owned Validation Run inspection", () => {
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
-              configurationSnapshot: policy.acceptanceReview,
+              configurationSnapshot: reviewerConfiguration.acceptanceReview,
             }),
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -193,7 +196,7 @@ describe("Candidate-owned Validation Run inspection", () => {
               producer: "acceptance",
               validationRunId: fixture.validationRunId,
               phase: "acceptance_review",
-              configurationSnapshot: policy.acceptanceReview,
+              configurationSnapshot: reviewerConfiguration.acceptanceReview,
             }),
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -646,7 +649,7 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("shows each review policy with one Agent Profile identity in the Snapshot", () =>
+  it.effect("joins Change reviewer configuration without adding it to the Run policy", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.recordRunToolingFailure("Replace the reviewer policy fixture");
@@ -655,8 +658,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         outcome: "tooling_failed",
       });
       const reviewPolicy = {
-        checks: [],
-        copyFiles: [],
         acceptanceReview: {
           instructions: "Review intent",
           instructionsSource: "built_in",
@@ -692,7 +693,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       const started = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy: reviewPolicy,
+        policy: { checks: [], copyFiles: [] },
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
@@ -720,7 +721,9 @@ describe("Candidate-owned Validation Run inspection", () => {
       ]);
       expect(result.status).toBe(0);
       const shown = JSON.parse(result.stdout);
-      expect(shown.policy).toEqual(reviewPolicy);
+      expect(shown.policy).toEqual({ checks: [], copyFiles: [] });
+      expect(shown.reviewerConfiguration).toBeUndefined();
+      expect(shown.change.reviewerConfiguration).toEqual(reviewPolicy);
     }),
   );
 
@@ -880,10 +883,7 @@ const candidateValidationFixture = () =>
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', ${join(root, "feature-worktree")},
-            ${JSON.stringify({
-              acceptanceReview: policy.acceptanceReview,
-              specialistReviews: policy.specialistReviews,
-            })}, 0
+            ${JSON.stringify(reviewerConfiguration)}, 0
           )
         `,
         );
@@ -999,9 +999,7 @@ const candidateValidationFixture = () =>
       validationRunId: number,
       phase: "acceptance_review" | "specialist_review",
       producer: string,
-      reviewer:
-        | NonNullable<CandidateValidationPolicySnapshot["acceptanceReview"]>
-        | NonNullable<CandidateValidationPolicySnapshot["specialistReviews"]>[number],
+      reviewer: ChangeReviewerPolicy,
     ) =>
       withPersistence((persistence) =>
         Effect.gen(function* () {
@@ -1064,7 +1062,7 @@ const candidateValidationFixture = () =>
             validationRunId,
             "acceptance_review",
             "acceptance",
-            policy.acceptanceReview,
+            reviewerConfiguration.acceptanceReview,
           );
         }),
       );

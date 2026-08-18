@@ -72,7 +72,6 @@ describe("Candidate validation", () => {
               },
             ],
             copyFiles: [".validation-env"],
-            specialistReviews: [],
           },
         });
 
@@ -124,7 +123,6 @@ describe("Candidate validation", () => {
             prepare: { command: "printf changed > candidate.txt", timeoutSeconds: 1 },
             checks: [{ id: "skipped", command: "true", timeoutSeconds: 1 }],
             copyFiles: [],
-            specialistReviews: [],
           },
         });
 
@@ -214,7 +212,6 @@ describe("Candidate validation", () => {
             },
           ],
           copyFiles: [],
-          specialistReviews: [],
         });
         const validation = candidateValidationForTest({
           localRepositoryMainCheckoutRoot: mainCheckout,
@@ -303,8 +300,6 @@ describe("Candidate validation", () => {
           policy: {
             checks: [],
             copyFiles: [],
-            acceptanceReview: reviewerPolicy("acceptance"),
-            specialistReviews: [],
           },
         });
 
@@ -352,8 +347,6 @@ describe("Candidate validation", () => {
           policy: {
             checks: [],
             copyFiles: [],
-            acceptanceReview: reviewerPolicy("acceptance"),
-            specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
           },
         });
 
@@ -475,8 +468,6 @@ describe("Candidate validation", () => {
               },
             ],
             copyFiles: [],
-            acceptanceReview: reviewerPolicy("acceptance"),
-            specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
           },
         });
 

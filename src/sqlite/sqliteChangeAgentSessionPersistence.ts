@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 
-import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import { internalChangeId } from "../change/changeId.js";
 import type { ChangeAgentSessionPort } from "../change/changePorts.js";
 import {
@@ -35,7 +34,7 @@ export const openSqliteChangeAgentSessionPort = () =>
       linkAgentInvocation: (input) => (sql, invocationId) =>
         Effect.gen(function* () {
           const operationName = "link Change Agent Invocation";
-          const run = yield* requireValidationPosition(sql, {
+          yield* requireValidationPosition(sql, {
             validationRunId: input.validationRunId,
             phase: input.phase,
             producer: input.producer,
@@ -81,19 +80,13 @@ export const openSqliteChangeAgentSessionPort = () =>
               const configuration = decodeSqliteChangeReviewerConfiguration(
                 owner.reviewerConfiguration,
               );
-              const expected = reviewerPolicyForPosition(run.policy, input.phase, input.producer);
               const stored = changeReviewerPolicy(configuration, input.phase, input.producer);
               const snapshot = decodeReviewerPolicySnapshot(
                 input.configurationSnapshot,
                 input.phase,
                 input.producer,
               );
-              if (!sameChangeReviewerPolicy(input.producer, snapshot, expected)) {
-                throw new Error(
-                  "Reviewer configuration Snapshot does not match the Validation Run policy",
-                );
-              }
-              return { configuration, expected, stored, snapshot };
+              return { configuration, stored, snapshot };
             },
             catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
           });
@@ -115,7 +108,7 @@ export const openSqliteChangeAgentSessionPort = () =>
             return yield* invalid(operationName, "Invocation Session is missing");
           }
           const sessionId = session.agentSessionId;
-          const runtimeConfig = reviewerEvidence.expected.profile.profile.runtimeConfig;
+          const runtimeConfig = reviewerEvidence.snapshot.profile.profile.runtimeConfig;
           if (
             session.harness !== "pi" ||
             session.provider !== null ||
@@ -155,7 +148,7 @@ export const openSqliteChangeAgentSessionPort = () =>
             !sameChangeReviewerPolicy(
               input.producer,
               reviewerEvidence.stored,
-              reviewerEvidence.expected,
+              reviewerEvidence.snapshot,
             )
           ) {
             const canCorrect = yield* agentSessionConfigurationCanBeCorrected(
@@ -195,24 +188,6 @@ export const openSqliteChangeAgentSessionPort = () =>
 
 const invalid = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-const reviewerPolicyForPosition = (
-  policy: CandidateValidationPolicySnapshot,
-  phase: string,
-  producer: string,
-): ChangeReviewerPolicy => {
-  if (phase === validationPhase.acceptanceReview && producer === "acceptance") {
-    if (policy.acceptanceReview === undefined) {
-      throw new Error("Validation Run has no Acceptance Reviewer");
-    }
-    return policy.acceptanceReview;
-  }
-  if (phase === validationPhase.specialistReview) {
-    const specialist = (policy.specialistReviews ?? []).find((review) => review.id === producer);
-    if (specialist !== undefined) return specialist;
-  }
-  throw new Error("Validation position is not a reviewer role");
-};
 
 const changeReviewerPolicy = (
   configuration: ChangeReviewerConfiguration,

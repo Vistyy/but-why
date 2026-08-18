@@ -13,17 +13,13 @@ import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistR
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
 import { InvalidReviewerConfig } from "../submit/submitRejectionErrors.js";
 import { submitRepoConfig } from "../submit/submitRepoConfig.js";
-import type {
-  AcceptanceContextCandidateValidationPolicy,
-  CandidateValidationPolicy,
-} from "./validateCandidate.js";
+import type { CandidateValidationPolicy } from "./validateCandidate.js";
 
-export type ResolvedCandidateValidationPolicy =
-  | { readonly acceptanceContextSupplied: false; readonly policy: CandidateValidationPolicy }
-  | {
-      readonly acceptanceContextSupplied: true;
-      readonly policy: AcceptanceContextCandidateValidationPolicy;
-    };
+export type ResolvedCandidateValidationPolicy = {
+  readonly acceptanceContextSupplied: boolean;
+  readonly policy: CandidateValidationPolicy;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
+};
 
 export type CandidateValidationPolicyResolution =
   | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
@@ -65,19 +61,24 @@ export const resolveCandidateValidationPolicy = (
   }
   const submit = submitRepoConfig(repoConfig);
   if (!submit.ok) return submit;
-  const specialistReviews =
-    input.reviewerConfiguration === undefined
-      ? resolveSpecialistReviewPolicies({
-          repoConfig,
-          globalConfig: input.globalConfig,
-          repoRoot,
-          globalConfigPath: input.globalConfigPath,
-        })
-      : { ok: true as const, policies: input.reviewerConfiguration.specialistReviews };
-  if (!specialistReviews.ok) return specialistReviews;
 
-  for (const specialist of specialistReviews.policies) {
+  const reviewerConfiguration = resolveReviewerConfiguration(input, repoConfig, repoRoot);
+  if (!reviewerConfiguration.ok) return reviewerConfiguration;
+  for (const specialist of reviewerConfiguration.configuration.specialistReviews) {
     const resources = validatePiAgentProfileResources(specialist.profile, repoRoot);
+    if (!resources.ok) return resources;
+  }
+  const acceptance = reviewerConfiguration.configuration.acceptanceReview;
+  if (input.acceptanceContextSupplied && acceptance === null) {
+    return {
+      ok: false,
+      error: new InvalidReviewerConfig({
+        message: "The stored Change reviewer configuration has no Acceptance Reviewer.",
+      }),
+    };
+  }
+  if (acceptance !== null) {
+    const resources = validatePiAgentProfileResources(acceptance.profile, repoRoot);
     if (!resources.ok) return resources;
   }
 
@@ -87,38 +88,52 @@ export const resolveCandidateValidationPolicy = (
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
     copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
-    specialistReviews: specialistReviews.policies,
   };
-  if (!input.acceptanceContextSupplied)
-    return { ok: true, resolved: { acceptanceContextSupplied: false, policy } };
-
-  const acceptanceReview =
-    input.reviewerConfiguration === undefined
-      ? resolveAcceptanceReviewPolicy({
-          repoConfig,
-          globalConfig: input.globalConfig,
-          repoRoot,
-          globalConfigPath: input.globalConfigPath,
-        })
-      : input.reviewerConfiguration.acceptanceReview === null
-        ? {
-            ok: false as const,
-            error: new InvalidReviewerConfig({
-              message: "The stored Change reviewer configuration has no Acceptance Reviewer.",
-            }),
-          }
-        : { ok: true as const, policy: input.reviewerConfiguration.acceptanceReview };
-  if (!acceptanceReview.ok) return acceptanceReview;
-  const acceptanceResources = validatePiAgentProfileResources(
-    acceptanceReview.policy.profile,
-    repoRoot,
-  );
-  if (!acceptanceResources.ok) return acceptanceResources;
   return {
     ok: true,
     resolved: {
-      acceptanceContextSupplied: true,
-      policy: { ...policy, acceptanceReview: acceptanceReview.policy },
+      acceptanceContextSupplied: input.acceptanceContextSupplied,
+      policy,
+      reviewerConfiguration: reviewerConfiguration.configuration,
+    },
+  };
+};
+
+const resolveReviewerConfiguration = (
+  input: CandidateValidationPolicyInput,
+  repoConfig: RepoConfig,
+  repoRoot: string,
+):
+  | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+  | { readonly ok: false; readonly error: SubmitRejectionError | GlobalConfigValidationFailed } => {
+  if (input.reviewerConfiguration !== undefined) {
+    return { ok: true, configuration: input.reviewerConfiguration };
+  }
+  const specialists = resolveSpecialistReviewPolicies({
+    repoConfig,
+    globalConfig: input.globalConfig,
+    repoRoot,
+    globalConfigPath: input.globalConfigPath,
+  });
+  if (!specialists.ok) return specialists;
+  if (!input.acceptanceContextSupplied) {
+    return {
+      ok: true,
+      configuration: { acceptanceReview: null, specialistReviews: specialists.policies },
+    };
+  }
+  const acceptance = resolveAcceptanceReviewPolicy({
+    repoConfig,
+    globalConfig: input.globalConfig,
+    repoRoot,
+    globalConfigPath: input.globalConfigPath,
+  });
+  if (!acceptance.ok) return acceptance;
+  return {
+    ok: true,
+    configuration: {
+      acceptanceReview: acceptance.policy,
+      specialistReviews: specialists.policies,
     },
   };
 };

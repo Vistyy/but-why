@@ -1,9 +1,20 @@
 import { Schema } from "effect";
-import {
-  acceptanceReviewPolicySnapshotSchema,
-  specialistReviewPolicySnapshotSchema,
-} from "./candidateValidation/candidateValidationPolicySnapshot.js";
+import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
+import { configNameSchema, nonBlankStringSchema } from "../contracts/agentConfig.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
+
+const acceptanceReviewPolicySnapshotSchema = Schema.Struct({
+  instructions: nonBlankStringSchema,
+  instructionsSource: Schema.Literal("repo", "global", "built_in"),
+  profile: resolvedReviewerPiAgentProfileSchema,
+});
+
+const specialistReviewPolicySnapshotSchema = Schema.Struct({
+  id: configNameSchema,
+  instructions: nonBlankStringSchema,
+  instructionsSource: Schema.Literal("repo", "global"),
+  profile: resolvedReviewerPiAgentProfileSchema,
+});
 
 const changeReviewerConfigurationSchema = Schema.Struct({
   acceptanceReview: Schema.NullOr(acceptanceReviewPolicySnapshotSchema),

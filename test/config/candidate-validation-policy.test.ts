@@ -89,7 +89,7 @@ describe("Candidate validation policy configuration", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      resolved: { policy: { specialistReviews: [] } },
+      resolved: { reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] } },
     });
   });
 
@@ -190,6 +190,8 @@ describe("Candidate validation policy configuration", () => {
         acceptanceContextSupplied: true,
         policy: {
           agentEnvironment: ["nix", "develop", "-c"],
+        },
+        reviewerConfiguration: {
           acceptanceReview: {
             profile: { profile: { runtimeConfig: { model: "acceptance-model" } } },
           },

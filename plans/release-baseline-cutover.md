@@ -69,7 +69,8 @@ Final physical schema and settled contracts:
   An unlinked Task cannot become Done; exact merged completion of its linked Change is the only completion path.
   Keep direct Task Dependency relationships in `task_dependencies`.
   Store each Task Review's exact proposal and dependency evidence as immutable JSON snapshots, with its Review Base ref and commit, nullable outcome, Findings, optional Tooling Failure, and cleanup obligation directly on `task_reviews`.
-  Task Reviews use their Task's stored reviewer configuration rather than duplicating it.
+  The Task stores reviewer configuration and its Agent Session atomically with the first linked Invocation, and Task Reviews do not duplicate that configuration.
+  A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session, and an earlier Review does not project a later corrected Task configuration.
   Do not add separate proposal, dependency-evidence, policy, Finding, or Tooling Failure tables.
 - Give `tasks` and `changes` independent SQLite-allocated table-local `INTEGER PRIMARY KEY` identities.
   Store the repository's immutable `id_prefix` once in `shared_state_identity` and derive public Task and Change IDs at the application boundary as `<id-prefix>-<task-number>` and `<id-prefix>-C<change-number>`.
@@ -159,7 +160,7 @@ Final physical schema and settled contracts:
 - Remove Validation Round `round_number` and use the fixed phase and producer identity.
 - Shared Agent storage retains Agent Sessions, physical continuations, and Invocations.
   Store no compatibility fingerprint.
-  The Task stores its resolved Task Reviewer configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
+  The Task stores its resolved Task Reviewer configuration and Task Reviewer Agent Session atomically when the first Agent Invocation links.
   The Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before their Agent Sessions are created lazily.
   These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
   Validate a resolved snapshot before storage.
@@ -169,7 +170,8 @@ Final physical schema and settled contracts:
   Once the harness establishes a conversation, that owner-role configuration remains fixed permanently.
   Missing or unusable transcript recovery uses that same configuration.
   Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
-  Prepare, Checks, Acceptance Context, and the output contract remain captured independently for each Validation Run rather than being frozen at Change Start.
+  A Validation Run policy snapshot contains only Run-specific facts, including Acceptance Context, Agent Environment, Prepare, Checks and timeouts, copied files, and other genuinely per-Run policy.
+  Validation joins Acceptance and Specialist reviewer configuration from its owning Change, and Validation Run inspection does not present that configuration as Run policy.
   For first-release Pi, store the nullable transcript-relative path and nullable unusable reason on its physical continuation and do not retain a separate transcript-reference table.
   A continuation is resumable only when its transcript path is present and no unusable reason is recorded.
   Do not add a replacement pointer, generic continuation status, or superseded timestamp.
@@ -299,6 +301,7 @@ The `validation_runs` table contains:
 - Nullable `run_tooling_failure` JSON.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
 
+The Validation Run policy snapshot does not duplicate Acceptance or Specialist reviewer configuration.
 The Validation Run row does not store lifecycle state, Change ID, Active Run identity, latest-resolved-Blocker identity, or timestamps.
 
 `validation_phase_results` contains required integer `validation_run_id`, required `phase` and `producer`, required `outcome` constrained to `passed` or `failed`, required ordered `findings` and `artifacts` JSON, and nullable `tooling_failure` JSON.
@@ -430,7 +433,7 @@ The BY-274 acceptance must:
 - Preserve independently settled phase results, pre-dispatch phase Invocation links, exactly-once Invocation settlement, correction and recovery Invocations, and their exact token evidence.
 - Preserve owner-held cleanup obligations and retryable Terminal Cleanup, exact Candidate and Validation Run agreement for Publication, and exact merged completion through Task and Change coordination.
 - Remove the legacy Reviewer representation from the released product without importing or converting old records.
-- Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for historical legacy records and the fixed configuration required for new Change reviewers.
+- Preserve Task Reviewer configuration and Change reviewer roster snapshots, including the no-invented-configuration rule for Reviews without Invocations, the no-projection rule after correction, and the fixed configuration required for new Change reviewers.
 - Defer Adapter relocation, SQL ownership enforcement, and general cleanup to `post-baseline-hardening.md`.
 - Keep the pre-merge source commit and build or retain its old executable for the separately authorized live reconciliation.
 

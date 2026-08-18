@@ -23,6 +23,9 @@ const currentPolicy = {
   prepare: { command: "pnpm install", timeoutSeconds: 60 },
   checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
   copyFiles: [".env.test"],
+};
+
+const reviewerConfiguration = {
   acceptanceReview: {
     instructions: "Review against the accepted intent.",
     instructionsSource: "built_in" as const,
@@ -69,8 +72,8 @@ const malformedPolicyRuns: readonly { readonly id: number; readonly policyJson: 
       agentEnvironment: currentPolicy.agentEnvironment,
       prepare: currentPolicy.prepare,
       copyFiles: currentPolicy.copyFiles,
-      acceptanceReview: currentPolicy.acceptanceReview,
-      specialistReviews: currentPolicy.specialistReviews,
+      acceptanceReview: reviewerConfiguration.acceptanceReview,
+      specialistReviews: reviewerConfiguration.specialistReviews,
     }),
   },
   { id: 103, policyJson: JSON.stringify({ ...currentPolicy, checks: {} }) },
@@ -85,20 +88,14 @@ const malformedPolicyRuns: readonly { readonly id: number; readonly policyJson: 
     id: 105,
     policyJson: JSON.stringify({
       ...currentPolicy,
-      specialistReviews: [{ ...currentPolicy.specialistReviews[0], instructionsSource: "bogus" }],
+      specialistReviews: reviewerConfiguration.specialistReviews,
     }),
   },
   {
     id: 106,
     policyJson: JSON.stringify({
       ...currentPolicy,
-      specialistReviews: [
-        {
-          ...currentPolicy.specialistReviews[0],
-          agentProfile: "security",
-          profileScope: "repo",
-        },
-      ],
+      acceptanceReview: reviewerConfiguration.acceptanceReview,
     }),
   },
 ];
@@ -128,8 +125,8 @@ const createCandidateOwningChange = (branchRef: string) =>
         'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
         ${encodeSqliteAcceptanceContextSnapshot(currentPolicy.acceptanceContext)},
         ${JSON.stringify({
-          acceptanceReview: currentPolicy.acceptanceReview,
-          specialistReviews: currentPolicy.specialistReviews,
+          acceptanceReview: reviewerConfiguration.acceptanceReview,
+          specialistReviews: reviewerConfiguration.specialistReviews,
         })}, 0
       )
     `,
@@ -204,10 +201,7 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
             headSha: "head-sha",
             policy: {
               ...currentPolicy,
-              acceptanceReview: {
-                ...currentPolicy.acceptanceReview,
-                ok: true,
-              },
+              acceptanceReview: reviewerConfiguration.acceptanceReview,
             } as CandidateValidationPolicySnapshot,
           })
           .pipe(Effect.flip);
@@ -262,37 +256,6 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
           {
             ...currentPolicy,
             prepare: { ...currentPolicy.prepare, timeoutSeconds: Number.MAX_SAFE_INTEGER + 1 },
-          },
-          {
-            ...currentPolicy,
-            specialistReviews: [
-              currentPolicy.specialistReviews[0],
-              currentPolicy.specialistReviews[0],
-            ],
-          },
-          {
-            ...currentPolicy,
-            specialistReviews: [{ ...currentPolicy.specialistReviews[0], id: "acceptance" }],
-          },
-          {
-            ...currentPolicy,
-            acceptanceReview: {
-              ...currentPolicy.acceptanceReview,
-              profile: {
-                ...currentPolicy.acceptanceReview.profile,
-                profile: { agentRuntime: "pi" as const, runtimeConfig: { model: " " } },
-              },
-            },
-          },
-          {
-            ...currentPolicy,
-            acceptanceReview: {
-              ...currentPolicy.acceptanceReview,
-              profile: {
-                ...currentPolicy.acceptanceReview.profile,
-                profile: { agentRuntime: "pi" as const },
-              },
-            },
           },
         ];
         for (const policy of invalidPolicies) {

@@ -67,6 +67,10 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
         ],
       });
 
+      if (!admitted.ok) throw new Error(admitted.code);
+      expect(admitted.review.agentSessionId).toBeUndefined();
+      expect(admitted.review.reviewerConfiguration).toBeUndefined();
+
       expect(
         yield* reviews.admit({
           taskId: publicTaskId("BY-2"),
@@ -76,6 +80,93 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
           now,
         }),
       ).toEqual({ ok: false, code: "active_task_review", reviewId: 1 });
+    }),
+  ),
+);
+
+it.scoped("does not project corrected Task reviewer configuration onto earlier Reviews", () =>
+  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const agents = yield* openSqliteAgentSessionPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+
+      const first = yield* reviews.admit({
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!first.ok) throw new Error(first.code);
+      const failedInvocation = yield* agents.beginInvocation({
+        configuration: { harness: "pi", model: "test-model" },
+        createdAt: now,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: first.review.id,
+          admittedPolicy: first.policy,
+        }),
+      });
+      if (!failedInvocation.ok) throw new Error(failedInvocation.code);
+      yield* agents.settleInvocation({
+        invocationId: failedInvocation.dispatch.invocation.id,
+        continuationId: failedInvocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "launch_failed" },
+      });
+      yield* reviews.recordCleanup(first.review.id, "removed", later);
+      yield* reviews.complete({
+        reviewId: first.review.id,
+        findings: [],
+        toolingFailure: { operation: "run_task_reviewer", message: "Reviewer launch failed." },
+        now: later,
+      });
+
+      const correctedPolicy = {
+        ...policy,
+        profile: {
+          ...policy.profile,
+          profile: {
+            ...policy.profile.profile,
+            runtimeConfig: { model: "corrected-model" },
+          },
+        },
+      };
+      const second = yield* reviews.admit({
+        taskId: publicTaskId("BY-1"),
+        policy: correctedPolicy,
+        baseRef: "refs/heads/main",
+        baseCommit: "b".repeat(40),
+        now: later,
+      });
+      if (!second.ok) throw new Error(second.code);
+      const correctedInvocation = yield* agents.beginInvocation({
+        agentSessionId: failedInvocation.dispatch.agentSessionId,
+        configuration: { harness: "pi", model: "corrected-model" },
+        createdAt: later,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId: publicTaskId("BY-1"),
+          reviewId: second.review.id,
+          admittedPolicy: second.policy,
+        }),
+      });
+      if (!correctedInvocation.ok) throw new Error(correctedInvocation.code);
+
+      const historical = yield* reviews.getById(first.review.id);
+      expect(historical).toMatchObject({
+        agentSessionId: failedInvocation.dispatch.agentSessionId,
+        agentInvocations: [
+          expect.objectContaining({
+            continuation: expect.objectContaining({ model: "test-model" }),
+          }),
+        ],
+      });
+      expect(historical?.reviewerConfiguration).toBeUndefined();
+      expect(yield* reviews.getById(second.review.id)).toMatchObject({
+        agentSessionId: correctedInvocation.dispatch.agentSessionId,
+        reviewerConfiguration: correctedPolicy,
+      });
     }),
   ),
 );

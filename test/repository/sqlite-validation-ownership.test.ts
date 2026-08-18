@@ -36,6 +36,10 @@ const specialist = (id: string) => ({
 const policy = {
   checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
   copyFiles: [],
+};
+
+const reviewerConfiguration = {
+  acceptanceReview: null,
   specialistReviews: [specialist("first"), specialist("second")],
 };
 
@@ -64,7 +68,7 @@ const createRun = (commonDirectory: string, branch: string) =>
         ) VALUES (
           ${`refs/heads/${branch}`}, 'refs/remotes/origin/main',
           'https://example.com/acme/repo.git', ${`/tmp/${branch}`},
-          ${JSON.stringify({ acceptanceReview: null, specialistReviews: policy.specialistReviews })},
+          ${JSON.stringify(reviewerConfiguration)},
           0
         )
       `,
@@ -621,9 +625,10 @@ describe("SQLite Validation ownership", () => {
               candidateId: fixture.captured.candidateId,
               changeBaseSha: "base",
               headSha: "reviewer-roster-head",
-              policy: {
-                ...policy,
-                specialistReviews: policy.specialistReviews.map((review, index) =>
+              policy,
+              reviewerConfiguration: {
+                ...reviewerConfiguration,
+                specialistReviews: reviewerConfiguration.specialistReviews.map((review, index) =>
                   index === 0
                     ? {
                         ...review,
@@ -647,9 +652,13 @@ describe("SQLite Validation ownership", () => {
               candidateId: fixture.captured.candidateId,
               changeBaseSha: "base",
               headSha: "reviewer-roster-head",
-              policy: {
-                ...policy,
-                specialistReviews: [...policy.specialistReviews, specialist("rogue")],
+              policy,
+              reviewerConfiguration: {
+                ...reviewerConfiguration,
+                specialistReviews: [
+                  ...reviewerConfiguration.specialistReviews,
+                  specialist("rogue"),
+                ],
               },
             })
             .pipe(Effect.flip),
@@ -737,7 +746,7 @@ describe("SQLite Validation ownership", () => {
     ),
   );
 
-  it.scoped("applies an eligible reviewer correction only from the immutable Run policy", () =>
+  it.scoped("applies an eligible reviewer correction from the selected Change authority", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const fixture = yield* createRun(input.commonDirectory, "valid-correction");
@@ -808,15 +817,16 @@ describe("SQLite Validation ownership", () => {
             },
           },
         };
-        const correctedPolicy = {
-          ...policy,
+        const correctedConfiguration = {
+          ...reviewerConfiguration,
           specialistReviews: [correctedFirst, specialist("second")],
         };
         const correctedRun = yield* fixture.validation.execution.startOrReuse({
           candidateId: fixture.captured.candidateId,
           changeBaseSha: "base",
           headSha: "valid-correction-head",
-          policy: correctedPolicy,
+          policy,
+          reviewerConfiguration: correctedConfiguration,
         });
         if (correctedRun.reused || "blocked" in correctedRun || "active" in correctedRun) {
           throw new Error("Expected a corrected Validation Run");
@@ -849,10 +859,12 @@ describe("SQLite Validation ownership", () => {
             WHERE id = ${internalChangeId(fixture.captured.changeId, repository.idPrefix)}
           `,
         );
-        const correctedConfiguration = JSON.parse(stored[0]?.reviewerConfiguration ?? "null") as {
+        const storedCorrectedConfiguration = JSON.parse(
+          stored[0]?.reviewerConfiguration ?? "null",
+        ) as {
           readonly specialistReviews?: readonly unknown[];
         };
-        expect(correctedConfiguration.specialistReviews?.[0]).toMatchObject({
+        expect(storedCorrectedConfiguration.specialistReviews?.[0]).toMatchObject({
           id: "first",
           profile: { profile: { runtimeConfig: { model: "corrected-model" } } },
         });

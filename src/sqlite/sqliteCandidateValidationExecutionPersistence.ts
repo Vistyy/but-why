@@ -6,7 +6,6 @@ import {
   assertValidationToolingFailureEvidence,
   decodeValidationFindingEvidence,
 } from "../change/candidateValidation/candidateValidationEvidence.js";
-import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
   CandidateValidationFinding,
   RecordCandidateValidationPhaseResultInput,
@@ -350,9 +349,11 @@ const startOrReuse = (
       try: () => encodeSqliteCandidateValidationPolicy(policy),
       catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
     });
+    const reviewerConfiguration =
+      input.reviewerConfiguration ?? changeAuthority.reviewerConfiguration;
     yield* requireMatchingReviewerConfiguration(
       sql,
-      policy,
+      reviewerConfiguration,
       changeAuthority.reviewerConfiguration,
       candidate.changeId,
       operationName,
@@ -361,6 +362,7 @@ const startOrReuse = (
     const authority = {
       candidate,
       policy,
+      reviewerConfiguration,
       implementationDecisions,
       blockerHistory,
       latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
@@ -624,21 +626,21 @@ const listPreviousCandidateReviewerFindings = (
 
 const requireMatchingReviewerConfiguration = (
   sql: SqlClient.SqlClient,
-  policy: CandidateValidationPolicySnapshot,
+  selected: ChangeReviewerConfiguration,
   configuration: ChangeReviewerConfiguration,
   changeId: string,
   operationName: string,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const acceptance = policy.acceptanceReview;
-    if ((acceptance !== undefined) !== (configuration.acceptanceReview !== null)) {
+    const acceptance = selected.acceptanceReview;
+    if ((acceptance !== null) !== (configuration.acceptanceReview !== null)) {
       return yield* invalidData(
         operationName,
         "Validation Acceptance Reviewer does not match the Change reviewer roster",
       );
     }
-    const specialists = policy.specialistReviews ?? [];
+    const specialists = selected.specialistReviews;
     if (
       specialists.length !== configuration.specialistReviews.length ||
       specialists.some((review, index) => review.id !== configuration.specialistReviews[index]?.id)
@@ -650,7 +652,7 @@ const requireMatchingReviewerConfiguration = (
     }
 
     if (
-      acceptance !== undefined &&
+      acceptance !== null &&
       configuration.acceptanceReview !== null &&
       !sameChangeReviewerPolicy("acceptance", acceptance, configuration.acceptanceReview) &&
       !(yield* changeReviewerConfigurationCanBeCorrected(sql, changeId, "acceptance", idPrefix))

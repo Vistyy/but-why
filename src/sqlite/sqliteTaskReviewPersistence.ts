@@ -598,10 +598,33 @@ const decodeReview = (
     return yield* Effect.try({
       try: (): TaskReviewRecord => {
         const cleanupPending = decodeBoolean(row.cleanupPending, "Task Review cleanup obligation");
+        const taskAuthority = task[0];
+        if (taskAuthority === undefined) throw new Error("Task Review owner is missing");
+        if ((taskAuthority.configuration === null) !== (taskAuthority.agentSessionId === null)) {
+          throw new Error("Task Reviewer authority is incomplete");
+        }
+        const invocationSessionId = invocations[0]?.agentSessionId;
+        if (
+          invocationSessionId !== undefined &&
+          invocations.some((invocation) => invocation.agentSessionId !== invocationSessionId)
+        ) {
+          throw new Error("Task Review Invocations do not share one Agent Session");
+        }
         const policy =
-          task[0]?.configuration === undefined || task[0].configuration === null
+          invocations.length === 0 || taskAuthority.configuration === null
             ? undefined
-            : parsePolicy(task[0].configuration);
+            : parsePolicy(taskAuthority.configuration);
+        const runtimeConfig = policy?.profile.profile.runtimeConfig;
+        const policyMatchesInvocationEvidence =
+          policy !== undefined &&
+          invocationSessionId === taskAuthority.agentSessionId &&
+          invocations.every(
+            (invocation) =>
+              invocation.harness === "pi" &&
+              invocation.provider === null &&
+              invocation.model === runtimeConfig?.model &&
+              invocation.thinking === (runtimeConfig?.thinking ?? null),
+          );
         return {
           id: row.id,
           taskId: publicTaskIdFromInternal(row.taskId, idPrefix),
@@ -620,13 +643,11 @@ const decodeReview = (
           cleanupBlockingReason: row.cleanupBlockingReason,
           toolingFailure: row.toolingFailure === null ? null : parseFailure(row.toolingFailure),
           findings: parseFindings(row.findings),
-          ...(task[0]?.agentSessionId === undefined || task[0].agentSessionId === null
-            ? {}
-            : { agentSessionId: task[0].agentSessionId }),
+          ...(invocationSessionId === undefined ? {} : { agentSessionId: invocationSessionId }),
           ...(invocations.length === 0
             ? {}
             : { agentInvocations: invocations.map(decodeAgentInvocation) }),
-          ...(policy === undefined ? {} : { reviewerConfiguration: policy }),
+          ...(policyMatchesInvocationEvidence ? { reviewerConfiguration: policy } : {}),
         };
       },
       catch: (cause) =>

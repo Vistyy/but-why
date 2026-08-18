@@ -396,7 +396,7 @@ describe("Candidate Specialist Review phase", () => {
                     candidateId: captured.candidateId,
                     headSha: captured.headSha,
                     changeBaseSha: captured.changeBaseSha,
-                    policy: { checks: [], copyFiles: [], specialistReviews: policies },
+                    policy: { checks: [], copyFiles: [] },
                   });
                   if (started.reused || "blocked" in started)
                     throw new Error("Expected a new unblocked Specialist Validation Run");
@@ -442,13 +442,13 @@ describe("Candidate Specialist Review phase", () => {
             ),
           );
 
+        const frozenPolicies = [
+          policy("standards"),
+          policy("broken-first"),
+          policy("broken-second"),
+        ];
         const durable = yield* Effect.suspend(() =>
-          runPersisted(
-            first,
-            [policy("standards"), policy("broken-first"), policy("broken-second")],
-            { review: firstReview },
-            "tooling_failed",
-          ),
+          runPersisted(first, frozenPolicies, { review: firstReview }, "tooling_failed"),
         );
         expect(
           yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
@@ -500,12 +500,7 @@ describe("Candidate Specialist Review phase", () => {
           }),
         );
         yield* Effect.suspend(() =>
-          runPersisted(
-            failedSuccessor,
-            [policy("standards")],
-            { review: failedReview },
-            "tooling_failed",
-          ),
+          runPersisted(failedSuccessor, frozenPolicies, { review: failedReview }, "tooling_failed"),
         );
 
         git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
@@ -515,9 +510,9 @@ describe("Candidate Specialist Review phase", () => {
           Effect.succeed(success()),
         );
         const clean = yield* Effect.suspend(() =>
-          runPersisted(successor, [policy("standards")], { review: successorReview }, "passed"),
+          runPersisted(successor, frozenPolicies, { review: successorReview }, "passed"),
         );
-        expect(successorReview).toHaveBeenCalledOnce();
+        expect(successorReview).toHaveBeenCalledTimes(3);
         expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
           "Durable Specialist Finding",
         );
@@ -537,9 +532,9 @@ describe("Candidate Specialist Review phase", () => {
           Effect.succeed(success()),
         );
         yield* Effect.suspend(() =>
-          runPersisted(laterSuccessor, [policy("standards")], { review: laterReview }, "passed"),
+          runPersisted(laterSuccessor, frozenPolicies, { review: laterReview }, "passed"),
         );
-        expect(laterReview).toHaveBeenCalledTimes(1);
+        expect(laterReview).toHaveBeenCalledTimes(3);
         expect(laterReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
       }),
     15_000,

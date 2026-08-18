@@ -18,6 +18,7 @@ const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
   candidateId: 1,
   policy: { checks: [], copyFiles: [] },
+  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
   implementationDecisions: [],
   state: "running",
   outcome: null,

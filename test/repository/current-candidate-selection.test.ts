@@ -32,7 +32,7 @@ describe("Current Candidate selection", () => {
         const validation = yield* openSqliteCandidateValidationExecutionPort();
         const reads = yield* openSqliteChangeValidationReadPort();
         const authority = yield* openSqliteChangeAuthorityPort();
-        const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+        const policy = { checks: [], copyFiles: [] };
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",

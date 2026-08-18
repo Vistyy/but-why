@@ -6,6 +6,7 @@ import type {
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
@@ -48,6 +49,7 @@ type DecodedValidationRun = {
 const decodeValidationRunRow = (
   row: StoredValidationRunRow,
   policy: CandidateValidationRunRecord["policy"],
+  reviewerConfiguration: CandidateValidationRunRecord["reviewerConfiguration"],
   implementationDecisions: CandidateValidationRunRecord["implementationDecisions"],
 ): DecodedValidationRun => {
   if (
@@ -72,6 +74,7 @@ const decodeValidationRunRow = (
       id: row.id,
       candidateId: row.candidateId,
       policy,
+      reviewerConfiguration,
       implementationDecisions,
       state: row.outcome === null ? "running" : "complete",
       outcome: row.outcome,
@@ -126,8 +129,12 @@ export const readValidationRunById = (
         "Validation Run includes an unresolved Implementation Blocker",
       );
     }
-    const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
-      SELECT initial_acceptance_context AS acceptanceContext
+    const changeRows = yield* sql<{
+      readonly acceptanceContext: string | null;
+      readonly reviewerConfiguration: string;
+    }>`
+      SELECT initial_acceptance_context AS acceptanceContext,
+        reviewer_configuration AS reviewerConfiguration
       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
     `;
     return yield* decodePersisted(operationName, () => {
@@ -149,7 +156,10 @@ export const readValidationRunById = (
       ) {
         throw new Error("Validation Run Acceptance Context does not match its Change authority");
       }
-      return decodeValidationRunRow(row, policy, decisions).record;
+      const reviewerConfiguration = decodeSqliteChangeReviewerConfiguration(
+        change.reviewerConfiguration,
+      );
+      return decodeValidationRunRow(row, policy, reviewerConfiguration, decisions).record;
     });
   });
 

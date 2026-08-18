@@ -38,7 +38,6 @@ const candidate = {
 const changeWithoutTaskPolicy = {
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   copyFiles: [],
-  specialistReviews: [],
 } as const;
 const storedAcceptanceReviewer = {
   instructions: "Review intent",
@@ -340,8 +339,9 @@ describe("Change Submit orchestration", () => {
               ok: true,
               resolved: {
                 acceptanceContextSupplied: false,
-                policy: {
-                  ...changeWithoutTaskPolicy,
+                policy: changeWithoutTaskPolicy,
+                reviewerConfiguration: {
+                  acceptanceReview: storedAcceptanceReviewer,
                   specialistReviews: [storedCandidateReviewer],
                 },
               },
@@ -353,7 +353,9 @@ describe("Change Submit orchestration", () => {
         validateCandidate: (input) =>
           Effect.sync(() => {
             events.push("validate_changeWithoutTask");
-            expect(input.policy.specialistReviews).toEqual([storedCandidateReviewer]);
+            expect(input.reviewerConfiguration?.specialistReviews).toEqual([
+              storedCandidateReviewer,
+            ]);
             return {
               ok: true,
               reused: false,
@@ -1597,18 +1599,8 @@ const dependencies = (input: {
             ok: true,
             resolved: {
               acceptanceContextSupplied: true,
-              policy: {
-                ...changeWithoutTaskPolicy,
-                acceptanceReview: {
-                  instructions: "Review intent",
-                  instructionsSource: "built_in",
-                  profile: {
-                    agentProfile: "default",
-                    scope: "global",
-                    profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
-                  },
-                },
-              },
+              policy: changeWithoutTaskPolicy,
+              reviewerConfiguration: input.change.reviewerConfiguration,
             },
           } as const)
         : ({
@@ -1621,6 +1613,7 @@ const dependencies = (input: {
                   ? {}
                   : { agentEnvironment: input.agentEnvironment }),
               },
+              reviewerConfiguration: input.change.reviewerConfiguration,
             },
           } as const);
     },

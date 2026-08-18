@@ -355,14 +355,19 @@ const applyChangeReviewerConfiguration = (
           stored.id,
         );
         const replacement = canCorrect
-          ? current()?.policy.specialistReviews.find((candidate) => candidate.id === stored.id)
+          ? current()?.reviewerConfiguration.specialistReviews.find(
+              (candidate) => candidate.id === stored.id,
+            )
           : undefined;
         return replacement ?? stored;
       }),
     );
-    const policy = { ...resolved.policy, specialistReviews };
+    const reviewerConfiguration = { ...configuration, specialistReviews };
     if (!resolved.acceptanceContextSupplied)
-      return { ok: true as const, resolved: { ...resolved, policy } };
+      return {
+        ok: true as const,
+        resolved: { ...resolved, reviewerConfiguration },
+      };
     if (configuration.acceptanceReview === null) {
       return {
         ok: false as const,
@@ -377,14 +382,15 @@ const applyChangeReviewerConfiguration = (
     const currentResolved = canCorrectAcceptance ? current() : undefined;
     const currentAcceptanceReview =
       currentResolved?.acceptanceContextSupplied === true
-        ? currentResolved.policy.acceptanceReview
+        ? currentResolved.reviewerConfiguration.acceptanceReview
         : undefined;
     return {
       ok: true as const,
       resolved: {
         acceptanceContextSupplied: true as const,
-        policy: {
-          ...policy,
+        policy: resolved.policy,
+        reviewerConfiguration: {
+          ...reviewerConfiguration,
           acceptanceReview: currentAcceptanceReview ?? configuration.acceptanceReview,
         },
       },
@@ -580,6 +586,7 @@ const validateAndPublish = (
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             policy: policy.policy,
+            reviewerConfiguration: policy.reviewerConfiguration,
             ...(progress === undefined ? {} : { progress }),
           })
         : yield* validation.validateCandidate({
@@ -587,6 +594,7 @@ const validateAndPublish = (
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             policy: policy.policy,
+            reviewerConfiguration: policy.reviewerConfiguration,
             ...(progress === undefined ? {} : { progress }),
           });
     if ("code" in validationResult) {

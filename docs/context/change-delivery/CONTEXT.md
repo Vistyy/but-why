@@ -131,8 +131,10 @@ History does not select or invalidate current passing evidence by recency alone.
 _Avoid_: Mutable current report
 
 **Validation Policy Snapshot**:
-The immutable resolved Prepare, Checks, copied local files, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
-Change Submit resolves current policy from the exact fetched Change Base and retains stored Change Start reviewer authority instead of reading Candidate Repo Config as policy.
+The immutable resolved Acceptance Context, Agent Environment, Prepare, Checks, copied local files, and other Run-specific policy used by one Validation Run.
+The Validation Policy Snapshot does not duplicate Acceptance or Specialist reviewer configuration.
+Validation joins the Change-owned reviewer roster, instructions, and resolved Agent Profiles that Change Start froze.
+Change Submit resolves Run-specific policy from the exact fetched Change Base and does not read Candidate Repo Config as policy.
 Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
 _Avoid_: Mutable current config, Candidate-controlled policy, raw config hash, retroactive policy
 
@@ -156,7 +158,7 @@ _Avoid_: reviewer attempt, cumulative session usage, reviewer outcome
 
 **Agent Session Configuration**:
 The resolved Pi harness, provider, model, and thinking configuration fixed for an Agent Session.
-Task Review stores its resolved configuration snapshot before execution, and Change Start stores its resolved reviewer roster before implementation.
+A Task stores its resolved Task Reviewer configuration atomically with the first linked Invocation, and Change Start stores its resolved reviewer roster before implementation.
 Later configuration changes do not alter these stored facts.
 _Avoid_: current Repo Config, Agent Profile name alone, prompt
 

@@ -31,12 +31,12 @@ export const configuredValidationPosition = (
     }
     case validationPhase.acceptanceReview:
       if (producer !== "acceptance") throw new Error("Acceptance Review producer is invalid");
-      if (run.policy.acceptanceReview === undefined) {
+      if (run.reviewerConfiguration.acceptanceReview === null) {
         throw new Error("Acceptance Review is not configured");
       }
       return 1;
     case validationPhase.specialistReview: {
-      const index = (run.policy.specialistReviews ?? []).findIndex(
+      const index = run.reviewerConfiguration.specialistReviews.findIndex(
         (review) => review.id === producer,
       );
       if (index < 0) throw new Error("Specialist Review is not configured");

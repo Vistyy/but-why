@@ -59,7 +59,8 @@ Use the returned Review state and outcome, and help, to identify the result and 
 If Task Submission reports an Active Task Review, inspect it with `<but-why> task-review show <review-id>`.
 If its process has stopped and it cannot finish, use the reported exact abandonment command.
 Run `<but-why> task reviews <task-id>` to inspect ordered Task Review history and valid next actions.
-Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, policy, outcome, Findings or Tooling Failure, recovery state, sessions, and transcripts.
+Run `<but-why> task-review show <review-id>` to inspect one Review's proposal, executed reviewer configuration when available, outcome, Findings or Tooling Failure, recovery state, Agent Session, Invocations, and Continuations.
+A Review with no linked Invocation reports no executed reviewer configuration or Agent Session.
 Resolve every applicable Finding by updating the New Task proposal before requesting another Review, or submit the unchanged New Task again when a new Task Submission is authorized.
 
 Task Submission is the only supported route that can approve an unlinked New Task.

@@ -38,11 +38,14 @@ It is resumable only when its transcript path is present and no unusable reason 
 When no continuation exists, dispatch creates one; when the current continuation is resumable, dispatch reuses it; otherwise dispatch appends a fresh continuation while preserving the logical Agent Session and its stored resolved configuration.
 Past Invocations and continuations remain history without separate replacement metadata.
 
-The owning domain resolves and stores the Agent Profile, role instructions, Agent Environment, tools, skills, and extensions once for the applicable owner lifecycle.
-A Task stores this configuration as a nullable JSON snapshot when its Task Reviewer Agent Session first launches.
+The owning domain resolves and stores the Agent Profile, role instructions, tools, skills, and extensions once for the applicable owner lifecycle.
+Agent Environment remains Run-specific Validation policy.
+A Task stores its resolved Task Reviewer configuration and Task Reviewer Agent Session atomically with the first linked Agent Invocation.
 A Change stores its fixed reviewer roster and each role's resolved configuration as one JSON snapshot at Change Start, before individual Agent Sessions are created lazily.
 These embedded configurations have no independent relational lifecycle and do not require separate configuration tables.
 Task Reviews and Validation Runs use their owner's stored reviewer configuration rather than duplicating it.
+A Task Review without a linked Invocation reports no executed reviewer configuration or Agent Session, and an earlier Review does not project a later corrected Task configuration.
+Validation Run policy and inspection do not duplicate Change-owned Acceptance or Specialist reviewer configuration.
 Later Repo or Global Config changes do not alter those stored configurations, add or remove Change reviewers, or replace a usable continuation.
 The owning domain validates a resolved snapshot before storage.
 A retry may replace only that owner-role configuration from corrected current config when no Invocation has returned, no transcript exists, and the latest Invocation settled as `launch_failed` because no conversation was established.
@@ -223,7 +226,7 @@ Candidate Publication verifies its own later adoption if its accepted design sti
 - Dispatch is recorded before the harness call, the harness runs without an open database transaction, and Invocation evidence and the domain result settle atomically afterward.
 - Invocation and transcript evidence is limited to the fields defined above, including `cacheRead` and `cacheWrite` token evidence; Invocation rows do not duplicate prompts or returned text.
 - Review persistence remains domain-owned; shared Agent infrastructure contains no generic Review identity.
-- Task Review inspection joins the Task-owned effective Task Reviewer configuration, and Validation Run inspection joins the relevant Change-owned reviewer configurations without copying configuration into each Review or Run.
+- Task Review inspection reports Task-owned reviewer configuration only when the Review has compatible linked Invocation evidence, and Validation Run inspection joins Change-owned reviewer configuration separately from Run policy without copying it into each Review or Run.
 - Use owner-role configuration, Agent Sessions, Agent Continuations, Agent Invocations, domain Tooling Failures, and cleanup evidence instead of the prerelease generic reviewer representation and aggregates.
 - The direct BY-274 baseline conforms to this exact physical schema without importing or converting legacy Reviewer records.
 

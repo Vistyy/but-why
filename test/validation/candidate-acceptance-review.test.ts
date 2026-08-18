@@ -268,20 +268,33 @@ type AcceptanceReadyRepo = {
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
 };
 
+type AcceptanceReviewTestPolicy = AcceptanceContextCandidateValidationPolicy & {
+  readonly acceptanceReview: typeof acceptancePolicy;
+  readonly specialistReviews: readonly unknown[];
+};
+
 const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceReviewTestPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) => runReviewPhases(ready, policy, captured);
 
 const runReviewPhases = (
   ready: AcceptanceReadyRepo,
-  policy: AcceptanceContextCandidateValidationPolicy,
+  policy: AcceptanceReviewTestPolicy,
   captured: Captured,
 ) =>
   ready.validation.runWithPersistence((persistence) =>
     Effect.gen(function* () {
-      const policySnapshot: CandidateValidationPolicySnapshot = { ...policy, acceptanceContext };
+      const {
+        acceptanceReview: _acceptanceReview,
+        specialistReviews: _specialists,
+        ...runPolicy
+      } = policy;
+      const policySnapshot: CandidateValidationPolicySnapshot = {
+        ...runPolicy,
+        acceptanceContext,
+      };
       const started = yield* persistence.execution.startOrReuse({
         candidateId: captured.candidateId,
         headSha: captured.headSha,

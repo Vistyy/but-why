@@ -1,5 +1,6 @@
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
+import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
@@ -40,11 +41,13 @@ export type StartCandidateValidationRunInput = {
   readonly headSha: string;
   readonly changeBaseSha?: string;
   readonly policy: Omit<CandidateValidationPolicySnapshot, "acceptanceContext">;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
 };
 
 export type CandidateValidationAuthority = {
   readonly candidate: CandidateRecord;
   readonly policy: CandidateValidationPolicySnapshot;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory: ImplementationBlockerHistory;
   readonly latestResolvedBlockerId: number | null;
@@ -117,6 +120,7 @@ export type CandidateValidationRunRecord = {
   readonly id: number;
   readonly candidateId: number;
   readonly policy: CandidateValidationPolicySnapshot;
+  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";
   readonly outcome: CandidateValidationOutcome | null;

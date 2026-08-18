@@ -49,8 +49,11 @@ _Avoid_: Display title, raw Task ID in process names
 **Task Review**:
 One review of one exact Task proposal submitted from New.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
-A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
-The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
+A Task Review captures dependency evidence and a Review Base, and it ends as passed, blocked by Findings, or tooling failed.
+The Task stores the resolved Task Reviewer configuration and Task Agent Session atomically with the first linked Agent Invocation.
+The configuration contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
+A Review that fails before any Invocation used no executed reviewer configuration, so inspection reports no reviewer configuration or Agent Session for that Review.
+After permitted pre-conversation correction, an earlier Review retains its exact Invocation evidence and does not project the corrected Task configuration.
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Agent Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 Ordinary Task Submission selects the newest completed Review for the exact unchanged New Task proposal and reuses it only when it passed.

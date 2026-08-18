@@ -15,7 +15,6 @@ const policy = {
   prepare: { command: "pnpm install", timeoutSeconds: 60 },
   checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
   copyFiles: [],
-  specialistReviews: [],
 } as const;
 const now = "2026-08-10T00:00:00.000Z";
 

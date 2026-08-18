@@ -146,8 +146,10 @@ Global paths and Global Agent Profile resources resolve from the Global Config d
 A missing, empty, or unreadable selected file rejects Task Submission before a Task Review is created.
 
 The configured guidance supplements the mandatory built-in Task Review instructions, which remain controlling.
-Task Submission captures the resolved Agent Profile configuration, mandatory instructions, optional guidance content, and guidance source as immutable Review policy before reviewer execution.
-Later configuration changes do not alter a captured policy.
+Task Submission resolves the Agent Profile configuration, mandatory instructions, optional guidance content, and guidance source before reviewer execution.
+The Task stores that configuration with the Task Reviewer Agent Session when the first Agent Invocation links.
+A Task Review that fails before any Invocation reports no executed reviewer configuration.
+Later configuration changes do not alter the stored Task configuration after execution begins, except for the supported pre-conversation correction after a launch failure.
 
 ## Review and Specialists
 
@@ -180,6 +182,7 @@ But Why prepends the list to the complete Pi invocation for headless reviewers a
 Interactive Sessions run Pi through the Herdr pane shell environment.
 Change Implement does not read or apply `agentEnvironment.command`.
 Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot for headless reviewers.
+Acceptance and Specialist reviewer configuration remains Change-owned and is not duplicated in that snapshot.
 Candidate reviewer configuration does not change this setting.
 Missing configuration preserves direct reviewer launch.
 An invalid configuration rejects the applicable headless reviewer operation before agent launch.

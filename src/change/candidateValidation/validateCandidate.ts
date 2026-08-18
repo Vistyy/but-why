@@ -7,11 +7,10 @@ import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
-import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
+import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
-import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
@@ -35,12 +34,9 @@ export type CandidateValidationPolicy = {
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
   readonly copyFiles: readonly string[];
-  readonly specialistReviews: readonly SpecialistReviewPolicy[];
 };
 
-export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPolicy & {
-  readonly acceptanceReview: AcceptanceReviewPolicy;
-};
+export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPolicy;
 
 export type ValidateCandidateInput = {
   readonly changeId: string;
@@ -49,6 +45,7 @@ export type ValidateCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly policy: CandidateValidationPolicy;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
   readonly progress?: SubmitProgress;
 };
 
@@ -60,6 +57,7 @@ type ValidateAcceptanceContextCandidateInput = {
   readonly resourceRoot?: string;
   readonly progress?: SubmitProgress;
   readonly policy: AcceptanceContextCandidateValidationPolicy;
+  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
 };
 
 type ValidateCandidateResult =
@@ -179,6 +177,9 @@ const makeCandidateValidation = (dependencies: {
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
       policy: input.policy,
+      ...(input.reviewerConfiguration === undefined
+        ? {}
+        : { reviewerConfiguration: input.reviewerConfiguration }),
     });
     if ("blocked" in started) {
       return { ok: false, code: "blocked" } as const;
@@ -329,7 +330,7 @@ const runCandidatePhases = (
               ? {}
               : { resolutions: [...policy.acceptanceContext.resolutions] }),
           };
-    const acceptanceReview = policy.acceptanceReview;
+    const acceptanceReview = authority.reviewerConfiguration.acceptanceReview;
     const sessionOptions = {
       sessionStorageRoot: dependencies.agentSessionsRoot,
       agentPersistence: dependencies.agentPersistence,
@@ -369,7 +370,7 @@ const runCandidatePhases = (
           continueAfterFinding: true,
           recordCheckResult: dependencies.persistence.recordCheckResult,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
-      ...(acceptanceContext === undefined || acceptanceReview === undefined
+      ...(acceptanceContext === undefined || acceptanceReview === null
         ? {}
         : {
             acceptanceReview: () =>
@@ -403,7 +404,7 @@ const runCandidatePhases = (
           validationRunId,
           changeId: authority.candidate.changeId,
           candidate: candidateIdentity(authority),
-          policies: policy.specialistReviews ?? [],
+          policies: authority.reviewerConfiguration.specialistReviews,
           ...(acceptanceContext === undefined ? {} : { acceptanceContext }),
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),

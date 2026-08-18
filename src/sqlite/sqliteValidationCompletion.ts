@@ -79,7 +79,7 @@ export const requireCoherentValidationCompletion = (
     const runToolingFailure = runRows[0]?.toolingFailure ?? null;
 
     yield* decodePersisted(operationName, () => {
-      const expected = expectedPhases(run.policy);
+      const expected = expectedPhases(run.policy, run.reviewerConfiguration);
       const resultByPosition = new Map(
         results.map((result) => [positionKey(result.phase, result.producer), result]),
       );
@@ -245,27 +245,31 @@ const isPreDispatchReviewerIntegrityFailure = (
   );
 };
 
-const expectedPhases = (policy: {
-  readonly prepare?: unknown;
-  readonly checks: readonly { readonly id: string }[];
-  readonly acceptanceReview?: unknown;
-  readonly specialistReviews?: readonly { readonly id: string }[] | undefined;
-}): readonly ExpectedPhase[] => [
+const expectedPhases = (
+  policy: {
+    readonly prepare?: unknown;
+    readonly checks: readonly { readonly id: string }[];
+  },
+  reviewerConfiguration: {
+    readonly acceptanceReview: unknown | null;
+    readonly specialistReviews: readonly { readonly id: string }[];
+  },
+): readonly ExpectedPhase[] => [
   ...(policy.prepare === undefined
     ? []
     : [{ phase: validationPhase.prepare, producers: ["prepare"] }]),
   ...(policy.checks.length === 0
     ? []
     : [{ phase: validationPhase.checks, producers: policy.checks.map((check) => check.id) }]),
-  ...(policy.acceptanceReview === undefined
+  ...(reviewerConfiguration.acceptanceReview === null
     ? []
     : [{ phase: validationPhase.acceptanceReview, producers: ["acceptance"] }]),
-  ...((policy.specialistReviews ?? []).length === 0
+  ...(reviewerConfiguration.specialistReviews.length === 0
     ? []
     : [
         {
           phase: validationPhase.specialistReview,
-          producers: (policy.specialistReviews ?? []).map((review) => review.id),
+          producers: reviewerConfiguration.specialistReviews.map((review) => review.id),
         },
       ]),
 ];
