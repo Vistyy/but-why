@@ -27,9 +27,6 @@ export const runAbandonCommand = (
     });
   const loaded = loadAbandonValidationRun({
     cwd: environment.cwd,
-    ...(environment.operationalRepoRoot === undefined
-      ? {}
-      : { operationalRepoRoot: environment.operationalRepoRoot }),
   });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
   return loaded.abandon.abandon({ ...command, now: environment.now().toISOString() }).pipe(

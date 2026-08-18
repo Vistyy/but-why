@@ -24,7 +24,7 @@ import {
 } from "../support/changeValidationPorts.js";
 
 export const candidateValidationForTest = (input: {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
@@ -43,7 +43,8 @@ export const candidateValidationForTest = (input: {
       const agentSessions = yield* openSqliteChangeAgentSessionPort();
       const agentPersistence = yield* openSqliteAgentSessionPersistence();
       return {
-        localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
+        localRepositoryRoot: input.localRepositoryRoot,
+        localRepositoryCommonDirectory: input.repository.commonDirectory,
         artifactsRoot: input.artifactsRoot,
         agentSessionsRoot: input.artifactsRoot,
         agentPersistence,

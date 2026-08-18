@@ -88,12 +88,12 @@ it.scoped("rejects Task dependency cycles without changing the graph", () =>
 it.scoped(
   "rejects direct Task dependency edits for approved Tasks without changing the graph",
   () =>
-    withTasks((tasks, mainCheckoutRoot) =>
+    withTasks((tasks, repositoryRoot) =>
       Effect.gen(function* () {
         yield* createTask(tasks, "First");
         yield* createTask(tasks, "Second");
         yield* createTask(tasks, "Dependent", ["BY-1"]);
-        yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
+        yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-3"), secondNow);
 
         for (const operation of ["add", "remove", "replace", "clear"] as const) {
           expect(
@@ -126,12 +126,12 @@ it.scoped("rejects coordinated Task dependency edits for Change-linked Tasks", (
         "create linked Change fixture",
         (sql) => sql`INSERT INTO changes (
           id, branch_ref, base_ref, base_remote_url, worktree_path,
-          initial_acceptance_context, reviewer_configuration, cleanup_pending
+          initial_acceptance_context, reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (
           1, 'refs/heads/change-linked', 'refs/remotes/origin/main',
           'https://example.test/repo.git', '/repo-worktrees/change-linked',
           '{"version":1,"title":"Linked","description":"Linked"}',
-          '{"acceptanceReview":null,"specialistReviews":[]}', 0
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
         )`,
       );
       yield* repository.operation(
@@ -187,15 +187,15 @@ it.scoped("continues to reject direct Task dependency edits for terminal Tasks",
 );
 
 it.scoped("returns direct Task dependency facts and start eligibility", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Done prerequisite");
       yield* createTask(tasks, "Open prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
-      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), secondNow);
-      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-3"), secondNow);
       yield* repository.operation(
         "set done prerequisite fixture",
         (sql) => sql`
@@ -227,10 +227,10 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
 );
 
 const withTasks = <A, E>(
-  use: (tasks: TaskPersistence, mainCheckoutRoot: string) => Effect.Effect<A, E, RepositorySql>,
+  use: (tasks: TaskPersistence, repositoryRoot: string) => Effect.Effect<A, E, RepositorySql>,
 ) => {
-  return withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
-    Effect.flatMap(openSqliteTaskPersistence(), (tasks) => use(tasks, mainCheckoutRoot)),
+  return withTemporaryRepositoryState(({ repositoryRoot }) =>
+    Effect.flatMap(openSqliteTaskPersistence(), (tasks) => use(tasks, repositoryRoot)),
   );
 };
 

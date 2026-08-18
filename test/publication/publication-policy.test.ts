@@ -27,7 +27,6 @@ import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-22T10:00:00.000Z";
-const policy = { checks: [], copyFiles: [] };
 const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
 type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
 let candidateRepoTemplate: string;
@@ -59,7 +58,10 @@ const publicationTemplateLayer = Layer.effect(
           "complete publication Change fixture",
           (sql) => sql`
           UPDATE changes
-          SET worktree_path = ${candidateRepoTemplate}
+          SET worktree_path = ${candidateRepoTemplate},
+            checks_definition = ${JSON.stringify([
+              { id: "publication", command: "true", timeoutSeconds: 1 },
+            ])}
           WHERE id = ${internalChangeId(captured.changeId, "BY")}
         `,
         );
@@ -1548,17 +1550,9 @@ function completeValidation(
   outcome: "passed" | "blocked" | "tooling_failed" = "passed",
 ) {
   return Effect.gen(function* () {
-    const validationPolicy =
-      outcome === "blocked"
-        ? {
-            ...policy,
-            checks: [{ id: "publication", command: "false", timeoutSeconds: 1 }],
-          }
-        : policy;
     const run = yield* validation.execution.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
-      policy: validationPolicy,
     });
     if (run.reused) {
       if (outcome !== "passed") throw new Error("Expected a new Validation Run");
@@ -1582,7 +1576,14 @@ function completeValidation(
         },
         artifactRecords: [],
       });
-    } else if (outcome === "tooling_failed") {
+    } else if (outcome === "passed") {
+      yield* validation.execution.recordCheckResult({
+        validationRunId: run.validationRunId,
+        producer: "publication",
+        outcome: "passed",
+        artifactRecords: [],
+      });
+    } else {
       yield* validation.execution.recordToolingFailure({
         validationRunId: run.validationRunId,
         errorKind: "snapshot_workspace_setup_failed",
@@ -1648,7 +1649,6 @@ const input = (fixture: Fixture) => ({
   candidateId: fixture.captured.candidateId,
   validationRunId: fixture.validationRunId,
   changeBaseSha: fixture.captured.changeBaseSha,
-  policy,
   target,
   now,
 });

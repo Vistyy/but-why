@@ -32,7 +32,6 @@ export const findCurrentRepositoryWorktreeFacts = findCurrentWorktreeFacts;
 
 export type LocalRepositoryContext = {
   readonly root: string;
-  readonly mainCheckoutRoot: string;
   readonly commonDirectory: string;
   readonly idPrefix: string;
   readonly config: RepoConfig;
@@ -41,7 +40,6 @@ export type LocalRepositoryContext = {
 
 export type InitRepoInput = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly idPrefix: string;
 };
 
@@ -103,10 +101,6 @@ export type ResolveLocalRepositoryResult =
 export type ResolveLocalRepositoryError =
   | {
       readonly code: "not_initialized";
-    }
-  | {
-      readonly code: "main_checkout_unavailable";
-      readonly path?: string;
     }
   | {
       readonly code: "invalid_repo_config";
@@ -177,11 +171,7 @@ const prepareRepoInitialization = (input: InitRepoInput): PrepareRepoInitializat
     return { ok: false, result: { ok: false, error: { code: "not_git_work_tree" } } };
   }
 
-  const paths = repoLocalPaths(
-    gitRoot.root,
-    gitRoot.commonDirectory,
-    operationalRepoRoot(gitRoot, input.operationalRepoRoot),
-  );
+  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
   mkdirSync(paths.butWhyDir, { recursive: true });
   mkdirSync(paths.operationalDir, { recursive: true });
 
@@ -297,27 +287,14 @@ export const resolveLocalRepositorySubmission = (
   return { ok: true, context };
 };
 
-export const resolveLocalRepository = (
-  cwd: string,
-  requestedOperationalRepoRoot?: string,
-): ResolveLocalRepositoryResult => {
+export const resolveLocalRepository = (cwd: string): ResolveLocalRepositoryResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
-    return {
-      ok: false,
-      error:
-        gitRoot.code === "main_checkout_unavailable"
-          ? { code: gitRoot.code, ...(gitRoot.path === undefined ? {} : { path: gitRoot.path }) }
-          : { code: "not_initialized" },
-    };
+    return { ok: false, error: { code: "not_initialized" } };
   }
 
-  const paths = repoLocalPaths(
-    gitRoot.root,
-    gitRoot.commonDirectory,
-    operationalRepoRoot(gitRoot, requestedOperationalRepoRoot),
-  );
+  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
 
   if (!existsSync(paths.configPath)) {
     return { ok: false, error: { code: "not_initialized" } };
@@ -333,7 +310,6 @@ export const resolveLocalRepository = (
     ok: true,
     context: {
       root: gitRoot.root,
-      mainCheckoutRoot: gitRoot.mainCheckoutRoot,
       commonDirectory: gitRoot.commonDirectory,
       paths,
       idPrefix: repoConfig.config.idPrefix,
@@ -341,17 +317,6 @@ export const resolveLocalRepository = (
     },
   };
 };
-
-const operationalRepoRoot = (
-  gitRoot: {
-    readonly root: string;
-    readonly mainCheckoutRoot: string;
-  },
-  requestedOperationalRepoRoot: string | undefined,
-): string =>
-  requestedOperationalRepoRoot === gitRoot.mainCheckoutRoot
-    ? gitRoot.mainCheckoutRoot
-    : gitRoot.root;
 
 type RepoConfigEnsureResult =
   | { readonly ok: true; readonly created: boolean }

@@ -12,7 +12,11 @@ import { WorkspaceCommandExecutionFailed } from "../../src/command/workspaceComm
 import type { RepositoryPreparationEffectExecutor } from "../../src/repositoryPreparation/runRepositoryPreparation.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-const reviewerConfiguration = { acceptanceReview: null, specialistReviews: [] } as const;
+const policy = {
+  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+  prepare: null,
+  checks: [],
+} as const;
 
 const intent = {
   repositoryCommonDirectory: "/repo/.git",
@@ -26,7 +30,7 @@ const intent = {
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
   ...input,
   acceptanceContext: null,
-  reviewerConfiguration: input.reviewerConfiguration ?? null,
+  reviewerConfiguration: input.reviewerConfiguration,
   prepare: input.prepare ?? null,
   prepareFailure: null,
   state: "open",
@@ -84,13 +88,11 @@ const fixture = (options: FixtureOptions = {}) => {
     options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
   const operations = {
     start: (input: Parameters<typeof startChange>[3]) =>
-      startChange(store, git, executor, { reviewerConfiguration, ...input }),
-    startWithReviewerConfigurationResolver: (
-      resolveReviewerConfiguration: NonNullable<
-        Parameters<typeof startChange>[3]["resolveReviewerConfiguration"]
-      >,
-    ) => startChange(store, git, executor, { now, resolveReviewerConfiguration }),
-    startWithoutReviewerConfiguration: () => startChange(store, git, executor, { now }),
+      startChange(store, git, executor, { policy, ...input }),
+    startWithPolicyResolver: (
+      resolvePolicy: NonNullable<Parameters<typeof startChange>[3]["resolvePolicy"]>,
+    ) => startChange(store, git, executor, { now, resolvePolicy }),
+    startWithoutPolicy: () => startChange(store, git, executor, { now }),
     prepare: (changeId: string, preparedAt: string) =>
       prepareChange(store, git, executor, changeId, preparedAt),
   };
@@ -115,36 +117,35 @@ describe("Change Start orchestration", () => {
     }),
   );
 
-  it.effect("requires reviewer configuration before creating a new Change", () =>
+  it.effect("requires complete policy before creating a new Change", () =>
     Effect.gen(function* () {
       const captured = fixture();
-      expect(yield* captured.operations.startWithoutReviewerConfiguration()).toEqual({
+      expect(yield* captured.operations.startWithoutPolicy()).toEqual({
         ok: false,
         code: "reviewer_configuration_invalid",
-        message: "A reviewer configuration is required to create a Change.",
+        message: "A complete Change policy is required to create a Change.",
       });
       expect(captured.events).toEqual([]);
     }),
   );
 
-  it.effect("resolves exact-base reviewer authority before inserting a Change", () =>
+  it.effect("resolves exact-base Change policy before inserting a Change", () =>
     Effect.gen(function* () {
       const captured = fixture();
-      const result = yield* captured.operations.startWithReviewerConfigurationResolver(
-        (startingCommit) =>
-          Effect.sync(() => {
-            captured.events.push(`resolveReviewerConfiguration:${startingCommit}`);
-            return { ok: false as const, message: "Exact-base reviewer resources are invalid." };
-          }),
+      const result = yield* captured.operations.startWithPolicyResolver((startingCommit) =>
+        Effect.sync(() => {
+          captured.events.push(`resolvePolicy:${startingCommit}`);
+          return { ok: false as const, message: "Exact-base Change policy is invalid." };
+        }),
       );
       expect(result).toEqual({
         ok: false,
         code: "reviewer_configuration_invalid",
-        message: "Exact-base reviewer resources are invalid.",
+        message: "Exact-base Change policy is invalid.",
       });
       expect(captured.events).toEqual([
         "resolveIntent:pending-change-start:default",
-        "resolveReviewerConfiguration:abc123",
+        "resolvePolicy:abc123",
       ]);
     }),
   );

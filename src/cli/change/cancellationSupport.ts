@@ -10,7 +10,6 @@ import { withCancellationUseCases } from "../../taskChange/composition/loadCance
 
 export type CancellationCommandEnvironment = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly cancellationUseCases?: CancellationUseCases;
 };
 
@@ -23,9 +22,6 @@ export const withCancellation = <A, R>(
       ? withCancellationUseCases(
           {
             cwd: environment.cwd,
-            ...(environment.operationalRepoRoot === undefined
-              ? {}
-              : { operationalRepoRoot: environment.operationalRepoRoot }),
           },
           use,
         ).pipe(

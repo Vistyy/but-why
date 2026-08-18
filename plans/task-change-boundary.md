@@ -67,7 +67,7 @@ Change Start stores that content as the initial Acceptance Context while the sam
 Tasks own Task Review, approval, readiness, and the exact context eligible to start a Change.
 Changes do not independently review Task intent or reinterpret Task readiness.
 After Change Start, implementation and validation read the Change-owned Acceptance Context rather than mutable live Task Context.
-Validation Policy Snapshots retain the exact complete Acceptance Context used by each Validation Run.
+Validation Input Snapshots retain the exact complete Acceptance Context used by each Validation Run.
 
 The initial boundary has no portable transfer artifact, compatibility envelope, digest, Intent Reference, approval signature, or external approval claim.
 A future external Task backend must justify any additional boundary contract when it becomes supported.
@@ -111,7 +111,7 @@ Accepted planning direction:
   Changes retain the initial Acceptance Context and the Resolution lineage so delivery evidence does not imply that Task Review approved later amendments.
   The first boundary change does not write those Resolutions back to the Task.
   Later Task and Change coordination may surface them to Tasks without making that behavior part of initial Change execution.
-- **Resolved planning direction:** At Validation Run start, the complete current Acceptance Context is stored in the immutable Validation Policy Snapshot.
+- **Resolved planning direction:** At Validation Run start, the complete current Acceptance Context is stored in the immutable Validation Input Snapshot.
   The Acceptance Reviewer input is built from that retained content.
   The existing `version: 1` identifies the stored format rather than a separate Acceptance Context revision.
   No digest or separate revision identifier is required.

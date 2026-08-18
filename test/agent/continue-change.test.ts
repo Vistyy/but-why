@@ -90,51 +90,47 @@ describe("Change Implement continuation policy", () => {
   });
 
   it.each([
-    "just by change submit change-123",
-    "pnpx but-why change submit change-123",
-    "npx -y but-why change submit change-123",
-    "git status && just by change submit change-123",
-    "git status\n npx -y but-why change submit change-123",
-    "{ just by change submit change-123; }",
-    "if true; then just by change submit change-123; fi",
-    `printf '%s\\n' "$(just by change submit change-123)"`,
-    "echo `just by change submit change-123`",
-    `printf '%s\\n' "\`just by change submit change-123\`"`,
-    "printf '<<DATA'; just by change submit change-123",
-    "commands=($(just by change submit change-123))",
-    "commands=(<(just by change submit change-123))",
-    "commands=(>(just by change submit change-123))",
-    "cat <<END-MARKER\ntext\nEND-MARKER\njust by change submit change-123",
-    "echo $((1 << 2))\njust by change submit change-123",
-    "(( value = 1 << 2 ))\njust by change submit change-123",
-    "value=$((\n  1 << 2\n))\njust by change submit change-123",
-    "commands=(foo\\()\njust by change submit change-123",
-    'output="$(\n  echo ready # )\n  just by change submit change-123\n)"',
-  ])("detects a visible canonical Change Submit in %j", (command) => {
+    "by change submit change-123",
+    "git status && by change submit change-123",
+    "git status\n by change submit change-123",
+    "{ by change submit change-123; }",
+    "if true; then by change submit change-123; fi",
+    `printf '%s\\n' "$(by change submit change-123)"`,
+    "echo `by change submit change-123`",
+    `printf '%s\\n' "\`by change submit change-123\`"`,
+    "printf '<<DATA'; by change submit change-123",
+    "commands=($(by change submit change-123))",
+    "commands=(<(by change submit change-123))",
+    "commands=(>(by change submit change-123))",
+    "cat <<END-MARKER\ntext\nEND-MARKER\nby change submit change-123",
+    "echo $((1 << 2))\nby change submit change-123",
+    "(( value = 1 << 2 ))\nby change submit change-123",
+    "value=$((\n  1 << 2\n))\nby change submit change-123",
+    "commands=(foo\\()\nby change submit change-123",
+    'output="$(\n  echo ready # )\n  by change submit change-123\n)"',
+  ])("detects a visible installed Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });
 
   it.each([
     "git status",
-    "just by change show change-123",
-    "just by change submit --help",
-    "just by change submit -h",
-    "just by change submit --version",
-    "just by change submit --completions bash",
-    "npx -y but-why change submit change-123 --help",
-    'printf "just by change submit change-123"',
-    "printf 'line one\\njust by change submit change-123\\n'",
-    "printf 'line one\njust by change submit change-123\n'",
-    'submit="just by change submit change-123"',
-    "# just by change submit change-123\ngit status",
-    "commands=(just by change submit change-123)",
-    "commands=(npx -y but-why change submit change-123)",
-    "commands=(pnpx but-why change submit change-123)",
-    "commands=(\n  just by change submit change-123\n)",
-    "commands=(\n  # Keep ) in this comment\n  just by change submit change-123\n)",
-    "commands=(\n  foo\\)\n  just by change submit change-123\n)",
-    "cat <<'DATA'\njust by change submit change-123\nDATA",
-    "cat <<\\EOF\njust by change submit change-123\nEOF",
+    "by change show change-123",
+    "by change submit --help",
+    "by change submit -h",
+    "by change submit --version",
+    "by change submit --completions bash",
+    "npx -y but-why change submit change-123",
+    'printf "by change submit change-123"',
+    "printf 'line one\\nby change submit change-123\\n'",
+    "printf 'line one\nby change submit change-123\n'",
+    'submit="by change submit change-123"',
+    "# by change submit change-123\ngit status",
+    "commands=(by change submit change-123)",
+    "commands=(\n  by change submit change-123\n)",
+    "commands=(\n  # Keep ) in this comment\n  by change submit change-123\n)",
+    "commands=(\n  foo\\)\n  by change submit change-123\n)",
+    "cat <<'DATA'\nby change submit change-123\nDATA",
+    "cat <<\\EOF\nby change submit change-123\nEOF",
     "./submit-change.sh",
   ])("does not classify unrelated Bash command %j as Change Submit", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(false);
@@ -142,9 +138,7 @@ describe("Change Implement continuation policy", () => {
 
   it("counts every directly visible Change Submit invocation", () => {
     expect(
-      countVisibleChangeSubmits(
-        "just by change submit change-123; npx -y but-why change submit change-123",
-      ),
+      countVisibleChangeSubmits("by change submit change-123; by change submit change-123"),
     ).toBe(2);
   });
 

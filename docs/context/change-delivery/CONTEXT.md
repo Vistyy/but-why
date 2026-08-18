@@ -91,19 +91,19 @@ Acceptance Review uses supplied Acceptance Context as review authority.
 A Specialist Review that receives Acceptance Context uses it only as an authoritative scope constraint.
 An Implementation Blocker Resolution for a Change linked to a Task becomes part of the current Acceptance Context through derivation from the immutable initial snapshot and ordered Resolution records.
 A Resolution for a Change without a Task remains Change history and creates no Acceptance Context.
-A Validation Run retains the exact Acceptance Context it used through its Validation Policy Snapshot.
+A Validation Run retains the exact Acceptance Context it used through its Validation Input Snapshot.
 _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
 
 **Validation Run**:
 One durable execution and judgment of one Candidate under one resolved validation policy.
 Validation start-or-reuse rejects a Change with an unresolved Implementation Blocker, and validation persistence keeps at most one Active Validation Run per Change.
-Each Validation Run records the exact Candidate, the Validation Policy Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity when the Run starts.
+Each Validation Run records the exact Candidate, the Validation Input Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity when the Run starts.
 Reuse and publication use a complete passed Run for the exact Current Candidate.
 Current passing evidence is the newest eligible passed Run in immutable Validation Run History.
 Change inspection uses that passing judgment for the Current Candidate rather than the newest Run of any outcome.
 A later failed or tooling-failed Run does not hide eligible passing evidence, and neither outcome is reused as a passed judgment.
 When a later Submission follows such a Run for the unchanged Current Candidate, it starts Validation again rather than reusing an earlier pass.
-Acceptance Context, Validation Policy Snapshot, Implementation Decisions, and resolved Implementation Blocker history remain immutable Run provenance rather than reuse invalidators.
+Acceptance Context, Validation Input Snapshot, Implementation Decisions, and resolved Implementation Blocker history remain immutable Run provenance rather than reuse invalidators.
 A changed Current Candidate requires eligible evidence for the new Candidate without deleting historical evidence.
 For a Change without a Task, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
 _Avoid_: Candidate, retry Attempt, generic job
@@ -130,14 +130,18 @@ The ordered immutable Validation Runs retained for one Change and its Candidates
 History does not select or invalidate current passing evidence by recency alone.
 _Avoid_: Mutable current report
 
-**Validation Policy Snapshot**:
-The immutable resolved Acceptance Context, Agent Environment, Prepare, Checks, copied local files, and other Run-specific policy used by one Validation Run.
-The Validation Policy Snapshot does not duplicate Acceptance or Specialist reviewer configuration.
-Validation joins the Change-owned reviewer roster, instructions, and resolved Agent Profiles that Change Start froze from the exact fetched starting Change Base and current Global Config.
-Change Submit resolves Run-specific policy from the exact fetched Change Base and does not read Candidate Repo Config as policy.
-An eligible pre-conversation correction resolves replacement authority from the exact fetched current Change Base and current Global Config before the effective configuration's resources are validated.
-Later configuration changes do not alter the snapshot or its historical Validation Run, and they do not invalidate a passed judgment for the same Candidate.
-_Avoid_: Mutable current config, Candidate-controlled policy, raw config hash, retroactive policy
+**Change Policy**:
+The complete immutable policy that Change Start resolves from the exact starting Change Base, current Global Config, and installed-package resources.
+It owns Repository Preparation, Agent Environment, ordered Checks and timeouts, Acceptance and Specialist roster, reviewer instruction text, resolved Agent Profiles, and permitted resource selections.
+Change Submit uses only this stored policy.
+Later configuration changes do not alter it.
+_Avoid_: Mutable current config, Candidate-controlled policy, Validation Run snapshot, policy correction
+
+**Validation Input Snapshot**:
+The immutable Run-specific input stored for one Validation Run.
+It contains the current Acceptance Context when one applies and does not duplicate Change Policy.
+Approved Blocker Resolutions can change the Acceptance Context selected for a later Run without changing Change Policy.
+_Avoid_: Change Policy, Candidate-controlled policy, raw config hash, retroactive policy
 
 **Agent Session**:
 The durable conversation owner for one Task Reviewer or one Change reviewer producer.
@@ -233,7 +237,7 @@ _Avoid_: Task Context, Acceptance Context, Implementation Decision, complete imp
 
 **Submission**:
 The point-in-time act of asking But Why to return an exact completed publication when it remains ready or otherwise fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.
-Submission checks completed publication evidence before it fetches a newer Change Base or resolves current configuration.
+Submission checks completed publication evidence before it fetches a newer Change Base for Git provenance.
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
 _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
@@ -302,8 +306,9 @@ _Avoid_: Acceptance Reviewer, Final Reviewer
 
 **Snapshot Workspace**:
 A disposable detached Git worktree in which one Validation Run judges the exact Candidate without changing it.
-Each Snapshot Workspace uses the Local Repository's sibling But Why worktree root and belongs to one Validation Run, expected commit, and deterministic path derived from the Validation Run identity.
-Cleanup verifies the safe But Why-owned path, the exact Local Repository worktree registration, and the exact live HEAD.
+Each Snapshot Workspace uses the product-owned workspace root under the verified Git Common Directory.
+Its identity and deterministic path derive from the Validation Run ID, and its expected commit derives through the immutable Candidate.
+Cleanup verifies the exact product root, derived path, Local Repository worktree registration, detached state, and expected commit.
 A later Validation Run uses a different Snapshot Workspace.
 Recovery may reuse only the same Validation Run's matching clean Snapshot Workspace.
 Snapshot Workspaces provide no security isolation.

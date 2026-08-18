@@ -5,6 +5,5 @@ export type SnapshotWorkspaceCleanup = {
   readonly cleanup: (input: {
     readonly validationRunId: number;
     readonly submittedSha: string;
-    readonly recordedWorktreePath?: string;
-  }) => Effect.Effect<SnapshotWorkspaceCleanupResult & { readonly errorMessage?: string }>;
+  }) => Effect.Effect<SnapshotWorkspaceCleanupResult>;
 };

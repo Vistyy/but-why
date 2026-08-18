@@ -61,6 +61,7 @@ const expectedColumns = {
     "initial_acceptance_context:TEXT:0:0",
     "reviewer_configuration:TEXT:1:0",
     "prepare_definition:TEXT:0:0",
+    "checks_definition:TEXT:1:0",
     "prepare_failure:TEXT:0:0",
     "close_reason:TEXT:0:0",
     "cancel_reason:TEXT:0:0",
@@ -89,7 +90,7 @@ const expectedColumns = {
   validation_runs: [
     "id:INTEGER:0:1",
     "candidate_id:INTEGER:1:0",
-    "policy_snapshot:TEXT:1:0",
+    "validation_input_snapshot:TEXT:1:0",
     "highest_decision_id:INTEGER:0:0",
     "highest_blocker_id:INTEGER:0:0",
     "outcome:TEXT:0:0",
@@ -448,13 +449,13 @@ it.scoped("installs the exact first-release product schema from one baseline mig
             "INSERT INTO tasks (id, title, description, state) VALUES (1, 'Task', 'Intent', 'new')",
           );
           yield* sql.unsafe(
-            "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (1, 'refs/heads/change', 'refs/heads/main', 'https://example.test/repo.git', '/tmp/change', '{}', 0)",
+            "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, cleanup_pending) VALUES (1, 'refs/heads/change', 'refs/heads/main', 'https://example.test/repo.git', '/tmp/change', '{}', '[]', 0)",
           );
           yield* sql.unsafe(
             "INSERT INTO candidates (id, change_id, base_commit, head_commit) VALUES (1, 1, 'base', 'head')",
           );
           yield* sql.unsafe(
-            "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (1, 1, '{}', 0)",
+            "INSERT INTO validation_runs (id, candidate_id, validation_input_snapshot, cleanup_pending) VALUES (1, 1, '{}', 0)",
           );
         }),
       );
@@ -492,7 +493,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         {
           name: "Change",
           statement: (id: number) =>
-            `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (${id}, 'refs/heads/change-${id}', 'main', 'url', '/tmp/change-${id}', '{}', 0)`,
+            `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, cleanup_pending) VALUES (${id}, 'refs/heads/change-${id}', 'main', 'url', '/tmp/change-${id}', '{}', '[]', 0)`,
         },
         {
           name: "Implementation Decision",
@@ -512,7 +513,7 @@ it.scoped("installs the exact first-release product schema from one baseline mig
         {
           name: "Validation Run",
           statement: (id: number) =>
-            `INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (${id}, 1, '{}', 0)`,
+            `INSERT INTO validation_runs (id, candidate_id, validation_input_snapshot, cleanup_pending) VALUES (${id}, 1, '{}', 0)`,
         },
       ];
       for (const identity of identityInsertions) {
@@ -569,23 +570,23 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       yield* expectStatementRejected(
         repository,
         "reject inconsistent Change closure",
-        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, close_reason, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'completed', 'reason', 0)",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, close_reason, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', '[]', 'completed', 'reason', 0)",
       );
       yield* expectStatementRejected(
         repository,
         "reject cancelled Change without cancellation reason",
-        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, close_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'cancelled', 0)",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, close_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', '[]', 'cancelled', 0)",
       );
       yield* expectStatementRejected(
         repository,
         "reject open Change with cancellation reason",
-        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', 'reason', 0)",
+        "INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, cancel_reason, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', '[]', 'reason', 0)",
       );
       for (const invalidCleanup of [-1, 2]) {
         yield* expectStatementRejected(
           repository,
           `reject Change cleanup flag ${invalidCleanup}`,
-          `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', ${invalidCleanup})`,
+          `INSERT INTO changes (id, branch_ref, base_ref, base_remote_url, worktree_path, reviewer_configuration, checks_definition, cleanup_pending) VALUES (2, 'refs/heads/change-2', 'main', 'url', '/tmp/change-2', '{}', '[]', ${invalidCleanup})`,
         );
       }
       yield* expectStatementRejected(
@@ -640,13 +641,13 @@ it.scoped("installs the exact first-release product schema from one baseline mig
       yield* expectStatementRejected(
         repository,
         "reject invalid Validation Run outcome",
-        "INSERT INTO validation_runs (id, candidate_id, policy_snapshot, outcome, cleanup_pending) VALUES (2, 1, '{}', 'unknown', 0)",
+        "INSERT INTO validation_runs (id, candidate_id, validation_input_snapshot, outcome, cleanup_pending) VALUES (2, 1, '{}', 'unknown', 0)",
       );
       for (const invalidCleanup of [-1, 2]) {
         yield* expectStatementRejected(
           repository,
           `reject Validation Run cleanup flag ${invalidCleanup}`,
-          `INSERT INTO validation_runs (id, candidate_id, policy_snapshot, cleanup_pending) VALUES (2, 1, '{}', ${invalidCleanup})`,
+          `INSERT INTO validation_runs (id, candidate_id, validation_input_snapshot, cleanup_pending) VALUES (2, 1, '{}', ${invalidCleanup})`,
         );
       }
       yield* expectStatementRejected(

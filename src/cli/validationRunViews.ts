@@ -41,7 +41,7 @@ export const candidateValidationRunInspectionView = (
     cleanup: inspection.validationRun.cleanup.state,
     blockingReason: inspection.validationRun.cleanup.blockingReason,
   },
-  policy: structuredValue(inspection.validationRun.policy),
+  validationInput: structuredValue(inspection.validationRun.validationInput),
   phases: [
     { phase: validationPhase.prepare, results: inspection.prepareResults },
     { phase: validationPhase.checks, results: inspection.checkResults },

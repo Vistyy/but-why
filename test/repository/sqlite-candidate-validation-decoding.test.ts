@@ -14,7 +14,6 @@ import { withTemporaryRepositoryState } from "../support/repository.js";
 const policy = {
   prepare: { command: "pnpm install", timeoutSeconds: 60 },
   checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
-  copyFiles: [],
 } as const;
 const now = "2026-08-10T00:00:00.000Z";
 
@@ -26,11 +25,12 @@ const createCandidateOwningChange = (branchRef: string) =>
       (sql) => sql<{ readonly id: number }>`
         INSERT INTO changes (
           branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, cleanup_pending
+          reviewer_configuration, prepare_definition, checks_definition, cleanup_pending
         ) VALUES (
           ${branchRef}, 'refs/remotes/origin/main',
           'https://example.com/acme/repo.git', ${`/tmp/${branchRef.slice("refs/heads/".length)}`},
-          '{"acceptanceReview":null,"specialistReviews":[]}', 0
+          '{"acceptanceReview":null,"specialistReviews":[]}',
+          ${JSON.stringify(policy.prepare)}, ${JSON.stringify(policy.checks)}, 0
         )
         RETURNING id
       `,
@@ -57,7 +57,6 @@ const createRun = (commonDirectory: string, branchRef: string) =>
       candidateId: captured.candidateId,
       changeBaseSha: "base",
       headSha: "head",
-      policy,
     });
     if (started.reused || "blocked" in started || "active" in started) {
       throw new Error("Expected a new Validation Run");
@@ -83,7 +82,6 @@ const expectInvalidRunAuthority = (
             candidateId,
             changeBaseSha: "base",
             headSha: "head",
-            policy,
           })
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
@@ -93,7 +91,6 @@ const expectInvalidRunAuthority = (
           candidateId,
           changeBaseSha: "base",
           headSha: "head",
-          policy,
         }),
       ).toEqual({ reused: false, blocked: true });
     }
@@ -310,7 +307,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           "forge Validation Run Acceptance Context",
           (sql) => sql`
             UPDATE validation_runs
-            SET highest_blocker_id = NULL, policy_snapshot = ${forgedPolicy}
+            SET highest_blocker_id = NULL, validation_input_snapshot = ${forgedPolicy}
             WHERE id = ${started.validationRunId}
           `,
         );
@@ -341,7 +338,7 @@ describe("SQLite Candidate and Validation read decoding", () => {
           (sql) => sql`
             UPDATE validation_runs
             SET highest_blocker_id = ${unresolvedBlockerId},
-              policy_snapshot = ${JSON.stringify(policy)}
+              validation_input_snapshot = ${JSON.stringify(policy)}
             WHERE id = ${started.validationRunId}
           `,
         );

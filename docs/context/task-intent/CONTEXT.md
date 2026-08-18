@@ -86,9 +86,9 @@ Captured dependency Context and lifecycle facts are evidence for that review and
 _Avoid_: Acceptance Context, dependency evidence, Task revision
 
 **Review Base**:
-The canonical main checkout branch ref and exact commit captured for one Task Review.
+The invoking current worktree branch ref and exact commit captured for one Task Review.
 Repository Preparation and reviewer execution use a disposable exact workspace at that commit.
-_Avoid_: Change Base, caller checkout HEAD, Candidate
+_Avoid_: Change Base, mutable branch tip, Candidate
 
 **Task Revision**:
 The transition that returns an unlinked Todo Task to New before the Operator changes its approved intent.

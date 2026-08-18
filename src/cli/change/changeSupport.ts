@@ -17,6 +17,7 @@ import { rejectedExplicitChangeId, resolveChangeId } from "./changeTarget.js";
 
 export { rejectedExplicitChangeId };
 
+import { structuredValue } from "../../output/structuredValue.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { prepareFailureView } from "./sharedResults.js";
 
@@ -26,7 +27,7 @@ export const withResolvedChangeId = <E, R>(
   commandName: string,
   use: (changeId: string) => Effect.Effect<CliResult, E, R>,
 ): Effect.Effect<CliResult, E, R> =>
-  resolveChangeId(changeId, environment.cwd, commandName, environment.operationalRepoRoot).pipe(
+  resolveChangeId(changeId, environment.cwd, commandName).pipe(
     Effect.flatMap((resolved) =>
       resolved.ok ? use(resolved.changeId) : Effect.succeed(resolved.result),
     ),
@@ -41,6 +42,11 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
   acceptanceContext: change.acceptanceContext,
+  policy: structuredValue({
+    reviewerConfiguration: change.reviewerConfiguration,
+    prepare: change.prepare,
+    checks: change.checks,
+  }),
   ...(change.prepareFailure === null
     ? {}
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),
@@ -89,9 +95,6 @@ export const inspectionFailure = <A>(
 
 export const changeOperationInput = (environment: ChangeCommandEnvironment) => ({
   cwd: environment.cwd,
-  ...(environment.operationalRepoRoot === undefined
-    ? {}
-    : { operationalRepoRoot: environment.operationalRepoRoot }),
   ...(environment.interactiveSessionHost === undefined
     ? {}
     : { interactiveSessionHost: environment.interactiveSessionHost }),

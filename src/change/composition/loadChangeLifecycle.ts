@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
@@ -32,7 +31,7 @@ import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
-import { resolveChangeReviewerConfigurationAtCommit } from "./resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "./resolveChangeReviewerConfiguration.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =
@@ -45,7 +44,6 @@ export type LoadedChangeOperationResult<A> =
 
 type LoadInput = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
@@ -58,8 +56,7 @@ export type UnlinkedChangeStartInput = {
 
 export type ChangeStartCommand = TaskChangeStartInput | UnlinkedChangeStartInput;
 
-const loadContext = (input: LoadInput) =>
-  openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
 
 export const withChangeStart = <A, E, R>(
   input: LoadInput,
@@ -94,13 +91,9 @@ export const withChangeStart = <A, E, R>(
             }
             return yield* startChange(changes, git, executeLocalRepositoryPreparation, {
               ...command,
-              resolveReviewerConfiguration: (startingCommit) =>
-                resolveChangeReviewerConfigurationAtCommit({
-                  repoRoot: context.mainCheckoutRoot,
-                  workspaceContainerRoot: join(
-                    context.paths.operationalDir,
-                    "exact-change-base-workspaces",
-                  ),
+              resolvePolicy: (startingCommit) =>
+                resolveChangePolicyAtCommit({
+                  repositoryRoot: context.root,
                   commit: startingCommit,
                   globalConfigPath: input.globalConfigPath,
                   acceptanceContextSupplied: false,
@@ -167,7 +160,7 @@ export const withChangeImplement = <A, E, R>(
       Effect.flatMap((store) =>
         use((changeId, implementerPrompt) =>
           implementChange(
-            context.mainCheckoutRoot,
+            context.root,
             context.config,
             store,
             input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),

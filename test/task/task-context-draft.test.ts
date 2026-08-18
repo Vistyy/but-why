@@ -34,7 +34,6 @@ const contextFor = (root: string): LocalRepositoryContext => {
   const butWhyDir = join(root, ".but-why");
   return {
     root,
-    mainCheckoutRoot: root,
     commonDirectory: join(root, ".git"),
     idPrefix: "BY",
     config: { idPrefix: "BY" },

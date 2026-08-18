@@ -7,7 +7,6 @@ import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js"
 import type { TextInputStdin } from "../input/textInput.js";
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;

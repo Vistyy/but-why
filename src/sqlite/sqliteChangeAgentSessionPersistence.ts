@@ -6,14 +6,12 @@ import {
   type ChangeReviewerPolicy,
   decodeChangeReviewerConfiguration,
   decodeSqliteChangeReviewerConfiguration,
-  encodeSqliteChangeReviewerConfiguration,
   sameChangeReviewerPolicy,
 } from "../change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { agentSessionConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 
 export const openSqliteChangeAgentSessionPort = () =>
@@ -151,26 +149,10 @@ export const openSqliteChangeAgentSessionPort = () =>
               reviewerEvidence.snapshot,
             )
           ) {
-            const canCorrect = yield* agentSessionConfigurationCanBeCorrected(
-              sql,
-              sessionId,
-              invocationId,
+            return yield* invalid(
+              operationName,
+              "Validation reviewer configuration does not match the frozen Change policy",
             );
-            if (!canCorrect) {
-              return yield* invalid(
-                operationName,
-                "Validation reviewer configuration cannot correct the Change",
-              );
-            }
-            const replacement = replaceChangeRoleConfiguration(
-              reviewerEvidence.configuration,
-              input.producer,
-              reviewerEvidence.snapshot,
-            );
-            yield* sql`
-              UPDATE changes SET reviewer_configuration = ${encodeSqliteChangeReviewerConfiguration(replacement)}
-              WHERE id = ${internalChangeId(input.changeId, repository.idPrefix)}
-            `;
           }
           yield* sql`
           INSERT INTO change_agent_sessions (change_id, producer, agent_session_id)
@@ -230,25 +212,4 @@ const decodeReviewerPolicySnapshot = (
     throw new Error("Specialist Reviewer Snapshot does not match its producer");
   }
   throw new Error("Validation position is not a reviewer role");
-};
-
-const replaceChangeRoleConfiguration = (
-  configuration: ChangeReviewerConfiguration,
-  producer: string,
-  replacement: unknown,
-): ChangeReviewerConfiguration => {
-  if (producer === "acceptance") {
-    return decodeChangeReviewerConfiguration({
-      ...configuration,
-      acceptanceReview: replacement,
-    });
-  }
-  const index = configuration.specialistReviews.findIndex((policy) => policy.id === producer);
-  if (index < 0) throw new Error(`Change reviewer roster does not contain producer ${producer}`);
-  return decodeChangeReviewerConfiguration({
-    ...configuration,
-    specialistReviews: configuration.specialistReviews.map((policy, policyIndex) =>
-      policyIndex === index ? replacement : policy,
-    ),
-  });
 };

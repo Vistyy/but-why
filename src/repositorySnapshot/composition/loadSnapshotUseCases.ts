@@ -18,9 +18,8 @@ export type LoadedSnapshotUseCases =
 
 export const loadSnapshotUseCases = (input: {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
 }): Effect.Effect<LoadedSnapshotUseCases> => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
   const { context } = loaded.runtime;
 

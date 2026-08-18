@@ -9,7 +9,6 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
-import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
@@ -33,10 +32,7 @@ export type CandidateValidationPolicy = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
-  readonly copyFiles: readonly string[];
 };
-
-export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPolicy;
 
 export type ValidateCandidateInput = {
   readonly changeId: string;
@@ -44,8 +40,6 @@ export type ValidateCandidateInput = {
   readonly changeBaseSha: string;
   readonly headSha: string;
   readonly resourceRoot?: string;
-  readonly policy: CandidateValidationPolicy;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
   readonly progress?: SubmitProgress;
 };
 
@@ -56,8 +50,6 @@ type ValidateAcceptanceContextCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly progress?: SubmitProgress;
-  readonly policy: AcceptanceContextCandidateValidationPolicy;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
 };
 
 type ValidateCandidateResult =
@@ -80,7 +72,8 @@ type ValidateCandidateResult =
     };
 
 type CandidateValidationPathsValue = {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
@@ -158,7 +151,8 @@ export const CandidateValidationLive = Layer.effect(
 );
 
 const makeCandidateValidation = (dependencies: {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly fileSystem: FileSystem.FileSystem;
   readonly persistence: CandidateValidationExecutionPort;
@@ -176,10 +170,6 @@ const makeCandidateValidation = (dependencies: {
       candidateId: input.candidateId,
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
-      policy: input.policy,
-      ...(input.reviewerConfiguration === undefined
-        ? {}
-        : { reviewerConfiguration: input.reviewerConfiguration }),
     });
     if ("blocked" in started) {
       return { ok: false, code: "blocked" } as const;
@@ -201,14 +191,17 @@ const makeCandidateValidation = (dependencies: {
     }
 
     const workspace = yield* dependencies.createSnapshotWorkspace({
-      repoRoot: dependencies.localRepositoryMainCheckoutRoot,
+      repositoryRoot: dependencies.localRepositoryRoot,
+      repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,
-      copyFiles: started.authority.policy.copyFiles,
       recordWorkspaceCleanup: (cleanupResult) =>
         dependencies.persistence.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
           cleanupWorkspace: cleanupResult.workspace,
+          ...(cleanupResult.errorMessage === undefined
+            ? {}
+            : { cleanupBlockingReason: cleanupResult.errorMessage }),
         }),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(
@@ -351,7 +344,7 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 expectedHeadSha: authority.candidate.headSha,
-                allowedUntrackedFiles: policy.copyFiles,
+                allowedUntrackedFiles: [],
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
                 recordPrepareResult: dependencies.persistence.recordPrepareResult,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
@@ -365,7 +358,7 @@ const runCandidatePhases = (
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           expectedHeadSha: authority.candidate.headSha,
-          allowedUntrackedFiles: policy.copyFiles,
+          allowedUntrackedFiles: [],
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           continueAfterFinding: true,
           recordCheckResult: dependencies.persistence.recordCheckResult,
@@ -391,7 +384,7 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 resourceRoot,
-                allowedUntrackedFiles: policy.copyFiles,
+                allowedUntrackedFiles: [],
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
@@ -415,7 +408,7 @@ const runCandidatePhases = (
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot,
-          allowedUntrackedFiles: policy.copyFiles,
+          allowedUntrackedFiles: [],
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,

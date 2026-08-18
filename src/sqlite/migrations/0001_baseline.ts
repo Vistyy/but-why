@@ -109,6 +109,7 @@ const baselineStatements = [
       initial_acceptance_context TEXT,
       reviewer_configuration TEXT NOT NULL,
       prepare_definition TEXT,
+      checks_definition TEXT NOT NULL,
       prepare_failure TEXT,
       close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('completed', 'cancelled')),
       cancel_reason TEXT,
@@ -162,7 +163,7 @@ const baselineStatements = [
     CREATE TABLE validation_runs (
       id INTEGER PRIMARY KEY CHECK (id BETWEEN 1 AND ${safeIntegerMaximum}),
       candidate_id INTEGER NOT NULL REFERENCES candidates(id),
-      policy_snapshot TEXT NOT NULL,
+      validation_input_snapshot TEXT NOT NULL,
       highest_decision_id INTEGER REFERENCES implementation_decisions(id),
       highest_blocker_id INTEGER REFERENCES implementation_blockers(id),
       outcome TEXT CHECK (outcome IS NULL OR outcome IN ('passed', 'blocked', 'tooling_failed')),

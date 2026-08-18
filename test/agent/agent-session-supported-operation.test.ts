@@ -15,7 +15,7 @@ import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
-  readCanonicalMainReviewBase,
+  readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
@@ -70,7 +70,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
     const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence(root);
+        const reviews = yield* openSqliteTaskReviewPersistence();
         const agents = yield* openSqliteAgentSessionPersistence();
         const created = yield* tasks.createTask({
           title: "Real Agent Session sentinel",
@@ -81,7 +81,8 @@ it.effect("submits through the supported Task Review operation with a real Agent
         if (!created.ok) return undefined;
 
         const useCases = openTaskReviewUseCases({
-          mainCheckoutRoot: root,
+          repositoryRoot: root,
+          repositoryCommonDirectory: loaded.runtime.context.commonDirectory,
           loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
           resolvePolicy: () => ({
             ok: true as const,
@@ -92,14 +93,19 @@ it.effect("submits through the supported Task Review operation with a real Agent
           agentPersistence: agents,
           reviewerRuntime: piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
-          readReviewBase: (mainCheckoutRoot) => readCanonicalMainReviewBase(mainCheckoutRoot),
-          verifyReviewBase: (mainCheckoutRoot, base) =>
-            verifyRecordedTaskReviewBase(mainCheckoutRoot, base),
+          readReviewBase: (repositoryRoot) => readCurrentWorktreeReviewBase(repositoryRoot),
+          verifyReviewBase: (repositoryRoot, base) =>
+            verifyRecordedTaskReviewBase(repositoryRoot, base),
           runWorkspace: (input) => runDisposableExactCommitWorkspace(input),
-          cleanupWorkspace: (mainCheckoutRoot, cleanup) =>
-            cleanupExactDisposableWorkspace(mainCheckoutRoot, cleanup),
-          inspectWorkspace: (mainCheckoutRoot, workspaceId, commitSha, worktreePath) =>
-            inspectDisposableWorktree(mainCheckoutRoot, workspaceId, commitSha, worktreePath),
+          cleanupWorkspace: (repositoryRoot, repositoryCommonDirectory, cleanup) =>
+            cleanupExactDisposableWorkspace(repositoryRoot, repositoryCommonDirectory, cleanup),
+          inspectWorkspace: (repositoryRoot, repositoryCommonDirectory, workspaceId, commitSha) =>
+            inspectDisposableWorktree(
+              repositoryRoot,
+              repositoryCommonDirectory,
+              workspaceId,
+              commitSha,
+            ),
         });
         return yield* useCases.submit(publicTaskId("BY-1"), now);
       }),

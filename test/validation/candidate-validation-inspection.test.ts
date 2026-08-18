@@ -34,7 +34,6 @@ const policy = {
     { id: "types", command: "pnpm typecheck", timeoutSeconds: 30 },
     { id: "tests", command: "pnpm test", timeoutSeconds: 30 },
   ],
-  copyFiles: [".env.test"],
 };
 
 const reviewerConfiguration = {
@@ -263,6 +262,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       yield* fixture.runStore.recordWorkspaceCleanup({
         validationRunId: fixture.validationRunId,
         cleanupWorkspace: "failed",
+        cleanupBlockingReason: "Workspace HEAD did not match the Candidate commit.",
       });
       expect(
         yield* fixture.runStore
@@ -278,7 +278,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         outcome: null,
         cleanup: {
           state: "pending",
-          blockingReason: "Snapshot Workspace cleanup failed.",
+          blockingReason: "Workspace HEAD did not match the Candidate commit.",
         },
       });
       const inspected = yield* runByInProcessEffect(fixture.root, [
@@ -290,7 +290,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       expect(JSON.parse(inspected.stdout)).toMatchObject({
         workspace: {
           cleanup: "pending",
-          blockingReason: "Snapshot Workspace cleanup failed.",
+          blockingReason: "Workspace HEAD did not match the Candidate commit.",
         },
       });
 
@@ -392,7 +392,7 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("retains the exact Snapshot Workspace path for abandonment", () =>
+  it.effect("derives abandonment identity from the Validation Run Candidate", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.runStore.recordWorkspaceCleanup({
@@ -400,8 +400,11 @@ describe("Candidate-owned Validation Run inspection", () => {
         cleanupWorkspace: "not_created",
       });
 
-      expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toMatchObject({
+      expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toEqual({
         validationRunId: fixture.validationRunId,
+        changeId: fixture.changeId,
+        candidateId: fixture.candidateId,
+        submittedSha: "head-sha",
       });
     }),
   );
@@ -412,7 +415,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       const second = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy,
       });
       expect(second.reused).toBe(false);
       if (!("active" in second) || !second.active)
@@ -427,7 +429,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       const third = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy,
       });
       expect(third.reused).toBe(false);
       if ("blocked" in third) throw new Error("Expected a new Validation Run");
@@ -435,7 +436,7 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
-  it.effect("reuses the latest passing judgment across mutable policy and authority", () =>
+  it.effect("reuses the latest passing judgment after Change authority history advances", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
       yield* fixture.recordPassingResults(fixture.validationRunId);
@@ -451,10 +452,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       const reused = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy: {
-          ...policy,
-          prepare: { ...policy.prepare, command: "pnpm install --frozen-lockfile" },
-        },
       });
 
       expect(reused).toEqual({
@@ -481,7 +478,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       const first = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy,
       });
       expect(first.reused).toBe(false);
       if ("blocked" in first) throw new Error("Expected a new Validation Run");
@@ -592,7 +588,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           headSha: "head-sha",
         },
         workspace: { cleanup: "complete", blockingReason: null },
-        policy,
         phases: [
           { phase: "prepare", results: [{ producer: "prepare", outcome: "passed" }] },
           {
@@ -693,10 +688,22 @@ describe("Candidate-owned Validation Run inspection", () => {
       const started = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,
         headSha: "head-sha",
-        policy: { checks: [], copyFiles: [] },
       });
       expect(started.reused).toBe(false);
       if ("blocked" in started) throw new Error("Expected a new Validation Run");
+      yield* fixture.runStore.recordPrepareResult({
+        validationRunId: started.validationRunId,
+        outcome: "passed",
+        artifactRecords: [],
+      });
+      for (const check of policy.checks) {
+        yield* fixture.runStore.recordCheckResult({
+          validationRunId: started.validationRunId,
+          producer: check.id,
+          outcome: "passed",
+          artifactRecords: [],
+        });
+      }
       yield* fixture.recordReviewerResult(
         started.validationRunId,
         "acceptance_review",
@@ -721,7 +728,6 @@ describe("Candidate-owned Validation Run inspection", () => {
       ]);
       expect(result.status).toBe(0);
       const shown = JSON.parse(result.stdout);
-      expect(shown.policy).toEqual({ checks: [], copyFiles: [] });
       expect(shown.reviewerConfiguration).toBeUndefined();
       expect(shown.change.reviewerConfiguration).toEqual(reviewPolicy);
     }),
@@ -879,11 +885,12 @@ const candidateValidationFixture = () =>
           (sql) => sql`
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
-            reviewer_configuration, cleanup_pending
+            reviewer_configuration, prepare_definition, checks_definition, cleanup_pending
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
-            'https://example.com/acme/repo.git', ${join(root, "feature-worktree")},
-            ${JSON.stringify(reviewerConfiguration)}, 0
+            'https://example.com/acme/repo.git', ${root},
+            ${JSON.stringify(reviewerConfiguration)}, ${JSON.stringify(policy.prepare)},
+            ${JSON.stringify(policy.checks)}, 0
           )
         `,
         );
@@ -906,7 +913,6 @@ const candidateValidationFixture = () =>
       persistence.execution.startOrReuse({
         candidateId: candidateResult.candidateId,
         headSha: "head-sha",
-        policy,
       }),
     );
     if (runResult.reused) throw new Error("Expected a new Validation Run");

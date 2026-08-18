@@ -147,6 +147,8 @@ export type SubmissionChange = {
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
+  readonly prepare: ChangeRecord["prepare"];
+  readonly checks: ChangeRecord["checks"];
   readonly publication: ChangePublication | null;
 };
 
@@ -169,10 +171,6 @@ export type ChangeCancellationMutationFailure = {
 
 export type ChangeSubmissionPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<SubmissionChange | undefined>;
-  readonly agentSessionConfigurationCanBeCorrected: (
-    changeId: string,
-    producer: string,
-  ) => StorageEffect<boolean>;
   readonly getChangeForOutputById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getCompletedPublicationEvidence: (
     changeId: string,

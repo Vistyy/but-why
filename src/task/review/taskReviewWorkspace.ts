@@ -3,6 +3,7 @@ import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/dispo
 export const taskReviewWorkspaceId = (reviewId: number): string => `task-review-${reviewId}`;
 
 export const expectedTaskReviewWorkspacePath = (
-  mainCheckoutRoot: string,
+  repositoryCommonDirectory: string,
   reviewId: number,
-): string => expectedDisposableWorkspacePath(mainCheckoutRoot, taskReviewWorkspaceId(reviewId));
+): string =>
+  expectedDisposableWorkspacePath(repositoryCommonDirectory, taskReviewWorkspaceId(reviewId));

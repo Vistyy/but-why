@@ -2,7 +2,6 @@ import { type CliResult, runtimeError } from "../../cliResults.js";
 
 export type ValidationRunCommandEnvironment = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly now: () => Date;
 };
 

@@ -13,11 +13,6 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import {
-  decodeSqliteChangeReviewerConfiguration,
-  sameChangeReviewerPolicy,
-} from "../change/changeReviewerConfiguration.js";
-import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -28,8 +23,6 @@ import {
   readCandidateById,
   readCurrentCandidateForChange,
 } from "./sqliteCandidateStorage.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
-import { changeReviewerConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
@@ -47,6 +40,7 @@ import {
   listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
+import { encodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 import {
   readActiveValidationRunForChange,
@@ -69,7 +63,12 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       recordWorkspaceCleanup: (input) =>
         repository.transactionImmediate("record Validation Run cleanup", (sql) =>
-          recordWorkspaceCleanup(sql, input.validationRunId, input.cleanupWorkspace),
+          recordWorkspaceCleanup(
+            sql,
+            input.validationRunId,
+            input.cleanupWorkspace,
+            input.cleanupBlockingReason,
+          ),
         ),
       recordToolingFailure: (input) =>
         repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
@@ -269,11 +268,9 @@ const startOrReuse = (
       readonly id: number;
       readonly closeReason: string | null;
       readonly acceptanceContext: string | null;
-      readonly reviewerConfiguration: string;
     }>`
       SELECT id, close_reason AS closeReason,
-        initial_acceptance_context AS acceptanceContext,
-        reviewer_configuration AS reviewerConfiguration
+        initial_acceptance_context AS acceptanceContext
       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
     `;
     const changeAuthority = yield* decodePersisted(operationName, () => {
@@ -287,7 +284,6 @@ const startOrReuse = (
           row.acceptanceContext === null
             ? null
             : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-        reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(row.reviewerConfiguration),
       };
     });
     const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
@@ -341,39 +337,20 @@ const startOrReuse = (
       changeAuthority.acceptanceContext,
       blockerHistory,
     );
-    const policy = {
-      ...input.policy,
+    const validationInput = {
       ...(acceptanceContext === null ? {} : { acceptanceContext }),
     };
-    const policySnapshot = yield* Effect.try({
-      try: () => encodeSqliteCandidateValidationPolicy(policy),
+    const validationInputSnapshot = yield* Effect.try({
+      try: () => encodeSqliteValidationInputSnapshot(validationInput),
       catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
     });
-    const reviewerConfiguration =
-      input.reviewerConfiguration ?? changeAuthority.reviewerConfiguration;
-    yield* requireMatchingReviewerConfiguration(
-      sql,
-      reviewerConfiguration,
-      changeAuthority.reviewerConfiguration,
-      candidate.changeId,
-      operationName,
-      idPrefix,
-    );
-    const authority = {
-      candidate,
-      policy,
-      reviewerConfiguration,
-      implementationDecisions,
-      blockerHistory,
-      latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
-    };
 
     const inserted = yield* sql<{ readonly id: number }>`
       INSERT INTO validation_runs (
-        candidate_id, policy_snapshot, highest_decision_id, highest_blocker_id,
+        candidate_id, validation_input_snapshot, highest_decision_id, highest_blocker_id,
         outcome, run_tooling_failure, cleanup_pending, cleanup_blocking_reason
       ) VALUES (
-        ${candidate.id}, ${policySnapshot}, ${highestDecisionId}, ${highestBlockerId},
+        ${candidate.id}, ${validationInputSnapshot}, ${highestDecisionId}, ${highestBlockerId},
         NULL, NULL, 1, NULL
       )
       RETURNING id
@@ -382,10 +359,22 @@ const startOrReuse = (
     if (validationRunId === undefined) {
       return yield* invalidData(operationName, "Validation Run identity was not allocated");
     }
+    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    if (run === undefined) {
+      return yield* invalidData(operationName, "Validation Run disappeared after creation");
+    }
     return {
       reused: false,
       validationRunId,
-      authority,
+      authority: {
+        candidate,
+        validationInput: run.validationInput,
+        policy: run.policy,
+        reviewerConfiguration: run.reviewerConfiguration,
+        implementationDecisions,
+        blockerHistory,
+        latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
+      },
     } satisfies StartCandidateValidationRunResult;
   });
 
@@ -423,10 +412,14 @@ const recordWorkspaceCleanup = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
   cleanupWorkspace: "removed" | "not_created" | "failed",
+  cleanupBlockingReason?: string,
 ) =>
   Effect.gen(function* () {
     const pending = cleanupWorkspace === "failed" ? 1 : 0;
-    const reason = cleanupWorkspace === "failed" ? "Snapshot Workspace cleanup failed." : null;
+    const reason =
+      cleanupWorkspace === "failed"
+        ? (cleanupBlockingReason ?? "Snapshot Workspace cleanup failed.")
+        : null;
     const updated = yield* sql<{ readonly id: number }>`
       UPDATE validation_runs
       SET cleanup_pending = ${pending}, cleanup_blocking_reason = ${reason}
@@ -623,59 +616,6 @@ const listPreviousCandidateReviewerFindings = (
       });
     });
   });
-
-const requireMatchingReviewerConfiguration = (
-  sql: SqlClient.SqlClient,
-  selected: ChangeReviewerConfiguration,
-  configuration: ChangeReviewerConfiguration,
-  changeId: string,
-  operationName: string,
-  idPrefix: string,
-) =>
-  Effect.gen(function* () {
-    const acceptance = selected.acceptanceReview;
-    if ((acceptance !== null) !== (configuration.acceptanceReview !== null)) {
-      return yield* invalidData(
-        operationName,
-        "Validation Acceptance Reviewer does not match the Change reviewer roster",
-      );
-    }
-    const specialists = selected.specialistReviews;
-    if (
-      specialists.length !== configuration.specialistReviews.length ||
-      specialists.some((review, index) => review.id !== configuration.specialistReviews[index]?.id)
-    ) {
-      return yield* invalidData(
-        operationName,
-        "Validation Specialists do not match the Change reviewer roster",
-      );
-    }
-
-    if (
-      acceptance !== null &&
-      configuration.acceptanceReview !== null &&
-      !sameChangeReviewerPolicy("acceptance", acceptance, configuration.acceptanceReview) &&
-      !(yield* changeReviewerConfigurationCanBeCorrected(sql, changeId, "acceptance", idPrefix))
-    ) {
-      return yield* invalidData(
-        operationName,
-        "Validation Acceptance Reviewer configuration does not match the Change",
-      );
-    }
-    for (const [index, review] of specialists.entries()) {
-      const configured = configuration.specialistReviews[index];
-      if (
-        configured !== undefined &&
-        !sameChangeReviewerPolicy(review.id, review, configured) &&
-        !(yield* changeReviewerConfigurationCanBeCorrected(sql, changeId, review.id, idPrefix))
-      ) {
-        return yield* invalidData(
-          operationName,
-          `Validation Specialist ${review.id} configuration does not match the Change`,
-        );
-      }
-    }
-  }).pipe(Effect.asVoid);
 
 const findingValue = (finding: CandidateValidationFinding) => ({
   title: finding.title,

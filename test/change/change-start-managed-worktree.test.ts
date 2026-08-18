@@ -282,7 +282,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout upstream from main and linked worktrees", () =>
+  it.effect("uses the invoking worktree without selecting a privileged checkout", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
@@ -303,8 +303,11 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(linkedOutput).toMatchObject({
         baseRef: "refs/remotes/upstream/main",
       });
-      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
+      expect(dirname(dirname(mainOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),
+      );
+      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
+        join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
       );
     }),
   );
@@ -695,6 +698,17 @@ const initializedRepository = (workspace?: string): string => {
     }),
   );
   git(root, "branch", "-M", "main");
+  writeFileSync(
+    join(root, ".but-why", "config.json"),
+    `${JSON.stringify(
+      {
+        idPrefix: "BY",
+        validation: { checks: [{ id: "test", command: "true", timeoutSeconds: 30 }] },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   writeFileSync(join(root, "README.md"), "# Test repository\n");
   git(root, "add", "README.md", ".but-why/config.json");
   git(root, "commit", "-m", "Initialize repository");
@@ -731,6 +745,7 @@ const changeStartRecord = (
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
     reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    checks: [],
     prepare: null,
     prepareFailure: null,
     state: "open",

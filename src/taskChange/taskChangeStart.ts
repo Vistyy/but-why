@@ -8,7 +8,7 @@ import {
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type {
-  ChangeReviewerConfiguration,
+  ChangePolicy,
   ChangeStartRecord,
   CreateChangeStartInput,
 } from "../change/changeStartStore.js";
@@ -82,10 +82,10 @@ export const startTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: TaskChangeStartInput,
-  resolveReviewerConfiguration: (
+  resolvePolicy: (
     startingCommit: string,
   ) => Effect.Effect<
-    | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+    | { readonly ok: true; readonly policy: ChangePolicy }
     | { readonly ok: false; readonly message: string }
   >,
 ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
@@ -121,7 +121,7 @@ export const startTaskChange = (
     };
     const started = yield* startChange(ownerStore, git, executor, {
       ...(input.baseBranch === undefined ? {} : { baseBranch: input.baseBranch }),
-      resolveReviewerConfiguration,
+      resolvePolicy,
       now: input.now,
     });
     return { ...started, taskId: input.taskId };

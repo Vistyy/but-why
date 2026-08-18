@@ -348,7 +348,7 @@ describe("Candidate Specialist Review phase", () => {
         if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
         const artifactsRoot = join(commonDirectory(repo), "but-why", "artifacts");
         const validation = candidateValidationForTest({
-          localRepositoryMainCheckoutRoot: repo,
+          localRepositoryRoot: repo,
           artifactsRoot,
           repository: {
             statePath: candidateRepositoryConfig(repo).statePath,
@@ -396,7 +396,6 @@ describe("Candidate Specialist Review phase", () => {
                     candidateId: captured.candidateId,
                     headSha: captured.headSha,
                     changeBaseSha: captured.changeBaseSha,
-                    policy: { checks: [], copyFiles: [] },
                   });
                   if (started.reused || "blocked" in started)
                     throw new Error("Expected a new unblocked Specialist Validation Run");

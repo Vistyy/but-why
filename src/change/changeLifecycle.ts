@@ -12,7 +12,7 @@ import type {
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
-import type { ChangeReviewerConfiguration, ChangeStartRecord } from "./changeStartStore.js";
+import type { ChangePolicy, ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
@@ -42,50 +42,47 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly reviewerConfiguration?: ChangeReviewerConfiguration;
-    readonly resolveReviewerConfiguration?: (
+    readonly policy?: ChangePolicy;
+    readonly resolvePolicy?: (
       startingCommit: string,
     ) => Effect.Effect<
-      | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+      | { readonly ok: true; readonly policy: ChangePolicy }
       | { readonly ok: false; readonly message: string }
     >;
     readonly now: string;
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (
-      input.reviewerConfiguration === undefined &&
-      input.resolveReviewerConfiguration === undefined
-    ) {
+    if (input.policy === undefined && input.resolvePolicy === undefined) {
       return {
         ok: false as const,
         code: "reviewer_configuration_invalid" as const,
-        message: "A reviewer configuration is required to create a Change.",
+        message: "A complete Change policy is required to create a Change.",
       };
     }
 
     const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
-    const resolveReviewerConfiguration = input.resolveReviewerConfiguration;
-    const reviewerConfiguration =
-      input.reviewerConfiguration !== undefined
-        ? { ok: true as const, configuration: input.reviewerConfiguration }
-        : resolveReviewerConfiguration === undefined
+    const resolvePolicy = input.resolvePolicy;
+    const policy =
+      input.policy !== undefined
+        ? { ok: true as const, policy: input.policy }
+        : resolvePolicy === undefined
           ? undefined
-          : yield* resolveReviewerConfiguration(gitIntent.intent.startingCommit);
-    if (reviewerConfiguration === undefined || !reviewerConfiguration.ok) {
+          : yield* resolvePolicy(gitIntent.intent.startingCommit);
+    if (policy === undefined || !policy.ok) {
       return {
         ok: false as const,
         code: "reviewer_configuration_invalid" as const,
-        message:
-          reviewerConfiguration?.message ??
-          "A reviewer configuration is required to create a Change.",
+        message: policy?.message ?? "A complete Change policy is required to create a Change.",
       };
     }
     const created = yield* store.create({
       id: "pending-change-start",
       ...gitIntent.intent,
-      reviewerConfiguration: reviewerConfiguration.configuration,
+      reviewerConfiguration: policy.policy.reviewerConfiguration,
+      ...(policy.policy.prepare === null ? {} : { prepare: policy.policy.prepare }),
+      checks: policy.policy.checks,
       now: input.now,
     });
     if (!("ok" in created)) return created;

@@ -115,6 +115,7 @@ export type ValidationRunAbandonmentPort = {
   ) => StorageEffect<CandidateValidationRunAbandonmentContext | undefined>;
   readonly getRunById: ChangeValidationReadPort["getRunById"];
   readonly recordToolingFailure: CandidateValidationExecutionPort["recordToolingFailure"];
+  readonly recordWorkspaceCleanup: CandidateValidationExecutionPort["recordWorkspaceCleanup"];
   readonly abandon: (input: AbandonCandidateValidationRunInput) => StorageEffect<void>;
 };
 

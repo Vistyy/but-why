@@ -274,7 +274,7 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout from a linked caller checkout", () =>
+  it.effect("uses the invoking worktree from a linked caller checkout", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
@@ -333,7 +333,7 @@ describe("by change implement", () => {
           }),
           expect.objectContaining({
             changeId: change.change.id,
-            repositoryPath: root,
+            repositoryPath: linkedCheckout,
             worktreePath: change.worktreePath,
           }),
         ]);

@@ -1,5 +1,5 @@
-import { accessSync, constants, copyFileSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { accessSync, constants, lstatSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import { Effect } from "effect";
 import { executeHostCommandEffect } from "../../command/hostCommand.js";
@@ -15,53 +15,59 @@ import {
 } from "../disposableWorkspacePath.js";
 
 export const prepareDisposableWorkspaceParent = (
-  mainCheckoutRoot: string,
-  workspaceContainerRoot?: string,
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
-  Effect.sync(() => {
-    const root = disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot);
-    const containers = [dirname(dirname(root)), dirname(root), root];
-    try {
-      for (const container of containers) {
-        if (!pathExists(container)) mkdirSync(container);
-        const entry = lstatSync(container);
-        if (!entry.isDirectory() || entry.isSymbolicLink()) {
-          return {
-            ok: false as const,
-            message: `Snapshot Workspace container is not a safe directory: ${container}`,
-          };
+  Effect.gen(function* () {
+    const identity = yield* verifyRepositoryCommonDirectory(
+      repositoryRoot,
+      repositoryCommonDirectory,
+    );
+    if (!identity.ok) return identity;
+    return yield* Effect.sync(() => {
+      const root = disposableWorkspaceRoot(repositoryCommonDirectory);
+      const containers = [dirname(root), root];
+      try {
+        for (const container of containers) {
+          if (!pathExists(container)) mkdirSync(container);
+          const entry = lstatSync(container);
+          if (!entry.isDirectory() || entry.isSymbolicLink()) {
+            return {
+              ok: false as const,
+              message: `Snapshot Workspace container is not a safe directory: ${container}`,
+            };
+          }
         }
+        accessSync(root, constants.W_OK | constants.X_OK);
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, message: errorMessage(error) };
       }
-      accessSync(root, constants.W_OK | constants.X_OK);
-      return { ok: true as const };
-    } catch (error) {
-      return { ok: false as const, message: errorMessage(error) };
-    }
+    });
   });
 
 export const inspectDisposableWorktree = (
-  mainCheckoutRoot: string,
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
   workspaceId: string,
   expectedCommitSha: string,
-  worktreePath: string,
-  workspaceContainerRoot?: string,
 ): Effect.Effect<DisposableWorktreeInspection> =>
   Effect.gen(function* () {
-    if (
-      !isExpectedDisposableWorkspacePath(
-        mainCheckoutRoot,
-        workspaceId,
-        worktreePath,
-        workspaceContainerRoot,
-      )
-    ) {
+    const identity = yield* verifyRepositoryCommonDirectory(
+      repositoryRoot,
+      repositoryCommonDirectory,
+    );
+    if (!identity.ok) return { state: "unproven", message: identity.message } as const;
+    const worktreePath = expectedDisposableWorkspacePath(repositoryCommonDirectory, workspaceId);
+    if (!isExpectedDisposableWorkspacePath(repositoryCommonDirectory, workspaceId, worktreePath)) {
       return {
         state: "unproven",
-        message:
-          "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
+        message: "Derived Snapshot Workspace identity is invalid.",
       } as const;
     }
-    const records = yield* readWorktreeRecords(mainCheckoutRoot);
+    const containers = yield* inspectSafeWorkspaceContainers(repositoryCommonDirectory);
+    if (!containers.ok) return { state: "unproven", message: containers.message } as const;
+    const records = yield* readWorktreeRecords(repositoryRoot);
     if (!records.ok) return { state: "unproven", message: records.message } as const;
     const matches = records.records.filter(
       (record) => resolve(record.path) === resolve(worktreePath),
@@ -104,88 +110,51 @@ export const inspectDisposableWorktree = (
   });
 
 export const createDetachedDisposableWorktree = (
-  mainCheckoutRoot: string,
+  repositoryRoot: string,
   worktreePath: string,
   commitSha: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
-  git(mainCheckoutRoot, ["worktree", "add", "--detach", "--", worktreePath, commitSha]).pipe(
+  git(repositoryRoot, ["worktree", "add", "--detach", "--", worktreePath, commitSha]).pipe(
     Effect.map((result) => (result.ok ? { ok: true as const } : result)),
   );
 
-export const copyDisposableWorkspaceFiles = (
-  mainCheckoutRoot: string,
-  worktreePath: string,
-  copyFiles: readonly string[],
-): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
-  Effect.sync(() => {
-    try {
-      for (const path of copyFiles) {
-        const source = resolve(mainCheckoutRoot, path);
-        const destination = resolve(worktreePath, path);
-        if (
-          !isPathInside(mainCheckoutRoot, source) ||
-          !isRegularContainedFile(mainCheckoutRoot, source) ||
-          !isPathInside(worktreePath, destination)
-        ) {
-          return {
-            ok: false as const,
-            message: `Allowlisted workspace file is not a regular repo-relative file: ${path}`,
-          };
-        }
-        const safeParent = ensureSafeDestinationParent(worktreePath, dirname(destination));
-        if (!safeParent.ok) return safeParent;
-        if (pathExists(destination) && lstatSync(destination).isSymbolicLink()) {
-          return {
-            ok: false as const,
-            message: `Snapshot Workspace file destination is a symbolic link: ${path}`,
-          };
-        }
-        copyFileSync(source, destination);
-      }
-      return { ok: true as const };
-    } catch (error) {
-      return { ok: false as const, message: errorMessage(error) };
-    }
-  });
-
 export const cleanupExactDisposableWorkspace = (
-  mainCheckoutRoot: string,
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
   input: ExactDisposableWorkspaceCleanupInput,
-  workspaceContainerRoot?: string,
 ): Effect.Effect<ExactDisposableWorkspaceCleanupResult> =>
   Effect.gen(function* () {
+    const identity = yield* verifyRepositoryCommonDirectory(
+      repositoryRoot,
+      repositoryCommonDirectory,
+    );
+    if (!identity.ok) return cleanupFailed(identity.message);
     const expectedWorktreePath = expectedDisposableWorkspacePath(
-      mainCheckoutRoot,
+      repositoryCommonDirectory,
       input.workspaceId,
-      workspaceContainerRoot,
     );
     if (
-      input.recordedWorktreePath === undefined ||
       !isExpectedDisposableWorkspacePath(
-        mainCheckoutRoot,
+        repositoryCommonDirectory,
         input.workspaceId,
-        input.recordedWorktreePath,
-        workspaceContainerRoot,
+        expectedWorktreePath,
       )
     ) {
-      return cleanupFailed(
-        `Recorded Snapshot Workspace identity does not match the expected workspace identity. Expected ${expectedWorktreePath}; received ${input.recordedWorktreePath ?? "<missing>"}.`,
-      );
+      return cleanupFailed("Derived Snapshot Workspace identity is invalid.");
     }
-    const parent = yield* inspectSafeWorkspaceContainers(mainCheckoutRoot, workspaceContainerRoot);
+    const parent = yield* inspectSafeWorkspaceContainers(repositoryCommonDirectory);
     if (!parent.ok) return cleanupFailed(parent.message);
 
     const inspected = yield* inspectDisposableWorktree(
-      mainCheckoutRoot,
+      repositoryRoot,
+      repositoryCommonDirectory,
       input.workspaceId,
       input.expectedCommitSha,
-      expectedWorktreePath,
-      workspaceContainerRoot,
     );
     if (inspected.state === "absent") return { workspace: "removed" } as const;
     if (inspected.state === "unproven") return cleanupFailed(inspected.message);
 
-    const removed = yield* git(mainCheckoutRoot, [
+    const removed = yield* git(repositoryRoot, [
       "worktree",
       "remove",
       "--force",
@@ -193,11 +162,10 @@ export const cleanupExactDisposableWorkspace = (
       expectedWorktreePath,
     ]);
     const verified = yield* inspectDisposableWorktree(
-      mainCheckoutRoot,
+      repositoryRoot,
+      repositoryCommonDirectory,
       input.workspaceId,
       input.expectedCommitSha,
-      expectedWorktreePath,
-      workspaceContainerRoot,
     );
     if (verified.state === "absent") return { workspace: "removed" } as const;
     return cleanupFailed(
@@ -205,14 +173,31 @@ export const cleanupExactDisposableWorkspace = (
     );
   });
 
+const verifyRepositoryCommonDirectory = (
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
+): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
+  git(repositoryRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).pipe(
+    Effect.map((result) => {
+      if (!result.ok) return result;
+      const actual = resolve(result.stdout.trim());
+      const expected = resolve(repositoryCommonDirectory);
+      return actual === expected
+        ? ({ ok: true } as const)
+        : ({
+            ok: false,
+            message: `Local Repository Git Common Directory does not match Shared Repository State. Expected ${expected}; received ${actual}.`,
+          } as const);
+    }),
+  );
+
 const inspectSafeWorkspaceContainers = (
-  mainCheckoutRoot: string,
-  workspaceContainerRoot?: string,
+  repositoryCommonDirectory: string,
 ): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
   Effect.sync(() => {
     try {
-      const root = disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot);
-      for (const container of [dirname(dirname(root)), dirname(root), root]) {
+      const root = disposableWorkspaceRoot(repositoryCommonDirectory);
+      for (const container of [dirname(root), root]) {
         if (!pathExists(container)) continue;
         const entry = lstatSync(container);
         if (!entry.isDirectory() || entry.isSymbolicLink()) {
@@ -241,12 +226,12 @@ type WorktreeRecord = {
 };
 
 const readWorktreeRecords = (
-  mainCheckoutRoot: string,
+  repositoryRoot: string,
 ): Effect.Effect<
   | { readonly ok: true; readonly records: readonly WorktreeRecord[] }
   | { readonly ok: false; readonly message: string }
 > =>
-  git(mainCheckoutRoot, ["worktree", "list", "--porcelain"]).pipe(
+  git(repositoryRoot, ["worktree", "list", "--porcelain"]).pipe(
     Effect.map((result) =>
       result.ok ? { ok: true as const, records: parseWorktreeRecords(result.stdout) } : result,
     ),
@@ -290,38 +275,6 @@ const git = (cwd: string, args: readonly string[]): Effect.Effect<GitResult> =>
       Effect.succeed({ ok: false as const, message: errorMessage(error) }),
     ),
   );
-
-const isRegularContainedFile = (root: string, path: string): boolean => {
-  try {
-    return lstatSync(path).isFile() && isPathInside(realpathSync(root), realpathSync(path));
-  } catch {
-    return false;
-  }
-};
-
-const ensureSafeDestinationParent = (
-  worktreePath: string,
-  destinationParent: string,
-): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
-  let current = resolve(worktreePath);
-  for (const part of relative(current, destinationParent).split(sep).filter(Boolean)) {
-    current = join(current, part);
-    if (!pathExists(current)) mkdirSync(current);
-    const entry = lstatSync(current);
-    if (!entry.isDirectory() || entry.isSymbolicLink()) {
-      return {
-        ok: false,
-        message: `Snapshot Workspace file parent is not a safe directory: ${current}`,
-      };
-    }
-  }
-  return { ok: true };
-};
-
-const isPathInside = (root: string, path: string): boolean => {
-  const relativePath = relative(resolve(root), resolve(path));
-  return relativePath.length > 0 && relativePath !== ".." && !relativePath.startsWith(`..${sep}`);
-};
 
 const isSafeWorktreeDirectory = (path: string): boolean => {
   try {

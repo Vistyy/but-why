@@ -40,8 +40,8 @@ export const resolveChangeStartGitIntent = (
       branchRef,
       startingCommit,
       worktreePath: join(
-        dirname(context.mainCheckoutRoot),
-        `${basename(context.mainCheckoutRoot)}-worktrees`,
+        dirname(context.root),
+        `${basename(context.root)}-worktrees`,
         "but-why",
         slug,
       ),

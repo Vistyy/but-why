@@ -6,13 +6,13 @@ import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationBlockerHistory,
   deriveAcceptanceContext,
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
 } from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
@@ -147,12 +147,12 @@ export const createChangeFixture = (
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
             initial_acceptance_context, reviewer_configuration,
-            cleanup_pending
+            checks_definition, cleanup_pending
           ) VALUES (
             ${branchRef}, ${options.baseRef ?? "refs/remotes/origin/main"},
             'https://github.test/acme/repo.git',
             ${options.worktreePath ?? join(root, `worktree-${branchRef.split("/").at(-1) ?? "change"}`)},
-            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', 0
+            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
           )
           RETURNING id
         `,
@@ -275,17 +275,15 @@ export const createValidationRunFixture = (
               "BY",
             );
             const acceptanceContext = deriveAcceptanceContext(initialContext, blockerHistory);
-            const policySnapshot = encodeSqliteCandidateValidationPolicy({
-              checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }],
-              copyFiles: [],
-              ...(acceptanceContext === null ? {} : { acceptanceContext }),
-            });
+            const validationInputSnapshot = encodeSqliteValidationInputSnapshot(
+              acceptanceContext === null ? {} : { acceptanceContext },
+            );
             return yield* sql<{ readonly id: number }>`
               INSERT INTO validation_runs (
-                candidate_id, policy_snapshot, highest_decision_id, highest_blocker_id,
+                candidate_id, validation_input_snapshot, highest_decision_id, highest_blocker_id,
                 outcome, cleanup_pending
               ) VALUES (
-                ${input.candidateId}, ${policySnapshot},
+                ${input.candidateId}, ${validationInputSnapshot},
                 (SELECT MAX(id) FROM implementation_decisions WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
                 (SELECT MAX(id) FROM implementation_blockers WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
                 ${input.state === "running" ? null : input.outcome}, 0

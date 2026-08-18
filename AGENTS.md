@@ -3,7 +3,8 @@
 - But Why validates submitted code against approved human intent.
 - But Why is task-based.
 - `by` is an agent-first, non-interactive CLI.
-- This repository is unreleased.
+- The globally installed built `by` executable is the only CLI permitted to open or mutate live Shared Repository State.
+- Candidate source and package artifacts may run only in disposable test repositories with independent Git Common Directories and state.
 - Shared Repository State uses immutable ordered Effect SQL migrations beginning with `0001_baseline`.
 - SQLite Tasks are the source of truth for active work and accepted implementation intent.
 - Use current domain terms in code, storage, and documentation.
@@ -67,4 +68,5 @@ Do not merge, rebase, or reset automatically.
 
 Run `just` to list available recipes.
 Use Just recipes for repository workflows.
-Use `just by ...` only when developing But Why from this source checkout.
+Use the globally installed `by` executable for But Why commands.
+The source repository does not provide a `just by` route.

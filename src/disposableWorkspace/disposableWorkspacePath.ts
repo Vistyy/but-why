@@ -1,22 +1,12 @@
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-export const disposableWorkspaceRoot = (
-  mainCheckoutRoot: string,
-  workspaceContainerRoot?: string,
-): string =>
-  workspaceContainerRoot ??
-  join(
-    dirname(mainCheckoutRoot),
-    `${basename(mainCheckoutRoot)}-worktrees`,
-    "but-why",
-    "validation-runs",
-  );
+export const disposableWorkspaceRoot = (repositoryCommonDirectory: string): string =>
+  join(repositoryCommonDirectory, "but-why", "workspaces");
 
 export const expectedDisposableWorkspacePath = (
-  mainCheckoutRoot: string,
+  repositoryCommonDirectory: string,
   workspaceId: string,
-  workspaceContainerRoot?: string,
-): string => join(disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot), workspaceId);
+): string => join(disposableWorkspaceRoot(repositoryCommonDirectory), workspaceId);
 
 const isDisposableWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.length > 0 &&
@@ -26,15 +16,12 @@ const isDisposableWorkspaceId = (workspaceId: string): boolean =>
   !workspaceId.includes("\\");
 
 export const isExpectedDisposableWorkspacePath = (
-  mainCheckoutRoot: string,
+  repositoryCommonDirectory: string,
   workspaceId: string,
   worktreePath: string,
-  workspaceContainerRoot?: string,
 ): boolean => {
   if (!isDisposableWorkspaceId(workspaceId)) return false;
-  const root = resolve(disposableWorkspaceRoot(mainCheckoutRoot, workspaceContainerRoot));
-  const expected = resolve(
-    expectedDisposableWorkspacePath(mainCheckoutRoot, workspaceId, workspaceContainerRoot),
-  );
+  const root = resolve(disposableWorkspaceRoot(repositoryCommonDirectory));
+  const expected = resolve(expectedDisposableWorkspacePath(repositoryCommonDirectory, workspaceId));
   return resolve(worktreePath) === expected && resolve(dirname(expected)) === root;
 };

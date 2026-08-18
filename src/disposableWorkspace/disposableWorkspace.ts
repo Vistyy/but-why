@@ -4,6 +4,7 @@ export type DisposableWorkspaceCleanupState = "not_created" | "removed" | "faile
 
 export type DisposableWorkspaceCleanupResult = {
   readonly workspace: DisposableWorkspaceCleanupState;
+  readonly errorMessage?: string;
 };
 
 export type DisposableWorktreeInspection =
@@ -14,17 +15,13 @@ export type DisposableWorktreeInspection =
 export type ExactDisposableWorkspaceCleanupInput = {
   readonly workspaceId: string;
   readonly expectedCommitSha: string;
-  readonly recordedWorktreePath?: string;
 };
 
-export type ExactDisposableWorkspaceCleanupResult = DisposableWorkspaceCleanupResult & {
-  readonly errorMessage?: string;
-};
+export type ExactDisposableWorkspaceCleanupResult = DisposableWorkspaceCleanupResult;
 
 export type DisposableWorkspaceOperationName =
   | "create_disposable_workspace"
-  | "cleanup_disposable_workspace"
-  | "copy_allowlisted_file";
+  | "cleanup_disposable_workspace";
 
 export type DisposableWorkspace = {
   readonly commandExecutor: WorkspaceCommandExecutor;

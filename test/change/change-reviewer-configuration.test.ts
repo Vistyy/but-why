@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -7,7 +7,7 @@ import {
   encodeSqliteChangeReviewerConfiguration,
 } from "../../src/change/changeReviewerConfiguration.js";
 import type { ChangeReviewerConfiguration } from "../../src/change/changeStartStore.js";
-import { resolveChangeReviewerConfigurationAtCommit } from "../../src/change/composition/resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { createChange } from "../../src/sqlite/sqliteChangeStartPersistence.js";
@@ -65,11 +65,8 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
   runTestProcessOrThrow("git", ["config", "user.email", "test@but-why.invalid"], { cwd: root });
   const configPath = join(root, ".but-why", "config.json");
   const instructionsPath = join(root, ".but-why", "reviewers", "base.md");
-  const extensionPath = join(root, "extensions", "base.ts");
   mkdirSync(join(root, ".but-why", "reviewers"), { recursive: true });
-  mkdirSync(join(root, "extensions"), { recursive: true });
   writeFileSync(instructionsPath, "Review exact base authority.\n");
-  writeFileSync(extensionPath, "export {};\n");
   writeFileSync(
     configPath,
     JSON.stringify({
@@ -77,7 +74,7 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
       agentProfiles: {
         base: {
           agentRuntime: "pi",
-          runtimeConfig: { model: "base-model", extensions: ["extensions/base.ts"] },
+          runtimeConfig: { model: "base-model" },
         },
       },
       review: { specialists: ["base"] },
@@ -86,6 +83,10 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
           agentProfile: { scope: "repo", name: "base" },
           instructionsFile: ".but-why/reviewers/base.md",
         },
+      },
+      prepare: { command: "prepare exact base", timeoutSeconds: 17 },
+      validation: {
+        checks: [{ id: "exact-base", command: "check exact base", timeoutSeconds: 23 }],
       },
     }),
   );
@@ -104,9 +105,8 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
   writeFileSync(globalConfigPath, "{}");
 
   return Effect.gen(function* () {
-    const resolved = yield* resolveChangeReviewerConfigurationAtCommit({
-      repoRoot: root,
-      workspaceContainerRoot: join(root, ".git", "but-why", "exact-change-base-workspaces"),
+    const resolved = yield* resolveChangePolicyAtCommit({
+      repositoryRoot: root,
       commit: exactBase,
       globalConfigPath,
       acceptanceContextSupplied: false,
@@ -115,37 +115,22 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
     if (!resolved.ok) throw new Error(resolved.message);
     expect(resolved).toMatchObject({
       ok: true,
-      configuration: {
-        specialistReviews: [
-          {
-            id: "base",
-            instructions: "Review exact base authority.\n",
-            profile: {
-              agentProfile: "base",
-              profile: { runtimeConfig: { extensions: ["extensions/base.ts"] } },
+      policy: {
+        reviewerConfiguration: {
+          specialistReviews: [
+            {
+              id: "base",
+              instructions: "Review exact base authority.\n",
+              profile: {
+                agentProfile: "base",
+                profile: { runtimeConfig: { model: "base-model" } },
+              },
             },
-          },
-        ],
+          ],
+        },
+        prepare: { command: "prepare exact base", timeoutSeconds: 17 },
+        checks: [{ id: "exact-base", command: "check exact base", timeoutSeconds: 23 }],
       },
-    });
-
-    rmSync(extensionPath);
-    runTestProcessOrThrow("git", ["add", "extensions/base.ts"], { cwd: root });
-    runTestProcessOrThrow("git", ["commit", "-m", "missing resource"], { cwd: root });
-    const missingResourceBase = runTestProcessOrThrow("git", ["rev-parse", "HEAD"], {
-      cwd: root,
-    });
-    const invalid = yield* resolveChangeReviewerConfigurationAtCommit({
-      repoRoot: root,
-      workspaceContainerRoot: join(root, ".git", "but-why", "exact-change-base-workspaces"),
-      commit: missingResourceBase,
-      globalConfigPath,
-      acceptanceContextSupplied: false,
-      expectedIdPrefix: "BY",
-    });
-    expect(invalid).toMatchObject({
-      ok: false,
-      message: expect.stringContaining("missing extension resource"),
     });
   });
 });
@@ -170,6 +155,7 @@ it.scoped("rejects invalid initial reviewer configuration before inserting a Cha
                 acceptanceReview: null,
                 specialistReviews: [specialist("standards"), specialist("standards")],
               },
+              checks: [],
               now: "2026-10-02T10:00:00.000Z",
             },
             repository.idPrefix,

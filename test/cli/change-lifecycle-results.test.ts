@@ -18,6 +18,7 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
     description: "Accepted description",
   },
   reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+  checks: [],
   prepare: { command: "prepare repository", timeoutSeconds: 17 },
   prepareFailure,
   state: "open",

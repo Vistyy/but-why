@@ -5,7 +5,6 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import { changeReviewerConfigurationCanBeCorrected } from "./sqliteChangeAgentConfigurationCorrection.js";
 import {
   decodeImplementationDecisions,
   deriveAcceptanceContext,
@@ -31,10 +30,6 @@ export const openSqliteChangeSubmissionPort = () =>
           Effect.map(readFullChange(sql, changeId, repository.idPrefix), (change) =>
             change === undefined ? undefined : submissionChange(change),
           ),
-        ),
-      agentSessionConfigurationCanBeCorrected: (changeId, producer) =>
-        repository.transaction("check Change Agent configuration correction", (sql) =>
-          changeReviewerConfigurationCanBeCorrected(sql, changeId, producer, repository.idPrefix),
         ),
       getChangeForOutputById: (changeId) =>
         repository.transaction("read Change for Submit output", (sql) =>
@@ -76,6 +71,8 @@ const submissionChange = (change: ChangeRecord): SubmissionChange => ({
   worktreePath: change.worktreePath,
   acceptanceContext: change.acceptanceContext,
   reviewerConfiguration: change.reviewerConfiguration,
+  prepare: change.prepare,
+  checks: change.checks,
   publication: change.publication,
 });
 

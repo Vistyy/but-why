@@ -159,13 +159,34 @@ describe("configuration contracts", () => {
       agentProfiles: {
         default: {
           agentRuntime: "pi",
-          runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "medium" },
+          runtimeConfig: {
+            model: "openai-codex/gpt-5.5",
+            thinking: "medium",
+            extensions: ["npm:@acme/reviewer-extension"],
+            skills: ["github:acme/reviewer-skill"],
+          },
         },
       },
-      snapshotWorkspace: { copyFiles: [".env.test"] },
     };
 
     expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
+  it("rejects unsafe repository Agent resource paths", () => {
+    const error = left(
+      decodeRepoConfig({
+        idPrefix: "BY",
+        agentProfiles: {
+          unsafe: {
+            agentRuntime: "pi",
+            runtimeConfig: { skills: ["../outside/skill"] },
+          },
+        },
+      }),
+    );
+
+    expect(error._tag).toBe("RepoConfigValidationFailed");
+    expect(error.diagnostics.length).toBeGreaterThan(0);
   });
 
   it("rejects validation-scoped preparation", () => {

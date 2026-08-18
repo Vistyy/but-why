@@ -52,6 +52,7 @@ describe("by change reconcile --discard-work", () => {
               worktreePath: join(root, "uncreated-worktree"),
               now,
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              checks: [],
             });
             if (!created.ok) throw new Error(created.code);
             yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -114,6 +115,7 @@ describe("by change reconcile --discard-work", () => {
               worktreePath: recordedWorktreePath,
               now,
               reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              checks: [],
             });
             if (!created.ok) throw new Error(created.code);
             yield* starts.recordPrepareOutcome(created.change.id, null, now);

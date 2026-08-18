@@ -22,7 +22,8 @@ import {
 } from "../validateCandidate.js";
 
 export const candidateValidationLayer = (input: {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
@@ -39,7 +40,8 @@ export const candidateValidationLayer = (input: {
       Layer.mergeAll(
         NodeFileSystem.layer,
         Layer.succeed(CandidateValidationPaths, {
-          localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
+          localRepositoryRoot: input.localRepositoryRoot,
+          localRepositoryCommonDirectory: input.localRepositoryCommonDirectory,
           artifactsRoot: input.artifactsRoot,
           agentSessionsRoot: input.agentSessionsRoot,
           agentPersistence: input.agentPersistence,

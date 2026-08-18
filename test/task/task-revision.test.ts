@@ -28,10 +28,10 @@ const policy = {
 };
 
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Dependency", description: "Required", now });
       yield* tasks.createTask({
         title: "Approved proposal",
@@ -39,7 +39,7 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
-      const completed = yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-2"), now);
+      const completed = yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), now);
       const before = yield* tasks.getTaskById(publicTaskId("BY-2"));
 
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
@@ -89,26 +89,26 @@ it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
 it.scoped(
   "rejects revision for linked, actively reviewed, and terminal Tasks without mutation",
   () =>
-    withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+    withTemporaryRepositoryState(({ repositoryRoot }) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+        const reviews = yield* openSqliteTaskReviewPersistence();
         const taskChanges = yield* openSqliteTaskChangeTaskPersistence();
         const repository = yield* RepositorySql;
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
         }
-        yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), now);
+        yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
         yield* repository.operation(
           "link Todo Task fixture to Change",
           (sql) => sql`INSERT INTO changes (
           id, branch_ref, base_ref, base_remote_url, worktree_path,
-          initial_acceptance_context, reviewer_configuration, cleanup_pending
+          initial_acceptance_context, reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (
           1, 'refs/heads/change-linked', 'refs/remotes/origin/main',
           'https://example.test/repo.git', '/repo-worktrees/change-linked',
           '{"version":1,"title":"Linked","description":"Linked intent"}',
-          '{"acceptanceReview":null,"specialistReviews":[]}', 0
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
         )`,
         );
         yield* repository.operation(

@@ -1,13 +1,9 @@
-import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
-import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
-import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
@@ -20,7 +16,6 @@ import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
-import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { openSqliteTaskChangeSubmissionCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import {
   localCandidateCaptureGit,
@@ -29,7 +24,6 @@ import {
 import type { CandidateCapturePersistence } from "../candidateCapture/candidateCapturePersistence.js";
 import { openCandidateCapture } from "../candidateCapture/captureLocalCandidate.js";
 import { candidateValidationLayer } from "../candidateValidation/composition/candidateValidationLayer.js";
-import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidatePublicationPort,
   ChangeAgentSessionPort,
@@ -37,12 +31,7 @@ import type {
 } from "../changePorts.js";
 import { localCandidatePublicationGit } from "../publication/adapters/localCandidatePublicationGit.js";
 import { openCandidatePublication } from "../publication/candidatePublication.js";
-import {
-  type ChangeSubmit,
-  type ChangeSubmitResult,
-  type ManagedRepoConfigResolution,
-  openChangeSubmit,
-} from "../submitChange.js";
+import { type ChangeSubmit, type ChangeSubmitResult, openChangeSubmit } from "../submitChange.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 
 export type LoadChangeSubmitResult =
@@ -69,8 +58,6 @@ export const loadChangeSubmit = (input: {
   ) => {
     const submission: ChangeSubmissionPort = {
       getChangeById: submissionOwner.getChangeById,
-      agentSessionConfigurationCanBeCorrected:
-        submissionOwner.agentSessionConfigurationCanBeCorrected,
       getChangeForOutputById: submissionOwner.getChangeForOutputById,
       getCompletedPublicationEvidence: submissionOwner.getCompletedPublicationEvidence,
       completeMergedChange: submissionCompletion,
@@ -78,58 +65,9 @@ export const loadChangeSubmit = (input: {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
       github,
-      loadRepoConfigAtCommit: (worktreePath, commit): ManagedRepoConfigResolution => {
-        const source = readRepositoryFileAtCommit(worktreePath, commit, ".but-why/config.json");
-        if (!source.ok) {
-          return {
-            ok: false,
-            message: `Change Base Repo Config could not be read at commit ${commit}.`,
-          };
-        }
-        const decoded = decodeRepoConfigSource(source.content, ".but-why/config.json");
-        return decoded.ok
-          ? decoded
-          : {
-              ok: false,
-              message: `Change Base Repo Config is invalid: ${decoded.error.message}`,
-              ...(decoded.error.path === undefined ? {} : { path: decoded.error.path }),
-              ...(decoded.error.diagnostics === undefined
-                ? {}
-                : { diagnostics: decoded.error.diagnostics }),
-            };
-      },
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
-      exactCommitWorkspaceRoot: join(context.paths.operationalDir, "exact-change-base-workspaces"),
       persistence: submission,
-      resolvePolicy: (
-        acceptanceContextSupplied,
-        repoConfig,
-        worktreePath,
-        reviewerConfiguration,
-      ) => {
-        if (reviewerConfiguration !== undefined) {
-          return resolveCandidateValidationPolicy({
-            context,
-            globalConfigPath: input.globalConfigPath,
-            acceptanceContextSupplied,
-            repoConfig,
-            repoRoot: worktreePath,
-            reviewerConfiguration,
-          });
-        }
-        const globalConfig = readGlobalConfig(input.globalConfigPath);
-        return globalConfig.ok
-          ? resolveCandidateValidationPolicy({
-              context,
-              globalConfigPath: input.globalConfigPath,
-              globalConfig: globalConfig.config,
-              acceptanceContextSupplied,
-              repoConfig,
-              repoRoot: worktreePath,
-            })
-          : globalConfig;
-      },
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence: publication,
@@ -145,7 +83,6 @@ export const loadChangeSubmit = (input: {
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
       }).capture,
-      runDisposableExactCommitWorkspace,
       executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
     });
   };
@@ -155,7 +92,8 @@ export const loadChangeSubmit = (input: {
     agentPersistence: AgentSessionPersistence,
   ) =>
     candidateValidationLayer({
-      localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
+      localRepositoryRoot: context.root,
+      localRepositoryCommonDirectory: context.commonDirectory,
       artifactsRoot: context.paths.artifactsPath,
       persistence,
       ...(input.reviewerAgentRuntime === undefined

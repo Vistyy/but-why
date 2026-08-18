@@ -35,12 +35,11 @@ type LoadedChangeInspectionOperation<A> =
     }
   | { readonly ok: false; readonly error: LoadChangeInspectionError };
 
-type LoadInput = { readonly cwd: string; readonly operationalRepoRoot?: string };
+type LoadInput = { readonly cwd: string };
 
 type LoadedContext = Exclude<ReturnType<typeof loadContext>, { readonly ok: false }>;
 
-const loadContext = (input: LoadInput) =>
-  openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
 
 const loadOperation = <A>(
   input: LoadInput,

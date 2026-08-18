@@ -121,6 +121,7 @@ describe("owned pull request observation", () => {
     worktreePath: "/repo",
     acceptanceContext: null,
     reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    checks: [],
     prepare: null,
     prepareFailure: null,
     publication,

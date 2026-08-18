@@ -35,9 +35,6 @@ export const runArtifactCommand = (
 ): Effect.Effect<CliResult> => {
   const loaded = loadCandidateValidationRunInspection({
     cwd: environment.cwd,
-    ...(environment.operationalRepoRoot === undefined
-      ? {}
-      : { operationalRepoRoot: environment.operationalRepoRoot }),
   });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
   return loaded.inspection.readArtifact(command.validationRunId, command.artifactRef).pipe(

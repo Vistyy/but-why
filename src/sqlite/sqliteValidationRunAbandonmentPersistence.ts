@@ -27,6 +27,15 @@ export const openSqliteValidationRunAbandonmentPort = () =>
             repository.idPrefix,
           ),
         ),
+      recordWorkspaceCleanup: (input) =>
+        repository.transactionImmediate("record Candidate Snapshot Workspace cleanup", (sql) =>
+          recordWorkspaceCleanup(
+            sql,
+            input.validationRunId,
+            input.cleanupWorkspace,
+            input.cleanupBlockingReason,
+          ),
+        ),
       recordToolingFailure: (input) =>
         repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
           Effect.gen(function* () {
@@ -82,6 +91,25 @@ const getAbandonmentContext = (
             ),
           ),
   );
+
+const recordWorkspaceCleanup = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  cleanupWorkspace: "removed" | "not_created" | "failed",
+  cleanupBlockingReason?: string,
+) =>
+  Effect.gen(function* () {
+    const reason =
+      cleanupWorkspace === "failed"
+        ? (cleanupBlockingReason ?? "Snapshot Workspace cleanup failed.")
+        : null;
+    yield* sql`
+      UPDATE validation_runs
+      SET cleanup_pending = ${cleanupWorkspace === "failed" ? 1 : 0},
+        cleanup_blocking_reason = ${reason}
+      WHERE id = ${validationRunId} AND outcome IS NULL
+    `;
+  }).pipe(Effect.asVoid);
 
 const abandon = (
   sql: SqlClient.SqlClient,

@@ -24,6 +24,11 @@ export const resolveAcceptanceReviewPolicy = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructions?: (
+    path: string,
+  ) =>
+    | { readonly ok: true; readonly content: string }
+    | { readonly ok: false; readonly message: string };
 }):
   | { readonly ok: true; readonly policy: AcceptanceReviewPolicy }
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
@@ -65,11 +70,22 @@ const resolveInstructions = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructions?: (
+    path: string,
+  ) =>
+    | { readonly ok: true; readonly content: string }
+    | { readonly ok: false; readonly message: string };
 }):
   | (Pick<AcceptanceReviewPolicy, "instructions" | "instructionsSource"> & { readonly ok: true })
   | { readonly ok: false; readonly error: InvalidReviewerConfig } => {
   const repoInstructionsFile = input.repoConfig.review?.acceptance?.instructionsFile;
   if (repoInstructionsFile !== undefined) {
+    if (input.readRepoInstructions !== undefined) {
+      const result = input.readRepoInstructions(repoInstructionsFile);
+      return result.ok
+        ? nonBlankInstructions(result.content, "repo", repoInstructionsFile)
+        : invalidInstructions(result.message);
+    }
     return readInstructions(join(input.repoRoot, repoInstructionsFile), "repo");
   }
 
@@ -95,6 +111,17 @@ const readInstructions = (
     ? { ok: true, instructions: result.instructions, instructionsSource }
     : invalidInstructions(result.message);
 };
+
+const nonBlankInstructions = (
+  content: string,
+  instructionsSource: "repo" | "global",
+  path: string,
+):
+  | (Pick<AcceptanceReviewPolicy, "instructions" | "instructionsSource"> & { readonly ok: true })
+  | { readonly ok: false; readonly error: InvalidReviewerConfig } =>
+  content.trim().length === 0
+    ? invalidInstructions(`Acceptance Reviewer instructions file is empty: ${path}`)
+    : { ok: true, instructions: content, instructionsSource };
 
 const invalidInstructions = (
   message: string,

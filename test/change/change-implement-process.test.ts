@@ -120,12 +120,12 @@ exit 1
               (sql) => sql`
               INSERT INTO changes (
                 id, branch_ref, base_ref, base_remote_url, worktree_path,
-                reviewer_configuration, cleanup_pending
+                reviewer_configuration, checks_definition, cleanup_pending
               ) VALUES (
                 ${internalChangeId(changeId, "BY")}, 'refs/heads/process',
                 'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
                 ${join(root, "process-worktree")},
-                '{"acceptanceReview":null,"specialistReviews":[]}', 0
+                '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
               )
             `,
             );

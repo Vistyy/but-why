@@ -367,6 +367,7 @@ const changeRecord = (input: {
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
   reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+  checks: [],
   prepare: null,
   prepareFailure: null,
   implementationDecisions: [],

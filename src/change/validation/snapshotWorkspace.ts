@@ -4,6 +4,7 @@ import type { CleanupState } from "../validationRun/cleanup.js";
 
 export type SnapshotWorkspaceCleanupResult = {
   readonly workspace: CleanupState;
+  readonly errorMessage?: string;
 };
 
 export type ActiveSnapshotWorkspace = {
@@ -17,8 +18,7 @@ export type ActiveSnapshotWorkspaceResult = {
 
 export type SnapshotWorkspaceOperationName =
   | "create_snapshot_workspace"
-  | "cleanup_snapshot_workspace"
-  | "copy_allowlisted_file";
+  | "cleanup_snapshot_workspace";
 
 export type SnapshotWorkspaceToolingError = {
   readonly operationName: SnapshotWorkspaceOperationName;

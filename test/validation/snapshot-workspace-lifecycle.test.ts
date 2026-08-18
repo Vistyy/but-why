@@ -1,11 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -23,19 +16,20 @@ const validationRunId = 1;
 const createSnapshotWorkspace = makeCreateSnapshotWorkspace(runDisposableExactCommitWorkspace);
 
 describe("Snapshot Workspace lifecycle", () => {
-  it.scoped("creates an exact detached worktree, executes commands, and removes it", () =>
+  it.scoped("creates an exact detached worktree without local file copying and removes it", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
       writeFileSync(join(repository, ".env.test"), "LOCAL_INPUT=yes\n");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
       const cleanupResults: unknown[] = [];
 
       const result = yield* createSnapshotWorkspace({
-        repoRoot: repository,
+        repositoryRoot: repository,
+        repositoryCommonDirectory: commonDirectory,
         validationRunId,
         submittedSha: commitSha,
-        copyFiles: [".env.test"],
         recordWorkspaceCleanup: (cleanupResult) =>
           Effect.sync(() => {
             cleanupResults.push(cleanupResult);
@@ -44,11 +38,11 @@ describe("Snapshot Workspace lifecycle", () => {
           Effect.gen(function* () {
             expect(gitStatus(workspace.worktreePath, "symbolic-ref", "-q", "HEAD")).toBe(1);
             const observed = yield* workspace.commandExecutor(
-              'printf \'%s:%s\' "$(git rev-parse HEAD)" "$(cat .env.test)"',
+              "test ! -e .env.test && git rev-parse HEAD",
             );
             expect(observed).toMatchObject({
               exitCode: 0,
-              stdout: `${commitSha}:LOCAL_INPUT=yes`,
+              stdout: `${commitSha}\n`,
             });
             return { outcome: "passed" as const };
           }).pipe(
@@ -75,16 +69,17 @@ describe("Snapshot Workspace lifecycle", () => {
   it.scoped("reuses only the same clean detached worktree at the exact commit", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
       mkdirSync(dirname(worktreePath), { recursive: true });
       git(repository, "worktree", "add", "--detach", "--", worktreePath, commitSha);
 
       const result = yield* createSnapshotWorkspace({
-        repoRoot: repository,
+        repositoryRoot: repository,
+        repositoryCommonDirectory: commonDirectory,
         validationRunId,
         submittedSha: commitSha,
-        copyFiles: [],
       });
 
       expect(result).toEqual({ ok: true });
@@ -95,17 +90,18 @@ describe("Snapshot Workspace lifecycle", () => {
   it.scoped("refuses a path whose Local Repository registration cannot be proved", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
       mkdirSync(worktreePath, { recursive: true });
       writeFileSync(join(worktreePath, "keep"), "unowned\n");
       const cleanupResults: unknown[] = [];
 
       const result = yield* createSnapshotWorkspace({
-        repoRoot: repository,
+        repositoryRoot: repository,
+        repositoryCommonDirectory: commonDirectory,
         validationRunId,
         submittedSha: commitSha,
-        copyFiles: [],
         recordWorkspaceCleanup: (cleanupResult) =>
           Effect.sync(() => {
             cleanupResults.push(cleanupResult);
@@ -119,79 +115,31 @@ describe("Snapshot Workspace lifecycle", () => {
           cleanupResult: { workspace: "failed" },
         },
       });
-      expect(cleanupResults).toEqual([{ workspace: "failed" }]);
+      expect(cleanupResults).toEqual([
+        {
+          workspace: "failed",
+          errorMessage: "Snapshot Workspace path exists without a Local Repository registration.",
+        },
+      ]);
       expect(existsSync(join(worktreePath, "keep"))).toBe(true);
-    }),
-  );
-
-  it.scoped("rejects a symbolic-link local workspace input", () =>
-    Effect.gen(function* () {
-      const repository = initializedRepository();
-      const commitSha = git(repository, "rev-parse", "HEAD");
-      writeFileSync(join(repository, "source"), "secret\n");
-      symlinkSync("source", join(repository, ".env.test"));
-
-      const result = yield* createSnapshotWorkspace({
-        repoRoot: repository,
-        validationRunId,
-        submittedSha: commitSha,
-        copyFiles: [".env.test"],
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        toolingError: {
-          operationName: "copy_allowlisted_file",
-          cleanupResult: { workspace: "removed" },
-        },
-      });
-    }),
-  );
-
-  it.scoped("does not follow a Candidate symbolic link while copying a local input", () =>
-    Effect.gen(function* () {
-      const repository = initializedRepository();
-      writeFileSync(join(repository, "target"), "candidate target\n");
-      symlinkSync("target", join(repository, ".env.test"));
-      git(repository, "add", "target", ".env.test");
-      git(repository, "commit", "-m", "Candidate symbolic link");
-      const commitSha = git(repository, "rev-parse", "HEAD");
-      unlinkSync(join(repository, ".env.test"));
-      writeFileSync(join(repository, ".env.test"), "LOCAL_INPUT=yes\n");
-
-      const result = yield* createSnapshotWorkspace({
-        repoRoot: repository,
-        validationRunId,
-        submittedSha: commitSha,
-        copyFiles: [".env.test"],
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        toolingError: {
-          operationName: "copy_allowlisted_file",
-          errorMessage: "Snapshot Workspace file destination is a symbolic link: .env.test",
-          cleanupResult: { workspace: "removed" },
-        },
-      });
-      expect(readFileSync(join(repository, "target"), "utf8")).toBe("candidate target\n");
     }),
   );
 
   it.scoped("terminates an interrupted command before cleanup records success", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
       const evidenceRoot = createTestWorkspace();
       const processIdPath = join(evidenceRoot, "child-pid");
       const cleanupResults: unknown[] = [];
       const fiber = yield* Effect.fork(
         createSnapshotWorkspace({
-          repoRoot: repository,
+          repositoryRoot: repository,
+          repositoryCommonDirectory: commonDirectory,
           validationRunId,
           submittedSha: commitSha,
-          copyFiles: [],
           recordWorkspaceCleanup: (cleanupResult) =>
             Effect.sync(() => {
               cleanupResults.push(cleanupResult);
@@ -246,6 +194,9 @@ const initializedRepository = (): string => {
   git(repository, "branch", "-M", "main");
   return repository;
 };
+
+const repositoryCommonDirectory = (repository: string): string =>
+  git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
 const gitStatus = (cwd: string, ...args: readonly string[]): number =>
   runTestProcess("git", args, { cwd }).status ?? -1;

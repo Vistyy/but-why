@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { accessSync, constants, readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -123,9 +120,9 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const blockerPollingIntervalMs = 30_000;
 const changeIdPattern = /^\s*Change identity:\s*([A-Z][A-Z0-9]{1,9}-C[1-9][0-9]*)\.?\s*$/mu;
-type ButWhyCommandPrefix = "just by" | "npx -y but-why";
+type ButWhyCommandPrefix = "by";
 
-const defaultCommandPrefix: ButWhyCommandPrefix = "npx -y but-why";
+const defaultCommandPrefix: ButWhyCommandPrefix = "by";
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
 
@@ -133,7 +130,7 @@ export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
 const submitCommandPattern =
-  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
+  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*by\s+change\s+submit(?:\s|$)/gu;
 
 type ShellLineState = {
   readonly quote: "'" | '"' | undefined;
@@ -644,25 +641,12 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
-    try {
-      accessSync(join(cwd, "justfile"), constants.R_OK);
-      accessSync(join(cwd, "bin/by"), constants.X_OK);
-      const launcher = readFileSync(join(cwd, "bin/by"), "utf8");
-      return launcher.includes("main_checkout_unavailable") &&
-        launcher.includes("trusted_executable_unavailable")
-        ? "just by"
-        : "npx -y but-why";
-    } catch {
-      return "npx -y but-why";
-    }
-  };
+  const commandPrefixFor = (_cwd: string): ButWhyCommandPrefix => "by";
 
   const cliInvocation = (
     prefix: ButWhyCommandPrefix,
     args: readonly string[],
-  ): readonly [string, ...string[]] =>
-    prefix === "just by" ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
+  ): readonly [string, ...string[]] => [prefix, ...args];
 
   const inspectCommand = async (
     commandArgs: readonly string[],

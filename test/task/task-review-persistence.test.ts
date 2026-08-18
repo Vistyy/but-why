@@ -35,10 +35,10 @@ const policy = {
 };
 
 it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Review", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       yield* tasks.createTask({ title: "Dependency", description: "Observed dependency", now });
       yield* tasks.createTask({
         title: "Proposal",
@@ -84,11 +84,11 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
   ),
 );
 
-it.scoped("does not project corrected Task reviewer configuration onto earlier Reviews", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+it.scoped("rejects Task reviewer policy changes after the first Invocation", () =>
+  withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 
@@ -127,25 +127,17 @@ it.scoped("does not project corrected Task reviewer configuration onto earlier R
         ...policy,
         guidance: { content: "Use corrected guidance.\n", source: "repo" as const },
       };
-      const second = yield* reviews.admit({
-        taskId: publicTaskId("BY-1"),
-        policy: correctedPolicy,
-        baseRef: "refs/heads/main",
-        baseCommit: "b".repeat(40),
-        now: later,
-      });
-      if (!second.ok) throw new Error(second.code);
-      const correctedInvocation = yield* agents.beginInvocation({
-        agentSessionId: failedInvocation.dispatch.agentSessionId,
-        configuration: { harness: "pi", model: "test-model" },
-        createdAt: later,
-        linkInvocation: reviews.linkAgentInvocation({
-          taskId: publicTaskId("BY-1"),
-          reviewId: second.review.id,
-          admittedPolicy: second.policy,
-        }),
-      });
-      if (!correctedInvocation.ok) throw new Error(correctedInvocation.code);
+      expect(
+        yield* reviews
+          .admit({
+            taskId: publicTaskId("BY-1"),
+            policy: correctedPolicy,
+            baseRef: "refs/heads/main",
+            baseCommit: "b".repeat(40),
+            now: later,
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
 
       const historical = yield* reviews.getById(first.review.id);
       expect(historical).toMatchObject({
@@ -156,11 +148,8 @@ it.scoped("does not project corrected Task reviewer configuration onto earlier R
           }),
         ],
       });
-      expect(historical?.reviewerConfiguration).toBeUndefined();
-      expect(yield* reviews.getById(second.review.id)).toMatchObject({
-        agentSessionId: correctedInvocation.dispatch.agentSessionId,
-        reviewerConfiguration: correctedPolicy,
-      });
+      expect(historical?.reviewerConfiguration).toEqual(policy);
+      expect(yield* reviews.listForTask(publicTaskId("BY-1"))).toHaveLength(1);
     }),
   ),
 );
@@ -182,7 +171,7 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
     root,
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(root);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
       const admitted = yield* reviews.admit({
@@ -194,8 +183,8 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
       });
       if (!admitted.ok) throw new Error(`Could not admit Review: ${admitted.code}`);
 
-      const workspacePath = expectedTaskReviewWorkspacePath(root, admitted.review.id);
-      expect(yield* prepareDisposableWorkspaceParent(root)).toEqual({ ok: true });
+      const workspacePath = expectedTaskReviewWorkspacePath(`${root}/.git`, admitted.review.id);
+      expect(yield* prepareDisposableWorkspaceParent(root, `${root}/.git`)).toEqual({ ok: true });
       expect(yield* createDetachedDisposableWorktree(root, workspacePath, baseCommit)).toEqual({
         ok: true,
       });
@@ -260,10 +249,10 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
 });
 
 it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       const agents = yield* openSqliteAgentSessionPersistence();
       const repository = yield* RepositorySql;
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
@@ -355,10 +344,10 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
 );
 
 it.scoped("orders immutable Task Review history by its SQLite ID", () =>
-  withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
-      const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+      const reviews = yield* openSqliteTaskReviewPersistence();
       const agents = yield* openSqliteAgentSessionPersistence();
       yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
 

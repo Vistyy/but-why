@@ -129,7 +129,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
+  it.effect("infers the Change from its Managed Worktree and rejects a non-managed worktree", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);

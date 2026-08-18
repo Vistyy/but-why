@@ -94,9 +94,8 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     async exec(command: string, args: string[], options?: { signal?: AbortSignal }) {
       execCalls.push({ command, args });
       execSignals.push(options?.signal);
-      const sourceCli = command === "just" && args[0] === "by";
-      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
-      if ((sourceCli || publishedCli) && inspectionGate !== undefined) {
+      const installedCli = command === "by";
+      if (installedCli && inspectionGate !== undefined) {
         await Promise.race([
           inspectionGate,
           new Promise<void>((resolve) =>
@@ -107,11 +106,10 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
           return { stdout: "", stderr: "", code: 1, killed: true };
         }
       }
-      if ((sourceCli || publishedCli) && inspectionFails)
-        return { stdout: "", stderr: "", code: 1, killed: true };
-      if ((sourceCli || publishedCli) && args.includes("blocker"))
+      if (installedCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
+      if (installedCli && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
-      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
+      if (installedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -201,7 +199,7 @@ describe("packaged Change Implement continuation extension", () => {
       type: "tool_call",
       toolCallId: "submit-1",
       toolName: "bash",
-      input: { command: `git status && just by change submit ${changeId}` },
+      input: { command: `git status && by change submit ${changeId}` },
     };
 
     const first = await harness.emit("tool_call", submit);
@@ -237,7 +235,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.getExecCallCount()).toBe(inspectionCallCount);
@@ -270,7 +268,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.latestWidgetText()).toEqual([
@@ -294,7 +292,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "help-1",
         toolName: "bash",
-        input: { command: "just by change submit --help" },
+        input: { command: "by change submit --help" },
       }),
     ).toBeUndefined();
     expect(harness.getExecCallCount()).toBe(inspectionCallCount);
@@ -303,7 +301,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.execCalls.filter(({ args }) => args.includes("blocker"))).toHaveLength(
@@ -321,7 +319,7 @@ describe("packaged Change Implement continuation extension", () => {
       type: "tool_call",
       toolCallId: "submit-1",
       toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
+      input: { command: `by change submit ${changeId}` },
     });
 
     expect(result).toMatchObject({
@@ -343,7 +341,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.getExecCallCount()).toBe(execCallCount);
   });
 
-  it("uses the canonical source-repository Trusted But Why Executable", async () => {
+  it("uses the globally installed executable from every worktree", async () => {
     const harness = createHarness();
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
@@ -351,26 +349,14 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(1);
     expect(harness.execCalls).toContainEqual({
-      command: "just",
-      args: ["by", "change", "show", changeId],
+      command: "by",
+      args: ["change", "show", changeId],
     });
     expect(harness.execCalls).toContainEqual({
-      command: "just",
-      args: ["by", "change", "blocker", "list", changeId],
+      command: "by",
+      args: ["change", "blocker", "list", changeId],
     });
-  });
-
-  it("uses the published executable for a separate target repository", async () => {
-    const harness = createHarness("/managed/change");
-
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    await harness.emit("agent_settled");
-
-    expect(harness.execCalls).toContainEqual({
-      command: "npx",
-      args: ["-y", "but-why", "change", "show", changeId],
-    });
-    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
+    expect(harness.sent[0]).toContain(`by change show ${changeId}`);
   });
 
   it("does not leave an inspection failure idle", async () => {
@@ -754,7 +740,7 @@ describe("packaged Change Implement continuation extension", () => {
     });
     await harness.runCommand("continue-change");
 
-    expect(harness.execCalls.filter(({ command }) => command === "just").at(-1)).toMatchObject({
+    expect(harness.execCalls.filter(({ command }) => command === "by").at(-1)).toMatchObject({
       args: expect.arrayContaining([changeId]),
     });
     expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);

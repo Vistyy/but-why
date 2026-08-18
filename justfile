@@ -34,10 +34,6 @@ fix:
 quality:
     @exec ./scripts/run-quality-workload.sh
 
-# Validate Repo Config with the Candidate source contract without opening Shared Repository State.
-validate-candidate-repo-config:
-    @pnpm exec tsx scripts/validate-candidate-repo-config.ts
-
 # Run blocking static checks that do not require coverage.
 _quality-static:
     #!/usr/bin/env bash
@@ -117,8 +113,3 @@ format:
 format-check:
     just --unstable --fmt --check
     pnpm run format-check
-
-# Run the local by CLI, forwarding any arguments.
-[no-exit-message]
-by *args:
-    @./bin/by "$@"

@@ -35,7 +35,6 @@ const specialist = (id: string) => ({
 
 const policy = {
   checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
-  copyFiles: [],
 };
 
 const reviewerConfiguration = {
@@ -64,11 +63,11 @@ const createRun = (commonDirectory: string, branch: string) =>
       (sql) => sql`
         INSERT INTO changes (
           branch_ref, base_ref, base_remote_url, worktree_path,
-          reviewer_configuration, cleanup_pending
+          reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (
           ${`refs/heads/${branch}`}, 'refs/remotes/origin/main',
           'https://example.com/acme/repo.git', ${`/tmp/${branch}`},
-          ${JSON.stringify(reviewerConfiguration)},
+          ${JSON.stringify(reviewerConfiguration)}, ${JSON.stringify(policy.checks)},
           0
         )
       `,
@@ -87,7 +86,6 @@ const createRun = (commonDirectory: string, branch: string) =>
       candidateId: captured.candidateId,
       changeBaseSha: "base",
       headSha: `${branch}-head`,
-      policy,
     });
     if (started.reused || "blocked" in started || "active" in started) {
       throw new Error("Expected a new Validation Run");
@@ -618,51 +616,6 @@ describe("SQLite Validation ownership", () => {
           validationRunId: fixture.started.validationRunId,
           outcome: "tooling_failed",
         });
-
-        expect(
-          yield* fixture.validation.execution
-            .startOrReuse({
-              candidateId: fixture.captured.candidateId,
-              changeBaseSha: "base",
-              headSha: "reviewer-roster-head",
-              policy,
-              reviewerConfiguration: {
-                ...reviewerConfiguration,
-                specialistReviews: reviewerConfiguration.specialistReviews.map((review, index) =>
-                  index === 0
-                    ? {
-                        ...review,
-                        profile: {
-                          ...review.profile,
-                          profile: {
-                            ...review.profile.profile,
-                            runtimeConfig: { model: "rogue-model" },
-                          },
-                        },
-                      }
-                    : review,
-                ),
-              },
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(
-          yield* fixture.validation.execution
-            .startOrReuse({
-              candidateId: fixture.captured.candidateId,
-              changeBaseSha: "base",
-              headSha: "reviewer-roster-head",
-              policy,
-              reviewerConfiguration: {
-                ...reviewerConfiguration,
-                specialistReviews: [
-                  ...reviewerConfiguration.specialistReviews,
-                  specialist("rogue"),
-                ],
-              },
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),
   );
@@ -746,178 +699,54 @@ describe("SQLite Validation ownership", () => {
     ),
   );
 
-  it.scoped("applies an eligible reviewer correction from the selected Change authority", () =>
-    withTemporaryRepositoryState((input) =>
-      Effect.gen(function* () {
-        const fixture = yield* createRun(input.commonDirectory, "valid-correction");
-        const initial = yield* beginInvocation(fixture.validation, {
-          validationRunId: fixture.started.validationRunId,
-          changeId: fixture.captured.changeId,
-          producer: "first",
-        });
-        if (!initial.ok) throw new Error(initial.code);
-        yield* fixture.validation.agentPersistence.settleInvocation({
-          invocationId: initial.dispatch.invocation.id,
-          continuationId: initial.dispatch.continuation.id,
-          settlement: {
-            settledAt: "2026-10-02T10:01:11.000Z",
-            kind: "launch_failed",
-            unusableReason: "Correct the Specialist model.",
-          },
-          settleDomain: fixture.validation.execution.settleAgentInvocationResult({
-            validationRunId: fixture.started.validationRunId,
-            phase: "specialist_review",
-            producer: "first",
-            outcome: "failed",
-            findings: [],
-            artifactRecords: [],
-            toolingFailure: {
-              validationRunId: fixture.started.validationRunId,
-              errorKind: "reviewer_process_execution_failed",
-              operationName: "run_specialist_reviewer",
-              errorMessage: "The configured model was unavailable.",
+  it.scoped(
+    "rejects a Change Invocation whose reviewer configuration differs from frozen policy",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const fixture = yield* createRun(input.commonDirectory, "invalid-correction");
+          const initial = yield* fixture.validation.agentPersistence.beginInvocation({
+            configuration,
+            createdAt: "2026-10-02T10:01:10.000Z",
+            linkInvocation: () => Effect.void,
+          });
+          if (!initial.ok) throw new Error(initial.code);
+          yield* fixture.validation.agentPersistence.settleInvocation({
+            invocationId: initial.dispatch.invocation.id,
+            continuationId: initial.dispatch.continuation.id,
+            settlement: {
+              settledAt: "2026-10-02T10:01:11.000Z",
+              kind: "launch_failed",
+              unusableReason: "Correct the Specialist configuration.",
             },
-          }),
-        });
-        yield* fixture.validation.execution.recordCheckResult({
-          validationRunId: fixture.started.validationRunId,
-          producer: "types",
-          outcome: "passed",
-          artifactRecords: [],
-        });
-        yield* fixture.validation.execution.recordSpecialistResult({
-          validationRunId: fixture.started.validationRunId,
-          producer: "second",
-          outcome: "failed",
-          findings: [],
-          artifactRecords: [],
-          toolingFailure: {
-            validationRunId: fixture.started.validationRunId,
-            errorKind: "infrastructure_tooling_failed",
-            operationName: "verify_specialist_candidate",
-            errorMessage: "The Candidate changed before the second reviewer dispatched.",
-          },
-        });
-        yield* fixture.validation.execution.recordWorkspaceCleanup({
-          validationRunId: fixture.started.validationRunId,
-          cleanupWorkspace: "not_created",
-        });
-        yield* fixture.validation.execution.complete({
-          validationRunId: fixture.started.validationRunId,
-          outcome: "tooling_failed",
-        });
+          });
 
-        const correctedFirst = {
-          ...specialist("first"),
-          profile: {
-            ...specialist("first").profile,
-            profile: {
-              ...specialist("first").profile.profile,
-              runtimeConfig: { model: "corrected-model" },
-            },
-          },
-        };
-        const correctedConfiguration = {
-          ...reviewerConfiguration,
-          specialistReviews: [correctedFirst, specialist("second")],
-        };
-        const correctedRun = yield* fixture.validation.execution.startOrReuse({
-          candidateId: fixture.captured.candidateId,
-          changeBaseSha: "base",
-          headSha: "valid-correction-head",
-          policy,
-          reviewerConfiguration: correctedConfiguration,
-        });
-        if (correctedRun.reused || "blocked" in correctedRun || "active" in correctedRun) {
-          throw new Error("Expected a corrected Validation Run");
-        }
-        const correctedInvocation = yield* fixture.validation.agentPersistence.beginInvocation({
-          agentSessionId: initial.dispatch.agentSessionId,
-          configuration: {
-            harness: "pi",
-            provider: null,
-            model: "corrected-model",
-            thinking: null,
-          },
-          createdAt: "2026-10-02T10:01:12.000Z",
-          linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
-            validationRunId: correctedRun.validationRunId,
-            changeId: fixture.captured.changeId,
-            phase: "specialist_review",
-            producer: "first",
-            configurationSnapshot: correctedFirst,
-          }),
-        });
-        expect(correctedInvocation).toMatchObject({ ok: true });
-
-        const repository = yield* RepositorySql;
-        const stored = yield* repository.operation(
-          "read corrected reviewer configuration",
-          (sql) => sql<{ readonly reviewerConfiguration: string }>`
-            SELECT reviewer_configuration AS reviewerConfiguration
-            FROM changes
-            WHERE id = ${internalChangeId(fixture.captured.changeId, repository.idPrefix)}
-          `,
-        );
-        const storedCorrectedConfiguration = JSON.parse(
-          stored[0]?.reviewerConfiguration ?? "null",
-        ) as {
-          readonly specialistReviews?: readonly unknown[];
-        };
-        expect(storedCorrectedConfiguration.specialistReviews?.[0]).toMatchObject({
-          id: "first",
-          profile: { profile: { runtimeConfig: { model: "corrected-model" } } },
-        });
-      }),
-    ),
-  );
-
-  it.scoped("rejects an invalid Change reviewer correction before linking the Invocation", () =>
-    withTemporaryRepositoryState((input) =>
-      Effect.gen(function* () {
-        const fixture = yield* createRun(input.commonDirectory, "invalid-correction");
-        const initial = yield* fixture.validation.agentPersistence.beginInvocation({
-          configuration,
-          createdAt: "2026-10-02T10:01:10.000Z",
-          linkInvocation: () => Effect.void,
-        });
-        if (!initial.ok) throw new Error(initial.code);
-        yield* fixture.validation.agentPersistence.settleInvocation({
-          invocationId: initial.dispatch.invocation.id,
-          continuationId: initial.dispatch.continuation.id,
-          settlement: {
-            settledAt: "2026-10-02T10:01:11.000Z",
-            kind: "launch_failed",
-            unusableReason: "Correct the Specialist configuration.",
-          },
-        });
-
-        expect(
-          yield* fixture.validation.agentPersistence
-            .beginInvocation({
-              agentSessionId: initial.dispatch.agentSessionId,
-              configuration,
-              createdAt: "2026-10-02T10:01:12.000Z",
-              linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
-                validationRunId: fixture.started.validationRunId,
-                changeId: fixture.captured.changeId,
-                phase: "specialist_review",
-                producer: "first",
-                configurationSnapshot: { ...specialist("first"), id: "acceptance" },
-              }),
-            })
-            .pipe(Effect.flip),
-        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
-      }),
-    ),
+          expect(
+            yield* fixture.validation.agentPersistence
+              .beginInvocation({
+                agentSessionId: initial.dispatch.agentSessionId,
+                configuration,
+                createdAt: "2026-10-02T10:01:12.000Z",
+                linkInvocation: fixture.validation.agentSessions.linkAgentInvocation({
+                  validationRunId: fixture.started.validationRunId,
+                  changeId: fixture.captured.changeId,
+                  phase: "specialist_review",
+                  producer: "first",
+                  configurationSnapshot: { ...specialist("first"), id: "acceptance" },
+                }),
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        }),
+      ),
   );
 
   it.scoped("makes Task Review admission the sole reviewer policy authority", () =>
-    withTemporaryRepositoryState((input) =>
+    withTemporaryRepositoryState(() =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
         const tasks = yield* openSqliteTaskPersistence();
-        const reviews = yield* openSqliteTaskReviewPersistence(input.mainCheckoutRoot);
+        const reviews = yield* openSqliteTaskReviewPersistence();
         const validation = yield* openSqliteChangeValidationTestDependencies();
         yield* tasks.createTask({
           title: "Owner",

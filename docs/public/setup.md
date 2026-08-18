@@ -7,32 +7,24 @@ The installed `but-why` skill owns Work Route Selection, Task authoring, and Imp
 ## Install the CLI
 
 But Why requires Node.js 24.
-This Candidate is unreleased, so the But Why source checkout must also be the target repository.
-Run unreleased commands from that checkout with `just by`.
-
-From the source checkout, enter the locked environment and initialize dependencies:
+Install the package globally so one built `by` executable owns live Shared Repository State:
 
 ```bash
-nix develop
-just init
+npm install --global but-why
+by --help
 ```
 
-Verify the unreleased command prefix:
+During package development, build a tarball and install that exact tarball globally before operating live state:
 
 ```bash
-just by --help
+just pack
+npm install --global /absolute/path/to/but-why-0.0.1.tgz
+by --help
 ```
 
-After publication, use But Why from a separate target repository.
-Verify one published command prefix:
-
-```bash
-pnpx but-why --help
-```
-
-Use `npx -y but-why --help` only when `pnpx` is unavailable.
-Resolve one command prefix before running But Why commands.
-Let `<but-why>` represent that prefix below.
+Candidate source and package tests must use disposable repositories with independent Git Common Directories and state.
+Do not run Candidate source against live Shared Repository State.
+Use `by` for every But Why command below.
 
 ## Install the Pi package
 
@@ -72,13 +64,14 @@ The package directory contains the references and Implementer instructions that 
 In the target repository, initialize But Why with a repository-specific uppercase ID Prefix:
 
 ```bash
-<but-why> init --id-prefix BY
+by init --id-prefix BY
 ```
 
 The command creates `.but-why/config.json` and `.but-why/reviewers/`.
 It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so linked worktrees share them.
 
-But Why creates each disposable Snapshot Workspace in the Local Repository sibling worktree root under `<main-checkout-name>-worktrees/but-why/validation-runs/`.
+But Why creates Task Review and Candidate Snapshot Workspaces under `<git-common-dir>/but-why/workspaces/`.
+Each deterministic workspace name derives from its owning Review or Validation Run ID.
 
 Inspect repository tooling before editing `.but-why/config.json`.
 Add at least one `validation.checks` entry.
@@ -95,7 +88,7 @@ git push <publication-remote> <base-branch>
 
 Replace `<publication-remote>` with the GitHub remote selected by But Why for this repository.
 Inspect configured remotes with `git remote -v`.
-When multiple GitHub remotes exist, But Why prefers the main checkout's upstream remote and then `origin`.
+When multiple GitHub remotes exist, But Why uses the invoking worktree's configured upstream remote and then `origin`.
 Otherwise, But Why reports an ambiguous publication remote.
 Use the same remote that Change Start selects because Change Start reads Repo Config from the fetched Change Base commit.
 

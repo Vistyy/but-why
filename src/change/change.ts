@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
+import type { SubmitCheckConfig } from "./submit/submitRepoConfig.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 export const changeState = {
@@ -90,6 +91,7 @@ export type ChangeRecord = {
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly prepare: ChangePrepareDefinition | null;
+  readonly checks: readonly SubmitCheckConfig[];
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;

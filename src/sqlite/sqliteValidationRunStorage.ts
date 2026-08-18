@@ -6,6 +6,7 @@ import type {
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangeChecks } from "../change/changePolicy.js";
 import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
@@ -13,19 +14,20 @@ import {
   encodeSqliteAcceptanceContextSnapshot,
 } from "./sqliteAcceptanceContextSnapshot.js";
 import { readCandidateById } from "./sqliteCandidateStorage.js";
-import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeImplementationDecisions,
   deriveAcceptanceContext,
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
+import { decodePrepareDefinition } from "./sqliteChangeStartPersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { decodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 
 export type StoredValidationRunRow = {
   readonly id: number;
   readonly candidateId: number;
-  readonly policySnapshot: string;
+  readonly validationInputSnapshot: string;
   readonly highestDecisionId: number | null;
   readonly highestBlockerId: number | null;
   readonly outcome: CandidateValidationRunRecord["outcome"];
@@ -34,20 +36,21 @@ export type StoredValidationRunRow = {
 };
 
 export const validationRunReadColumns = `
-  id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
+  id, candidate_id AS candidateId, validation_input_snapshot AS validationInputSnapshot,
   highest_decision_id AS highestDecisionId, highest_blocker_id AS highestBlockerId,
   outcome, cleanup_pending AS cleanupPending, cleanup_blocking_reason AS cleanupBlockingReason
 `;
 
 type DecodedValidationRun = {
   readonly record: CandidateValidationRunRecord;
-  readonly policySnapshot: string;
+  readonly validationInputSnapshot: string;
   readonly highestDecisionId: number | null;
   readonly highestBlockerId: number | null;
 };
 
 const decodeValidationRunRow = (
   row: StoredValidationRunRow,
+  validationInput: CandidateValidationRunRecord["validationInput"],
   policy: CandidateValidationRunRecord["policy"],
   reviewerConfiguration: CandidateValidationRunRecord["reviewerConfiguration"],
   implementationDecisions: CandidateValidationRunRecord["implementationDecisions"],
@@ -73,6 +76,7 @@ const decodeValidationRunRow = (
     record: {
       id: row.id,
       candidateId: row.candidateId,
+      validationInput,
       policy,
       reviewerConfiguration,
       implementationDecisions,
@@ -83,7 +87,7 @@ const decodeValidationRunRow = (
         blockingReason: row.cleanupBlockingReason,
       },
     },
-    policySnapshot: row.policySnapshot,
+    validationInputSnapshot: row.validationInputSnapshot,
     highestDecisionId: row.highestDecisionId,
     highestBlockerId: row.highestBlockerId,
   };
@@ -132,21 +136,25 @@ export const readValidationRunById = (
     const changeRows = yield* sql<{
       readonly acceptanceContext: string | null;
       readonly reviewerConfiguration: string;
+      readonly prepareDefinition: string | null;
+      readonly checksDefinition: string;
     }>`
       SELECT initial_acceptance_context AS acceptanceContext,
-        reviewer_configuration AS reviewerConfiguration
+        reviewer_configuration AS reviewerConfiguration,
+        prepare_definition AS prepareDefinition,
+        checks_definition AS checksDefinition
       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
     `;
     return yield* decodePersisted(operationName, () => {
       const change = changeRows[0];
       if (change === undefined) throw new Error("Validation Run owning Change was not selected");
-      const policy = decodeSqliteCandidateValidationPolicy(row.policySnapshot);
+      const validationInput = decodeSqliteValidationInputSnapshot(row.validationInputSnapshot);
       const initialContext =
         change.acceptanceContext === null
           ? null
           : decodeSqliteAcceptanceContextSnapshot(change.acceptanceContext);
       const expectedContext = deriveAcceptanceContext(initialContext, blockers);
-      const policyContext = policy.acceptanceContext ?? null;
+      const policyContext = validationInput.acceptanceContext ?? null;
       if (
         (expectedContext === null) !== (policyContext === null) ||
         (expectedContext !== null &&
@@ -159,7 +167,21 @@ export const readValidationRunById = (
       const reviewerConfiguration = decodeSqliteChangeReviewerConfiguration(
         change.reviewerConfiguration,
       );
-      return decodeValidationRunRow(row, policy, reviewerConfiguration, decisions).record;
+      const prepare =
+        change.prepareDefinition === null
+          ? undefined
+          : decodePrepareDefinition(change.prepareDefinition);
+      const checks = decodeSqliteChangeChecks(change.checksDefinition);
+      const policy = {
+        ...validationInput,
+        ...(reviewerConfiguration.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: reviewerConfiguration.agentEnvironment }),
+        ...(prepare === undefined ? {} : { prepare }),
+        checks,
+      };
+      return decodeValidationRunRow(row, validationInput, policy, reviewerConfiguration, decisions)
+        .record;
     });
   });
 

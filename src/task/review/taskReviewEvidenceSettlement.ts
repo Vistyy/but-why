@@ -23,14 +23,16 @@ export type TaskReviewEvidenceSettlementResult =
 
 export const settleTaskReviewEvidence = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly persistence: TaskReviewEvidencePersistence;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: { readonly ref: string; readonly commit: string },
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly cleanupWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       cleanup: ExactDisposableWorkspaceCleanupInput,
     ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },
@@ -38,7 +40,7 @@ export const settleTaskReviewEvidence = (
   now: string,
 ): Effect.Effect<TaskReviewEvidenceSettlementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.repositoryRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
@@ -54,13 +56,16 @@ export const settleTaskReviewEvidence = (
       );
     }
 
-    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: taskReviewWorkspaceId(review.id),
-      expectedCommitSha: review.baseCommit,
-      recordedWorktreePath: review.workspacePath,
-    });
+    const cleanup = yield* input.cleanupWorkspace(
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
+      {
+        workspaceId: taskReviewWorkspaceId(review.id),
+        expectedCommitSha: review.baseCommit,
+      },
+    );
     const cleanupRecorded = yield* Effect.either(
-      input.persistence.recordCleanup(review.id, cleanup.workspace, now),
+      input.persistence.recordCleanup(review.id, cleanup.workspace, now, cleanup.errorMessage),
     );
     if (cleanupRecorded._tag === "Left") {
       return yield* settlementFailed(

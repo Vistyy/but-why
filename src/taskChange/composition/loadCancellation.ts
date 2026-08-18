@@ -18,10 +18,10 @@ type WithCancellationUseCasesResult<A> =
   | { readonly ok: false; readonly error: RepositoryRuntimeLoadError };
 
 export const withCancellationUseCases = <A, E, R>(
-  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
+  input: { readonly cwd: string },
   use: (cancellation: CancellationUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<WithCancellationUseCasesResult<A>, E | RepositoryStorageError, R> => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
   const { context } = loaded.runtime;
 

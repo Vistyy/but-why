@@ -24,14 +24,11 @@ import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewe
 import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
-import {
-  readRepositoryFileAtCommit,
-  repositoryPathExistsAtCommit,
-} from "../../submissionEnvironment/adapters/repositoryFile.js";
+import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { type RepoTaskIdResolution, resolveRepoTaskId } from "../repoTaskIds.js";
 import {
-  readCanonicalMainReviewBase,
+  readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../review/adapters/taskReviewGit.js";
 import { resolveTaskReviewPolicy } from "../review/taskReviewConfig.js";
@@ -52,7 +49,7 @@ export type LoadTaskReviewError =
   | { readonly code: "task_review_config_invalid"; readonly message: string };
 
 export const withTaskReviewInspectionUseCases = <A, E, R>(
-  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
+  input: { readonly cwd: string },
   use: (reviews: TaskReviewInspectionUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
@@ -60,11 +57,11 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence(context.mainCheckoutRoot).pipe(
+    openSqliteTaskReviewPersistence().pipe(
       Effect.flatMap((persistence) =>
         use({
           getById: persistence.getById,
@@ -74,7 +71,8 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
           inspectIdentity: (review) =>
             inspectTaskReviewIdentity(
               {
-                mainCheckoutRoot: context.mainCheckoutRoot,
+                repositoryRoot: context.root,
+                repositoryCommonDirectory: context.commonDirectory,
                 verifyReviewBase: verifyRecordedTaskReviewBase,
                 inspectWorkspace: inspectDisposableWorktree,
               },
@@ -88,7 +86,7 @@ export const withTaskReviewInspectionUseCases = <A, E, R>(
 };
 
 export const withTaskReviewRecoveryUseCases = <A, E, R>(
-  input: { readonly cwd: string; readonly operationalRepoRoot?: string },
+  input: { readonly cwd: string },
   use: (reviews: TaskReviewRecoveryUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<
   | { readonly ok: true; readonly value: A }
@@ -96,17 +94,18 @@ export const withTaskReviewRecoveryUseCases = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   return loaded.runtime.provide(
-    openSqliteTaskReviewPersistence(context.mainCheckoutRoot).pipe(
+    openSqliteTaskReviewPersistence().pipe(
       Effect.flatMap((persistence) =>
         use({
           abandon: (reviewId, reason, now) =>
             abandonTaskReview(
               {
-                mainCheckoutRoot: context.mainCheckoutRoot,
+                repositoryRoot: context.root,
+                repositoryCommonDirectory: context.commonDirectory,
                 persistence,
                 verifyReviewBase: verifyRecordedTaskReviewBase,
                 cleanupWorkspace: cleanupExactDisposableWorkspace,
@@ -129,7 +128,6 @@ export type TaskReviewRepositorySubmitResult =
 export const withTaskReviewSubmissionUseCases = <A, E, R>(
   input: {
     readonly cwd: string;
-    readonly operationalRepoRoot?: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
     readonly progress?: SubmitProgress;
@@ -147,7 +145,7 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
   if (!reuseRuntime.ok) return Effect.succeed(reuseRuntime);
   return reuseRuntime.runtime
     .provide(
-      openSqliteTaskReviewPersistence(reuseRuntime.runtime.context.mainCheckoutRoot).pipe(
+      openSqliteTaskReviewPersistence().pipe(
         Effect.flatMap((persistence) => persistence.reuseJudgment(input.taskId, input.now)),
       ),
     )
@@ -163,7 +161,6 @@ export const withTaskReviewSubmissionUseCases = <A, E, R>(
 const submitFreshTaskReview = <A, E, R>(
   input: {
     readonly cwd: string;
-    readonly operationalRepoRoot?: string;
     readonly globalConfigPath: string;
     readonly reviewerRuntime?: ReviewerAgentRuntime<TaskReviewerOutput>;
     readonly progress?: SubmitProgress;
@@ -177,7 +174,7 @@ const submitFreshTaskReview = <A, E, R>(
   E | RepositoryStorageError,
   R
 > => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return Effect.succeed(loaded);
   const context = loaded.runtime.context;
   const resolved = resolveRepoTaskId(context, input.taskId);
@@ -185,20 +182,17 @@ const submitFreshTaskReview = <A, E, R>(
     return use(resolved).pipe(Effect.map((value) => ({ ok: true as const, value })));
   return loaded.runtime.provide(
     Effect.all({
-      admission: openSqliteTaskChangeReviewAdmissionPersistence(context.mainCheckoutRoot),
-      persistence: openSqliteTaskReviewPersistence(context.mainCheckoutRoot),
+      admission: openSqliteTaskChangeReviewAdmissionPersistence(context.root),
+      persistence: openSqliteTaskReviewPersistence(),
       agentPersistence: openSqliteAgentSessionPersistence(),
     }).pipe(
       Effect.flatMap(({ admission, persistence, agentPersistence }) =>
         openTaskReviewUseCases({
-          mainCheckoutRoot: context.mainCheckoutRoot,
+          repositoryRoot: context.root,
+          repositoryCommonDirectory: context.commonDirectory,
           agentSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
           loadRepoConfig: (commit) => {
-            const source = readRepositoryFileAtCommit(
-              context.mainCheckoutRoot,
-              commit,
-              ".but-why/config.json",
-            );
+            const source = readRepositoryFileAtCommit(context.root, commit, ".but-why/config.json");
             if (!source.ok)
               return { ok: false, message: `Repo Config is missing at Review Base ${commit}.` };
             const decoded = decodeRepoConfigSource(source.content);
@@ -219,7 +213,7 @@ const submitFreshTaskReview = <A, E, R>(
               globalConfigPath: input.globalConfigPath,
               builtInInstructions: taskReviewBuiltInInstructions,
               readRepoGuidance: (path) => {
-                const source = readRepositoryFileAtCommit(context.mainCheckoutRoot, commit, path);
+                const source = readRepositoryFileAtCommit(context.root, commit, path);
                 return source.ok
                   ? { ok: true, content: source.content }
                   : {
@@ -237,8 +231,6 @@ const submitFreshTaskReview = <A, E, R>(
                   };
                 }
               },
-              repoResourceExists: (path) =>
-                repositoryPathExistsAtCommit(context.mainCheckoutRoot, commit, path),
             });
           },
           admission,
@@ -246,7 +238,7 @@ const submitFreshTaskReview = <A, E, R>(
           agentPersistence,
           reviewerRuntime: input.reviewerRuntime ?? piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
-          readReviewBase: readCanonicalMainReviewBase,
+          readReviewBase: readCurrentWorktreeReviewBase,
           verifyReviewBase: verifyRecordedTaskReviewBase,
           runWorkspace: runDisposableExactCommitWorkspace,
           cleanupWorkspace: cleanupExactDisposableWorkspace,

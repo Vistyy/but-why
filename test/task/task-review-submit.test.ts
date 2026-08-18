@@ -6,7 +6,7 @@ import type { AgentSessionPersistence } from "../../src/agent/agentSession/agent
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
 import {
-  readCanonicalMainReviewBase,
+  readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import type { TaskReviewRecord } from "../../src/task/review/taskReview.js";
@@ -120,14 +120,14 @@ it.effect("returns a reused judgment before every repository and reviewer collab
       listForTask: unused,
       getReviewerAgentSession: unused,
       getReviewerConfiguration: () => Effect.succeed(undefined),
-      reviewerConfigurationCanBeCorrected: () => Effect.succeed(false),
       linkAgentInvocation: defaultAgentLink,
       settleAgentReview: () => () => Effect.void,
       recordActiveFailure: unused,
       proposalIsCurrent: unused,
     };
     const reviews = openTaskReviewUseCases({
-      mainCheckoutRoot: createTestWorkspace(),
+      repositoryRoot: createTestWorkspace(),
+      repositoryCommonDirectory: createTestWorkspace(),
       loadRepoConfig: () => {
         calls.repoConfig += 1;
         return { ok: true, config: { idPrefix: "BY" } };
@@ -207,7 +207,7 @@ it.effect(
       writeFileSync(join(root, "initial.txt"), "initial\n");
       expect(runTestProcess("git", ["add", "initial.txt"], { cwd: root }).status).toBe(0);
       expect(runTestProcess("git", ["commit", "-m", "Initial"], { cwd: root }).status).toBe(0);
-      const base = yield* readCanonicalMainReviewBase(root);
+      const base = yield* readCurrentWorktreeReviewBase(root);
       expect(base.ok).toBe(true);
       if (!base.ok) return;
       writeFileSync(join(root, "advance.txt"), "advance\n");
@@ -217,9 +217,9 @@ it.effect(
       expect(
         yield* verifyRecordedTaskReviewBase(root, {
           ...base.base,
-          ref: "refs/heads/not-main",
+          ref: "refs/heads/not-current",
         }),
-      ).toMatchObject({ ok: false, message: expect.stringContaining("ref") });
+      ).toEqual({ ok: true });
       expect(
         yield* verifyRecordedTaskReviewBase(root, {
           ...base.base,
@@ -433,9 +433,7 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
     yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
     commitButWhyConfigAndRecordDefault(root);
     mkdirSync(join(root, ".but-why", "reviewers"), { recursive: true });
-    mkdirSync(join(root, "skills", "task"), { recursive: true });
     writeFileSync(join(root, ".but-why", "reviewers", "task.md"), "Repository guidance\n");
-    writeFileSync(join(root, "skills", "task", "SKILL.md"), "Task skill\n");
     writeFileSync(
       join(root, ".but-why", "config.json"),
       JSON.stringify({
@@ -453,18 +451,16 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
             runtimeConfig: {
               model: "provider/repo-model",
               thinking: "high",
-              skills: ["skills/task"],
+              skills: ["npm:@acme/task-review-skill"],
             },
           },
         },
       }),
     );
     expect(
-      runTestProcess(
-        "git",
-        ["add", ".but-why/config.json", ".but-why/reviewers/task.md", "skills/task/SKILL.md"],
-        { cwd: root },
-      ).status,
+      runTestProcess("git", ["add", ".but-why/config.json", ".but-why/reviewers/task.md"], {
+        cwd: root,
+      }).status,
     ).toBe(0);
     expect(
       runTestProcess("git", ["commit", "-m", "Configure Task Review"], { cwd: root }).status,
@@ -515,7 +511,12 @@ it.effect("captures and executes the effective Review Base Task Review policy", 
       profile: {
         agentProfile: "task-review",
         scope: "repo",
-        profile: { runtimeConfig: { model: "provider/repo-model", skills: ["skills/task"] } },
+        profile: {
+          runtimeConfig: {
+            model: "provider/repo-model",
+            skills: ["npm:@acme/task-review-skill"],
+          },
+        },
       },
     });
     expect(observed?.systemPrompt).toContain("Repository guidance");
@@ -761,7 +762,10 @@ it.effect("submits one exact Task proposal through a fresh exact Review Base wor
         workspace: { path: string; cleanup: string; blockingReason: string | null };
       };
     };
-    const expectedWorkspacePath = expectedTaskReviewWorkspacePath(root, output.review.id);
+    const expectedWorkspacePath = expectedTaskReviewWorkspacePath(
+      join(root, ".git"),
+      output.review.id,
+    );
     expect(reviewerCommandCwd).toBe(expectedWorkspacePath);
     expect(shownOutput.review.proposalCurrent).toBe(true);
     expect(shownOutput.review.workspace).toEqual({

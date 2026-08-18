@@ -51,8 +51,6 @@ export const repoStateLoadError = (error: RepoStateLoadError): CliResult => {
   switch (error.code) {
     case "not_initialized":
       return notInitialized();
-    case "main_checkout_unavailable":
-      return mainCheckoutUnavailable(error.path);
     case "invalid_repo_config":
       return invalidRepoConfig(error.error);
     case "state_store_unavailable":
@@ -69,14 +67,6 @@ const notInitialized = (): CliResult =>
     code: "not_initialized",
     message: "This workspace is not initialized for But Why?.",
     help: ["Run `by init --id-prefix BY` in the repository root."],
-  });
-
-const mainCheckoutUnavailable = (path: string | undefined): CliResult =>
-  runtimeError({
-    code: "main_checkout_unavailable",
-    message: "The Local Repository's canonical main checkout is unavailable.",
-    ...(path === undefined ? {} : { details: { path } }),
-    help: ["Restore the canonical main checkout, then retry the command."],
   });
 
 const invalidRepoConfig = (

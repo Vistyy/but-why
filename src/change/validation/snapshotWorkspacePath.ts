@@ -4,7 +4,7 @@ export const snapshotWorkspaceId = (validationRunId: number): string =>
   `validation-run-${validationRunId}`;
 
 export const expectedSnapshotWorkspacePath = (
-  mainCheckoutRoot: string,
+  repositoryCommonDirectory: string,
   validationRunId: number,
 ): string =>
-  expectedDisposableWorkspacePath(mainCheckoutRoot, snapshotWorkspaceId(validationRunId));
+  expectedDisposableWorkspacePath(repositoryCommonDirectory, snapshotWorkspaceId(validationRunId));

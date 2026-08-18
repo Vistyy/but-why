@@ -24,6 +24,11 @@ export const resolveSpecialistReviewPolicies = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructions?: (
+    path: string,
+  ) =>
+    | { readonly ok: true; readonly content: string }
+    | { readonly ok: false; readonly message: string };
 }):
   | { readonly ok: true; readonly policies: readonly SpecialistReviewPolicy[] }
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
@@ -52,6 +57,11 @@ const resolveSpecialist = (
     readonly globalConfig: GlobalConfig;
     readonly repoRoot: string;
     readonly globalConfigPath: string;
+    readonly readRepoInstructions?: (
+      path: string,
+    ) =>
+      | { readonly ok: true; readonly content: string }
+      | { readonly ok: false; readonly message: string };
   },
   id: string,
 ):
@@ -86,14 +96,23 @@ const resolveSpecialist = (
     instructionsSource === "repo"
       ? join(input.repoRoot, definition.instructionsFile)
       : join(dirname(input.globalConfigPath), definition.instructionsFile);
-  const instructions = readAcceptanceInstructions(instructionsPath);
+  const instructions =
+    instructionsSource === "repo" && input.readRepoInstructions !== undefined
+      ? input.readRepoInstructions(definition.instructionsFile)
+      : (() => {
+          const read = readAcceptanceInstructions(instructionsPath);
+          return read.ok ? { ok: true as const, content: read.instructions } : read;
+        })();
   if (!instructions.ok) return invalid(instructions.message);
+  if (instructions.content.trim().length === 0) {
+    return invalid(`Specialist instructions file is empty: ${definition.instructionsFile}`);
+  }
 
   return {
     ok: true,
     policy: {
       id,
-      instructions: instructions.instructions,
+      instructions: instructions.content,
       instructionsSource,
       profile: profileResolution.resolved,
     },

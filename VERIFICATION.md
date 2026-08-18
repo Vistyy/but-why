@@ -24,7 +24,7 @@
 - Use a real process only when the claim requires package, executable, stdin, process-tree, or agent-runtime behavior.
   Captured Adapters are sufficient for GitHub classification and retry behavior.
 - A Validation Run does not prove changes to Validation Sequence machinery unless its evidence shows that the exact Candidate implementation was exercised directly.
-- Trusted But Why Executable selection requires a focused real-process sentinel from a linked worktree until first-release executable selection replaces the Source Checkout Guard.
+- Installed-package isolation and current-worktree behavior require focused real-process sentinels in disposable repositories with independent Git Common Directories and state.
 - Package, public documentation, structural-tooling, and temporary test-operation checks have their own workflow owners.
   Do not misclassify them as product-risk evidence.
 - `just quality` is the only repository-wide blocking quality command.

@@ -93,9 +93,15 @@ const abandonWhileLocked = (
     const cleanupAttempt = yield* input.workspaceCleanup.cleanup({
       validationRunId: command.validationRunId,
       submittedSha: context.submittedSha,
-      ...(context.worktreePath === undefined ? {} : { recordedWorktreePath: context.worktreePath }),
     });
     const cleanup = { workspace: cleanupAttempt.workspace } as const;
+    yield* input.persistence.recordWorkspaceCleanup({
+      validationRunId: command.validationRunId,
+      cleanupWorkspace: cleanup.workspace,
+      ...(cleanupAttempt.errorMessage === undefined
+        ? {}
+        : { cleanupBlockingReason: cleanupAttempt.errorMessage }),
+    });
     if (cleanup.workspace === "failed") {
       yield* input.persistence.recordToolingFailure({
         validationRunId: command.validationRunId,

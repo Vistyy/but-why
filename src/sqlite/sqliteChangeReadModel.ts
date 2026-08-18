@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
 import { publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangeChecks } from "../change/changePolicy.js";
 import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -25,6 +26,7 @@ export const changeReadColumns = [
   "changes.initial_acceptance_context AS acceptanceContext",
   "changes.reviewer_configuration AS reviewerConfiguration",
   "changes.prepare_definition AS prepareDefinition",
+  "changes.checks_definition AS checksDefinition",
   "changes.prepare_failure AS prepareFailure",
   "changes.cleanup_pending AS cleanupPending",
   "changes.cleanup_blocking_reason AS cleanupBlockingReason",
@@ -49,6 +51,7 @@ export type StoredChangeRow = {
   readonly acceptanceContext: unknown;
   readonly reviewerConfiguration: unknown;
   readonly prepareDefinition: unknown;
+  readonly checksDefinition: unknown;
   readonly prepareFailure: unknown;
   readonly cleanupPending: unknown;
   readonly cleanupBlockingReason: unknown;
@@ -75,6 +78,10 @@ export const decodeChangeRow = (
   );
   const prepare =
     encodedPrepareDefinition === null ? null : decodePrepareDefinition(encodedPrepareDefinition);
+  const encodedChecksDefinition = decodeStoredString(
+    row.checksDefinition,
+    "Change Checks definition",
+  );
   const encodedPrepareFailure = decodeStoredNullableString(
     row.prepareFailure,
     "Change prepare failure",
@@ -105,6 +112,7 @@ export const decodeChangeRow = (
       decodeStoredString(row.reviewerConfiguration, "Change Reviewer Configuration"),
     ),
     prepare,
+    checks: decodeSqliteChangeChecks(encodedChecksDefinition),
     prepareFailure:
       encodedPrepareFailure === null
         ? null

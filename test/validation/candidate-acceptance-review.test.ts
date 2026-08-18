@@ -12,8 +12,7 @@ import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
-import type { AcceptanceContextCandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
@@ -45,11 +44,16 @@ beforeAll(() => {
       .run(acceptanceContext.title, acceptanceContext.description);
     database
       .prepare(
-        "UPDATE changes SET initial_acceptance_context = ?, reviewer_configuration = ? WHERE id = 1",
+        "UPDATE changes SET initial_acceptance_context = ?, reviewer_configuration = ?, checks_definition = ? WHERE id = 1",
       )
       .run(
         JSON.stringify(acceptanceContext),
-        JSON.stringify({ acceptanceReview: acceptancePolicy, specialistReviews: [] }),
+        JSON.stringify({
+          acceptanceReview: acceptancePolicy,
+          specialistReviews: [],
+          agentEnvironment: passingValidationPolicy.agentEnvironment,
+        }),
+        JSON.stringify(passingValidationPolicy.checks),
       );
     database.prepare("INSERT INTO task_change_links (task_id, change_id) VALUES (1, 1)").run();
   } finally {
@@ -99,7 +103,6 @@ const acceptancePolicy = {
 const passingValidationPolicy = {
   agentEnvironment: ["nix", "develop", "-c"] as const,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
-  copyFiles: [],
   acceptanceReview: acceptancePolicy,
   specialistReviews: [],
 };
@@ -268,7 +271,7 @@ type AcceptanceReadyRepo = {
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
 };
 
-type AcceptanceReviewTestPolicy = AcceptanceContextCandidateValidationPolicy & {
+type AcceptanceReviewTestPolicy = CandidateValidationPolicy & {
   readonly acceptanceReview: typeof acceptancePolicy;
   readonly specialistReviews: readonly unknown[];
 };
@@ -286,20 +289,10 @@ const runReviewPhases = (
 ) =>
   ready.validation.runWithPersistence((persistence) =>
     Effect.gen(function* () {
-      const {
-        acceptanceReview: _acceptanceReview,
-        specialistReviews: _specialists,
-        ...runPolicy
-      } = policy;
-      const policySnapshot: CandidateValidationPolicySnapshot = {
-        ...runPolicy,
-        acceptanceContext,
-      };
       const started = yield* persistence.execution.startOrReuse({
         candidateId: captured.candidateId,
         headSha: captured.headSha,
         changeBaseSha: captured.changeBaseSha,
-        policy: policySnapshot,
       });
       if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
       if ("blocked" in started) {
@@ -392,7 +385,7 @@ const acceptanceReadyRepo = (
     const repo = yield* candidateReadyRepoCopy();
     const captured = template.captured;
     const validation = candidateValidationForTest({
-      localRepositoryMainCheckoutRoot: repo,
+      localRepositoryRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       repository: repositoryConfig(repo),
       reviewerAgentRuntime,

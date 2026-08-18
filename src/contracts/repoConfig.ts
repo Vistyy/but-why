@@ -6,6 +6,7 @@ import {
   agentProfileReferenceSchema,
   configNameSchema,
   nonBlankStringSchema,
+  packageAgentResourceSchema,
 } from "./agentConfig.js";
 import { RepoConfigValidationFailed } from "./configErrors.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
@@ -25,11 +26,13 @@ export const repoRelativePathSchema = Schema.String.pipe(
   }),
 );
 
+const repoAgentResourceSchema = Schema.Union(repoRelativePathSchema, packageAgentResourceSchema);
+
 const repoRuntimeConfigSchema = Schema.Struct({
   model: Schema.optional(nonBlankStringSchema),
   thinking: Schema.optional(Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh")),
-  extensions: Schema.optional(Schema.Array(repoRelativePathSchema)),
-  skills: Schema.optional(Schema.Array(repoRelativePathSchema)),
+  extensions: Schema.optional(Schema.Array(repoAgentResourceSchema)),
+  skills: Schema.optional(Schema.Array(repoAgentResourceSchema)),
   tools: Schema.optional(Schema.Array(nonBlankStringSchema)),
   contextFileDiscovery: Schema.optional(Schema.Boolean),
 });
@@ -57,10 +60,6 @@ const repoCheckConfigSchema = Schema.Struct({
   id: checkIdSchema,
   command: nonBlankStringSchema,
   timeoutSeconds: Schema.optional(timeoutSecondsSchema),
-});
-
-const repoSnapshotWorkspaceConfigSchema = Schema.Struct({
-  copyFiles: Schema.NonEmptyArray(repoRelativePathSchema),
 });
 
 const repoValidationConfigSchema = Schema.Struct({
@@ -93,7 +92,6 @@ const repoConfigSchema = Schema.Struct({
       agentProfile: Schema.optional(agentProfileReferenceSchema),
     }),
   ),
-  snapshotWorkspace: Schema.optional(repoSnapshotWorkspaceConfigSchema),
 });
 
 export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;

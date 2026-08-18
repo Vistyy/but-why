@@ -2,7 +2,7 @@
 
 This reference is for a user or agent configuring one But Why repository.
 It answers which settings belong in tracked Repo Config, which settings belong in Global Config, and how validation uses them.
-Let `<but-why>` represent the command prefix resolved during setup.
+Use the globally installed `by` executable for every command in this reference.
 
 ## Config files
 
@@ -15,11 +15,11 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 Both files are validated when But Why reads them.
 
 Task Submit reads Repo Config from the exact captured Review Base.
-Change Start stores reviewer policy and Repo Agent Profiles resolved from the exact fetched starting Change Base and current Global Config.
-Change Submit reads current validation policy from the exact fetched Change Base and retains the stored Change reviewer configuration.
-An eligible pre-conversation correction resolves its replacement from that exact fetched Change Base and current Global Config before validating the effective reviewer resources.
-The caller checkout's and Candidate's Repo Config do not supply Change reviewer authority or submission policy.
-Global Config resolves from the configured user path.
+Change Start directly reads Repo Config and repository reviewer instructions from the exact fetched starting Change Base.
+It combines them with current Global Config and installed-package resources and stores one complete immutable Change policy.
+Change Submit uses only that stored policy for Prepare, Checks, Agent Environment, Acceptance Review, and Specialist Reviews.
+It does not reread policy from Change Base, the current checkout, Candidate Repo Config, current Repo Config, or later Global Config.
+Global resource paths remain live operator-owned dependencies after selection.
 
 ## Repo Config
 
@@ -39,9 +39,6 @@ A complete example is:
     "checks": [
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
-  },
-  "snapshotWorkspace": {
-    "copyFiles": [".env.test"]
   },
   "review": {
     "task": {
@@ -75,7 +72,6 @@ But Why freezes it in Shared Repository State and derives Task IDs as `<id-prefi
 `agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
-`snapshotWorkspace.copyFiles` is an optional list of local regular files copied into each Snapshot Workspace.
 `review` selects Task Review policy, Acceptance Review policy, and Specialists.
 `reviewers` supplies Specialist instruction files.
 `agentProfiles` supplies Repo Agent Profiles.
@@ -99,7 +95,7 @@ Change Submit runs it before Checks in the Snapshot Workspace.
 Retry it with:
 
 ```bash
-<but-why> change prepare <change-id>
+by change prepare <change-id>
 ```
 
 A Change Start or Change Prepare failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
@@ -119,21 +115,6 @@ A non-zero exit or timeout creates a Finding and does not stop later Checks.
 Execution or observation failure is a Validation Tooling Failure.
 Any Check Finding stops reviewer phases for that Candidate.
 
-## Copied local files
-
-`snapshotWorkspace.copyFiles` is optional.
-When present, it must be a non-empty list of normalized paths relative to the Local Repository's main checkout.
-The Repo Config schema rejects paths that are not repo-relative or that use parent traversal.
-During Snapshot Workspace setup, each path must identify an existing regular file.
-A missing path, directory, symbolic link, or other non-regular path creates a Validation Tooling Failure.
-Change Submit reports `validation_tooling_failed`; fix the path or the validation tooling, then retry Change Submit.
-Duplicate entries are accepted but do not identify additional files.
-
-But Why copies each file once into the Snapshot Workspace.
-Copied files are local environment inputs, not Candidate content.
-Their contents are not hashed, stored, or exposed through Findings.
-But Why removes them with the Snapshot Workspace.
-
 ## Task Review
 
 Repo Config and Global Config may select `review.task.agentProfile` and `review.task.instructionsFile`.
@@ -150,7 +131,8 @@ The configured guidance supplements the mandatory built-in Task Review instructi
 Task Submission resolves the Agent Profile configuration, mandatory instructions, optional guidance content, and guidance source before reviewer execution.
 The Task stores that configuration with the Task Reviewer Agent Session when the first Agent Invocation links.
 A Task Review that fails before any Invocation reports no executed reviewer configuration.
-Later configuration changes do not alter the stored Task configuration after execution begins, except for the supported pre-conversation correction after a launch failure.
+Later configuration changes do not alter the stored Task configuration after execution begins.
+A failed launch retries with the same frozen policy.
 
 ## Review and Specialists
 
@@ -182,9 +164,10 @@ But Why prepends the list to the complete Pi invocation for headless reviewers a
 
 Interactive Sessions run Pi through the Herdr pane shell environment.
 Change Implement does not read or apply `agentEnvironment.command`.
-Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot for headless reviewers.
-Acceptance and Specialist reviewer configuration remains Change-owned and is not duplicated in that snapshot.
-Candidate reviewer configuration does not change this setting.
+Change Start resolves the setting from the exact fetched starting Change Base and stores it in the immutable Change policy.
+Acceptance and Specialist reviewer configuration remains Change-owned.
+Validation Runs do not duplicate this policy.
+Candidate configuration does not change this setting.
 Missing configuration preserves direct reviewer launch.
 An invalid configuration rejects the applicable headless reviewer operation before agent launch.
 A configured wrapper failure stops the reviewer operation without an unwrapped retry.
@@ -285,8 +268,10 @@ Configured resource arrays are exact allowlists for user-configured resources.
 An empty array disables that user-configured resource type.
 An omitted field preserves normal Pi behavior.
 Trusted host resources required by But Why remain active independently of these arrays.
-Acceptance Review and Specialist Repo paths resolve from the Candidate Snapshot Workspace and remain inside the repository.
-Global relative paths resolve from the Global Config directory.
+Repo reviewer instruction text is read directly from the starting Change Base and stored with the Change policy.
+Repo Agent Profiles used for Task Review or Validation may use only package resource URIs for extensions and skills.
+Candidate-relative and repository-relative reviewer extensions and skills are not supported.
+Global relative paths resolve from the Global Config directory and remain live external dependencies.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
 
 The old flat `agentModel` and `thinking` fields are invalid.

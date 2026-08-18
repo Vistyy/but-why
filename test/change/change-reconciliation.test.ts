@@ -9,8 +9,8 @@ import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
@@ -37,21 +37,19 @@ const installPublicationIdentity = (changeId: string) =>
           changeRows[0]?.acceptanceContext === null || changeRows[0] === undefined
             ? null
             : decodeSqliteAcceptanceContextSnapshot(changeRows[0].acceptanceContext);
-        const policySnapshot = encodeSqliteCandidateValidationPolicy({
-          checks: [],
-          copyFiles: [],
-          ...(acceptanceContext === null ? {} : { acceptanceContext }),
-        });
+        const validationInputSnapshot = encodeSqliteValidationInputSnapshot(
+          acceptanceContext === null ? {} : { acceptanceContext },
+        );
         yield* sql`
           INSERT INTO candidates (id, change_id, base_commit, head_commit)
           VALUES (1, ${internalChangeId(changeId, "BY")}, 'base', 'head')
         `;
         yield* sql`
           INSERT INTO validation_runs (
-            id, candidate_id, policy_snapshot, highest_decision_id,
+            id, candidate_id, validation_input_snapshot, highest_decision_id,
             highest_blocker_id, outcome, cleanup_pending
           ) VALUES (
-            2, 1, ${policySnapshot}, NULL, NULL, 'passed', 0
+            2, 1, ${validationInputSnapshot}, NULL, NULL, 'passed', 0
           )
         `;
       }),
@@ -75,6 +73,7 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            checks: [],
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -171,6 +170,7 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            checks: [],
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -267,7 +267,7 @@ describe("by change reconcile", () => {
         });
         if (!createdTask.ok) throw new Error(createdTask.code);
         const taskId = publicTaskId(createdTask.task.id);
-        yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
+        yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
         const starts = yield* openSqliteChangeStartPersistence();
         const prepared = yield* starts.prepareTask(taskId);
@@ -283,6 +283,7 @@ describe("by change reconcile", () => {
           taskId,
           now,
           reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+          checks: [],
         });
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -416,6 +417,7 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            checks: [],
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -505,7 +507,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
+          yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
@@ -521,6 +523,7 @@ describe("by change reconcile", () => {
             taskId,
             now,
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            checks: [],
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -623,7 +626,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          yield* passTaskReviewFixture(input.mainCheckoutRoot, taskId, now);
+          yield* passTaskReviewFixture(input.repositoryRoot, taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
@@ -639,6 +642,7 @@ describe("by change reconcile", () => {
             taskId,
             now,
             reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            checks: [],
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);

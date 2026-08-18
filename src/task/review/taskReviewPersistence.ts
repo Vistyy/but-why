@@ -108,6 +108,7 @@ export type TaskReviewPersistence = {
     reviewId: number,
     cleanup: DisposableWorkspaceCleanupState,
     now: string,
+    cleanupBlockingReason?: string,
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly complete: (
     input: CompleteTaskReviewInput,
@@ -132,9 +133,6 @@ export type TaskReviewPersistence = {
   readonly getReviewerConfiguration: (
     taskId: string,
   ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
-  readonly reviewerConfigurationCanBeCorrected: (
-    taskId: string,
-  ) => Effect.Effect<boolean, RepositoryStorageError>;
   readonly linkAgentInvocation: (input: {
     readonly taskId: string;
     readonly reviewId: number;

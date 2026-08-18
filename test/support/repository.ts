@@ -24,14 +24,10 @@ const taskReviewPolicyFixture = {
   guidance: null,
 };
 
-export const passTaskReviewFixture = (
-  mainCheckoutRoot: string,
-  taskId: PublicTaskId,
-  now: string,
-) =>
+export const passTaskReviewFixture = (_repositoryRoot: string, taskId: PublicTaskId, now: string) =>
   Effect.gen(function* () {
     const agents = yield* openSqliteAgentSessionPersistence();
-    const reviews = yield* openSqliteTaskReviewPersistence(mainCheckoutRoot);
+    const reviews = yield* openSqliteTaskReviewPersistence();
     const admitted = yield* reviews.admit({
       taskId,
       policy: taskReviewPolicyFixture,
@@ -107,7 +103,7 @@ export const withTestRepository = <A, E, R>(
 
 export const withTemporaryRepositoryState = <A, E>(
   use: (input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
     readonly commonDirectory: string;
     readonly statePath: string;
   }) => Effect.Effect<A, E, RepositorySql>,
@@ -115,12 +111,12 @@ export const withTemporaryRepositoryState = <A, E>(
   Effect.acquireUseRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
     (directory) => {
-      const mainCheckoutRoot = join(directory, "main");
+      const repositoryRoot = join(directory, "main");
       const commonDirectory = join(directory, "git-common");
       const statePath = join(commonDirectory, "state.sqlite");
-      mkdirSync(mainCheckoutRoot);
+      mkdirSync(repositoryRoot);
       mkdirSync(commonDirectory);
-      return use({ mainCheckoutRoot, commonDirectory, statePath }).pipe(
+      return use({ repositoryRoot, commonDirectory, statePath }).pipe(
         Effect.provide(
           repositorySqlLayer({
             commonDirectory,

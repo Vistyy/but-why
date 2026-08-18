@@ -1,113 +1,114 @@
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { Effect } from "effect";
-import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import type { ResolvedReviewerPiAgentProfile } from "../../agent/agentProfiles.js";
 import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
-import { readRepoConfig } from "../../init/adapters/repoConfig.js";
+import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
+import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { validateChangeReviewerConfigurationResources } from "../changeReviewerConfiguration.js";
-import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
+import type { ChangePolicy } from "../changeStartStore.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
+import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 
-export type ChangeReviewerConfigurationResolution =
-  | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
+export type ChangePolicyResolution =
+  | { readonly ok: true; readonly policy: ChangePolicy }
   | { readonly ok: false; readonly message: string };
 
-const resolveChangeReviewerConfiguration = (
-  repoConfig: Parameters<typeof resolveSpecialistReviewPolicies>[0]["repoConfig"] | undefined,
-  globalConfigPath: string,
-  repoRoot: string,
-  acceptanceContextSupplied: boolean,
-): ChangeReviewerConfigurationResolution => {
-  if (repoConfig === undefined) {
-    return {
-      ok: false,
-      message: "Repo Config is required to resolve Change reviewer configuration.",
-    };
-  }
-  const globalConfig = readGlobalConfig(globalConfigPath);
-  if (!globalConfig.ok) return { ok: false, message: globalConfig.error.message };
-  const specialists = resolveSpecialistReviewPolicies({
-    repoConfig,
-    globalConfig: globalConfig.config,
-    repoRoot,
-    globalConfigPath,
-  });
-  if (!specialists.ok) return { ok: false, message: specialists.error.message };
-  const acceptance = acceptanceContextSupplied
-    ? resolveAcceptanceReviewPolicy({
-        repoConfig,
-        globalConfig: globalConfig.config,
-        repoRoot,
-        globalConfigPath,
-      })
-    : { ok: true as const, policy: null };
-  if (!acceptance.ok) return { ok: false, message: acceptance.error.message };
-  const configuration: ChangeReviewerConfiguration = {
-    acceptanceReview: acceptance.policy === null ? null : snapshotReviewerPolicy(acceptance.policy),
-    specialistReviews: specialists.policies.map(snapshotReviewerPolicy),
-  };
-  const resources = validateChangeReviewerConfigurationResources(configuration, repoRoot);
-  return resources.ok ? { ok: true, configuration } : resources;
-};
+const snapshotProfile = (
+  profile: ResolvedReviewerPiAgentProfile,
+): ResolvedReviewerPiAgentProfile => ({
+  agentProfile: profile.agentProfile,
+  scope: profile.scope,
+  profile: profile.profile,
+  ...(profile.globalConfigDirectory === undefined
+    ? {}
+    : { globalConfigDirectory: profile.globalConfigDirectory }),
+});
 
-export const resolveChangeReviewerConfigurationAtCommit = (input: {
-  readonly repoRoot: string;
-  readonly workspaceContainerRoot: string;
+export const resolveChangePolicyAtCommit = (input: {
+  readonly repositoryRoot: string;
   readonly commit: string;
   readonly globalConfigPath: string;
   readonly acceptanceContextSupplied: boolean;
   readonly expectedIdPrefix: string;
-}): Effect.Effect<ChangeReviewerConfigurationResolution> =>
-  Effect.gen(function* () {
-    const result = yield* runDisposableExactCommitWorkspace({
-      repoRoot: input.repoRoot,
-      workspaceId: `change-start-${randomUUID()}`,
-      workspaceContainerRoot: input.workspaceContainerRoot,
-      commitSha: input.commit,
-      copyFiles: [],
-      runInWorkspace: ({ worktreePath }) =>
-        Effect.sync(() => {
-          const config = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-          if (!config.ok) return { ok: false as const, message: config.error.message };
-          if (config.config.idPrefix !== input.expectedIdPrefix) {
-            return {
-              ok: false as const,
-              message: "Change Base Repo Config idPrefix does not match Shared Repository State.",
-            };
-          }
-          return resolveChangeReviewerConfiguration(
-            config.config,
-            input.globalConfigPath,
-            worktreePath,
-            input.acceptanceContextSupplied,
-          );
-        }),
-    });
-    if (!result.ok) {
+}): Effect.Effect<ChangePolicyResolution> =>
+  Effect.sync(() => {
+    const source = readRepositoryFileAtCommit(
+      input.repositoryRoot,
+      input.commit,
+      ".but-why/config.json",
+    );
+    if (!source.ok) {
       return {
         ok: false,
-        message: `Change Base reviewer resources could not be inspected: ${result.toolingError.errorMessage}`,
+        message: `Repo Config is missing at Change Base ${input.commit}.`,
       };
     }
-    return (
-      result.workspaceResult ?? {
+    const decoded = decodeRepoConfigSource(source.content);
+    if (!decoded.ok) return { ok: false, message: decoded.error.message };
+    if (decoded.config.idPrefix !== input.expectedIdPrefix) {
+      return {
         ok: false,
-        message: "Change Base reviewer configuration was not resolved.",
-      }
+        message: "Change Base Repo Config idPrefix does not match Shared Repository State.",
+      };
+    }
+    const global = readGlobalConfig(input.globalConfigPath);
+    if (!global.ok) return { ok: false, message: global.error.message };
+    const submit = submitRepoConfig(decoded.config);
+    if (!submit.ok) return { ok: false, message: submit.error.message };
+    const readRepoInstructions = (path: string) => {
+      const read = readRepositoryFileAtCommit(input.repositoryRoot, input.commit, path);
+      return read.ok
+        ? { ok: true as const, content: read.content }
+        : {
+            ok: false as const,
+            message: `Could not read reviewer instructions ${path} from Change Base ${input.commit}.`,
+          };
+    };
+    const specialist = resolveSpecialistReviewPolicies({
+      repoConfig: decoded.config,
+      globalConfig: global.config,
+      repoRoot: input.repositoryRoot,
+      globalConfigPath: input.globalConfigPath,
+      readRepoInstructions,
+    });
+    if (!specialist.ok) return { ok: false, message: specialist.error.message };
+    const acceptance = input.acceptanceContextSupplied
+      ? resolveAcceptanceReviewPolicy({
+          repoConfig: decoded.config,
+          globalConfig: global.config,
+          repoRoot: input.repositoryRoot,
+          globalConfigPath: input.globalConfigPath,
+          readRepoInstructions,
+        })
+      : { ok: true as const, policy: null };
+    if (!acceptance.ok) return { ok: false, message: acceptance.error.message };
+    const agentEnvironment = repoAgentEnvironment(decoded.config);
+    const reviewerConfiguration = {
+      acceptanceReview:
+        acceptance.policy === null
+          ? null
+          : {
+              ...acceptance.policy,
+              profile: snapshotProfile(acceptance.policy.profile),
+            },
+      specialistReviews: specialist.policies.map((policy) => ({
+        ...policy,
+        profile: snapshotProfile(policy.profile),
+      })),
+      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+    };
+    const resources = validateChangeReviewerConfigurationResources(
+      reviewerConfiguration,
+      input.repositoryRoot,
     );
+    if (!resources.ok) return resources;
+    return {
+      ok: true,
+      policy: {
+        reviewerConfiguration,
+        prepare: submit.config.prepare ?? null,
+        checks: submit.config.checks,
+      },
+    };
   });
-
-const snapshotReviewerPolicy = <
-  Policy extends { readonly profile: { readonly globalConfigDirectory?: string } },
->(
-  policy: Policy,
-): Policy => ({
-  ...policy,
-  profile: {
-    ...policy.profile,
-    ...(policy.profile.globalConfigDirectory === undefined
-      ? {}
-      : { globalConfigDirectory: policy.profile.globalConfigDirectory }),
-  },
-});

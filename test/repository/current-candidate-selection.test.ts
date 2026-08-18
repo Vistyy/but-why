@@ -20,11 +20,11 @@ describe("Current Candidate selection", () => {
           (sql) => sql`
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
-            reviewer_configuration, cleanup_pending
+            reviewer_configuration, checks_definition, cleanup_pending
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', '/tmp/feature',
-            '{"acceptanceReview":null,"specialistReviews":[]}', 0
+            '{"acceptanceReview":null,"specialistReviews":[]}', '[]', 0
           )
         `,
         );
@@ -32,7 +32,6 @@ describe("Current Candidate selection", () => {
         const validation = yield* openSqliteCandidateValidationExecutionPort();
         const reads = yield* openSqliteChangeValidationReadPort();
         const authority = yield* openSqliteChangeAuthorityPort();
-        const policy = { checks: [], copyFiles: [] };
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/feature",
@@ -46,7 +45,6 @@ describe("Current Candidate selection", () => {
           candidateId: first.candidateId,
           headSha: "head-a",
           changeBaseSha: "base-a",
-          policy,
         });
         expect(admitted).toMatchObject({ reused: false, validationRunId: 1 });
         if (admitted.reused || "blocked" in admitted || "active" in admitted) {
@@ -97,7 +95,6 @@ describe("Current Candidate selection", () => {
             candidateId: second.candidateId,
             headSha: "head-b",
             changeBaseSha: "base-a",
-            policy,
           })
           .pipe(Effect.flip);
         expect(historicalAdmission).toBeInstanceOf(RepositoryPersistedDataInvalid);

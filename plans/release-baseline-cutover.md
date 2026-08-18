@@ -90,7 +90,7 @@ Final physical schema and settled contracts:
   Do not add a uniqueness constraint across Change and commit pair.
   Index `(change_id, id DESC)` to find the Current Candidate and list Candidate history by immutable Candidate order.
 - Store only Snapshot Workspace cleanup obligation on its Task Review or Validation Run and do not retain a separate workspace table or stored Snapshot Workspace path.
-  Derive and verify the exact deterministic path from the canonical main checkout and Review or Validation Run ID before cleanup.
+  Derive and verify the exact deterministic path under the verified Git Common Directory from the Review or Validation Run ID before cleanup.
   Derive a Validation Snapshot Workspace's expected commit from its immutable Candidate.
   Continue storing the Change Managed Worktree path because Change recovery preserves its originally recorded location.
 
@@ -242,8 +242,9 @@ The `changes` table contains:
 - Required `base_ref` and `base_remote_url`.
 - Required unique `worktree_path`, which records the intended location before provisioning so failure remains retryable.
 - Nullable `initial_acceptance_context` JSON.
-- Required `reviewer_configuration` JSON containing the fixed roster and each role's resolved configuration at Change Start, subject only to the approved pre-conversation role-configuration correction.
+- Required `reviewer_configuration` JSON containing the fixed roster and each role's resolved configuration at Change Start.
 - Nullable `prepare_definition` JSON that freezes the exact Repository Preparation command and timeout for retry.
+- Required `checks_definition` JSON that freezes the exact configured Checks at Change Start.
 - Nullable `prepare_failure` JSON containing the latest retained preparation failure evidence.
 - Nullable `close_reason` and `cancel_reason`.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
@@ -259,7 +260,7 @@ The `tasks` table contains:
 - Required `title` and `description`.
 - Required `state` constrained to `new`, `todo`, `done`, or `cancelled`.
 - Nullable `cancel_reason` with the approved cancellation-state combination constraint.
-- Nullable `reviewer_configuration` JSON, fixed after its Task Reviewer conversation is established and subject only to the approved pre-conversation correction.
+- Nullable `reviewer_configuration` JSON, fixed when the first Task Review is admitted.
 - Nullable unique `reviewer_agent_session_id` referencing `agent_sessions`.
 - The approved all-present or all-absent constraint across reviewer configuration and Agent Session ID.
 
@@ -296,13 +297,13 @@ The `validation_runs` table contains:
 
 - `id INTEGER PRIMARY KEY`, allocated by SQLite and constrained to the JavaScript-safe positive integer range.
 - Required integer `candidate_id` foreign key.
-- Required immutable `policy_snapshot` JSON.
+- Required immutable `validation_input_snapshot` JSON containing the complete current Acceptance Context.
 - Nullable integer `highest_decision_id` and `highest_blocker_id` foreign keys.
 - Nullable `outcome` constrained to `passed`, `blocked`, or `tooling_failed` when present.
 - Nullable `run_tooling_failure` JSON.
 - Required integer Boolean `cleanup_pending` and nullable `cleanup_blocking_reason`.
 
-The Validation Run policy snapshot does not duplicate Acceptance or Specialist reviewer configuration.
+The Validation Input Snapshot does not duplicate the Change-owned reviewer configuration, Repository Preparation definition, or Checks definition.
 The Validation Run row does not store lifecycle state, Change ID, Active Run identity, latest-resolved-Blocker identity, or timestamps.
 
 `validation_phase_results` contains required integer `validation_run_id`, required `phase` and `producer`, required `outcome` constrained to `passed` or `failed`, required ordered `findings` and `artifacts` JSON, and nullable `tooling_failure` JSON.

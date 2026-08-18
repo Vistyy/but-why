@@ -24,25 +24,19 @@ Health findings become implementation work only when repository evidence establi
 Repository-wide quality, unselected test, and unselected coverage workloads share a capacity lock.
 Focused test selections do not wait for that lock.
 
-## Source-repository executable
+## Installed executable and package tests
 
-Before npm publication, `just by ...` uses the Trusted But Why Executable and operational Repo Config from the canonical main checkout.
-The Source Checkout Guard preserves the caller checkout for command inputs and Git inspection while it binds operational policy to canonical main.
-It does not load CLI, migration code, or operational Repo Config from a Candidate worktree.
-Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
+The globally installed built package and its `by` executable are the only supported CLI for live Shared Repository State.
+The source repository has no `just by` route and does not select an executable or operational Repo Config from another checkout.
+The installed CLI resolves the invoking current worktree and its Git Common Directory.
+No checkout is privileged.
 
-Change Submit treats the Candidate Repo Config as opaque to the Trusted But Why Executable.
-It resolves Repository Preparation, Checks, copied local files, and current reviewer policy from the exact fetched Change Base, while Change Start facts retain reviewer authority for the Change.
-The source repository's Change Base config includes the `candidate-repo-config` Check.
-After trusted Repository Preparation, that Check runs `just validate-candidate-repo-config` in the Snapshot Workspace so the Candidate source decoder validates the actual Candidate Repo Config.
-A nonzero result creates normal Check evidence and prevents reviewer execution and publication.
-The validator reads only `.but-why/config.json` and does not open Shared Repository State.
-Do not invoke the Candidate CLI for this validation.
+Candidate source and package artifacts execute only in disposable test repositories with independent Git Common Directories, user configuration, and SQLite state.
+Package contract tests own installed runtime behavior, packaged resources, and Repo Config behavior.
+Candidate code must not open live Shared Repository State.
 
-While the source repository is unreleased, every source-repository But Why command resolves the executable and operational Repo Config from the canonical main checkout before it reads or mutates Shared Repository State.
-A Candidate worktree must not supply its own CLI or Repo Config as trusted repository policy for those operations.
-Change Base-controlled validation remains the only path that decodes Candidate Repo Config.
-After publication, packaged commands use the published But Why Executable and the target repository's normal Repo Config resolution instead.
+Change Start reads Repo Config and referenced repository reviewer instructions directly from the exact starting Change Base and stores the complete immutable Change policy.
+Change Submit uses that stored policy and treats Candidate Repo Config as Candidate content rather than judgment authority.
 
 ### Prerelease release-baseline cutover
 
@@ -51,12 +45,12 @@ Use this minimum procedure for the one-time live cutover.
 
 1. Keep the pre-merge source commit and build or retain its old executable before the baseline Change is merged.
 2. After the merged baseline Change is available, pause But Why operations that can open or write Shared Repository State.
-3. Invoke the old executable directly with canonical `main` as `BUT_WHY_SOURCE_TRUSTED_ROOT`, only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
-   Leave the merged `idPrefix` unchanged.
-4. Rename the old Git Common Directory But Why state directory as a dated low-value backup.
-5. Initialize fresh Shared Repository State from `0001_baseline` with the merged executable and unchanged `idPrefix`.
+3. Invoke the old executable directly from the target checkout only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
+4. Install the exact merged package tarball globally as `by`.
+5. Rename the old Git Common Directory But Why state directory as a dated low-value backup.
+6. Initialize fresh Shared Repository State from `0001_baseline` with installed `by` and the unchanged `idPrefix`.
    Do not import or convert old rows.
-6. Run one basic supported CLI smoke check, such as `task list`, and then resume work.
+7. Run basic `init` and `task list` smoke checks, then resume work.
 
 This procedure requires no checksum, manifest, rehearsal, backup verification, archive reader, rollback command, or migration command.
 

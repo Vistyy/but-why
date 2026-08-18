@@ -39,7 +39,7 @@ Tracked-tree equality between the exact Change Base and Repository Branch head r
 A changed Candidate completes only through its exact owned pull request.
 A `nothing_to_submit` Submission keeps its Task and Change open and does not run validation.
 
-Completed Submissions retain their Candidate, Validation Policy Snapshot, validation, and current publication facts.
+Completed Submissions retain their Candidate, Validation Input Snapshot, validation, and current publication facts.
 Later configuration or Change Base changes do not invalidate completed evidence.
 A repeated Submit returns stored success only when durable evidence identifies the same exact Candidate and confirmed publication.
 A revised Candidate must pass Submission before But Why updates the same owned pull request.

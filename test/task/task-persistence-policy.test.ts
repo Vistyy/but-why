@@ -68,7 +68,7 @@ it.scoped("preserves terminal Task policy", () => {
 it.scoped(
   "rejects Task Context mutation for approved Tasks without changing stored Context",
   () => {
-    return withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+    return withTemporaryRepositoryState(({ repositoryRoot }) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
         const approved = yield* tasks.createTask({
@@ -78,7 +78,7 @@ it.scoped(
         });
         if (!approved.ok) throw new Error(approved.code);
         const taskId = publicTaskId("BY-1");
-        yield* passTaskReviewFixture(mainCheckoutRoot, taskId, secondNow);
+        yield* passTaskReviewFixture(repositoryRoot, taskId, secondNow);
 
         for (const description of ["Approved description", "Changed description"]) {
           expect(
@@ -121,7 +121,7 @@ it.scoped(
 );
 
 it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => {
-  return withTemporaryRepositoryState(({ mainCheckoutRoot }) =>
+  return withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
 
@@ -141,8 +141,8 @@ it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => 
       yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
       yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
 
-      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-1"), firstNow);
-      yield* passTaskReviewFixture(mainCheckoutRoot, publicTaskId("BY-2"), thirdNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), firstNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), thirdNow);
       yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
       yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
 

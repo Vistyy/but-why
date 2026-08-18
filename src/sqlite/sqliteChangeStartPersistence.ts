@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import type { ChangePrepareDefinition, ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangeChecks, encodeSqliteChangeChecks } from "../change/changePolicy.js";
 import {
   decodeSqliteChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
@@ -91,13 +92,14 @@ const insertChangeRow = (
       INSERT INTO changes (
         branch_ref, base_ref, base_remote_url, worktree_path,
         initial_acceptance_context, reviewer_configuration,
-        prepare_definition, prepare_failure, close_reason, cancel_reason,
+        prepare_definition, checks_definition, prepare_failure, close_reason, cancel_reason,
         cleanup_pending, cleanup_blocking_reason
       ) VALUES (
         ${input.branchRef}, ${input.baseRef}, ${input.baseRemoteUrl}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${reviewerConfiguration},
         ${input.prepare === undefined ? null : JSON.stringify(input.prepare)},
+        ${input.checks.length === 0 ? null : encodeSqliteChangeChecks(input.checks)},
         NULL, NULL, NULL, 0, NULL
       )
       RETURNING id
@@ -152,6 +154,7 @@ const changeStartSelectionColumns = `
   change_row.initial_acceptance_context AS acceptanceContext,
   change_row.reviewer_configuration AS reviewerConfiguration,
   change_row.prepare_definition AS prepareDefinition,
+  change_row.checks_definition AS checksDefinition,
   change_row.prepare_failure AS prepareFailure,
   change_row.close_reason AS closeReason
 `;
@@ -166,6 +169,7 @@ type StoredChangeStartRow = {
   readonly acceptanceContext: unknown;
   readonly reviewerConfiguration: unknown;
   readonly prepareDefinition: unknown;
+  readonly checksDefinition: unknown;
   readonly prepareFailure: unknown;
   readonly closeReason: unknown;
 };
@@ -200,6 +204,10 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
     row.prepareDefinition,
     "Change prepare definition",
   );
+  const encodedChecksDefinition = decodeStoredString(
+    row.checksDefinition,
+    "Change Checks definition",
+  );
   const encodedPrepareFailure = decodeStoredNullableString(
     row.prepareFailure,
     "Change prepare failure",
@@ -225,6 +233,7 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
     reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
     prepare,
+    checks: decodeSqliteChangeChecks(encodedChecksDefinition),
     prepareFailure:
       encodedPrepareFailure === null
         ? null

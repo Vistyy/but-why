@@ -136,7 +136,8 @@ type WorkspaceExecution =
     };
 
 export const openTaskReviewUseCases = (input: {
-  readonly mainCheckoutRoot: string;
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
   readonly loadRepoConfig: (
     commit: string,
   ) =>
@@ -153,25 +154,26 @@ export const openTaskReviewUseCases = (input: {
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
   ) => Effect.Effect<
     | { readonly ok: true; readonly base: TaskReviewBase }
     | { readonly ok: false; readonly message: string }
   >;
   readonly verifyReviewBase: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
     recorded: TaskReviewBase,
   ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
   readonly runWorkspace: RunDisposableExactCommitWorkspace;
   readonly cleanupWorkspace: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
+    repositoryCommonDirectory: string,
     cleanup: ExactDisposableWorkspaceCleanupInput,
   ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   readonly inspectWorkspace: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
+    repositoryCommonDirectory: string,
     workspaceId: string,
     expectedCommitSha: string,
-    worktreePath: string,
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
@@ -196,7 +198,7 @@ const submitTaskReview = (
     const rejected = yield* admission.checkAdmission(taskId);
     if (rejected !== undefined) return rejected;
 
-    const base = yield* input.readReviewBase(input.mainCheckoutRoot);
+    const base = yield* input.readReviewBase(input.repositoryRoot);
     if (!base.ok)
       return { ok: false, code: "review_base_unavailable", message: base.message } as const;
     const config = input.loadRepoConfig(base.base.commit);
@@ -204,12 +206,8 @@ const submitTaskReview = (
       return { ok: false, code: "review_base_unavailable", message: config.message } as const;
     const repoConfig = config.config;
     const storedPolicy = yield* input.persistence.getReviewerConfiguration(taskId);
-    const configurationCanBeCorrected =
-      storedPolicy === undefined
-        ? false
-        : yield* input.persistence.reviewerConfigurationCanBeCorrected(taskId);
     const resolvedPolicy =
-      storedPolicy === undefined || configurationCanBeCorrected
+      storedPolicy === undefined
         ? input.resolvePolicy(repoConfig, base.base.commit)
         : taskReviewPolicyFromSnapshot(storedPolicy);
     if (!resolvedPolicy.ok) {
@@ -235,10 +233,10 @@ const submitTaskReview = (
       started: () => taskReviewProgress,
       run: Effect.gen(function* () {
         const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
-          repoRoot: input.mainCheckoutRoot,
+          repositoryRoot: input.repositoryRoot,
+          repositoryCommonDirectory: input.repositoryCommonDirectory,
           workspaceId: taskReviewWorkspaceId(reviewId),
           commitSha: base.base.commit,
-          copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
           runInWorkspace: (active) =>
             Effect.gen(function* () {
               const prepare = repoConfig.prepare;
@@ -446,31 +444,32 @@ const taskReviewStorageErrorMessage = (error: RepositoryStorageError): string =>
 
 export const inspectTaskReviewIdentity = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: TaskReviewBase,
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly inspectWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       workspaceId: string,
       expectedCommitSha: string,
-      worktreePath: string,
     ) => Effect.Effect<DisposableWorktreeInspection>;
   },
   review: TaskReviewRecord,
 ): Effect.Effect<TaskReviewIdentityInspection> =>
   Effect.gen(function* () {
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.repositoryRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
     if (!base.ok) return { verified: false, message: base.message } as const;
     const workspace = yield* input.inspectWorkspace(
-      input.mainCheckoutRoot,
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
       taskReviewWorkspaceId(review.id),
       review.baseCommit,
-      review.workspacePath,
     );
     return workspace.state === "unproven"
       ? ({ verified: false, message: workspace.message } as const)
@@ -479,14 +478,16 @@ export const inspectTaskReviewIdentity = (
 
 export const abandonTaskReview = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly persistence: TaskReviewPersistence;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: TaskReviewBase,
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly cleanupWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       cleanup: ExactDisposableWorkspaceCleanupInput,
     ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },

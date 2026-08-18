@@ -1,7 +1,11 @@
 import { Schema } from "effect";
 import { resolvedReviewerPiAgentProfileSchema } from "../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
-import { configNameSchema, nonBlankStringSchema } from "../contracts/agentConfig.js";
+import {
+  configNameSchema,
+  isPackageAgentResource,
+  nonBlankStringSchema,
+} from "../contracts/agentConfig.js";
 import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 
 const acceptanceReviewPolicySnapshotSchema = Schema.Struct({
@@ -20,6 +24,7 @@ const specialistReviewPolicySnapshotSchema = Schema.Struct({
 const changeReviewerConfigurationSchema = Schema.Struct({
   acceptanceReview: Schema.NullOr(acceptanceReviewPolicySnapshotSchema),
   specialistReviews: Schema.Array(specialistReviewPolicySnapshotSchema),
+  agentEnvironment: Schema.optionalWith(Schema.Array(nonBlankStringSchema), { exact: true }),
 }).pipe(
   Schema.filter(
     (configuration) => {
@@ -51,14 +56,27 @@ export type ChangeReviewerPolicy =
 
 export const validateChangeReviewerConfigurationResources = (
   configuration: ChangeReviewerConfiguration,
-  repoRoot: string,
+  repositoryRoot: string,
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
   const policies = [
     ...(configuration.acceptanceReview === null ? [] : [configuration.acceptanceReview]),
     ...configuration.specialistReviews,
   ];
   for (const policy of policies) {
-    const result = validatePiAgentProfileResources(policy.profile, repoRoot);
+    if (policy.profile.scope === "repo") {
+      const resources = [
+        ...(policy.profile.profile.runtimeConfig?.extensions ?? []),
+        ...(policy.profile.profile.runtimeConfig?.skills ?? []),
+      ];
+      const unsupported = resources.find((source) => !isPackageAgentResource(source));
+      if (unsupported !== undefined) {
+        return {
+          ok: false,
+          message: `Agent Profile "${policy.profile.agentProfile}" in repo scope uses unsupported repository-relative Validation resource "${unsupported}".`,
+        };
+      }
+    }
+    const result = validatePiAgentProfileResources(policy.profile, repositoryRoot);
     if (!result.ok) return { ok: false, message: result.error.message };
   }
   return { ok: true };

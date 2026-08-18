@@ -40,12 +40,6 @@ const openArtifactLifecycleForTest = (
   };
 };
 
-const policy = {
-  prepare: { command: "true", timeoutSeconds: 10 },
-  checks: [{ id: "check", command: "true", timeoutSeconds: 10 }],
-  copyFiles: [],
-};
-
 let candidateValidationRepoTemplate: string;
 
 beforeAll(() => {
@@ -213,11 +207,12 @@ const withArtifactLifecycleFixture = <A, E>(
             (sql) => sql`
             INSERT INTO changes (
               branch_ref, base_ref, base_remote_url, worktree_path,
-              reviewer_configuration, cleanup_pending
+              reviewer_configuration, checks_definition, cleanup_pending
             ) VALUES (
               ${branchRef}, 'refs/remotes/origin/main',
               'https://example.com/acme/repo.git', ${`/tmp/${marker}`},
-              '{"acceptanceReview":null,"specialistReviews":[]}', 0
+              '{"acceptanceReview":null,"specialistReviews":[]}',
+              '[{"id":"check","command":"true","timeoutSeconds":10}]', 0
             )
           `,
           );
@@ -232,7 +227,6 @@ const withArtifactLifecycleFixture = <A, E>(
           const started = yield* validation.execution.startOrReuse({
             candidateId: captured.candidateId,
             headSha: `head-${marker}`,
-            policy,
           });
           if (started.reused || "blocked" in started)
             throw new Error("Expected a new Validation Run");

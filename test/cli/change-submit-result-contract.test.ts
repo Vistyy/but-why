@@ -18,6 +18,7 @@ const change: ChangeRecord = {
   worktreePath: "/repo-worktrees/change-1",
   acceptanceContext: null,
   reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+  checks: [],
   prepare: null,
   prepareFailure: null,
   publication: null,

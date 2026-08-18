@@ -9,9 +9,6 @@ import { loadSnapshotUseCases } from "../repositorySnapshot/composition/loadSnap
 export const runSnapshotCommand = (environment: CliEnvironment): Effect.Effect<CliResult> =>
   loadSnapshotUseCases({
     cwd: environment.cwd,
-    ...(environment.operationalRepoRoot === undefined
-      ? {}
-      : { operationalRepoRoot: environment.operationalRepoRoot }),
   }).pipe(
     Effect.flatMap((loaded) => {
       if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));

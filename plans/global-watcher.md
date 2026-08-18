@@ -67,7 +67,7 @@ It does not grant Implementation Authorization.
 An enrollment stores only:
 
 - Canonical Git Common Directory.
-- Canonical main checkout path.
+- Last known Local Repository worktree path.
 - Enrollment time.
 - Last successful check time.
 - Latest error when present.

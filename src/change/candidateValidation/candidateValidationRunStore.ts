@@ -9,7 +9,8 @@ import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
-import type { CandidateValidationPolicySnapshot } from "./candidateValidationPolicySnapshot.js";
+import type { CandidateValidationPolicy } from "./validateCandidate.js";
+import type { ValidationInputSnapshot } from "./validationInputSnapshot.js";
 
 export type CandidateValidationOutcome = "passed" | "blocked" | "tooling_failed";
 
@@ -40,13 +41,12 @@ export type StartCandidateValidationRunInput = {
   readonly candidateId: number;
   readonly headSha: string;
   readonly changeBaseSha?: string;
-  readonly policy: Omit<CandidateValidationPolicySnapshot, "acceptanceContext">;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration;
 };
 
 export type CandidateValidationAuthority = {
   readonly candidate: CandidateRecord;
-  readonly policy: CandidateValidationPolicySnapshot;
+  readonly validationInput: ValidationInputSnapshot;
+  readonly policy: CandidateValidationPolicy & ValidationInputSnapshot;
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory: ImplementationBlockerHistory;
@@ -89,6 +89,7 @@ export type RecordCandidateSpecialistResultInput = Omit<
 export type RecordCandidateWorkspaceCleanupInput = {
   readonly validationRunId: number;
   readonly cleanupWorkspace: "removed" | "not_created" | "failed";
+  readonly cleanupBlockingReason?: string;
 };
 
 export type AbandonCandidateValidationRunInput = {
@@ -113,13 +114,13 @@ export type CandidateValidationRunAbandonmentContext = {
   readonly changeId: string;
   readonly candidateId: number;
   readonly submittedSha: string;
-  readonly worktreePath?: string;
 };
 
 export type CandidateValidationRunRecord = {
   readonly id: number;
   readonly candidateId: number;
-  readonly policy: CandidateValidationPolicySnapshot;
+  readonly validationInput: ValidationInputSnapshot;
+  readonly policy: CandidateValidationPolicy & ValidationInputSnapshot;
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";

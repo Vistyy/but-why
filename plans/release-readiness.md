@@ -17,7 +17,7 @@ The package will use the normal `latest` distribution tag and will be published 
 The normal installation path is global npm installation.
 Published operation resolves `by` from `PATH`.
 The public workflow does not use `pnpx`, `pnpm dlx`, or `npx`.
-Source-repository development continues to use the protected `just by` route.
+Source-repository development uses an installed package build for live repository operations and disposable repositories for Candidate tests.
 
 The CLI will provide an explicit Pi integration setup operation, provisionally named `by setup pi`.
 Setup connects Pi to resources in the same globally installed But Why package rather than installing an independently updated resource package.

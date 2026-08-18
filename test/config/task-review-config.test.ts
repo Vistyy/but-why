@@ -16,7 +16,6 @@ const resolve = (repoConfig: RepoConfig, globalConfig: GlobalConfig) =>
     builtInInstructions: "Mandatory core",
     readRepoGuidance: (path) => ({ ok: true, content: `repo:${path}` }),
     readGlobalGuidance: (path) => ({ ok: true, content: `global:${path}` }),
-    repoResourceExists: (path) => path === "skills/task",
   });
 
 describe("Task Review configuration", () => {
@@ -35,7 +34,7 @@ describe("Task Review configuration", () => {
         {
           idPrefix: "BY",
           review: { task: { agentProfile: { scope: "repo", name: "repo" } } },
-          agentProfiles: { repo: profile("repo-model", ["skills/task"]) },
+          agentProfiles: { repo: profile("repo-model", ["npm:@acme/task-review-skill"]) },
         },
         globalConfig,
       ),
@@ -47,7 +46,9 @@ describe("Task Review configuration", () => {
           profile: {
             agentProfile: "repo",
             scope: "repo",
-            profile: { runtimeConfig: { model: "repo-model", skills: ["skills/task"] } },
+            profile: {
+              runtimeConfig: { model: "repo-model", skills: ["npm:@acme/task-review-skill"] },
+            },
           },
         },
       },
@@ -102,7 +103,7 @@ describe("Task Review configuration", () => {
     });
   });
 
-  it("rejects missing Review Base resources before policy capture", () => {
+  it("rejects repository-relative resources before policy capture", () => {
     expect(
       resolve(
         {
@@ -115,7 +116,7 @@ describe("Task Review configuration", () => {
     ).toEqual({
       ok: false,
       message:
-        'Agent Profile "repo" in repo scope has a missing skill resource at Review Base path "skills/missing".',
+        'Agent Profile "repo" in repo scope uses unsupported repository-relative Task Review resource "skills/missing".',
     });
   });
 });
