@@ -156,6 +156,32 @@ CHANGE_ID="${ID_PREFIX}-C${CHANGE_INTEGER}"
 CHANGE_BRANCH=${CHANGE_BRANCH_REF#refs/heads/}
 WORKTREE="${ROOT}-worktrees/but-why/${CHANGE_ID}"
 
+STEP=merged_repo_config_verification
+MERGED_COMMIT=$(git -C "$ROOT" rev-parse "refs/heads/${BASE_BRANCH}^{commit}")
+git -C "$ROOT" merge-base --is-ancestor "$EXPECTED_HEAD_SHA" "$MERGED_COMMIT"
+git -C "$ROOT" show "$MERGED_COMMIT:.but-why/config.json" > "$DETAILS/merged-repo-config.json"
+if ! cmp -s "$DETAILS/merged-repo-config.json" "$ROOT/.but-why/config.json"; then
+  printf 'error: fixture Repo Config differs from merged commit %s\n' "$MERGED_COMMIT" >&2
+  exit 1
+fi
+COMMITTED_ID_PREFIX=$(python3 - "$DETAILS/merged-repo-config.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    config = json.load(source)
+id_prefix = config.get("idPrefix")
+if not isinstance(id_prefix, str) or not id_prefix:
+    raise SystemExit("merged Repo Config does not contain a valid idPrefix")
+print(id_prefix)
+PY
+)
+if [[ "$COMMITTED_ID_PREFIX" != "$ID_PREFIX" ]]; then
+  printf 'error: merged Repo Config idPrefix %s differs from old state idPrefix %s\n' "$COMMITTED_ID_PREFIX" "$ID_PREFIX" >&2
+  exit 1
+fi
+log_event merged_repo_config_verified
+
 mkdir -p "$(dirname "$WORKTREE")"
 git -C "$ROOT" branch "$CHANGE_BRANCH" "$EXPECTED_HEAD_SHA"
 git -C "$ROOT" worktree add "$WORKTREE" "$CHANGE_BRANCH" > "$DETAILS/worktree-create.txt"
@@ -507,5 +533,5 @@ find "$ROOT/.git" -maxdepth 1 -type d -name '*archive*' -printf '%f\n' | sort > 
 log_event final_archive_verified
 
 trap - EXIT
-printf '%s\n' '{"outcome":"passed","oldBundleReconciliation":"passed","archive":"passed","freshInitialization":"passed","beforeNewWorkRecovery":"passed","afterNewWorkRecovery":"passed"}'
+printf '%s\n' '{"outcome":"passed","mergedRepoConfig":"passed","oldBundleReconciliation":"passed","archive":"passed","freshInitialization":"passed","beforeNewWorkRecovery":"passed","afterNewWorkRecovery":"passed"}'
 printf 'Detailed transient observations: %s\n' "$DETAILS" >&2
