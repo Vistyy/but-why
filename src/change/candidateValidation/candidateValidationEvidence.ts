@@ -1,11 +1,28 @@
 import {
+  decodeReviewerFindingCore,
+  type ReviewerFindingCore,
+} from "../../contracts/reviewerFinding.js";
+import {
+  isValidationArtifactRef,
   validationArtifactPath,
   validationArtifactRef,
 } from "../../contracts/validationArtifact.js";
+import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
 import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
+
+const validationToolingFailureKinds = new Set<string>([
+  "snapshot_workspace_setup_failed",
+  "infrastructure_tooling_failed",
+  "git_tooling_failed",
+  "reviewer_process_execution_failed",
+  "prepare_command_execution_tooling_failed",
+  "check_command_execution_tooling_failed",
+  "reviewer_output_contract_failed",
+  "token_usage_contract_failed",
+] satisfies readonly ValidationToolingFailureKind[]);
 
 export const assertValidationArtifactRecord = (artifact: ValidationRunArtifactRecord): void => {
   requireSafePositiveInteger(artifact.validationRunId, "Artifact Validation Run ID");
@@ -39,12 +56,69 @@ export const assertValidationArtifactRecord = (artifact: ValidationRunArtifactRe
   }
 };
 
+type ValidationFindingEvidence = ReviewerFindingCore & {
+  readonly artifactRefs: readonly string[];
+};
+
+export const decodeValidationFindingEvidence = (
+  value: unknown,
+  availableArtifactRefs: ReadonlySet<string>,
+): ValidationFindingEvidence => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Finding is not an object");
+  }
+  const row = value as Record<string, unknown> & {
+    readonly title?: unknown;
+    readonly description?: unknown;
+    readonly evidence?: unknown;
+    readonly files?: unknown;
+    readonly artifactRefs?: unknown;
+  };
+  const fields = ["title", "description", "evidence", "files", "artifactRefs"];
+  const keys = Object.keys(row);
+  if (keys.length !== fields.length || fields.some((field) => !(field in row))) {
+    throw new Error("Finding fields are invalid");
+  }
+  const artifactRefs = row.artifactRefs;
+  if (
+    !Array.isArray(artifactRefs) ||
+    artifactRefs.some((artifactRef) => typeof artifactRef !== "string")
+  ) {
+    throw new Error("Finding Artifact references are invalid");
+  }
+  const title = row.title;
+  const description = row.description;
+  const evidence = row.evidence;
+  const files = row.files;
+  const finding = {
+    ...decodeReviewerFindingCore({ title, description, evidence, files }),
+    artifactRefs: artifactRefs as readonly string[],
+  };
+  for (const artifactRef of finding.artifactRefs) {
+    if (!isValidationArtifactRef(artifactRef)) {
+      throw new Error("Finding Artifact reference is invalid");
+    }
+    if (!availableArtifactRefs.has(artifactRef)) {
+      throw new Error("Finding Artifact reference does not resolve within the Validation Run");
+    }
+  }
+  return finding;
+};
+
 export const assertValidationFindingEvidence = (
-  finding: Pick<ValidationRunFindingRecord, "title" | "description" | "evidence">,
+  finding: ValidationRunFindingRecord,
+  availableArtifactRefs: ReadonlySet<string>,
 ): void => {
-  requireNonBlank(finding.title, "Finding title");
-  requireNonBlank(finding.description, "Finding description");
-  requireNonBlank(finding.evidence, "Finding evidence");
+  decodeValidationFindingEvidence(
+    {
+      title: finding.title,
+      description: finding.description,
+      evidence: finding.evidence,
+      files: finding.files,
+      artifactRefs: finding.artifactRefs,
+    },
+    availableArtifactRefs,
+  );
 };
 
 export const assertValidationToolingFailureEvidence = (failure: {
@@ -53,6 +127,9 @@ export const assertValidationToolingFailureEvidence = (failure: {
   readonly errorMessage: string;
 }): void => {
   requireNonBlank(failure.errorKind, "Tooling Failure kind");
+  if (!validationToolingFailureKinds.has(failure.errorKind)) {
+    throw new Error("Tooling Failure kind is unsupported");
+  }
   requireNonBlank(failure.operationName, "Tooling Failure operation");
   requireNonBlank(failure.errorMessage, "Tooling Failure message");
 };

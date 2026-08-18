@@ -4,8 +4,8 @@ import { Effect } from "effect";
 import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
 import {
   assertValidationArtifactRecord,
-  assertValidationFindingEvidence,
   assertValidationToolingFailureEvidence,
+  decodeValidationFindingEvidence,
 } from "../change/candidateValidation/candidateValidationEvidence.js";
 import type {
   CandidateValidationArtifact,
@@ -130,9 +130,11 @@ export const listValidationFindings = (
       "list Candidate validation Findings",
       idPrefix,
     );
+    const artifacts = yield* listValidationArtifacts(sql, validationRunId, idPrefix);
+    const availableArtifactRefs = new Set(artifacts.map((artifact) => artifact.ref));
     return yield* decodePersisted("list Candidate validation Findings", () =>
       rows.flatMap((row) =>
-        parseFindings(row.findings).map((finding) => ({
+        parseFindings(row.findings, availableArtifactRefs).map((finding) => ({
           ...finding,
           validationRunId: assertRunId(row.validationRunId, validationRunId),
           phase: decodePhase(row.phase),
@@ -236,19 +238,9 @@ const readOrderedPhaseResults = (
 
 const parseFindings = (
   source: string,
+  availableArtifactRefs: ReadonlySet<string>,
 ): readonly Omit<CandidateValidationFinding, "validationRunId" | "phase" | "producer">[] =>
-  parseArray(source).map((value) => {
-    const row = objectValue(value, "Finding");
-    const finding = {
-      title: stringValue(field(row, "title"), "Finding title"),
-      description: stringValue(field(row, "description"), "Finding description"),
-      evidence: stringValue(field(row, "evidence"), "Finding evidence"),
-      files: stringArray(field(row, "files"), "Finding files"),
-      artifactRefs: stringArray(field(row, "artifactRefs"), "Finding Artifact refs"),
-    };
-    assertValidationFindingEvidence(finding);
-    return finding;
-  });
+  parseArray(source).map((value) => decodeValidationFindingEvidence(value, availableArtifactRefs));
 
 const parseArtifacts = (
   source: string,
@@ -267,6 +259,7 @@ const parseToolingFailure = (
   source: string,
 ): Omit<CandidateValidationToolingFailure, "sequence" | "validationRunId"> => {
   const row = objectValue(JSON.parse(source) as unknown, "Tooling Failure");
+  requireExactFields(row, ["errorKind", "operationName", "errorMessage"], "Tooling Failure");
   const failure = {
     errorKind: stringValue(
       field(row, "errorKind"),
@@ -379,11 +372,15 @@ const stringValue = (value: unknown, name: string): string => {
   if (typeof value !== "string") throw new Error(`${name} is not a string`);
   return value;
 };
-const stringArray = (value: unknown, name: string): readonly string[] => {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new Error(`${name} is not a string array`);
+const requireExactFields = (
+  value: Record<string, unknown>,
+  fields: readonly string[],
+  name: string,
+): void => {
+  const keys = Object.keys(value);
+  if (keys.length !== fields.length || fields.some((fieldName) => !(fieldName in value))) {
+    throw new Error(`${name} fields are invalid`);
   }
-  return value as readonly string[];
 };
 const numberValue = (value: unknown, name: string): number => {
   if (typeof value !== "number") throw new Error(`${name} is not a number`);

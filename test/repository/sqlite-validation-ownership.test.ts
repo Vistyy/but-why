@@ -6,7 +6,9 @@ import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,
@@ -43,7 +45,7 @@ const taskReviewPolicy = {
     scope: "repo" as const,
     profile: {
       agentRuntime: "pi" as const,
-      runtimeConfig: { model: "claimed-model", thinking: "medium" as const },
+      runtimeConfig: { model: "provider/model", thinking: "medium" as const },
     },
   },
   builtInInstructions: "Review the Task proposal.",
@@ -270,15 +272,25 @@ describe("SQLite Validation ownership", () => {
         };
         expect(
           yield* fixture.validation.execution
+            .recordToolingFailure({
+              validationRunId: position.validationRunId,
+              errorKind: "infrastructure_tooling_failed",
+              operationName: " ",
+              errorMessage: "This malformed failure must not persist.",
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
             .recordCheckResult({
               validationRunId: position.validationRunId,
               producer: position.producer,
               outcome: "passed",
               artifactRecords: [
                 {
-                  ref: "artifact:invalid",
+                  ref: `artifact:${position.validationRunId}/checks/types/stdout.txt`,
                   ...position,
-                  path: "checks/types/stdout.txt",
+                  path: `${position.validationRunId}/checks/types/stdout.txt`,
                   originalBytes: 1,
                   storedBytes: 2,
                   truncated: false,
@@ -338,6 +350,60 @@ describe("SQLite Validation ownership", () => {
               validationRunId: position.validationRunId,
               producer: position.producer,
               outcome: "failed",
+              finding: {
+                ...position,
+                title: "Invalid file path",
+                description: "The Finding must not persist.",
+                evidence: "The file path is absolute.",
+                files: ["/absolute/path.ts"],
+                artifactRefs: [],
+              },
+              artifactRecords: [],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
+              finding: {
+                ...position,
+                title: "Invalid Artifact reference",
+                description: "The Finding must not persist.",
+                evidence: "The Artifact reference syntax is invalid.",
+                files: [],
+                artifactRefs: ["not-an-artifact"],
+              },
+              artifactRecords: [],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
+              finding: {
+                ...position,
+                title: "Unresolved Artifact reference",
+                description: "The Finding must not persist.",
+                evidence: "The Artifact does not exist in this Validation Run.",
+                files: [],
+                artifactRefs: [`artifact:${position.validationRunId}/checks/types/missing.txt`],
+              },
+              artifactRecords: [],
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(
+          yield* fixture.validation.execution
+            .recordCheckResult({
+              validationRunId: position.validationRunId,
+              producer: position.producer,
+              outcome: "failed",
               artifactRecords: [],
               toolingFailure: {
                 validationRunId: position.validationRunId,
@@ -353,12 +419,20 @@ describe("SQLite Validation ownership", () => {
         expect(
           yield* repository.operation(
             "inspect rejected Validation Phase Results",
-            (sql) => sql<{ readonly count: number }>`
-              SELECT COUNT(*) AS count FROM validation_phase_results
-              WHERE validation_run_id = ${position.validationRunId}
+            (sql) => sql<{
+              readonly count: number;
+              readonly runToolingFailure: string | null;
+              readonly outcome: string | null;
+            }>`
+              SELECT
+                (SELECT COUNT(*) FROM validation_phase_results
+                  WHERE validation_run_id = run.id) AS count,
+                run.run_tooling_failure AS runToolingFailure,
+                run.outcome
+              FROM validation_runs AS run WHERE run.id = ${position.validationRunId}
             `,
           ),
-        ).toEqual([{ count: 0 }]);
+        ).toEqual([{ count: 0, runToolingFailure: null, outcome: null }]);
 
         yield* fixture.validation.execution.recordCheckResult({
           validationRunId: position.validationRunId,
@@ -826,47 +900,85 @@ describe("SQLite Validation ownership", () => {
     ),
   );
 
-  it.scoped("links an active Task Review only to its owning Task and configuration", () =>
+  it.scoped("makes Task Review admission the sole reviewer policy authority", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "create Task Review ownership fixtures",
-          (sql) => sql`
-            INSERT INTO tasks (id, title, description, state)
-            VALUES (1, 'Owner', 'Review owner.', 'new'), (2, 'Other', 'Other Task.', 'new');
-            INSERT INTO task_reviews (
-              id, task_id, proposal, dependency_evidence, base_ref, base_commit,
-              outcome, findings, tooling_failure, cleanup_pending
-            ) VALUES (
-              1, 1, '{}', '[]', 'refs/heads/main', 'base', NULL, '[]', NULL, 1
-            )
-          `,
-        );
+        const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence(input.mainCheckoutRoot);
         const validation = yield* openSqliteChangeValidationTestDependencies();
+        yield* tasks.createTask({
+          title: "Owner",
+          description: "Review owner.",
+          now: "2026-10-02T10:02:00.000Z",
+        });
+
         expect(
-          yield* validation.agentPersistence
-            .beginInvocation({
-              configuration,
-              createdAt: "2026-10-02T10:02:00.000Z",
-              linkInvocation: reviews.linkAgentInvocation({
-                taskId: `${repository.idPrefix}-2`,
-                reviewId: 1,
-                configurationSnapshot: taskReviewPolicy,
-              }),
+          yield* reviews
+            .admit({
+              taskId: publicTaskId(`${repository.idPrefix}-1`),
+              policy: {
+                ...taskReviewPolicy,
+                profile: {
+                  ...taskReviewPolicy.profile,
+                  profile: {
+                    ...taskReviewPolicy.profile.profile,
+                    runtimeConfig: { model: " " },
+                  },
+                },
+              },
+              baseRef: "refs/heads/main",
+              baseCommit: "base",
+              now: "2026-10-02T10:02:00.000Z",
             })
             .pipe(Effect.flip),
         ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        const rejectedAdmission = yield* repository.operation(
+          "inspect rejected Task Review admission",
+          (sql) => sql<{
+            readonly reviewerConfiguration: string | null;
+            readonly reviewerAgentSessionId: number | null;
+            readonly reviewCount: number;
+            readonly sessionCount: number;
+          }>`
+            SELECT task.reviewer_configuration AS reviewerConfiguration,
+              task.reviewer_agent_session_id AS reviewerAgentSessionId,
+              (SELECT COUNT(*) FROM task_reviews) AS reviewCount,
+              (SELECT COUNT(*) FROM agent_sessions) AS sessionCount
+            FROM tasks AS task WHERE task.id = 1
+          `,
+        );
+        expect(rejectedAdmission).toEqual([
+          {
+            reviewerConfiguration: null,
+            reviewerAgentSessionId: null,
+            reviewCount: 0,
+            sessionCount: 0,
+          },
+        ]);
+
+        const admitted = yield* reviews.admit({
+          taskId: publicTaskId(`${repository.idPrefix}-1`),
+          policy: taskReviewPolicy,
+          baseRef: "refs/heads/main",
+          baseCommit: "base",
+          now: "2026-10-02T10:02:01.000Z",
+        });
+        if (!admitted.ok) throw new Error(admitted.code);
+        const agentSessionId = yield* reviews.getReviewerAgentSession(
+          publicTaskId(`${repository.idPrefix}-1`),
+        );
+        if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
+
         expect(
           yield* validation.agentPersistence
             .beginInvocation({
-              configuration,
-              createdAt: "2026-10-02T10:02:01.000Z",
+              agentSessionId,
+              configuration: { ...configuration, model: "competing-model" },
+              createdAt: "2026-10-02T10:02:02.000Z",
               linkInvocation: reviews.linkAgentInvocation({
-                taskId: `${repository.idPrefix}-1`,
-                reviewId: 1,
-                configurationSnapshot: taskReviewPolicy,
+                taskId: publicTaskId(`${repository.idPrefix}-1`),
+                reviewId: admitted.review.id,
               }),
             })
             .pipe(Effect.flip),
@@ -877,19 +989,25 @@ describe("SQLite Validation ownership", () => {
           (sql) => sql<{
             readonly reviewerConfiguration: string | null;
             readonly reviewerAgentSessionId: number | null;
+            readonly continuationCount: number;
+            readonly invocationCount: number;
             readonly invocationLinks: number;
           }>`
             SELECT task.reviewer_configuration AS reviewerConfiguration,
               task.reviewer_agent_session_id AS reviewerAgentSessionId,
+              (SELECT COUNT(*) FROM agent_continuations) AS continuationCount,
+              (SELECT COUNT(*) FROM agent_invocations) AS invocationCount,
               (SELECT COUNT(*) FROM task_review_agent_invocations
-                WHERE task_review_id = 1) AS invocationLinks
+                WHERE task_review_id = ${admitted.review.id}) AS invocationLinks
             FROM tasks AS task WHERE task.id = 1
           `,
         );
         expect(retained).toEqual([
           {
-            reviewerConfiguration: null,
-            reviewerAgentSessionId: null,
+            reviewerConfiguration: JSON.stringify(taskReviewPolicy),
+            reviewerAgentSessionId: agentSessionId,
+            continuationCount: 0,
+            invocationCount: 0,
             invocationLinks: 0,
           },
         ]);

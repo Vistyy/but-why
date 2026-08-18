@@ -10,4 +10,11 @@ export const reviewerFindingCoreSchema = Schema.Struct({
   files: Schema.Array(repoRelativePathSchema),
 });
 
+const decodeFindingCore = Schema.decodeUnknownSync(reviewerFindingCoreSchema, {
+  onExcessProperty: "error",
+});
+
+export const decodeReviewerFindingCore = (value: unknown): ReviewerFindingCore =>
+  decodeFindingCore(value);
+
 export type ReviewerFindingCore = Schema.Schema.Type<typeof reviewerFindingCoreSchema>;

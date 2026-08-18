@@ -4,6 +4,7 @@ import {
   assertValidationArtifactRecord,
   assertValidationFindingEvidence,
   assertValidationToolingFailureEvidence,
+  decodeValidationFindingEvidence,
 } from "../change/candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationPolicySnapshot.js";
 import type {
@@ -73,11 +74,16 @@ export const openSqliteCandidateValidationExecutionPort = () =>
         ),
       recordToolingFailure: (input) =>
         repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
-          Effect.asVoid(sql`
-            UPDATE validation_runs
-            SET run_tooling_failure = ${JSON.stringify(toolingFailureValue(input))}
-            WHERE id = ${input.validationRunId} AND outcome IS NULL
-          `),
+          Effect.gen(function* () {
+            const operationName = "record Candidate validation Tooling Failure";
+            const failure = toolingFailureValue(input);
+            yield* requireValidToolingFailure(failure, operationName);
+            yield* sql`
+              UPDATE validation_runs
+              SET run_tooling_failure = ${JSON.stringify(failure)}
+              WHERE id = ${input.validationRunId} AND outcome IS NULL
+            `;
+          }).pipe(Effect.asVoid),
         ),
       recordPrepareResult: (input) =>
         repository.transactionImmediate("record Candidate validation Prepare Result", (sql) =>
@@ -466,12 +472,24 @@ const recordPhaseResult = (
     }
     yield* Effect.try({
       try: () => {
-        for (const finding of findings) assertValidationFindingEvidence(finding);
         for (const artifact of input.artifactRecords) {
           assertValidationArtifactRecord(artifact);
         }
         if (input.toolingFailure !== undefined) {
-          assertValidationToolingFailureEvidence(input.toolingFailure);
+          assertValidationToolingFailureEvidence(toolingFailureValue(input.toolingFailure));
+        }
+      },
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    });
+    const persistedArtifacts = yield* listValidationArtifacts(sql, input.validationRunId, idPrefix);
+    const availableArtifactRefs = new Set([
+      ...persistedArtifacts.map((artifact) => artifact.ref),
+      ...input.artifactRecords.map((artifact) => artifact.ref),
+    ]);
+    yield* Effect.try({
+      try: () => {
+        for (const finding of findings) {
+          assertValidationFindingEvidence(finding, availableArtifactRefs);
         }
       },
       catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
@@ -586,25 +604,20 @@ const listPreviousCandidateReviewerFindings = (
         "Selected reviewer history belongs to an unrelated Candidate",
       );
     }
+    const artifacts = yield* listValidationArtifacts(sql, selected.validationRunId, idPrefix);
+    const availableArtifactRefs = new Set(artifacts.map((artifact) => artifact.ref));
     return yield* decodePersisted("list previous Candidate reviewer Findings", () => {
       const value: unknown = JSON.parse(selected.findings) as unknown;
       if (!Array.isArray(value)) throw new Error("Stored Findings are not an array");
       return value.map((item) => {
-        if (typeof item !== "object" || item === null || Array.isArray(item)) {
-          throw new Error("Stored Finding is invalid");
-        }
-        const finding = item as Record<string, unknown>;
-        const field = (name: string) => finding[name];
-        return {
+        const finding = {
+          ...decodeValidationFindingEvidence(item, availableArtifactRefs),
           validationRunId: selected.validationRunId,
           phase: input.phase,
           producer: input.producer,
-          title: requiredString(field("title")),
-          description: requiredString(field("description")),
-          evidence: requiredString(field("evidence")),
-          files: requiredStringArray(field("files")),
-          artifactRefs: requiredStringArray(field("artifactRefs")),
         } satisfies CandidateValidationFinding;
+        assertValidationFindingEvidence(finding, availableArtifactRefs);
+        return finding;
       });
     });
   });
@@ -678,15 +691,13 @@ const toolingFailureValue = (failure: {
   operationName: failure.operationName,
   errorMessage: failure.errorMessage,
 });
-const requiredString = (value: unknown): string => {
-  if (typeof value !== "string") throw new Error("Stored Finding field is invalid");
-  return value;
-};
-const requiredStringArray = (value: unknown): readonly string[] => {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new Error("Stored Finding string array is invalid");
-  }
-  return value as readonly string[];
-};
+const requireValidToolingFailure = (
+  failure: Parameters<typeof assertValidationToolingFailureEvidence>[0],
+  operationName: string,
+) =>
+  Effect.try({
+    try: () => assertValidationToolingFailureEvidence(failure),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

@@ -1,8 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { assertValidationToolingFailureEvidence } from "../change/candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { publicChangeId } from "../change/changeId.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
@@ -26,12 +28,17 @@ export const openSqliteValidationRunAbandonmentPort = () =>
           ),
         ),
       recordToolingFailure: (input) =>
-        repository.operation("record Candidate validation Tooling Failure", (sql) =>
-          Effect.asVoid(sql`
-            UPDATE validation_runs
-            SET run_tooling_failure = ${JSON.stringify(toolingFailureValue(input))}
-            WHERE id = ${input.validationRunId} AND outcome IS NULL
-          `),
+        repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
+          Effect.gen(function* () {
+            const operationName = "record Candidate validation Tooling Failure";
+            const failure = toolingFailureValue(input);
+            yield* requireValidToolingFailure(failure, operationName);
+            yield* sql`
+              UPDATE validation_runs
+              SET run_tooling_failure = ${JSON.stringify(failure)}
+              WHERE id = ${input.validationRunId} AND outcome IS NULL
+            `;
+          }).pipe(Effect.asVoid),
         ),
       abandon: (input) =>
         repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
@@ -87,6 +94,8 @@ const abandon = (
   },
 ) =>
   Effect.gen(function* () {
+    const failure = toolingFailureValue(input);
+    yield* requireValidToolingFailure(failure, "abandon Candidate Validation Run");
     const linked = yield* sql<{ readonly invocationId: number }>`
       SELECT agent_invocation_id AS invocationId
       FROM validation_phase_agent_invocations
@@ -101,7 +110,7 @@ const abandon = (
     yield* sql`
       UPDATE validation_runs
       SET cleanup_pending = 0, cleanup_blocking_reason = NULL,
-        run_tooling_failure = ${JSON.stringify(toolingFailureValue(input))},
+        run_tooling_failure = ${JSON.stringify(failure)},
         outcome = 'tooling_failed'
       WHERE id = ${input.validationRunId} AND outcome IS NULL
     `;
@@ -125,6 +134,15 @@ const decodeAbandonmentContext = (
     submittedSha: row.submittedSha,
   };
 };
+
+const requireValidToolingFailure = (
+  failure: Parameters<typeof assertValidationToolingFailureEvidence>[0],
+  operationName: string,
+) =>
+  Effect.try({
+    try: () => assertValidationToolingFailureEvidence(failure),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
 
 const toolingFailureValue = (input: {
   readonly errorKind: string;

@@ -307,11 +307,7 @@ const submitTaskReview = (
                 ...(agentSessionId === undefined ? {} : { agentSessionId }),
                 configuration: agentConfiguration(resolvedPolicy.policy.profile),
                 agentPersistence: input.agentPersistence,
-                linkInvocation: input.persistence.linkAgentInvocation({
-                  taskId,
-                  reviewId,
-                  configurationSnapshot: resolvedPolicy.policy.snapshot,
-                }),
+                linkInvocation: input.persistence.linkAgentInvocation({ taskId, reviewId }),
                 reviewerRuntime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
                 decodeOutput,

@@ -119,6 +119,35 @@ describe("Candidate-owned Validation Run inspection", () => {
             }),
           });
           if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
+          expect(
+            yield* abandonment
+              .recordToolingFailure({
+                validationRunId: fixture.validationRunId,
+                errorKind: "infrastructure_tooling_failed",
+                operationName: " ",
+                errorMessage: "This malformed failure must not persist.",
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          expect(
+            yield* abandonment
+              .abandon({
+                validationRunId: fixture.validationRunId,
+                errorKind: "unsupported_failure_kind",
+                operationName: "validation_run_abandonment",
+                errorMessage: "This malformed abandonment must not settle the Invocation.",
+                now: later,
+              })
+              .pipe(Effect.flip),
+          ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          expect(
+            yield* agents.readInvocationHistory(started.dispatch.agentSessionId),
+          ).toMatchObject([{ settledAt: null, settlementKind: null }]);
+          expect(yield* abandonment.getRunById(fixture.validationRunId)).toMatchObject({
+            state: "running",
+            outcome: null,
+          });
+
           yield* abandonment.abandon({
             validationRunId: fixture.validationRunId,
             errorKind: "infrastructure_tooling_failed",

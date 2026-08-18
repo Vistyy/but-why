@@ -137,7 +137,6 @@ export type TaskReviewPersistence = {
   readonly linkAgentInvocation: (input: {
     readonly taskId: string;
     readonly reviewId: number;
-    readonly configurationSnapshot: TaskReviewPolicySnapshot;
   }) => AgentSessionSqlLink;
   readonly settleAgentReview: (input: {
     readonly reviewId: number;

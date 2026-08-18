@@ -118,13 +118,15 @@ it.effect("abandons a Task Review through workspace and Agent Session recovery",
         harness: "pi" as const,
         model: "test-model",
       };
+      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
+      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const started = yield* agents.beginInvocation({
+        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
-          configurationSnapshot: policy,
         }),
       });
       if (!started.ok) throw new Error(`Could not start Invocation: ${started.code}`);
@@ -189,22 +191,43 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
       if (!admitted.ok) throw new Error(`Task Review admission failed: ${admitted.code}`);
       yield* reviews.recordCleanup(admitted.review.id, "removed", now);
       const configuration = { harness: "pi" as const, model: "test-model" };
+      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
+      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const invocation = yield* agents.beginInvocation({
+        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: admitted.review.id,
-          configurationSnapshot: policy,
         }),
       });
       if (!invocation.ok) throw new Error(invocation.code);
-      yield* agents.settleInvocation({
-        invocationId: invocation.dispatch.invocation.id,
-        continuationId: invocation.dispatch.continuation.id,
-        settlement: { settledAt: later, kind: "returned" },
-      });
-
+      expect(
+        yield* agents
+          .settleInvocation({
+            invocationId: invocation.dispatch.invocation.id,
+            continuationId: invocation.dispatch.continuation.id,
+            settlement: { settledAt: later, kind: "returned" },
+            settleDomain: reviews.settleAgentReview({
+              reviewId: admitted.review.id,
+              findings: [
+                {
+                  title: "Invalid file path",
+                  description: "The Finding must not persist.",
+                  evidence: "The file path is absolute.",
+                  files: ["/absolute/path.ts"],
+                },
+              ],
+              now: later,
+              complete: true,
+            }),
+          })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+      expect(yield* agents.readInvocationHistory(agentSessionId)).toMatchObject([
+        { settledAt: null, settlementKind: null },
+      ]);
       expect(
         yield* reviews
           .complete({ reviewId: admitted.review.id, findings: [], now: later })
@@ -213,6 +236,7 @@ it.scoped("requires atomic Agent settlement to pass an Active Task Review", () =
       expect(yield* reviews.getById(admitted.review.id)).toMatchObject({
         state: "running",
         outcome: null,
+        findings: [],
       });
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ state: "new" });
     }),
@@ -250,13 +274,15 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
           .pipe(Effect.flip),
       ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       const configuration = { harness: "pi" as const, model: "test-model" };
+      const agentSessionId = yield* reviews.getReviewerAgentSession(publicTaskId("BY-1"));
+      if (agentSessionId === undefined) throw new Error("Task Review has no Agent Session");
       const blockedInvocation = yield* agents.beginInvocation({
+        agentSessionId,
         configuration,
         createdAt: now,
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: first.review.id,
-          configurationSnapshot: policy,
         }),
       });
       if (!blockedInvocation.ok) throw new Error(blockedInvocation.code);
@@ -314,7 +340,6 @@ it.scoped("orders immutable Task Review history by its SQLite ID", () =>
         linkInvocation: reviews.linkAgentInvocation({
           taskId: publicTaskId("BY-1"),
           reviewId: second.review.id,
-          configurationSnapshot: policy,
         }),
       });
       if (!passedInvocation.ok) throw new Error(passedInvocation.code);

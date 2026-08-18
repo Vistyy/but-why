@@ -1,6 +1,12 @@
+import { Schema } from "effect";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
-import type { PiAgentProfileConfig } from "../../contracts/agentConfig.js";
+import {
+  agentProfileSchema,
+  configNameSchema,
+  nonBlankStringSchema,
+  type PiAgentProfileConfig,
+} from "../../contracts/agentConfig.js";
 import type { ReviewerFindingCore } from "../../contracts/reviewerFinding.js";
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
@@ -19,6 +25,28 @@ export type TaskReviewDependencyEvidence = {
   readonly description: string;
   readonly state: string;
 };
+
+const taskReviewPolicySnapshotSchema = Schema.Struct({
+  profile: Schema.Struct({
+    agentProfile: configNameSchema,
+    scope: Schema.Literal("repo", "global"),
+    profile: Schema.NullOr(agentProfileSchema),
+  }),
+  builtInInstructions: nonBlankStringSchema,
+  guidance: Schema.NullOr(
+    Schema.Struct({
+      content: nonBlankStringSchema,
+      source: Schema.Literal("repo", "global"),
+    }),
+  ),
+});
+
+const decodePolicySnapshot = Schema.decodeUnknownSync(taskReviewPolicySnapshotSchema, {
+  onExcessProperty: "error",
+});
+
+export const decodeTaskReviewPolicySnapshot = (value: unknown): TaskReviewPolicySnapshot =>
+  decodePolicySnapshot(value);
 
 export type TaskReviewPolicySnapshot = {
   readonly profile: Pick<ResolvedPiAgentProfile, "agentProfile" | "scope"> & {
