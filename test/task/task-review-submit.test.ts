@@ -191,7 +191,7 @@ const passingReviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
     }),
 };
 
-it.effect("returns a missing Task Review only when completion and recovery lookup both miss", () =>
+it.effect("preserves missing and inactive Task Review outcomes through submission", () =>
   Effect.gen(function* () {
     const taskId = publicTaskId("BY-1");
     const reviewerProfile = {
@@ -219,67 +219,79 @@ it.effect("returns a missing Task Review only when completion and recovery looku
       toolingFailure: null,
       findings: [],
     };
-    const unused = () => Effect.die("Unexpected persistence operation");
-    const persistence: TaskReviewPersistence = {
-      reuseJudgment: () => Effect.succeed(undefined),
-      checkAdmission: () => Effect.succeed(undefined),
-      admit: () =>
-        Effect.succeed({
+    const submit = (completion: "missing" | "inactive") => {
+      const unused = () => Effect.die("Unexpected persistence operation");
+      const persistence: TaskReviewPersistence = {
+        reuseJudgment: () => Effect.succeed(undefined),
+        checkAdmission: () => Effect.succeed(undefined),
+        admit: () =>
+          Effect.succeed({
+            ok: true as const,
+            review,
+            policy: reviewerPolicy,
+            proposal: review.proposal,
+            dependencyEvidence: [],
+          }),
+        recordCleanup: () => Effect.void,
+        complete: () =>
+          Effect.succeed(
+            completion === "missing"
+              ? { ok: false as const, code: "task_review_not_found" as const }
+              : { ok: false as const, code: "task_review_not_active" as const },
+          ),
+        abandon: unused,
+        getById: () => Effect.succeed(completion === "missing" ? undefined : review),
+        getLatestForTask: unused,
+        listForTask: () => Effect.succeed([]),
+        getReviewerAgentSession: () => Effect.succeed(undefined),
+        getReviewerConfiguration: () => Effect.succeed(undefined),
+        linkAgentInvocation: defaultAgentLink,
+        settleAgentReview: () => () => Effect.void,
+        recordActiveFailure: unused,
+        proposalIsCurrent: unused,
+      };
+      const reviews = openTaskReviewUseCases({
+        repositoryRoot: createTestWorkspace(),
+        repositoryCommonDirectory: createTestWorkspace(),
+        loadRepoConfig: () => ({ ok: true, config: { idPrefix: "BY" } }),
+        resolvePolicy: () => ({
           ok: true as const,
-          review,
-          policy: reviewerPolicy,
-          proposal: review.proposal,
-          dependencyEvidence: [],
+          policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
         }),
-      recordCleanup: () => Effect.void,
-      complete: () =>
-        Effect.succeed({ ok: false as const, code: "task_review_not_found" as const }),
-      abandon: unused,
-      getById: () => Effect.succeed(undefined),
-      getLatestForTask: unused,
-      listForTask: () => Effect.succeed([]),
-      getReviewerAgentSession: () => Effect.succeed(undefined),
-      getReviewerConfiguration: () => Effect.succeed(undefined),
-      linkAgentInvocation: defaultAgentLink,
-      settleAgentReview: () => () => Effect.void,
-      recordActiveFailure: unused,
-      proposalIsCurrent: unused,
+        persistence,
+        agentSessionStorageRoot: createTestWorkspace(),
+        agentPersistence: defaultAgentPersistence(),
+        reviewerRuntime: passingReviewer,
+        reviewerExecutor: { execute: () => Effect.die("unused") },
+        readReviewBase: () =>
+          Effect.succeed({
+            ok: true as const,
+            base: { ref: "refs/heads/main", commit: "a".repeat(40) },
+          }),
+        verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+        runWorkspace: (workspaceInput) =>
+          workspaceInput.runInWorkspace === undefined
+            ? Effect.succeed({ ok: true as const })
+            : workspaceInput
+                .runInWorkspace({
+                  commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  worktreePath: "/tmp/review-1",
+                })
+                .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+        cleanupWorkspace: () => Effect.succeed({ workspace: "removed" as const }),
+        inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
+      });
+      return reviews.submit(taskId, "2026-08-11T12:05:00.000Z");
     };
-    const reviews = openTaskReviewUseCases({
-      repositoryRoot: createTestWorkspace(),
-      repositoryCommonDirectory: createTestWorkspace(),
-      loadRepoConfig: () => ({ ok: true, config: { idPrefix: "BY" } }),
-      resolvePolicy: () => ({
-        ok: true as const,
-        policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
-      }),
-      persistence,
-      agentSessionStorageRoot: createTestWorkspace(),
-      agentPersistence: defaultAgentPersistence(),
-      reviewerRuntime: passingReviewer,
-      reviewerExecutor: { execute: () => Effect.die("unused") },
-      readReviewBase: () =>
-        Effect.succeed({
-          ok: true as const,
-          base: { ref: "refs/heads/main", commit: "a".repeat(40) },
-        }),
-      verifyReviewBase: () => Effect.succeed({ ok: true as const }),
-      runWorkspace: (workspaceInput) =>
-        workspaceInput.runInWorkspace === undefined
-          ? Effect.succeed({ ok: true as const })
-          : workspaceInput
-              .runInWorkspace({
-                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
-                worktreePath: "/tmp/review-1",
-              })
-              .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
-      cleanupWorkspace: () => Effect.succeed({ workspace: "removed" as const }),
-      inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
-    });
 
-    expect(yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z")).toEqual({
+    expect(yield* submit("missing")).toEqual({
       ok: false,
       code: "task_review_not_found",
+    });
+    expect(yield* submit("inactive")).toEqual({
+      ok: false,
+      code: "task_review_recovery_required",
+      review,
     });
   }),
 );
