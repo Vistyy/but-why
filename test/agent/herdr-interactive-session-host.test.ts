@@ -528,6 +528,46 @@ describe("Herdr Interactive Session Host", () => {
     expect(promptAttempts).toBe(1);
   });
 
+  it.each([
+    ["working", "launch_failed"],
+    ["unknown", "launch_indeterminate"],
+  ] as const)("does not reuse a pre-start done session while another agent is %s in the worktree", async (peerStatus, expectedCode) => {
+    const commands: string[][] = [];
+    let observations = 0;
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        observations += 1;
+        return observations === 1
+          ? emptyAgents()
+          : listedAgents([
+              matchingAgent("done"),
+              {
+                name: "other-session",
+                cwd: input.worktreePath,
+                pane_id: "pane-2",
+                agent_status: peerStatus,
+              },
+            ]);
+      }
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toMatchObject({ ok: false, code: expectedCode });
+
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(0);
+    expect(promptAttempts).toBe(0);
+  });
+
   it("prompts a matching done session observed after an uncertain native start", async () => {
     const commands: string[][] = [];
     let observations = 0;
