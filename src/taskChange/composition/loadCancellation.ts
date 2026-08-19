@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 import { composeTerminalCleanup } from "../../change/composition/terminalCleanup.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { openSqliteActiveValidationRunPort } from "../../repositoryRuntime/adapters/sqlite/sqliteActiveValidationRunPersistence.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
-import { openSqliteTaskPersistence } from "../../repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
 import {
   openRepositoryRuntime,
   type RepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteActiveValidationRunPort } from "../../sqlite/sqliteActiveValidationRunPersistence.js";
+import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { resolveRepoTaskId } from "../../task/repoTaskIds.js";
 import { openSqliteTaskChangeCancellationPort } from "../adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";

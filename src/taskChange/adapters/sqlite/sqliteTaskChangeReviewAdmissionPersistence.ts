@@ -3,7 +3,7 @@ import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/reposi
 import {
   admitTaskReview,
   taskReviewAdmissionRejection,
-} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
+} from "../../../sqlite/sqliteTaskReviewPersistence.js";
 import type {
   AdmitTaskReviewInput,
   TaskReviewAdmissionPersistence,

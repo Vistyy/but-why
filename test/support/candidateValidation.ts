@@ -19,8 +19,8 @@ import {
   type RepositorySqlConfig,
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteAgentSessionPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteChangeAgentSessionPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import {
   type ChangeValidationTestDependencies,
   openSqliteChangeValidationTestDependencies,

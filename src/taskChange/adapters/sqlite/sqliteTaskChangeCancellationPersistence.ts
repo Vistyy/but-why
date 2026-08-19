@@ -8,11 +8,8 @@ import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/reposi
 import {
   cancelChange as cancelChangeOnly,
   readCancellationChange,
-} from "../../../repositoryRuntime/adapters/sqlite/sqliteChangeCancellationPersistence.js";
-import {
-  cancelTaskState,
-  getTaskById,
-} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
+} from "../../../sqlite/sqliteChangeCancellationPersistence.js";
+import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
 import { internalTaskId, publicTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {

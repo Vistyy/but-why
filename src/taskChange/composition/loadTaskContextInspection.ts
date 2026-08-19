@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { openSqliteChangeAuthorityPort } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteTaskPersistence } from "../../repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteTaskPersistence } from "../../sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskChangeLinkPort } from "../adapters/sqlite/sqliteTaskChangePersistence.js";
 import { queryTaskContext, type TaskContextInspectionUseCases } from "../inspectTaskChange.js";
 

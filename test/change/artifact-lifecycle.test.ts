@@ -12,7 +12,7 @@ import {
   RepositorySql,
   repositorySqlLayer,
 } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import {
   type ChangeTestDependencies,
   openSqliteChangeTestDependencies,

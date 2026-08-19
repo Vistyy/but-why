@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
-import { openSqliteChangeReconciliationPort } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeReconciliationPersistence.js";
-import { openSqliteChangeStartPersistence } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
+import { openSqliteChangeReconciliationPort } from "../../sqlite/sqliteChangeReconciliationPersistence.js";
+import { openSqliteChangeStartPersistence } from "../../sqlite/sqliteChangeStartPersistence.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { openSqliteTaskChangeReconciliationCompletion } from "../../taskChange/adapters/sqlite/sqliteTaskChangeCompletionPersistence.js";
 import {

@@ -13,8 +13,6 @@ import {
 import { runDisposableExactCommitWorkspace } from "../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
 import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
-import { openSqliteAgentSessionPersistence } from "../../repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import {
   openRepositoryRuntime,
   openSubmissionRepositoryRuntime,
@@ -22,6 +20,8 @@ import {
   type SubmissionRepositoryRuntimeLoadError,
 } from "../../repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../reviewerPrompts/taskReviewerPrompt.js";
+import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../sqlite/sqliteTaskReviewPersistence.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";

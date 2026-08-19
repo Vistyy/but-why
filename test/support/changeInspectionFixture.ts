@@ -6,13 +6,13 @@ import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import {
   decodeImplementationBlockerHistory,
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
-} from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeAuthorityHistory.js";
-import { encodeSqliteValidationInputSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteValidationInputSnapshot.js";
+} from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";

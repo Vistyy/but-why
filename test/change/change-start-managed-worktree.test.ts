@@ -7,8 +7,8 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { openSqliteChangeStartPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeStartPersistence.js";
 import { defaultAcceptanceInstructions } from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {

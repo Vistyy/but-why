@@ -61,8 +61,8 @@
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
 - `src/disposableWorkspace/`: shared exact-commit disposable Git workspace creation, identity verification, Effect command execution, interruption handling, and cleanup for Task Review and Change Validation.
-- `src/repositoryRuntime/adapters/sqlite/`: Shared Repository State SQLite Adapters.
-- `src/sqlite/sqliteSnapshot.ts`: Shared Repository State Snapshot Adapter.
+- `src/repositoryRuntime/adapters/sqlite/`: Shared Repository State SQLite infrastructure Adapters.
+- `src/sqlite/`: Owner-specific SQLite persistence Adapters and the Shared Repository State Snapshot Adapter.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
 
 ## Repository synchronization

@@ -8,13 +8,13 @@ import type {
   ChangeSubmissionPort,
   TerminalChangeCleanupPort,
 } from "../../src/change/changePorts.js";
-import { openSqliteCandidatePublicationPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidatePublicationPersistence.js";
-import { openSqliteChangeAgentSessionPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
-import { openSqliteChangeAuthorityPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeReadPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeInspectionPersistence.js";
-import { openSqliteChangeReconciliationPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeReconciliationPersistence.js";
-import { openSqliteChangeSubmissionPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeSubmissionPersistence.js";
-import { openSqliteTerminalChangeCleanupPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTerminalChangeCleanupPersistence.js";
+import { openSqliteCandidatePublicationPort } from "../../src/sqlite/sqliteCandidatePublicationPersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeReadPort } from "../../src/sqlite/sqliteChangeInspectionPersistence.js";
+import { openSqliteChangeReconciliationPort } from "../../src/sqlite/sqliteChangeReconciliationPersistence.js";
+import { openSqliteChangeSubmissionPort } from "../../src/sqlite/sqliteChangeSubmissionPersistence.js";
+import { openSqliteTerminalChangeCleanupPort } from "../../src/sqlite/sqliteTerminalChangeCleanupPersistence.js";
 import { openSqliteTaskChangeCancellationPort } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeCancellationPersistence.js";
 import {
   openSqliteTaskChangeReconciliationCompletion,

@@ -8,9 +8,9 @@ import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js"
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { openSqliteTaskPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
-import { encodeSqliteValidationInputSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteValidationInputSnapshot.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";

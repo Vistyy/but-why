@@ -13,7 +13,7 @@ import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repos
 import {
   createChange,
   readChangeStartById,
-} from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeStartPersistence.js";
+} from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
