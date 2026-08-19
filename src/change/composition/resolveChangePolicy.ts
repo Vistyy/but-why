@@ -5,8 +5,8 @@ import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
+import type { ChangePolicy } from "../changePolicy.js";
 import { validateChangeReviewerConfigurationResources } from "../changeReviewerConfiguration.js";
-import type { ChangePolicy } from "../changeStartStore.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
 import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 

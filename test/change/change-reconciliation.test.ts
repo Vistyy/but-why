@@ -72,8 +72,11 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
-            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-            checks: [],
+            policy: {
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              prepare: null,
+              checks: [],
+            },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -169,8 +172,11 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
-            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-            checks: [],
+            policy: {
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              prepare: null,
+              checks: [],
+            },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -282,8 +288,11 @@ describe("by change reconcile", () => {
           worktreePath: join(input.commonDirectory, "uncreated-worktree"),
           taskId,
           now,
-          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-          checks: [],
+          policy: {
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            prepare: null,
+            checks: [],
+          },
         });
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -416,8 +425,11 @@ describe("by change reconcile", () => {
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
-            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-            checks: [],
+            policy: {
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              prepare: null,
+              checks: [],
+            },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -522,8 +534,11 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "uncreated-worktree"),
             taskId,
             now,
-            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-            checks: [],
+            policy: {
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              prepare: null,
+              checks: [],
+            },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -641,8 +656,11 @@ describe("by change reconcile", () => {
             worktreePath: join(input.commonDirectory, "worktree"),
             taskId,
             now,
-            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-            checks: [],
+            policy: {
+              reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+              prepare: null,
+              checks: [],
+            },
           });
           if (!created.ok) throw new Error(created.code);
           yield* starts.recordPrepareOutcome(created.change.id, null, now);

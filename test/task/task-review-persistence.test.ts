@@ -257,9 +257,10 @@ it.scoped("attributes frozen Task Reviewer configuration to every matching invok
       });
       if (!newestInvocation.ok) throw new Error(newestInvocation.code);
 
-      expect(yield* reviews.getById(withoutInvocation.review.id)).not.toHaveProperty(
-        "reviewerConfiguration",
-      );
+      const reviewWithoutInvocation = yield* reviews.getById(withoutInvocation.review.id);
+      expect(reviewWithoutInvocation).not.toHaveProperty("reviewerConfiguration");
+      expect(reviewWithoutInvocation).not.toHaveProperty("agentSessionId");
+      expect(reviewWithoutInvocation).not.toHaveProperty("agentInvocations");
       expect(yield* reviews.getById(older.review.id)).toMatchObject({
         reviewerConfiguration: policy,
       });

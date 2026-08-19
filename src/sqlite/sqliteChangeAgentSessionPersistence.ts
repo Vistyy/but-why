@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import { internalChangeId } from "../change/changeId.js";
+import type { ChangeReviewerConfiguration } from "../change/changePolicy.js";
 import type { ChangeAgentSessionPort } from "../change/changePorts.js";
 import {
   type ChangeReviewerPolicy,
@@ -8,7 +9,6 @@ import {
   decodeSqliteChangeReviewerConfiguration,
   sameChangeReviewerPolicy,
 } from "../change/changeReviewerConfiguration.js";
-import type { ChangeReviewerConfiguration } from "../change/changeStartStore.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";

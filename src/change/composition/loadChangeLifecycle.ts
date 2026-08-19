@@ -31,7 +31,7 @@ import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
-import { resolveChangePolicyAtCommit } from "./resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "./resolveChangePolicy.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =

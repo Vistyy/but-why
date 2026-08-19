@@ -84,7 +84,7 @@ const insertChangeRow = (
     }
 
     const reviewerConfiguration = yield* Effect.try({
-      try: () => encodeSqliteChangeReviewerConfiguration(input.reviewerConfiguration),
+      try: () => encodeSqliteChangeReviewerConfiguration(input.policy.reviewerConfiguration),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({ operationName: "create Change Start", cause }),
     });
@@ -98,8 +98,8 @@ const insertChangeRow = (
         ${input.branchRef}, ${input.baseRef}, ${input.baseRemoteUrl}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         ${reviewerConfiguration},
-        ${input.prepare === undefined ? null : JSON.stringify(input.prepare)},
-        ${input.checks.length === 0 ? null : encodeSqliteChangeChecks(input.checks)},
+        ${input.policy.prepare === null ? null : JSON.stringify(input.policy.prepare)},
+        ${input.policy.checks.length === 0 ? null : encodeSqliteChangeChecks(input.policy.checks)},
         NULL, NULL, NULL, 0, NULL
       )
       RETURNING id
@@ -231,10 +231,12 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
-    prepare,
-    checks:
-      encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
+    policy: {
+      reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(encodedReviewerConfiguration),
+      prepare,
+      checks:
+        encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
+    },
     prepareFailure:
       encodedPrepareFailure === null
         ? null

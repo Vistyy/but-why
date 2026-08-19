@@ -255,7 +255,7 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
       help: ["Restore GitHub access and the owned pull request, then retry Submit."],
     });
   }
-  if (result.code === "validation_policy_invalid") {
+  if (result.code === "change_policy_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,
@@ -269,7 +269,10 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
                 : { diagnostics: structuredContractDiagnostics(result.details.diagnostics) }),
             },
           }),
-      help: ["Fix Repo Config or Global Config, then retry Change Submit."],
+      help: [
+        "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
+        "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
+      ],
     });
   }
   if (

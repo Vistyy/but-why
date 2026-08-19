@@ -64,8 +64,11 @@ const createTerminalChange = (fixture: ReconcileFixture, id: string) =>
       startingCommit: "base",
       worktreePath,
       now,
-      reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-      checks: [],
+      policy: {
+        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        prepare: null,
+        checks: [],
+      },
     });
     if (!created.ok) throw new Error(created.code);
     yield* starts.recordPrepareOutcome(created.change.id, null, now);
@@ -243,8 +246,11 @@ describe("Change reconciliation discard boundary", () => {
           startingCommit: "base",
           worktreePath,
           now,
-          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-          checks: [],
+          policy: {
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            prepare: null,
+            checks: [],
+          },
         });
         if (!created.ok) throw new Error(created.code);
         yield* starts.recordPrepareOutcome(created.change.id, null, now);

@@ -70,9 +70,7 @@ const submissionChange = (change: ChangeRecord): SubmissionChange => ({
   baseRemoteUrl: change.baseRemoteUrl,
   worktreePath: change.worktreePath,
   acceptanceContext: change.acceptanceContext,
-  reviewerConfiguration: change.reviewerConfiguration,
-  prepare: change.prepare,
-  checks: change.checks,
+  policy: change.policy,
   publication: change.publication,
 });
 

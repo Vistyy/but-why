@@ -62,10 +62,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
       builtInInstructions: taskReviewBuiltInInstructions,
       guidance: null,
     };
-    const sessionStorageRoot = join(
-      loaded.runtime.context.paths.operationalDir,
-      "task-review-sessions",
-    );
+    const sessionStorageRoot = loaded.runtime.context.paths.agentSessionsPath;
 
     const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { submitResult } from "../../src/cli/change/submitResult.js";
 
-describe("Change Submit validation-policy errors", () => {
+describe("Change Submit Change Policy errors", () => {
   it("serializes unchanged Candidate guidance without running Submission setup", () => {
     expect(
       submitResult({ ok: true, status: "nothing_to_submit", changeId: "change-1" }, "change-1"),
@@ -167,11 +167,11 @@ describe("Change Submit validation-policy errors", () => {
     });
   });
 
-  it("serializes an exact validation-policy rejection with supplied message and help", () => {
+  it("serializes an exact Change Policy rejection with supplied message and help", () => {
     const result = submitResult(
       {
         ok: false,
-        code: "validation_policy_invalid",
+        code: "change_policy_invalid",
         message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
       },
       "change-1",
@@ -181,19 +181,22 @@ describe("Change Submit validation-policy errors", () => {
       exitCode: 1,
       stdout: {
         error: {
-          code: "validation_policy_invalid",
+          code: "change_policy_invalid",
           message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
         },
-        help: ["Fix Repo Config or Global Config, then retry Change Submit."],
+        help: [
+          "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
+          "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
+        ],
       },
     });
   });
 
-  it("serializes validation-policy path and structured contract diagnostics", () => {
+  it("serializes Change Policy path and structured contract diagnostics", () => {
     const result = submitResult(
       {
         ok: false,
-        code: "validation_policy_invalid",
+        code: "change_policy_invalid",
         message: "Global Config is invalid.",
         details: {
           path: "/repo/global-config.json",
@@ -214,7 +217,7 @@ describe("Change Submit validation-policy errors", () => {
       exitCode: 1,
       stdout: {
         error: {
-          code: "validation_policy_invalid",
+          code: "change_policy_invalid",
           message: "Global Config is invalid.",
           path: "/repo/global-config.json",
           diagnostics: [
@@ -226,7 +229,10 @@ describe("Change Submit validation-policy errors", () => {
             },
           ],
         },
-        help: ["Fix Repo Config or Global Config, then retry Change Submit."],
+        help: [
+          "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
+          "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
+        ],
       },
     });
   });

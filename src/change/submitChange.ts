@@ -95,7 +95,7 @@ export type ChangeSubmitResult =
     }
   | {
       readonly ok: false;
-      readonly code: "validation_policy_invalid";
+      readonly code: "change_policy_invalid";
       readonly message: string;
       readonly details?:
         | {
@@ -152,7 +152,6 @@ type CaptureCandidate = (
 ) => Effect.Effect<CaptureLocalCandidateResult, RepositoryStorageError>;
 
 export const openChangeSubmit = (dependencies: {
-  readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
   readonly github: GitHubPullRequestReader;
@@ -236,22 +235,22 @@ const submitChange = (
     }
     if (
       change.acceptanceContext !== null &&
-      change.reviewerConfiguration.acceptanceReview === null
+      change.policy.reviewerConfiguration.acceptanceReview === null
     ) {
       return {
         ok: false,
-        code: "validation_policy_invalid",
+        code: "change_policy_invalid",
         message: "The Change policy has no Acceptance Reviewer for its Acceptance Context.",
       } as const;
     }
     const resources = validateChangeReviewerConfigurationResources(
-      change.reviewerConfiguration,
+      change.policy.reviewerConfiguration,
       dependencies.repositoryPath,
     );
     if (!resources.ok) {
       return {
         ok: false,
-        code: "validation_policy_invalid",
+        code: "change_policy_invalid",
         message: resources.message,
       } as const;
     }
@@ -409,15 +408,11 @@ const validateAndPublish = (
     const validationResult =
       change.acceptanceContext !== null
         ? yield* validation.validateAcceptanceContextCandidate({
-            changeId: change.id,
             ...candidateIdentity(candidate),
-            resourceRoot: change.worktreePath,
             ...(progress === undefined ? {} : { progress }),
           })
         : yield* validation.validateCandidate({
-            changeId: change.id,
             ...candidateIdentity(candidate),
-            resourceRoot: change.worktreePath,
             ...(progress === undefined ? {} : { progress }),
           });
     if ("code" in validationResult) {

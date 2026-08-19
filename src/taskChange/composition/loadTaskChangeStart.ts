@@ -4,7 +4,7 @@ import {
   resolveChangeStartGitIntent,
 } from "../../change/adapters/changeStartGit.js";
 import type { ChangeStartGitOperations } from "../../change/changeStartGitOperations.js";
-import { resolveChangePolicyAtCommit } from "../../change/composition/resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "../../change/composition/resolveChangePolicy.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";

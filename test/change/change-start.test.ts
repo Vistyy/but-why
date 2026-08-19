@@ -30,8 +30,6 @@ const intent = {
 const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
   ...input,
   acceptanceContext: null,
-  reviewerConfiguration: input.reviewerConfiguration,
-  prepare: input.prepare ?? null,
   prepareFailure: null,
   state: "open",
 });
@@ -39,7 +37,7 @@ const recordFrom = (input: CreateChangeStartInput): ChangeStartRecord => ({
 type FixtureOptions = {
   readonly existing?: ChangeStartRecord;
   readonly provision?: ReturnType<ChangeStartGitOperations["provisionWorktree"]>;
-  readonly prepare?: Exclude<ChangeStartRecord["prepare"], null>;
+  readonly prepare?: Exclude<ChangeStartRecord["policy"]["prepare"], null>;
   readonly execute?: RepositoryPreparationEffectExecutor;
 };
 
@@ -56,7 +54,9 @@ const fixture = (options: FixtureOptions = {}) => {
       events.push("create");
       const change = recordFrom({
         ...input,
-        ...(options.prepare === undefined ? {} : { prepare: options.prepare }),
+        ...(options.prepare === undefined
+          ? {}
+          : { policy: { ...input.policy, prepare: options.prepare } }),
       });
       current = change;
       return Effect.succeed({ ok: true as const, change });
@@ -129,7 +129,7 @@ describe("Change Start orchestration", () => {
       );
       expect(result).toEqual({
         ok: false,
-        code: "reviewer_configuration_invalid",
+        code: "change_policy_invalid",
         message: "Exact-base Change policy is invalid.",
       });
       expect(captured.events).toEqual([

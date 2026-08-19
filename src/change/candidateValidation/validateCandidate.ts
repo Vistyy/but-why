@@ -27,22 +27,13 @@ import type {
 import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
 
 export type ValidateCandidateInput = {
-  readonly changeId: string;
   readonly candidateId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
-  readonly resourceRoot?: string;
   readonly progress?: SubmitProgress;
 };
 
-type ValidateAcceptanceContextCandidateInput = {
-  readonly changeId: string;
-  readonly candidateId: number;
-  readonly changeBaseSha: string;
-  readonly headSha: string;
-  readonly resourceRoot?: string;
-  readonly progress?: SubmitProgress;
-};
+type ValidateAcceptanceContextCandidateInput = ValidateCandidateInput;
 
 type ValidateCandidateResult =
   | {

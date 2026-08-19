@@ -2,7 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { CandidateValidationOutcome } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ChangePolicy } from "../change/changeStartStore.js";
+import type { ChangePolicy } from "../change/changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";

@@ -6,7 +6,7 @@ import {
   isPackageAgentResource,
   nonBlankStringSchema,
 } from "../contracts/agentConfig.js";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
+import type { ChangeReviewerConfiguration } from "./changePolicy.js";
 
 const acceptanceReviewPolicySnapshotSchema = Schema.Struct({
   instructions: nonBlankStringSchema,

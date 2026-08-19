@@ -12,11 +12,11 @@ export const startResult = (result: ChangeStartResult | TaskChangeStartResult): 
         : unlinkedStartChangeView(result.change),
     );
   }
-  if (result.code === "reviewer_configuration_invalid") {
+  if (result.code === "change_policy_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,
-      help: ["Fix the configured Change reviewers, then run Change Start again."],
+      help: ["Fix the complete Change Policy inputs, then run Change Start again."],
     });
   }
   if (result.code === "task_dependencies_unsatisfied") {

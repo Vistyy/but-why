@@ -65,7 +65,6 @@ describe("Candidate validation", () => {
           repository: repositoryConfig(mainCheckout),
         });
         const result = yield* validateCandidate(validation, {
-          changeId: captured.changeId,
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
@@ -163,7 +162,6 @@ describe("Candidate validation", () => {
           repository: repositoryConfig(mainCheckout),
         });
         const firstResult = yield* validateCandidate(validation, {
-          changeId: first.changeId,
           candidateId: first.candidateId,
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
@@ -188,7 +186,6 @@ describe("Candidate validation", () => {
         expect(second.ok).toBe(true);
         if (!second.ok) return;
         const secondResult = yield* validateCandidate(validation, {
-          changeId: second.changeId,
           candidateId: second.candidateId,
           changeBaseSha: second.changeBaseSha,
           headSha: second.headSha,
@@ -199,7 +196,6 @@ describe("Candidate validation", () => {
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
 
         const historicalCandidateError = yield* validateCandidate(validation, {
-          changeId: first.changeId,
           candidateId: first.candidateId,
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
@@ -232,7 +228,6 @@ describe("Candidate validation", () => {
         });
 
         const result = yield* validateAcceptanceContextCandidate(validation, {
-          changeId: captured.changeId,
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
@@ -275,7 +270,6 @@ describe("Candidate validation", () => {
         });
 
         const result = yield* validateAcceptanceContextCandidate(validation, {
-          changeId: captured.changeId,
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
@@ -391,7 +385,6 @@ describe("Candidate validation", () => {
           reviewerAgentRuntime: { review },
         });
         const result = yield* validateAcceptanceContextCandidate(validation, {
-          changeId: captured.changeId,
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,

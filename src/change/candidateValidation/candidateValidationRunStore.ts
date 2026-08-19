@@ -1,6 +1,6 @@
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
-import type { ChangePolicy } from "../changeStartStore.js";
+import type { ChangePolicy } from "../changePolicy.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";

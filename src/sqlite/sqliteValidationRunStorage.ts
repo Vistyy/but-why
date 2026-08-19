@@ -6,9 +6,9 @@ import type {
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import type { ChangePolicy } from "../change/changePolicy.js";
 import { decodeSqliteChangeChecks } from "../change/changePolicy.js";
 import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
-import type { ChangePolicy } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,

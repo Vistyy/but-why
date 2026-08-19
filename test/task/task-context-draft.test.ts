@@ -44,6 +44,7 @@ const contextFor = (root: string): LocalRepositoryContext => {
       statePath: join(operationalDir, "state.sqlite"),
       reviewersPath: join(butWhyDir, "reviewers"),
       artifactsPath: join(operationalDir, "artifacts"),
+      agentSessionsPath: join(operationalDir, "agent-sessions"),
       snapshotsPath: join(operationalDir, "snapshots"),
       taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
     },

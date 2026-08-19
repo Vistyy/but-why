@@ -125,10 +125,14 @@ describe("Change Submit orchestration", () => {
           dependencies({
             events,
             change: readyChange({
-              reviewerConfiguration: {
-                acceptanceReview: storedAcceptanceReviewer,
-                specialistReviews: [],
-                agentEnvironment: ["nix", "develop", "-c"],
+              policy: {
+                reviewerConfiguration: {
+                  acceptanceReview: storedAcceptanceReviewer,
+                  specialistReviews: [],
+                  agentEnvironment: ["nix", "develop", "-c"],
+                },
+                prepare: null,
+                checks: changeWithoutTaskPolicy.checks,
               },
             }),
             publication: {
@@ -466,7 +470,6 @@ describe("Change Submit orchestration", () => {
         validationRunId: 1,
       });
       expect(seenValidationInput).toMatchObject({
-        changeId: change.id,
         candidateId: 1,
       });
       expect(events).toEqual([
@@ -564,10 +567,9 @@ describe("Change Submit orchestration", () => {
         const submit = openChangeSubmit(dependencies({ events, change }));
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
-          validateAcceptanceContextCandidate: (input) =>
+          validateAcceptanceContextCandidate: () =>
             Effect.sync(() => {
               events.push("validate_change_linked_to_task");
-              expect(input.changeId).toBe(change.id);
               return {
                 ok: true,
                 reused: false,
@@ -1321,7 +1323,6 @@ const dependencies = (input: {
   const pullRequestObservations = [...(input.pullRequestObservations ?? [])];
   let currentTargetSha: string = refreshedBase.commit;
   return {
-    repositoryCommonDirectory: "/repo/.git",
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
@@ -1459,12 +1460,14 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   baseRemoteUrl: "https://github.test/acme/repo.git",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
-  reviewerConfiguration: {
-    acceptanceReview: storedAcceptanceReviewer,
-    specialistReviews: [],
+  policy: {
+    reviewerConfiguration: {
+      acceptanceReview: storedAcceptanceReviewer,
+      specialistReviews: [],
+    },
+    prepare: null,
+    checks: changeWithoutTaskPolicy.checks,
   },
-  prepare: null,
-  checks: changeWithoutTaskPolicy.checks,
   prepareFailure: null,
   implementationDecisions: [],
   activeBlocker: null,

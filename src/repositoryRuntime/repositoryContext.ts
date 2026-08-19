@@ -24,6 +24,7 @@ export type LocalRepositoryPaths = {
   readonly statePath: string;
   readonly reviewersPath: string;
   readonly artifactsPath: string;
+  readonly agentSessionsPath: string;
   readonly snapshotsPath: string;
   readonly taskContextDraftsPath: string;
 };
@@ -134,6 +135,7 @@ const repoLocalPaths = (
     statePath: join(operationalDir, "state.sqlite"),
     reviewersPath: join(butWhyDir, "reviewers"),
     artifactsPath: join(operationalDir, "artifacts"),
+    agentSessionsPath: join(operationalDir, "agent-sessions"),
     snapshotsPath: join(operationalDir, "snapshots"),
     taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
   };

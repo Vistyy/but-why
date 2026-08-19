@@ -108,12 +108,14 @@ export const decodeChangeRow = (
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(
-      decodeStoredString(row.reviewerConfiguration, "Change Reviewer Configuration"),
-    ),
-    prepare,
-    checks:
-      encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
+    policy: {
+      reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(
+        decodeStoredString(row.reviewerConfiguration, "Change Reviewer Configuration"),
+      ),
+      prepare,
+      checks:
+        encodedChecksDefinition === null ? [] : decodeSqliteChangeChecks(encodedChecksDefinition),
+    },
     prepareFailure:
       encodedPrepareFailure === null
         ? null

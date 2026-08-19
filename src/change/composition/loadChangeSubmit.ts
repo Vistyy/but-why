@@ -43,7 +43,6 @@ export type LoadChangeSubmitResult =
 
 export const loadChangeSubmit = (input: {
   readonly cwd: string;
-  readonly globalConfigPath: string;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
 }): LoadChangeSubmitResult => {
   const loaded = openSubmissionRepositoryRuntime(input.cwd);
@@ -65,7 +64,6 @@ export const loadChangeSubmit = (input: {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     return openChangeSubmit({
       github,
-      repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: submission,
       publicationFor: (cwd) =>
@@ -99,7 +97,7 @@ export const loadChangeSubmit = (input: {
       ...(input.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
-      agentSessionsRoot: context.paths.operationalDir,
+      agentSessionsRoot: context.paths.agentSessionsPath,
       agentPersistence,
       getAgentSession: agentSessions.getAgentSession,
       linkAgentInvocation: agentSessions.linkAgentInvocation,

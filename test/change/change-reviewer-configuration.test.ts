@@ -2,12 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import type { ChangeReviewerConfiguration } from "../../src/change/changePolicy.js";
 import {
   decodeSqliteChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
 } from "../../src/change/changeReviewerConfiguration.js";
-import type { ChangeReviewerConfiguration } from "../../src/change/changeStartStore.js";
-import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangePolicy.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { createChange } from "../../src/sqlite/sqliteChangeStartPersistence.js";
@@ -151,11 +151,14 @@ it.scoped("rejects invalid initial reviewer configuration before inserting a Cha
               baseRemoteUrl: "https://example.com/acme/repo.git",
               startingCommit: "head",
               worktreePath: "/tmp/pending",
-              reviewerConfiguration: {
-                acceptanceReview: null,
-                specialistReviews: [specialist("standards"), specialist("standards")],
+              policy: {
+                reviewerConfiguration: {
+                  acceptanceReview: null,
+                  specialistReviews: [specialist("standards"), specialist("standards")],
+                },
+                prepare: null,
+                checks: [],
               },
-              checks: [],
               now: "2026-10-02T10:00:00.000Z",
             },
             repository.idPrefix,

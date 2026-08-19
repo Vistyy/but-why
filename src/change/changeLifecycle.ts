@@ -6,13 +6,14 @@ import {
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
+import type { ChangePolicy } from "./changePolicy.js";
 import type {
   ChangeStartGitOperations,
   ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
-import type { ChangePolicy, ChangeStartRecord } from "./changeStartStore.js";
+import type { ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
@@ -24,7 +25,7 @@ export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | {
       readonly ok: false;
-      readonly code: "reviewer_configuration_invalid";
+      readonly code: "change_policy_invalid";
       readonly message: string;
     }
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
@@ -58,16 +59,14 @@ export const startChange = <CreationFailure extends object = never>(
     if (!policy.ok) {
       return {
         ok: false as const,
-        code: "reviewer_configuration_invalid" as const,
+        code: "change_policy_invalid" as const,
         message: policy.message,
       };
     }
     const created = yield* store.create({
       id: "pending-change-start",
       ...gitIntent.intent,
-      reviewerConfiguration: policy.policy.reviewerConfiguration,
-      ...(policy.policy.prepare === null ? {} : { prepare: policy.policy.prepare }),
-      checks: policy.policy.checks,
+      policy: policy.policy,
       now: input.now,
     });
     if (!("ok" in created)) return created;
@@ -132,7 +131,7 @@ export const prepareExistingChange = (
   now: string,
 ): Effect.Effect<PreparationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const prepare = change.prepare;
+    const prepare = change.policy.prepare;
     if (prepare === null) {
       const recorded = yield* store.recordPrepareOutcome(change.id, null, now);
       return { ok: true as const, change: recorded };

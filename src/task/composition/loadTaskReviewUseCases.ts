@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../agent/adapters/piReviewerProcessExecutor.js";
 import {
@@ -190,7 +189,7 @@ const submitFreshTaskReview = <A, E, R>(
         openTaskReviewUseCases({
           repositoryRoot: context.root,
           repositoryCommonDirectory: context.commonDirectory,
-          agentSessionStorageRoot: join(context.paths.operationalDir, "task-review-sessions"),
+          agentSessionStorageRoot: context.paths.agentSessionsPath,
           loadRepoConfig: (commit) => {
             const source = readRepositoryFileAtCommit(context.root, commit, ".but-why/config.json");
             if (!source.ok)

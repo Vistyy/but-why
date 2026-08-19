@@ -5,13 +5,10 @@ import {
   prepareExistingChange,
   startChange,
 } from "../change/changeLifecycle.js";
+import type { ChangePolicy } from "../change/changePolicy.js";
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type {
-  ChangePolicy,
-  ChangeStartRecord,
-  CreateChangeStartInput,
-} from "../change/changeStartStore.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { RepositoryPreparationEffectExecutor } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";

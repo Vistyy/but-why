@@ -13,8 +13,8 @@ import type {
 
 export type { TerminalCleanupChange } from "./change.js";
 
+import type { ChangePolicy } from "./changePolicy.js";
 import type { ChangeReviewerPolicy } from "./changeReviewerConfiguration.js";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
 import type {
   BeginChangePublicationInput,
   CompleteMergedChangeInput,
@@ -146,9 +146,7 @@ export type SubmissionChange = {
   readonly baseRemoteUrl: string;
   readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration: ChangeReviewerConfiguration;
-  readonly prepare: ChangeRecord["prepare"];
-  readonly checks: ChangeRecord["checks"];
+  readonly policy: ChangePolicy;
   readonly publication: ChangePublication | null;
 };
 

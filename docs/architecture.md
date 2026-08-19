@@ -31,6 +31,7 @@ Repository Runtime provides a scoped database capability rather than an Adapter 
 
 SQLite Adapters implement owner-defined persistence ports and own SQL and transaction mechanics.
 Shared Agent Session execution owns Agent Session dispatch, Agent Continuation resume, Invocation settlement, Pi harness execution, transcript paths, and token evidence for Task Review and Change Validation.
+Repository Runtime supplies one Git Common Directory Agent Session transcript root to both workflows.
 Task Intent and Change Delivery retain separate reviewer policy, prompts, output decoding, Findings, errors, and lifecycle behavior.
 External execution, Git, GitHub, agent runtime, and disposable workspace behavior remain behind their applicable Adapter boundaries.
 

@@ -42,11 +42,7 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
   acceptanceContext: change.acceptanceContext,
-  policy: structuredValue({
-    reviewerConfiguration: change.reviewerConfiguration,
-    prepare: change.prepare,
-    checks: change.checks,
-  }),
+  policy: structuredValue(change.policy),
   ...(change.prepareFailure === null
     ? {}
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),

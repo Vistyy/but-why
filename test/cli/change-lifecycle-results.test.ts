@@ -17,9 +17,11 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
     title: "Accepted title",
     description: "Accepted description",
   },
-  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-  checks: [],
-  prepare: { command: "prepare repository", timeoutSeconds: 17 },
+  policy: {
+    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    prepare: { command: "prepare repository", timeoutSeconds: 17 },
+    checks: [],
+  },
   prepareFailure,
   state: "open",
 });
@@ -45,6 +47,25 @@ describe("Change lifecycle CLI results", () => {
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
         worktreePath: "/repo-worktrees/but-why/by-197-change-1",
+      },
+    });
+  });
+
+  it("identifies complete Change Policy resolution failures", () => {
+    expect(
+      startResult({
+        ok: false,
+        code: "change_policy_invalid",
+        message: "Validation Checks are missing.",
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "change_policy_invalid",
+          message: "Validation Checks are missing.",
+        },
+        help: ["Fix the complete Change Policy inputs, then run Change Start again."],
       },
     });
   });

@@ -747,9 +747,11 @@ const changeStartRecord = (
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
-    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
-    checks: [],
-    prepare: null,
+    policy: {
+      reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+      prepare: null,
+      checks: [],
+    },
     prepareFailure: null,
     state: "open",
   };

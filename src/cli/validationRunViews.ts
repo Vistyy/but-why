@@ -67,7 +67,7 @@ const candidateValidationChangeView = (change: ChangeRecord): StructuredObject =
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   state: change.state,
-  reviewerConfiguration: structuredValue(change.reviewerConfiguration),
+  reviewerConfiguration: structuredValue(change.policy.reviewerConfiguration),
 });
 
 const candidateView = (candidate: CandidateRecord): StructuredObject => ({
