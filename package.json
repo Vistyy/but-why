@@ -11,7 +11,7 @@
     ]
   },
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "pnpm@11.21.0",
   "bin": {
     "by": "./dist/main.js"
   },
@@ -65,13 +65,5 @@
     "tsx": "^4.20.3",
     "typescript": "^7.0.2",
     "vitest": "^3.2.4"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@ast-grep/cli",
-      "@parcel/watcher",
-      "esbuild",
-      "msgpackr-extract"
-    ]
   }
 }

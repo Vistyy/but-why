@@ -5,8 +5,8 @@ Executable recipe descriptions belong to `just --list`.
 
 ## Contributor workflow
 
-Enter the repository through direnv or run `nix develop -c just <recipe>`.
-Run `just init` after entering the locked development environment.
+Use Node.js 24 and the project-declared pnpm 11.21.0.
+Run `just init` before repository workflows.
 Use Just recipes instead of direct package-manager commands for repository workflows.
 
 Use focused recipes while implementing a change or diagnosing a failure.

@@ -103,7 +103,7 @@ Interactive Implementer Sessions use the Herdr pane shell environment and do not
 ```json
 {
   "agentEnvironment": {
-    "command": ["nix", "develop", "-c"]
+    "command": ["pnpm", "exec"]
   }
 }
 ```

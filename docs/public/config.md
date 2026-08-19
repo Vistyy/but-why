@@ -29,7 +29,7 @@ A complete example is:
 {
   "idPrefix": "BY",
   "agentEnvironment": {
-    "command": ["nix", "develop", "-c"]
+    "command": ["pnpm", "exec"]
   },
   "prepare": {
     "command": "pnpm install --frozen-lockfile --prefer-offline",

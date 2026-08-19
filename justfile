@@ -1,4 +1,4 @@
-set positional-arguments := true
+set positional-arguments
 
 # List available commands.
 default:
@@ -10,12 +10,12 @@ init:
     set -euo pipefail
     if [[ "$(node -p 'process.versions.node.split(".")[0]')" != "24" ]]; then
         echo "error: Node.js 24 is required"
-        echo "help: enter the repository through direnv or run nix develop"
+        echo "help: install Node.js 24 and pnpm 11.21.0"
         exit 1
     fi
-    if [[ "$(pnpm --version)" != "10.28.0" ]]; then
-        echo "error: pnpm 10.28.0 is required"
-        echo "help: enter the repository through direnv or run nix develop"
+    if [[ "$(pnpm --version)" != "11.21.0" ]]; then
+        echo "error: pnpm 11.21.0 is required"
+        echo "help: install Node.js 24 and pnpm 11.21.0"
         exit 1
     fi
     pnpm install --frozen-lockfile
