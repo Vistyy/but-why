@@ -8,13 +8,13 @@ import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { TaskDependencyOperation } from "../../../task/taskStore.js";
 import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
+import { dependencyOptionRequiredError } from "../dependencyOptionUsage.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
   taskNotFound,
   withTaskChangeTasks,
 } from "../taskCliSupport.js";
-import { dependencyOptionRequiredError } from "../dependencyOptionUsage.js";
 
 export type TaskDependenciesCommand = {
   readonly operation: TaskDependencyOperation;
