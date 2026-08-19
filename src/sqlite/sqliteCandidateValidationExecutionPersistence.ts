@@ -44,6 +44,7 @@ import { encodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnap
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 import {
   readActiveValidationRunForChange,
+  readValidationExecutionAuthorityById,
   readValidationRunById,
   type StoredValidationRunRow,
   validationRunReadColumns,
@@ -359,8 +360,13 @@ const startOrReuse = (
     if (validationRunId === undefined) {
       return yield* invalidData(operationName, "Validation Run identity was not allocated");
     }
-    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
-    if (run === undefined) {
+    const executionAuthority = yield* readValidationExecutionAuthorityById(
+      sql,
+      validationRunId,
+      operationName,
+      idPrefix,
+    );
+    if (executionAuthority === undefined) {
       return yield* invalidData(operationName, "Validation Run disappeared after creation");
     }
     return {
@@ -368,9 +374,8 @@ const startOrReuse = (
       validationRunId,
       authority: {
         candidate,
-        validationInput: run.validationInput,
-        policy: run.policy,
-        reviewerConfiguration: run.reviewerConfiguration,
+        changePolicy: executionAuthority.changePolicy,
+        validationInput: executionAuthority.run.validationInput,
         implementationDecisions,
         blockerHistory,
         latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),

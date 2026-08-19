@@ -1,6 +1,5 @@
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
@@ -10,7 +9,6 @@ import type { SubmitProgress } from "../../submission/submissionProgress.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ChangeAgentSessionPort } from "../changePorts.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
-import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckPhase.js";
@@ -27,12 +25,6 @@ import type {
   CandidateValidationOutcome,
 } from "./candidateValidationRunStore.js";
 import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
-
-export type CandidateValidationPolicy = {
-  readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly prepare?: SubmitPrepareConfig;
-  readonly checks: readonly SubmitCheckConfig[];
-};
 
 export type ValidateCandidateInput = {
   readonly changeId: string;
@@ -305,25 +297,25 @@ const runCandidatePhases = (
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
-    const policy = authority.policy;
-    const agentEnvironment = policy.agentEnvironment;
+    const changePolicy = authority.changePolicy;
+    const agentEnvironment = changePolicy.reviewerConfiguration.agentEnvironment;
     const resourceRoot = activeWorkspace.worktreePath;
-    const prepare = policy.prepare;
+    const prepare = changePolicy.prepare;
     const acceptanceContext =
-      policy.acceptanceContext === undefined
+      authority.validationInput.acceptanceContext === undefined
         ? undefined
         : {
-            version: policy.acceptanceContext.version,
-            title: policy.acceptanceContext.title,
-            description: policy.acceptanceContext.description,
-            ...(policy.acceptanceContext.comments === undefined
+            version: authority.validationInput.acceptanceContext.version,
+            title: authority.validationInput.acceptanceContext.title,
+            description: authority.validationInput.acceptanceContext.description,
+            ...(authority.validationInput.acceptanceContext.comments === undefined
               ? {}
-              : { comments: [...policy.acceptanceContext.comments] }),
-            ...(policy.acceptanceContext.resolutions === undefined
+              : { comments: [...authority.validationInput.acceptanceContext.comments] }),
+            ...(authority.validationInput.acceptanceContext.resolutions === undefined
               ? {}
-              : { resolutions: [...policy.acceptanceContext.resolutions] }),
+              : { resolutions: [...authority.validationInput.acceptanceContext.resolutions] }),
           };
-    const acceptanceReview = authority.reviewerConfiguration.acceptanceReview;
+    const acceptanceReview = changePolicy.reviewerConfiguration.acceptanceReview;
     const sessionOptions = {
       sessionStorageRoot: dependencies.agentSessionsRoot,
       agentPersistence: dependencies.agentPersistence,
@@ -332,7 +324,7 @@ const runCandidatePhases = (
       settleAgentInvocationResult: dependencies.persistence.settleAgentInvocationResult,
     };
     return yield* runCandidateValidationGate({
-      ...(prepare === undefined
+      ...(prepare === null
         ? {}
         : {
             prepare: () =>
@@ -352,7 +344,7 @@ const runCandidatePhases = (
       checks: () =>
         runCheckPhase({
           validationRunId,
-          checks: policy.checks,
+          checks: changePolicy.checks,
           commandExecutor: activeWorkspace.commandExecutor,
           artifactsRoot: dependencies.artifactsRoot,
           artifactMaxBytes: maxValidationArtifactBytes,
@@ -397,7 +389,7 @@ const runCandidatePhases = (
           validationRunId,
           changeId: authority.candidate.changeId,
           candidate: candidateIdentity(authority),
-          policies: authority.reviewerConfiguration.specialistReviews,
+          policies: changePolicy.reviewerConfiguration.specialistReviews,
           ...(acceptanceContext === undefined ? {} : { acceptanceContext }),
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),

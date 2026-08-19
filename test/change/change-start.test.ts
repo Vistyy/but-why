@@ -87,12 +87,13 @@ const fixture = (options: FixtureOptions = {}) => {
   const executor: RepositoryPreparationEffectExecutor =
     options.execute ?? (() => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }));
   const operations = {
-    start: (input: Parameters<typeof startChange>[3]) =>
-      startChange(store, git, executor, { policy, ...input }),
-    startWithPolicyResolver: (
-      resolvePolicy: NonNullable<Parameters<typeof startChange>[3]["resolvePolicy"]>,
-    ) => startChange(store, git, executor, { now, resolvePolicy }),
-    startWithoutPolicy: () => startChange(store, git, executor, { now }),
+    start: (input: Omit<Parameters<typeof startChange>[3], "resolvePolicy">) =>
+      startChange(store, git, executor, {
+        ...input,
+        resolvePolicy: () => Effect.succeed({ ok: true as const, policy }),
+      }),
+    startWithPolicyResolver: (resolvePolicy: Parameters<typeof startChange>[3]["resolvePolicy"]) =>
+      startChange(store, git, executor, { now, resolvePolicy }),
     prepare: (changeId: string, preparedAt: string) =>
       prepareChange(store, git, executor, changeId, preparedAt),
   };
@@ -114,18 +115,6 @@ describe("Change Start orchestration", () => {
         "provisionWorktree:create",
         expect.stringMatching(/^recordPrepareOutcome:/u),
       ]);
-    }),
-  );
-
-  it.effect("requires complete policy before creating a new Change", () =>
-    Effect.gen(function* () {
-      const captured = fixture();
-      expect(yield* captured.operations.startWithoutPolicy()).toEqual({
-        ok: false,
-        code: "reviewer_configuration_invalid",
-        message: "A complete Change policy is required to create a Change.",
-      });
-      expect(captured.events).toEqual([]);
     }),
   );
 

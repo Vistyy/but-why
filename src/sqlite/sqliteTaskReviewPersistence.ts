@@ -308,7 +308,7 @@ export const admitTaskReview = (
   sql: SqlClient.SqlClient,
   input: AdmitTaskReviewInput,
   idPrefix: string,
-  repositoryRoot: string,
+  repositoryCommonDirectory: string,
   linkedChangeId?: string,
 ): Effect.Effect<AdmitTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
@@ -369,7 +369,7 @@ export const admitTaskReview = (
     `;
     const reviewId = inserted[0]?.id;
     if (reviewId === undefined) return yield* invalid("admit Task Review", "Review ID is missing");
-    const stored = yield* getReview(sql, reviewId, idPrefix, repositoryRoot);
+    const stored = yield* getReview(sql, reviewId, idPrefix, repositoryCommonDirectory);
     if (stored === undefined) return yield* invalid("admit Task Review", "Review disappeared");
     return {
       ok: true as const,
@@ -385,7 +385,7 @@ const reuseTaskReviewJudgment = (
   taskId: string,
   _now: string,
   idPrefix: string,
-  repositoryRoot: string,
+  repositoryCommonDirectory: string,
 ) =>
   Effect.gen(function* () {
     const tasks = yield* sql<{
@@ -414,7 +414,7 @@ const reuseTaskReviewJudgment = (
         continue;
       }
       if (row.outcome !== "passed") return undefined;
-      const review = yield* decodeReview(sql, row, idPrefix, repositoryRoot);
+      const review = yield* decodeReview(sql, row, idPrefix, repositoryCommonDirectory);
       const judgment = completedTaskReviewResult(review, "new");
       if (judgment === undefined || judgment.outcome !== "passed") {
         return yield* invalid("reuse Task Review judgment", "Judgment facts are inconsistent");
@@ -434,7 +434,7 @@ const completeReview = (
   findings: readonly TaskReviewFinding[],
   toolingFailure: TaskReviewToolingFailure | undefined,
   idPrefix: string,
-  repositoryRoot: string,
+  repositoryCommonDirectory: string,
   authority: "agent_settlement" | "tooling_failure",
 ) =>
   Effect.gen(function* () {
@@ -442,7 +442,7 @@ const completeReview = (
       toolingFailure === undefined
         ? undefined
         : yield* decodeTaskReviewToolingFailureEffect("complete Task Review", toolingFailure);
-    const current = yield* getReview(sql, reviewId, idPrefix, repositoryRoot);
+    const current = yield* getReview(sql, reviewId, idPrefix, repositoryCommonDirectory);
     if (current === undefined) {
       return { ok: false as const, code: "task_review_not_found" as const };
     }
@@ -489,7 +489,7 @@ const completeReview = (
         tooling_failure = ${failure === undefined ? null : JSON.stringify(failure)}
       WHERE id = ${reviewId} AND outcome IS NULL
     `;
-    const completed = yield* getReview(sql, reviewId, idPrefix, repositoryRoot);
+    const completed = yield* getReview(sql, reviewId, idPrefix, repositoryCommonDirectory);
     if (completed === undefined)
       return yield* invalid("complete Task Review", "Review disappeared");
     const result = completedTaskReviewResult(
@@ -565,7 +565,7 @@ const getReview = (
   sql: SqlClient.SqlClient,
   reviewId: number,
   idPrefix: string,
-  repositoryRoot: string,
+  repositoryCommonDirectory: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<ReviewRow>(
@@ -574,14 +574,14 @@ const getReview = (
     );
     return rows[0] === undefined
       ? undefined
-      : yield* decodeReview(sql, rows[0], idPrefix, repositoryRoot);
+      : yield* decodeReview(sql, rows[0], idPrefix, repositoryCommonDirectory);
   });
 
 const decodeReview = (
   sql: SqlClient.SqlClient,
   row: ReviewRow,
   idPrefix: string,
-  repositoryRoot: string,
+  repositoryCommonDirectory: string,
 ) =>
   Effect.gen(function* () {
     const task = yield* sql<{
@@ -640,7 +640,7 @@ const decodeReview = (
           dependencyEvidence: parseDependencies(row.dependencyEvidence),
           baseRef: row.baseRef,
           baseCommit: row.baseCommit,
-          workspacePath: expectedTaskReviewWorkspacePath(repositoryRoot, row.id),
+          workspacePath: expectedTaskReviewWorkspacePath(repositoryCommonDirectory, row.id),
           state: row.outcome === null ? "running" : "complete",
           outcome: parseReviewOutcome(row.outcome),
           workspaceCleanup: cleanupPending

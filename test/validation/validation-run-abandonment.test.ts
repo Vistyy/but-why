@@ -17,8 +17,6 @@ const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
   candidateId: 1,
   validationInput: {},
-  policy: { checks: [] },
-  reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
   implementationDecisions: [],
   state: "running",
   outcome: null,

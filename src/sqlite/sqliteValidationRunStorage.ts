@@ -8,6 +8,7 @@ import type {
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { decodeSqliteChangeChecks } from "../change/changePolicy.js";
 import { decodeSqliteChangeReviewerConfiguration } from "../change/changeReviewerConfiguration.js";
+import type { ChangePolicy } from "../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
@@ -51,8 +52,6 @@ type DecodedValidationRun = {
 const decodeValidationRunRow = (
   row: StoredValidationRunRow,
   validationInput: CandidateValidationRunRecord["validationInput"],
-  policy: CandidateValidationRunRecord["policy"],
-  reviewerConfiguration: CandidateValidationRunRecord["reviewerConfiguration"],
   implementationDecisions: CandidateValidationRunRecord["implementationDecisions"],
 ): DecodedValidationRun => {
   if (
@@ -77,8 +76,6 @@ const decodeValidationRunRow = (
       id: row.id,
       candidateId: row.candidateId,
       validationInput,
-      policy,
-      reviewerConfiguration,
       implementationDecisions,
       state: row.outcome === null ? "running" : "complete",
       outcome: row.outcome,
@@ -133,16 +130,8 @@ export const readValidationRunById = (
         "Validation Run includes an unresolved Implementation Blocker",
       );
     }
-    const changeRows = yield* sql<{
-      readonly acceptanceContext: string | null;
-      readonly reviewerConfiguration: string;
-      readonly prepareDefinition: string | null;
-      readonly checksDefinition: string | null;
-    }>`
-      SELECT initial_acceptance_context AS acceptanceContext,
-        reviewer_configuration AS reviewerConfiguration,
-        prepare_definition AS prepareDefinition,
-        checks_definition AS checksDefinition
+    const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+      SELECT initial_acceptance_context AS acceptanceContext
       FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
     `;
     return yield* decodePersisted(operationName, () => {
@@ -164,25 +153,47 @@ export const readValidationRunById = (
       ) {
         throw new Error("Validation Run Acceptance Context does not match its Change authority");
       }
-      const reviewerConfiguration = decodeSqliteChangeReviewerConfiguration(
-        change.reviewerConfiguration,
-      );
-      const prepare =
-        change.prepareDefinition === null
-          ? undefined
-          : decodePrepareDefinition(change.prepareDefinition);
-      const checks =
-        change.checksDefinition === null ? [] : decodeSqliteChangeChecks(change.checksDefinition);
-      const policy = {
-        ...validationInput,
-        ...(reviewerConfiguration.agentEnvironment === undefined
-          ? {}
-          : { agentEnvironment: reviewerConfiguration.agentEnvironment }),
-        ...(prepare === undefined ? {} : { prepare }),
-        checks,
-      };
-      return decodeValidationRunRow(row, validationInput, policy, reviewerConfiguration, decisions)
-        .record;
+      return decodeValidationRunRow(row, validationInput, decisions).record;
+    });
+  });
+
+type ValidationExecutionAuthority = {
+  readonly run: CandidateValidationRunRecord;
+  readonly changePolicy: ChangePolicy;
+};
+
+export const readValidationExecutionAuthorityById = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    if (run === undefined) return undefined;
+    const rows = yield* sql<{
+      readonly reviewerConfiguration: string;
+      readonly prepareDefinition: string | null;
+      readonly checksDefinition: string | null;
+    }>`
+      SELECT change_row.reviewer_configuration AS reviewerConfiguration,
+        change_row.prepare_definition AS prepareDefinition,
+        change_row.checks_definition AS checksDefinition
+      FROM validation_runs AS validation_run
+      JOIN candidates AS candidate ON candidate.id = validation_run.candidate_id
+      JOIN changes AS change_row ON change_row.id = candidate.change_id
+      WHERE validation_run.id = ${validationRunId}
+    `;
+    return yield* decodePersisted(operationName, () => {
+      const row = rows[0];
+      if (row === undefined) throw new Error("Validation Run owning Change was not selected");
+      const changePolicy = {
+        reviewerConfiguration: decodeSqliteChangeReviewerConfiguration(row.reviewerConfiguration),
+        prepare:
+          row.prepareDefinition === null ? null : decodePrepareDefinition(row.prepareDefinition),
+        checks: row.checksDefinition === null ? [] : decodeSqliteChangeChecks(row.checksDefinition),
+      } satisfies ChangePolicy;
+      return { run, changePolicy } satisfies ValidationExecutionAuthority;
     });
   });
 

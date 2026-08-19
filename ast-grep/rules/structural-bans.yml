@@ -95,8 +95,6 @@ files:
 ignores:
   # This serialization transform establishes exactly the StructuredValue representation.
   - src/output/structuredValue.ts
-  # This immutable migration validates its assigned unknown value before canonicalizing the historical artifact.
-  - src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts
 rule:
   all:
     - pattern: JSON.parse($$$ARGS)

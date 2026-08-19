@@ -138,6 +138,41 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
     expect(methods).toEqual(["ping", "agent.prompt"]);
   });
 
+  it("classifies a mismatched prompt response ID as unknown and does not retry", async () => {
+    const methods: string[] = [];
+    const socketPath = await listen((request, socket) => {
+      const envelope = request as { readonly id: string; readonly method: string };
+      methods.push(envelope.method);
+      socket.end(
+        `${JSON.stringify(
+          envelope.method === "ping"
+            ? {
+                id: envelope.id,
+                result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+              }
+            : {
+                id: "another-request",
+                result: { type: "agent_prompted", agent: agentInfo() },
+              },
+        )}\n`,
+      );
+    });
+
+    await expect(
+      sendHerdrAgentPrompt({
+        socketPath,
+        target: "by-c262",
+        text: "Transmit once.",
+        timeoutMs: 5_000,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      transmission: "unknown",
+      message: "Herdr returned a malformed or mismatched agent_prompted response.",
+    });
+    expect(methods).toEqual(["ping", "agent.prompt"]);
+  });
+
   it("classifies a post-transmission timeout as unknown", async () => {
     const methods: string[] = [];
     const socketPath = await listen((request, socket) => {

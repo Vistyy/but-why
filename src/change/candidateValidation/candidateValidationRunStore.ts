@@ -1,6 +1,6 @@
 import type { AgentInvocationRecord } from "../../agent/agentSession/agentSession.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
-import type { ChangeReviewerConfiguration } from "../changeStartStore.js";
+import type { ChangePolicy } from "../changeStartStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
@@ -9,7 +9,6 @@ import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
-import type { CandidateValidationPolicy } from "./validateCandidate.js";
 import type { ValidationInputSnapshot } from "./validationInputSnapshot.js";
 
 export type CandidateValidationOutcome = "passed" | "blocked" | "tooling_failed";
@@ -45,9 +44,8 @@ export type StartCandidateValidationRunInput = {
 
 export type CandidateValidationAuthority = {
   readonly candidate: CandidateRecord;
+  readonly changePolicy: ChangePolicy;
   readonly validationInput: ValidationInputSnapshot;
-  readonly policy: CandidateValidationPolicy & ValidationInputSnapshot;
-  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory: ImplementationBlockerHistory;
   readonly latestResolvedBlockerId: number | null;
@@ -120,8 +118,6 @@ export type CandidateValidationRunRecord = {
   readonly id: number;
   readonly candidateId: number;
   readonly validationInput: ValidationInputSnapshot;
-  readonly policy: CandidateValidationPolicy & ValidationInputSnapshot;
-  readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";
   readonly outcome: CandidateValidationOutcome | null;

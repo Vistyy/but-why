@@ -154,6 +154,94 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
   ),
 );
 
+it.scoped("attributes Task Reviewer configuration only to the latest invoked Review", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const agents = yield* openSqliteAgentSessionPersistence();
+      const taskId = publicTaskId("BY-1");
+      const configuration = { harness: "pi" as const, model: "test-model" };
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+
+      const older = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!older.ok) throw new Error(older.code);
+      const olderInvocation = yield* agents.beginInvocation({
+        configuration,
+        createdAt: now,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId,
+          reviewId: older.review.id,
+          admittedPolicy: older.policy,
+        }),
+      });
+      if (!olderInvocation.ok) throw new Error(olderInvocation.code);
+      yield* agents.settleInvocation({
+        invocationId: olderInvocation.dispatch.invocation.id,
+        continuationId: olderInvocation.dispatch.continuation.id,
+        settlement: { settledAt: later, kind: "launch_failed" },
+      });
+      yield* reviews.recordCleanup(older.review.id, "removed", later);
+      yield* reviews.complete({
+        reviewId: older.review.id,
+        findings: [],
+        toolingFailure: { operation: "run_task_reviewer", message: "Older review failed." },
+        now: later,
+      });
+
+      const withoutInvocation = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "b".repeat(40),
+        now: later,
+      });
+      if (!withoutInvocation.ok) throw new Error(withoutInvocation.code);
+      yield* reviews.recordCleanup(withoutInvocation.review.id, "removed", later);
+      yield* reviews.complete({
+        reviewId: withoutInvocation.review.id,
+        findings: [],
+        toolingFailure: { operation: "run_task_reviewer", message: "No Invocation was created." },
+        now: later,
+      });
+
+      const newest = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "c".repeat(40),
+        now: later,
+      });
+      if (!newest.ok) throw new Error(newest.code);
+      const newestInvocation = yield* agents.beginInvocation({
+        agentSessionId: olderInvocation.dispatch.agentSessionId,
+        configuration,
+        createdAt: later,
+        linkInvocation: reviews.linkAgentInvocation({
+          taskId,
+          reviewId: newest.review.id,
+          admittedPolicy: newest.policy,
+        }),
+      });
+      if (!newestInvocation.ok) throw new Error(newestInvocation.code);
+
+      expect(yield* reviews.getById(withoutInvocation.review.id)).not.toHaveProperty(
+        "reviewerConfiguration",
+      );
+      expect(yield* reviews.getById(older.review.id)).not.toHaveProperty("reviewerConfiguration");
+      expect(yield* reviews.getById(newest.review.id)).toMatchObject({
+        reviewerConfiguration: policy,
+      });
+    }),
+  ),
+);
+
 it.effect("abandons a Task Review through workspace and Agent Session recovery", () => {
   const root = createGitRepo();
   runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], { cwd: root });

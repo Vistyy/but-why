@@ -12,7 +12,6 @@ import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { CandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
@@ -271,10 +270,7 @@ type AcceptanceReadyRepo = {
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
 };
 
-type AcceptanceReviewTestPolicy = CandidateValidationPolicy & {
-  readonly acceptanceReview: typeof acceptancePolicy;
-  readonly specialistReviews: readonly unknown[];
-};
+type AcceptanceReviewTestPolicy = typeof passingValidationPolicy;
 
 const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,

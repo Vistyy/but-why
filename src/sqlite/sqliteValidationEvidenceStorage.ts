@@ -17,7 +17,7 @@ import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
-import { readValidationRunById } from "./sqliteValidationRunStorage.js";
+import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type StoredPhaseResultRow = {
   readonly validationRunId: number;
@@ -100,7 +100,7 @@ export const listValidationAgentInvocations = (
       ORDER BY invocation.id
     `;
     if (rows.length === 0) return [];
-    const run = yield* requireRun(
+    const authority = yield* requireValidationExecutionAuthority(
       sql,
       validationRunId,
       "list Candidate Agent Invocations",
@@ -108,7 +108,7 @@ export const listValidationAgentInvocations = (
     );
     return yield* decodePersisted("list Candidate Agent Invocations", () =>
       rows.map((row) => {
-        configuredValidationPosition(row.phase, row.producer, run);
+        configuredValidationPosition(row.phase, row.producer, authority.changePolicy);
         return {
           ...decodeAgentInvocation(row),
           phase: decodeValidationPhase(row.phase),
@@ -219,13 +219,22 @@ const readOrderedPhaseResults = (
       WHERE validation_run_id = ${validationRunId}
     `;
     if (rows.length === 0) return rows;
-    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
+    const authority = yield* requireValidationExecutionAuthority(
+      sql,
+      validationRunId,
+      operationName,
+      idPrefix,
+    );
     return yield* decodePersisted(operationName, () =>
       rows
         .map((row) => ({
           row,
           phasePosition: phasePosition(row.phase),
-          producerPosition: configuredValidationPosition(row.phase, row.producer, run),
+          producerPosition: configuredValidationPosition(
+            row.phase,
+            row.producer,
+            authority.changePolicy,
+          ),
         }))
         .sort(
           (left, right) =>
@@ -335,16 +344,18 @@ const phasePosition = (phase: string): number => {
   }
 };
 
-const requireRun = (
+const requireValidationExecutionAuthority = (
   sql: SqlClient.SqlClient,
   validationRunId: number,
   operationName: string,
   idPrefix: string,
 ) =>
-  Effect.flatMap(readValidationRunById(sql, validationRunId, operationName, idPrefix), (run) =>
-    run === undefined
-      ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
-      : Effect.succeed(run),
+  Effect.flatMap(
+    readValidationExecutionAuthorityById(sql, validationRunId, operationName, idPrefix),
+    (authority) =>
+      authority === undefined
+        ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
+        : Effect.succeed(authority),
   );
 
 const decodePhase = decodeValidationPhase;

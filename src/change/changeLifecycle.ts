@@ -42,8 +42,7 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly policy?: ChangePolicy;
-    readonly resolvePolicy?: (
+    readonly resolvePolicy: (
       startingCommit: string,
     ) => Effect.Effect<
       | { readonly ok: true; readonly policy: ChangePolicy }
@@ -53,28 +52,14 @@ export const startChange = <CreationFailure extends object = never>(
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (input.policy === undefined && input.resolvePolicy === undefined) {
-      return {
-        ok: false as const,
-        code: "reviewer_configuration_invalid" as const,
-        message: "A complete Change policy is required to create a Change.",
-      };
-    }
-
     const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
-    const resolvePolicy = input.resolvePolicy;
-    const policy =
-      input.policy !== undefined
-        ? { ok: true as const, policy: input.policy }
-        : resolvePolicy === undefined
-          ? undefined
-          : yield* resolvePolicy(gitIntent.intent.startingCommit);
-    if (policy === undefined || !policy.ok) {
+    const policy = yield* input.resolvePolicy(gitIntent.intent.startingCommit);
+    if (!policy.ok) {
       return {
         ok: false as const,
         code: "reviewer_configuration_invalid" as const,
-        message: policy?.message ?? "A complete Change policy is required to create a Change.",
+        message: policy.message,
       };
     }
     const created = yield* store.create({

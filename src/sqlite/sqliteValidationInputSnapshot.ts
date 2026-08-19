@@ -5,16 +5,18 @@ import {
   validationInputSnapshotSchema,
 } from "../change/candidateValidation/validationInputSnapshot.js";
 
-export const encodeSqliteValidationInputSnapshot = (policy: ValidationInputSnapshot): string => {
-  const json = JSON.stringify(policy);
-  decodePolicySnapshot(json);
+export const encodeSqliteValidationInputSnapshot = (
+  validationInput: ValidationInputSnapshot,
+): string => {
+  const json = JSON.stringify(validationInput);
+  decodeValidationInputSnapshot(json);
   return json;
 };
 
-const decodePolicySnapshot = Schema.decodeUnknownSync(
+const decodeValidationInputSnapshot = Schema.decodeUnknownSync(
   Schema.parseJson(validationInputSnapshotSchema),
   { onExcessProperty: "error" },
 );
 
 export const decodeSqliteValidationInputSnapshot = (value: string): ValidationInputSnapshot =>
-  decodePolicySnapshot(value);
+  decodeValidationInputSnapshot(value);

@@ -69,7 +69,7 @@ const captureCandidate = (repositoryCommonDirectory: string) =>
   });
 
 describe("SQLite Validation Input Snapshot", () => {
-  it.scoped("stores only run input and derives runtime policy from the owning Change", () =>
+  it.scoped("separates run input from the owning Change Policy", () =>
     withTemporaryRepositoryState((input) =>
       Effect.gen(function* () {
         yield* createCandidateOwningChange();
@@ -85,14 +85,18 @@ describe("SQLite Validation Input Snapshot", () => {
           throw new Error("Expected a new Validation Run");
         }
 
-        const stored = yield* validation.reads.getRunById(started.validationRunId);
-        expect(stored?.validationInput).toEqual({ acceptanceContext });
-        expect(stored?.policy).toEqual({
-          acceptanceContext,
-          agentEnvironment: reviewerConfiguration.agentEnvironment,
+        expect(started.authority.changePolicy).toEqual({
+          reviewerConfiguration,
           prepare,
           checks,
         });
+        expect(started.authority.validationInput).toEqual({ acceptanceContext });
+
+        const stored = yield* validation.reads.getRunById(started.validationRunId);
+        expect(stored).toMatchObject({ validationInput: { acceptanceContext } });
+        expect(stored).not.toHaveProperty("changePolicy");
+        expect(stored).not.toHaveProperty("policy");
+        expect(stored).not.toHaveProperty("reviewerConfiguration");
 
         const repository = yield* RepositorySql;
         const rows = yield* repository.operation(

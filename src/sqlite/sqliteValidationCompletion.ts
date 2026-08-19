@@ -2,6 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import type { CandidateValidationOutcome } from "../change/candidateValidation/candidateValidationRunStore.js";
+import type { ChangePolicy } from "../change/changeStartStore.js";
 import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
@@ -11,7 +12,7 @@ import {
   listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
-import { readValidationRunById } from "./sqliteValidationRunStorage.js";
+import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
 type PhaseResultEvidenceRow = {
   readonly phase: string;
@@ -43,8 +44,13 @@ export const requireCoherentValidationCompletion = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
-    if (run === undefined) {
+    const authority = yield* readValidationExecutionAuthorityById(
+      sql,
+      validationRunId,
+      operationName,
+      idPrefix,
+    );
+    if (authority === undefined) {
       return yield* invalid(operationName, "Validation Run does not exist");
     }
     const results = yield* listValidationPhaseResults(sql, validationRunId, idPrefix);
@@ -79,7 +85,7 @@ export const requireCoherentValidationCompletion = (
     const runToolingFailure = runRows[0]?.toolingFailure ?? null;
 
     yield* decodePersisted(operationName, () => {
-      const expected = expectedPhases(run.policy, run.reviewerConfiguration);
+      const expected = expectedPhases(authority.changePolicy);
       const resultByPosition = new Map(
         results.map((result) => [positionKey(result.phase, result.producer), result]),
       );
@@ -245,31 +251,29 @@ const isPreDispatchReviewerIntegrityFailure = (
   );
 };
 
-const expectedPhases = (
-  policy: {
-    readonly prepare?: unknown;
-    readonly checks: readonly { readonly id: string }[];
-  },
-  reviewerConfiguration: {
-    readonly acceptanceReview: unknown | null;
-    readonly specialistReviews: readonly { readonly id: string }[];
-  },
-): readonly ExpectedPhase[] => [
-  ...(policy.prepare === undefined
+const expectedPhases = (changePolicy: ChangePolicy): readonly ExpectedPhase[] => [
+  ...(changePolicy.prepare === null
     ? []
     : [{ phase: validationPhase.prepare, producers: ["prepare"] }]),
-  ...(policy.checks.length === 0
+  ...(changePolicy.checks.length === 0
     ? []
-    : [{ phase: validationPhase.checks, producers: policy.checks.map((check) => check.id) }]),
-  ...(reviewerConfiguration.acceptanceReview === null
+    : [
+        {
+          phase: validationPhase.checks,
+          producers: changePolicy.checks.map((check) => check.id),
+        },
+      ]),
+  ...(changePolicy.reviewerConfiguration.acceptanceReview === null
     ? []
     : [{ phase: validationPhase.acceptanceReview, producers: ["acceptance"] }]),
-  ...(reviewerConfiguration.specialistReviews.length === 0
+  ...(changePolicy.reviewerConfiguration.specialistReviews.length === 0
     ? []
     : [
         {
           phase: validationPhase.specialistReview,
-          producers: reviewerConfiguration.specialistReviews.map((review) => review.id),
+          producers: changePolicy.reviewerConfiguration.specialistReviews.map(
+            (review) => review.id,
+          ),
         },
       ]),
 ];

@@ -120,35 +120,58 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("keeps prompts over 128 KiB out of argv without changing their text", () =>
+  it.effect("preserves prompts over 128 KiB across a real fake Pi process boundary", () =>
     Effect.gen(function* () {
+      const root = mkdtempSync(join(tmpdir(), "but-why-fake-pi-boundary-"));
+      const workspace = join(root, "workspace");
+      const fakePi = join(root, "fake-pi.cjs");
+      const capturePath = join(root, "capture.json");
       const largeSystemPrompt = `system:${"s".repeat(170_000)}`;
       const largeUserPrompt = `user:${"u".repeat(170_000)}`;
-      let observedSystemPrompt = "";
-      let observedUserPrompt = "";
-      let observedArgs: readonly string[] = [];
-      const executor = createPiReviewerProcessExecutor((command) => {
-        observedArgs = command.args ?? [];
-        const promptFlag = observedArgs.indexOf("--append-system-prompt");
-        observedSystemPrompt = readFileSync(observedArgs[promptFlag + 1] ?? "", "utf8");
-        observedUserPrompt = command.stdin ?? "";
-        return Effect.succeed({
-          exitCode: 0,
-          stderr: "",
-          stdout: `${messageEvent('<reviewer-output>{"findings":[]}</reviewer-output>')}\n`,
+      mkdirSync(workspace);
+      writeFileSync(
+        fakePi,
+        [
+          'const { readFileSync, writeFileSync } = require("node:fs");',
+          `const capturePath = ${JSON.stringify(capturePath)};`,
+          "const args = process.argv.slice(2);",
+          'const promptIndex = args.indexOf("--append-system-prompt");',
+          "let stdin = '';",
+          'process.stdin.setEncoding("utf8");',
+          'process.stdin.on("data", (chunk) => { stdin += chunk; });',
+          'process.stdin.on("end", () => {',
+          "  const systemPromptPath = args[promptIndex + 1];",
+          "  writeFileSync(capturePath, JSON.stringify({ args, systemPromptPath, systemPrompt: readFileSync(systemPromptPath, 'utf8'), stdin }));",
+          `  process.stdout.write(${JSON.stringify(`${messageEvent('<reviewer-output>{"findings":[]}</reviewer-output>')}\n`)});`,
+          "});",
+          "",
+        ].join("\n"),
+      );
+
+      try {
+        yield* createPiReviewerProcessExecutor().execute({
+          ...input,
+          commandCwd: workspace,
+          systemPrompt: largeSystemPrompt,
+          prompt: largeUserPrompt,
+          agentEnvironment: [process.execPath, fakePi],
         });
-      });
 
-      yield* executor.execute({
-        ...input,
-        systemPrompt: largeSystemPrompt,
-        prompt: largeUserPrompt,
-      });
-
-      expect(observedSystemPrompt).toBe(largeSystemPrompt);
-      expect(observedUserPrompt).toBe(largeUserPrompt);
-      expect(observedArgs).not.toContain(largeSystemPrompt);
-      expect(observedArgs).not.toContain(largeUserPrompt);
+        const observed = JSON.parse(readFileSync(capturePath, "utf8")) as {
+          readonly args: readonly string[];
+          readonly systemPromptPath: string;
+          readonly systemPrompt: string;
+          readonly stdin: string;
+        };
+        expect(observed.args[0]).toBe("pi");
+        expect(observed.systemPrompt).toBe(largeSystemPrompt);
+        expect(observed.stdin).toBe(largeUserPrompt);
+        expect(observed.args).not.toContain(largeSystemPrompt);
+        expect(observed.args).not.toContain(largeUserPrompt);
+        expect(existsSync(observed.systemPromptPath)).toBe(false);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     }),
   );
 

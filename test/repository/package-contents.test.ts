@@ -8,16 +8,16 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { createGitRepo, repoRoot } from "../support/by-cli.js";
+import { commitButWhyConfigAndRecordDefault, createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -342,6 +342,37 @@ describe("release package boundary", () => {
           }),
         ),
       ),
+    );
+  });
+
+  it("uses a linked invoking worktree through the installed executable", () => {
+    const repositoryRoot = createGitRepo();
+    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+    commitButWhyConfigAndRecordDefault(repositoryRoot);
+
+    const linkedWorktree = join(
+      dirname(repositoryRoot),
+      `${basename(repositoryRoot)}-installed-linked-caller`,
+    );
+    runTestProcessOrThrow(
+      "git",
+      ["worktree", "add", "-b", "installed-linked-caller", linkedWorktree, "main"],
+      { cwd: repositoryRoot },
+    );
+    const started = runTestProcess(bin, ["change", "start"], {
+      cwd: linkedWorktree,
+      timeout: packageProcessTimeoutMs,
+    });
+
+    expect(started.status, started.stderr || started.stdout).toBe(0);
+    const result = JSON.parse(started.stdout) as { readonly worktreePath: string };
+    expect(dirname(dirname(result.worktreePath))).toBe(
+      join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
     );
   });
 
