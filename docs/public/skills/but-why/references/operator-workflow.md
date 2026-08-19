@@ -78,7 +78,7 @@ For a direct edit, implement only the authorized work in the current repository 
 A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.
 
 For a Change linked to a Task, confirm that the selected Task is approved and start or resume its Change with `<but-why> change start --task <task-id>`.
-Then start or verify a fresh Implementer Interactive Session.
+Then start or verify the Change's Implementer Interactive Session.
 
 For a Change without a Task, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a fresh Implementer Interactive Session.
 

@@ -213,7 +213,9 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
 Task Recording Authorization and Task Submission do not grant it.
 It applies to Changes linked to a Task, Changes without a Task, and direct edits.
-For a Change linked to a Task, Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
+For a Change linked to a Task, Implementation Authorization requires starting or verifying its Implementer Interactive Session.
+Change Implement reuses the matching named agent when it is already active or Done.
+A Done agent receives a new initial handoff, while an active agent receives no repeated handoff.
 For a Change without a Task, implementation remains in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
 _Avoid_: Task Submission, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
