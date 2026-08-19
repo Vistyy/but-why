@@ -57,6 +57,7 @@ export type TaskReviewSubmitResult =
   | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: number }
   | { readonly ok: false; readonly code: "review_base_unavailable"; readonly message: string }
   | { readonly ok: false; readonly code: "task_review_config_invalid"; readonly message: string }
+  | { readonly ok: false; readonly code: "task_review_not_found" }
   | {
       readonly ok: false;
       readonly code: "task_review_recovery_required";
@@ -407,7 +408,7 @@ const submitTaskReview = (
         });
         if (!completed.ok) {
           const active = yield* input.persistence.getById(reviewId);
-          if (active === undefined) return { ok: false, code: "task_review_not_found" } as never;
+          if (active === undefined) return { ok: false, code: "task_review_not_found" } as const;
           return { ok: false, code: "task_review_recovery_required", review: active } as const;
         }
         return completed;

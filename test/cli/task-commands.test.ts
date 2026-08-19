@@ -260,6 +260,37 @@ describe("Task command Adapters", () => {
     }),
   );
 
+  it.effect("maps a missing Task Review with bounded retry guidance", () =>
+    Effect.gen(function* () {
+      const result = yield* runTaskSubmitCommand(
+        { taskId: "BY-1" },
+        {
+          ...environment(fakeTaskUseCases()),
+          taskReviewSubmissionUseCases: {
+            submit: () =>
+              Effect.succeed({ ok: false as const, code: "task_review_not_found" as const }),
+          },
+        },
+      );
+
+      expect(result).toEqual({
+        exitCode: 1,
+        stdout: {
+          error: {
+            code: "task_review_not_found",
+            message: "Task Review was not found while completing Task Submission.",
+            taskId: "BY-1",
+          },
+          help: [
+            "Run `by task reviews BY-1` to inspect Review history.",
+            "Run `by task show BY-1` to inspect the current Task state.",
+            "Retry `by task submit BY-1` only if the Task is still New and has no Active Review.",
+          ],
+        },
+      });
+    }),
+  );
+
   it.effect("maps Task List selectors and bounded result navigation", () =>
     Effect.gen(function* () {
       const inputs: Array<{
