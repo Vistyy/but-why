@@ -323,6 +323,27 @@ describe("release package boundary", () => {
     }
   });
 
+  it("rejects the retired Shared Repository State Snapshot command through the installed executable", () => {
+    const repositoryRoot = createGitRepo();
+    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const result = runTestProcess(bin, ["snapshot"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "invalid_usage",
+        message:
+          "Invalid subcommand for by - use one of 'init', 'task', 'task-review', 'change', 'validation-run'",
+      },
+      help: ["Run `by --help` for generated command help."],
+    });
+  });
+
   it.effect("initializes the release baseline through the installed executable", () => {
     const repositoryRoot = createGitRepo();
     const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
