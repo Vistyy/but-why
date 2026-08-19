@@ -1,12 +1,15 @@
 import {
   chmodSync,
+  mkdtempSync,
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 import { Effect } from "effect";
 import {
@@ -51,16 +54,27 @@ const executePiReviewerProcess = (
       });
     }
 
-    const invocation = yield* Effect.try({
-      try: () => commandInvocation(input),
-      catch: (error) => reviewerProcessExecutionFailed(error),
-    });
-    const commandResult = yield* executeCommand({
-      command: invocation.command,
-      args: invocation.args,
-      cwd: input.commandCwd,
-      stdin: input.prompt,
-    }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
+    const commandResult = yield* Effect.acquireUseRelease(
+      Effect.try({
+        try: () => stageSystemPrompt(input.systemPrompt),
+        catch: (error) => reviewerProcessExecutionFailed(error),
+      }),
+      (stagedPrompt) =>
+        Effect.gen(function* () {
+          const invocation = yield* Effect.try({
+            try: () => commandInvocation(input, stagedPrompt.path),
+            catch: (error) => reviewerProcessExecutionFailed(error),
+          });
+          return yield* executeCommand({
+            command: invocation.command,
+            args: invocation.args,
+            cwd: input.commandCwd,
+            stdin: input.prompt,
+          }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
+        }),
+      (stagedPrompt) =>
+        Effect.sync(() => rmSync(stagedPrompt.directory, { recursive: true, force: true })),
+    );
     if (commandResult.exitCode !== 0) {
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
         .filter((value) => value.length > 0)
@@ -122,6 +136,7 @@ export const piReviewerProcessExecutor = createPiReviewerProcessExecutor();
 
 const commandInvocation = (
   input: ReviewerProcessInput,
+  systemPromptPath: string,
 ): { readonly command: string; readonly args: readonly string[] } => {
   const model = input.profile.profile.runtimeConfig?.model;
   if (model === undefined) throw new Error("Reviewer Pi Agent Profile has no model.");
@@ -153,11 +168,30 @@ const commandInvocation = (
           : ["--session", input.sessionId]
       : ["--session", requiredResumeSessionFilePath(input)]),
     "--append-system-prompt",
-    input.systemPrompt,
+    systemPromptPath,
     "--name",
     `${input.reviewer} Review`,
   ];
   return applyAgentEnvironment("pi", args, input.agentEnvironment);
+};
+
+type StagedSystemPrompt = {
+  readonly directory: string;
+  readonly path: string;
+};
+
+const stageSystemPrompt = (systemPrompt: string): StagedSystemPrompt => {
+  const directory = mkdtempSync(join(tmpdir(), "but-why-reviewer-system-prompt-"));
+  try {
+    chmodSync(directory, 0o700);
+    const path = join(directory, "system-prompt.md");
+    writeFileSync(path, systemPrompt, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    chmodSync(path, 0o600);
+    return { directory, path };
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
 };
 
 const applyAgentEnvironment = (

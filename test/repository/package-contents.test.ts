@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect } from "vitest";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
+import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
 import { runTestProcess } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
@@ -388,21 +389,18 @@ if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
   printf '{"result":{"type":"agent_started","agent":{"terminal_id":"terminal"}}}\\n'
   exit 0
 fi
-if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
-  printf '%s' "$4" > "$BY_FAKE_CAPTURE"
-  printf '{"result":{"type":"agent_prompted"}}\\n'
-  exit 0
-fi
 exit 1
 `,
         );
         chmodSync(join(tools, "gh"), 0o755);
         chmodSync(join(tools, "herdr"), 0o755);
         const bin = join(installed, "node_modules", ".bin", "by");
+        const socketPath = join(tools, "herdr.sock");
         const env = {
           // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
           PATH: `${tools}:${process.env["PATH"] ?? ""}`,
           BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
+          HERDR_SOCKET_PATH: socketPath,
         };
         const isolatedHome = createTestWorkspace();
         mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
@@ -413,16 +411,29 @@ exit 1
             agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
           })}\n`,
         );
-        const implement = runTestProcess(bin, ["change", "implement", change.id], {
-          cwd: repository,
-          env: {
-            ...env,
-            BY_FAKE_WORKTREE: change.worktreePath,
-            BY_FAKE_SESSION: change.id,
-          },
-          isolatedHome,
-          timeout: packageProcessTimeoutMs,
-        });
+        const implement = yield* Effect.acquireUseRelease(
+          Effect.promise(() =>
+            startFakeHerdrApiServer({
+              socketPath,
+              capturePath: env.BY_FAKE_CAPTURE,
+              readyPath: join(tools, "herdr-api-ready"),
+            }),
+          ),
+          () =>
+            Effect.sync(() =>
+              runTestProcess(bin, ["change", "implement", change.id], {
+                cwd: repository,
+                env: {
+                  ...env,
+                  BY_FAKE_WORKTREE: change.worktreePath,
+                  BY_FAKE_SESSION: change.id,
+                },
+                isolatedHome,
+                timeout: packageProcessTimeoutMs,
+              }),
+            ),
+          (server) => Effect.promise(server.stop),
+        );
         expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
         const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
         const extension = join(installedPackage, "extensions/continue-change.ts");

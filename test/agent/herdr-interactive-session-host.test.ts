@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-
+import type { HerdrAgentPromptTransport } from "../../src/change/interactiveSession/adapters/herdrAgentPromptSocket.js";
 import {
   type HerdrCommandExecutor,
+  type HerdrInteractiveSessionHostOptions,
   herdrSessionName,
-  openHerdrInteractiveSessionHost,
+  openHerdrInteractiveSessionHost as openRawHerdrInteractiveSessionHost,
   trustedContinuationExtensionPath,
 } from "../../src/change/interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { resolvePackageAsset } from "../../src/change/packageAssetPath.js";
@@ -28,16 +29,27 @@ const openedWorktree = (): { readonly ok: true; readonly stdout: string } => ({
 const input = {
   changeId: "change-123",
   hostSessionName: herdrSessionName("change-123"),
-  agentSessionName: "Change 123 descriptive name",
   repositoryPath: "/repository",
   worktreePath: "/workspace/change-123",
   systemPromptPaths,
   initialPrompt: "Change identity: change-123.\n\nManaged Worktree: /workspace/change-123.",
 } as const;
 
+const confirmedPromptTransport: HerdrAgentPromptTransport = async () => ({ ok: true });
+
+const openHerdrInteractiveSessionHost = (
+  execute: HerdrCommandExecutor,
+  options: HerdrInteractiveSessionHostOptions = {},
+) =>
+  openRawHerdrInteractiveSessionHost(execute, {
+    ...options,
+    promptTransport: options.promptTransport ?? confirmedPromptTransport,
+  });
+
 describe("Herdr Interactive Session Host", () => {
   it("starts a named Pi agent natively and submits one complete handoff", async () => {
     const commands: readonly string[][] = [];
+    const prompts: Parameters<HerdrAgentPromptTransport>[0][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
@@ -49,13 +61,16 @@ describe("Herdr Interactive Session Host", () => {
             '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"},"future_field":true}}',
         };
       }
-      if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: true, stdout: '{"result":{"type":"agent_prompted","future_field":true}}' };
-      }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
+    const promptTransport: HerdrAgentPromptTransport = async (prompt) => {
+      prompts.push(prompt);
+      return { ok: true };
+    };
 
-    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toEqual({
+    await expect(
+      openHerdrInteractiveSessionHost(execute, { promptTransport }).launch(input),
+    ).resolves.toEqual({
       ok: true,
       host: "herdr",
       status: "started",
@@ -91,11 +106,17 @@ describe("Herdr Interactive Session Host", () => {
         "--append-system-prompt",
         systemPromptPaths[1],
         "--name",
-        "Change 123 descriptive name",
+        "change-123",
         "--extension",
         trustedContinuationExtensionPath(),
       ],
-      ["agent", "prompt", herdrSessionName("change-123"), input.initialPrompt],
+    ]);
+    expect(prompts).toEqual([
+      expect.objectContaining({
+        target: herdrSessionName("change-123"),
+        text: input.initialPrompt,
+        timeoutMs: 5_000,
+      }),
     ]);
 
     const start = commands[3] ?? [];
@@ -106,6 +127,7 @@ describe("Herdr Interactive Session Host", () => {
   it("retries only a definite busy pane and submits one prompt after native readiness", async () => {
     const commands: readonly string[][] = [];
     let startAttempts = 0;
+    let promptAttempts = 0;
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
@@ -125,9 +147,6 @@ describe("Herdr Interactive Session Host", () => {
           stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
         };
       }
-      if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
-      }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
 
@@ -135,6 +154,10 @@ describe("Herdr Interactive Session Host", () => {
       openHerdrInteractiveSessionHost(execute, {
         commandTimeoutMs: 5,
         readinessTimeoutMs: 250,
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
       }).launch(input),
     ).resolves.toEqual({
       ok: true,
@@ -143,7 +166,8 @@ describe("Herdr Interactive Session Host", () => {
     });
 
     expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(2);
-    expect(commands.filter((args) => args[0] === "agent" && args[1] === "prompt")).toHaveLength(1);
+    expect(promptAttempts).toBe(1);
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "prompt")).toBe(false);
   });
 
   it("stops permanent pane-busy readiness with an actionable pane failure", async () => {
@@ -184,9 +208,6 @@ describe("Herdr Interactive Session Host", () => {
           ok: true,
           stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
         };
-      }
-      if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
       }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
@@ -249,9 +270,6 @@ describe("Herdr Interactive Session Host", () => {
           stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
         };
       }
-      if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
-      }
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
 
@@ -310,7 +328,6 @@ describe("Herdr Interactive Session Host", () => {
       '{"result":{"type":"worktree_opened","workspace":{},"root_pane":{"pane_id":"pane-1"}}}',
     ],
     ["agent_started", '{"result":{"type":"agent_started","agent":{"terminal_id":[]}}}'],
-    ["agent_prompted", '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}'],
   ])("does not affirm a malformed %s mutation response", async (family, malformed) => {
     const execute: HerdrCommandExecutor = async (args) => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
@@ -511,6 +528,7 @@ describe("Herdr Interactive Session Host", () => {
 
   it("observes an uncertain initial prompt without replaying it", async () => {
     const commands: string[][] = [];
+    let promptAttempts = 0;
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
@@ -521,17 +539,22 @@ describe("Herdr Interactive Session Host", () => {
           stdout: '{"result":{"type":"agent_started","agent":{"terminal_id":"t-1"}}}',
         };
       }
-      if (args[0] === "agent" && args[1] === "prompt") {
-        return { ok: false, message: "response lost" };
-      }
       return { ok: false, message: "unexpected prompt retry" };
     };
 
-    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: false, transmission: "unknown", message: "response lost" };
+        },
+      }).launch(input),
+    ).resolves.toMatchObject({
       ok: false,
       code: "launch_indeterminate",
     });
-    expect(commands.filter((args) => args[0] === "agent" && args[1] === "prompt")).toHaveLength(1);
+    expect(promptAttempts).toBe(1);
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "prompt")).toBe(false);
     expect(commands.at(-1)).toEqual(["agent", "list"]);
   });
 });

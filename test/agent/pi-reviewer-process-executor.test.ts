@@ -1,13 +1,15 @@
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 
@@ -42,10 +44,22 @@ describe("Pi reviewer process executor", () => {
   it.effect("runs direct Pi arguments and decodes invocation-local output and usage", () =>
     Effect.gen(function* () {
       let observed:
-        | { readonly command: string; readonly args?: readonly string[]; readonly cwd?: string }
+        | {
+            readonly command: string;
+            readonly args?: readonly string[];
+            readonly cwd?: string;
+            readonly stdin?: string;
+          }
         | undefined;
+      let systemPromptPath: string | undefined;
       const executor = createPiReviewerProcessExecutor((command) => {
         observed = command;
+        const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+        systemPromptPath = command.args?.[promptFlag + 1];
+        expect(systemPromptPath).toBeDefined();
+        expect(isAbsolute(systemPromptPath ?? "")).toBe(true);
+        expect(readFileSync(systemPromptPath ?? "", "utf8")).toBe(input.systemPrompt);
+        expect(statSync(systemPromptPath ?? "").mode & 0o777).toBe(0o600);
         return Effect.succeed({
           exitCode: 0,
           stderr: "",
@@ -83,13 +97,16 @@ describe("Pi reviewer process executor", () => {
           "read,grep",
           "--no-session",
           "--append-system-prompt",
-          "Act as the Acceptance Reviewer.",
+          expect.any(String),
           "--name",
           "acceptance Review",
         ],
         cwd: "/validation/workspace",
         stdin: "Review the Candidate.",
       });
+      expect(systemPromptPath).toBeDefined();
+      expect(existsSync(systemPromptPath ?? "")).toBe(false);
+      expect(observed?.args).not.toContain(input.systemPrompt);
       expect(result).toMatchObject({
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
         invocationUsage: {
@@ -103,13 +120,52 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("keeps unexpected command executor defects out of the expected failure channel", () =>
+  it.effect("keeps prompts over 128 KiB out of argv without changing their text", () =>
+    Effect.gen(function* () {
+      const largeSystemPrompt = `system:${"s".repeat(170_000)}`;
+      const largeUserPrompt = `user:${"u".repeat(170_000)}`;
+      let observedSystemPrompt = "";
+      let observedUserPrompt = "";
+      let observedArgs: readonly string[] = [];
+      const executor = createPiReviewerProcessExecutor((command) => {
+        observedArgs = command.args ?? [];
+        const promptFlag = observedArgs.indexOf("--append-system-prompt");
+        observedSystemPrompt = readFileSync(observedArgs[promptFlag + 1] ?? "", "utf8");
+        observedUserPrompt = command.stdin ?? "";
+        return Effect.succeed({
+          exitCode: 0,
+          stderr: "",
+          stdout: `${messageEvent('<reviewer-output>{"findings":[]}</reviewer-output>')}\n`,
+        });
+      });
+
+      yield* executor.execute({
+        ...input,
+        systemPrompt: largeSystemPrompt,
+        prompt: largeUserPrompt,
+      });
+
+      expect(observedSystemPrompt).toBe(largeSystemPrompt);
+      expect(observedUserPrompt).toBe(largeUserPrompt);
+      expect(observedArgs).not.toContain(largeSystemPrompt);
+      expect(observedArgs).not.toContain(largeUserPrompt);
+    }),
+  );
+
+  it.effect("keeps executor defects out of the expected channel and cleans the staged prompt", () =>
     Effect.gen(function* () {
       const defect = new Error("unexpected command executor defect");
+      let systemPromptPath: string | undefined;
       const exit = yield* Effect.exit(
-        createPiReviewerProcessExecutor(() => Effect.die(defect)).execute(input),
+        createPiReviewerProcessExecutor((command) => {
+          const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+          systemPromptPath = command.args?.[promptFlag + 1];
+          return Effect.die(defect);
+        }).execute(input),
       );
 
+      expect(systemPromptPath).toBeDefined();
+      expect(existsSync(systemPromptPath ?? "")).toBe(false);
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) return;
       expect(Cause.failureOption(exit.cause)).toEqual(Option.none());
@@ -378,7 +434,10 @@ describe("Pi reviewer process executor", () => {
         expect(command.args).toContain("--session");
         expect(command.args).toContain(sessionFile);
         expect(command.args).toContain("--append-system-prompt");
-        expect(command.args).toContain("Act as the Acceptance Reviewer.");
+        const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+        const promptPath = command.args?.[promptFlag + 1] ?? "";
+        expect(readFileSync(promptPath, "utf8")).toBe(input.systemPrompt);
+        expect(command.args).not.toContain(input.systemPrompt);
         return Effect.succeed({
           exitCode: 0,
           stderr: "",
