@@ -149,6 +149,7 @@ const runByInProcessEffectRaw = (
     cwd,
     globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
     now: () => new Date(now),
+    platform: "linux",
     stdin: options.stdin ?? { fd: -1, isTerminal: true },
     ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
     ...(options.cancellationUseCases === undefined

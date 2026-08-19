@@ -45,7 +45,9 @@ export type LoadedChangeOperationResult<A> =
 type LoadInput = {
   readonly cwd: string;
   readonly globalConfigPath: string;
+  readonly herdrSocketPath?: string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly platform: NodeJS.Platform;
 };
 
 export type UnlinkedChangeStartInput = {
@@ -163,7 +165,13 @@ export const withChangeImplement = <A, E, R>(
             context.root,
             context.config,
             store,
-            input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
+            input.interactiveSessionHost ??
+              openHerdrInteractiveSessionHost(undefined, {
+                ...(input.herdrSocketPath === undefined
+                  ? {}
+                  : { socketPath: input.herdrSocketPath }),
+                platform: input.platform,
+              }),
             input.globalConfigPath,
             loadLocalInteractiveSessionProfile,
             changeId,

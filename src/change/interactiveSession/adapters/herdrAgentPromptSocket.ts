@@ -5,7 +5,7 @@ import { Either, Schema } from "effect";
 
 export const herdr08Protocol = 19;
 export const herdr08MaxInitialRequestBytes = 1024 * 1024;
-export const herdr08InitialRequestTimeoutMs = 5_000;
+const herdr08InitialRequestTimeoutMs = 5_000;
 
 export type HerdrAgentPromptTransportInput = {
   readonly socketPath: string;

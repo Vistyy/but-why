@@ -19,7 +19,9 @@ export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;
   readonly globalConfigPath: string;
+  readonly herdrSocketPath?: string;
   readonly now: () => Date;
+  readonly platform: NodeJS.Platform;
   readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;

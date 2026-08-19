@@ -95,10 +95,14 @@ export const inspectionFailure = <A>(
 
 export const changeOperationInput = (environment: ChangeCommandEnvironment) => ({
   cwd: environment.cwd,
+  globalConfigPath: environment.globalConfigPath,
+  ...(environment.herdrSocketPath === undefined
+    ? {}
+    : { herdrSocketPath: environment.herdrSocketPath }),
   ...(environment.interactiveSessionHost === undefined
     ? {}
     : { interactiveSessionHost: environment.interactiveSessionHost }),
-  globalConfigPath: environment.globalConfigPath,
+  platform: environment.platform,
 });
 
 export const loadedChangeOperation = (
