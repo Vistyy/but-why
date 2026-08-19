@@ -531,6 +531,12 @@ Keep this investigation bounded to observed resource-resolution problems and do 
 If evidence establishes a need for local untracked-file access, investigate an explicit local untracked-file injection boundary as the possible replacement for removed `copyFiles` behavior.
 Do not add that capability to the first release or infer its need from the existence of a configuration option.
 
+## 6.1. Reassess direct Herdr protocol and socket ownership
+
+After the live operator cutover, reassess PR #249's direct Herdr protocol/socket ownership against an upstream `herdr agent prompt --stdin` capability.
+Verify the result through real installed Herdr normal Change Implement behavior, including exact submission semantics and unknown-transmission no-replay semantics.
+This is a post-baseline concern only and does not authorize implementation or change the accepted Change scope.
+
 ## 7. Explicitly deferred or rejected generalizations
 
 Do not create work solely for:
