@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,
-} from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
 import {
   decodeSqliteChangePrepareFailure,
   encodeSqliteChangePrepareFailure,
-} from "../../src/sqlite/sqliteChangePreparation.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangePreparation.js";
 
 describe("SQLite stored JSON contracts", () => {
   it("round-trips Acceptance Context Snapshots and rejects unknown fields", () => {

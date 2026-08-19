@@ -5,7 +5,7 @@ import { describe } from "vitest";
 import type { ReconciliationChange } from "../../src/change/changePorts.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
-import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
+import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-08-12T12:00:00.000Z";

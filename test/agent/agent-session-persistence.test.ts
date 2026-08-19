@@ -12,12 +12,12 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
-import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   openSqliteAgentSessionPersistence,
   settleUnsettledAgentInvocations,
-} from "../../src/sqlite/sqliteAgentSessionPersistence.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const configuration: AgentSessionConfiguration = {

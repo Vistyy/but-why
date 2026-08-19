@@ -9,11 +9,11 @@ import {
   createDetachedDisposableWorktree,
   prepareDisposableWorkspaceParent,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";

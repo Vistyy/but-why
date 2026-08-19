@@ -10,7 +10,7 @@ import {
   RepositorySql,
   type RepositorySqlConfig,
   repositorySqlLayer,
-} from "../../src/sqlite/repositorySql.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import { type RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { type RepositorySql, repositorySqlLayer } from "./adapters/sqlite/repositorySql.js";
 import {
   type LocalRepositoryContext,
   type LocalRepositorySubmissionContext,

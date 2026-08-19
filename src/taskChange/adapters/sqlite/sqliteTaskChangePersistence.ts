@@ -6,8 +6,8 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
-import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { completeMergedChange as completeChangeOnly } from "../../../repositoryRuntime/adapters/sqlite/sqliteCompleteMergedChangeStorage.js";
 import {
   completeTask,
   editTaskDependencies,
@@ -15,7 +15,7 @@ import {
   reviseTask,
   validateTaskDependencyEditTarget,
   validateTaskRevisionTarget,
-} from "../../../sqlite/sqliteTaskPersistence.js";
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import type {
   EditTaskDependenciesInput,

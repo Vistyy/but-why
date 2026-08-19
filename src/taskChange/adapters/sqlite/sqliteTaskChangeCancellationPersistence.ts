@@ -4,12 +4,15 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CancelChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   cancelChange as cancelChangeOnly,
   readCancellationChange,
-} from "../../../sqlite/sqliteChangeCancellationPersistence.js";
-import { cancelTaskState, getTaskById } from "../../../sqlite/sqliteTaskPersistence.js";
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteChangeCancellationPersistence.js";
+import {
+  cancelTaskState,
+  getTaskById,
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
 import { internalTaskId, publicTaskId, publicTaskIdFromInternal } from "../../../task/taskId.js";
 import { canCancelLinkedTask } from "../../taskChange.js";
 import type {

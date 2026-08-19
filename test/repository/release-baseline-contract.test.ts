@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { type Context, Effect } from "effect";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const expectedColumns = {

@@ -1,9 +1,9 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
+import { openSqliteChangeReadPort } from "../../../repositoryRuntime/adapters/sqlite/sqliteChangeInspectionPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../../repositoryRuntime/adapters/sqlite/sqliteChangeValidationReadPersistence.js";
 import type { ResolveLocalRepositoryError } from "../../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeReadPort } from "../../../sqlite/sqliteChangeInspectionPersistence.js";
-import { openSqliteChangeValidationReadPort } from "../../../sqlite/sqliteChangeValidationReadPersistence.js";
 import {
   type CandidateValidationRunInspectionUseCases,
   openCandidateValidationRunInspection,

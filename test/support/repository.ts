@@ -5,10 +5,13 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { internalTaskId, type PublicTaskId } from "../../src/task/taskId.js";
 
 const taskReviewPolicyFixture = {

@@ -16,7 +16,7 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,

@@ -7,11 +7,14 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeReviewerPolicy } from "../../src/change/changeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
-import { openSqliteValidationRunAbandonmentPort } from "../../src/sqlite/sqliteValidationRunAbandonmentPersistence.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteAgentSessionPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteChangeAgentSessionPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeAgentSessionPersistence.js";
+import { openSqliteValidationRunAbandonmentPort } from "../../src/repositoryRuntime/adapters/sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";
 import {

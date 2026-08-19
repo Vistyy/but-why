@@ -1,8 +1,7 @@
 import { Effect } from "effect";
-
+import { RepositorySql } from "../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../sqlite/repositorySql.js";
 import { createSqliteSnapshot } from "../../sqlite/sqliteSnapshot.js";
 import {
   type SharedRepositoryStateSnapshot,

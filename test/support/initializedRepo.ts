@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
 
-import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
+import { nodeSqliteLayer } from "../../src/repositoryRuntime/adapters/sqlite/nodeSqliteClient.js";
 import { createGitRepo, runBy } from "./by-cli.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 

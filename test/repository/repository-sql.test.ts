@@ -6,7 +6,7 @@ import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
 } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 
 describe("RepositorySql", () => {

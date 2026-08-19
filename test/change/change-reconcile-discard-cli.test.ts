@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
+import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskChangeStartPersistence as openSqliteChangeStartPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeStartPersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import { openSqliteChangeTestDependencies } from "../support/changePorts.js";

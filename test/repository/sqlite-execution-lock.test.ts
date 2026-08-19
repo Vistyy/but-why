@@ -3,7 +3,7 @@ import { Deferred, Effect } from "effect";
 import { describe } from "vitest";
 
 import { ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
-import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
+import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("SQLite execution lock", () => {

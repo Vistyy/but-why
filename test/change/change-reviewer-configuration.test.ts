@@ -9,11 +9,11 @@ import {
 } from "../../src/change/changeReviewerConfiguration.js";
 import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangePolicy.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   createChange,
   readChangeStartById,
-} from "../../src/sqlite/sqliteChangeStartPersistence.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/sqliteChangeStartPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";

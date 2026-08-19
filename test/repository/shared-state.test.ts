@@ -8,7 +8,10 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { RepositoryMigrationFailed } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";

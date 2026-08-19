@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import { describe } from "vitest";
 
-import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
+import { nodeSqliteLayer } from "../../src/repositoryRuntime/adapters/sqlite/nodeSqliteClient.js";
 
 const withDatabase = <A, E>(use: Effect.Effect<A, E, SqlClient.SqlClient>) => {
   const root = mkdtempSync(join(tmpdir(), "but-why-node-sqlite-"));

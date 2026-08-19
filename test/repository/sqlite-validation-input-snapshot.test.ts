@@ -3,10 +3,10 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { encodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { encodeSqliteAcceptanceContextSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAcceptanceContextSnapshot.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidateCapturePersistence.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/repositoryRuntime/adapters/sqlite/sqliteValidationInputSnapshot.js";
 import { openSqliteChangeValidationTestDependencies } from "../support/changeValidationPorts.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 

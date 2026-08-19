@@ -9,11 +9,11 @@ import {
   inspectDisposableWorktree,
 } from "../../src/disposableWorkspace/adapters/disposableWorkspaceGit.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import { openSqliteAgentSessionPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteAgentSessionPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskPersistence.js";
+import { openSqliteTaskReviewPersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
   readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,

@@ -4,21 +4,21 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   createChange,
   insertLinkedChange,
   readChangeStartById,
   recordPrepareOutcome as recordChangePrepareOutcome,
-} from "../../../sqlite/sqliteChangeStartPersistence.js";
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteChangeStartPersistence.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
-  decodePersisted,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
   decodeTaskState,
   type StoredTaskContextRow,
   type StoredTaskDependencyFactRow,
-} from "../../../sqlite/sqliteTaskReadModel.js";
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskReadModel.js";
 import { internalTaskId, publicTaskId } from "../../../task/taskId.js";
 import type {
   TaskChangeStartCreateInput,

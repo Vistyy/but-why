@@ -15,7 +15,7 @@ import {
 } from "../contracts/repositoryStorageError.js";
 import { findCurrentWorktreeFacts, findGitRoot } from "../init/adapters/git.js";
 import { readRepoConfig, writeRepoConfig } from "../init/adapters/repoConfig.js";
-import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { RepositorySql, repositorySqlLayer } from "./adapters/sqlite/repositorySql.js";
 
 export type LocalRepositoryPaths = {
   readonly butWhyDir: string;

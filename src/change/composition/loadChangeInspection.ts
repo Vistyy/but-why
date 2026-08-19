@@ -3,12 +3,12 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../contracts/repositoryStorageError.js";
+import { openSqliteChangeAuthorityPort } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeAuthorityPersistence.js";
+import { openSqliteChangeReadPort } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeInspectionPersistence.js";
+import { openSqliteChangeValidationReadPort } from "../../repositoryRuntime/adapters/sqlite/sqliteChangeValidationReadPersistence.js";
+import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
-import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
-import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
-import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import type {
   ChangeAuthorityPort,
   ChangeReadPort,

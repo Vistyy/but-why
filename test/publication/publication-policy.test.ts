@@ -10,8 +10,8 @@ import type {
 } from "../../src/change/ownedPullRequestGateway.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo } from "../support/candidateReadyRepo.js";
 import {

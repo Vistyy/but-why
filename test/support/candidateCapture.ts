@@ -7,8 +7,8 @@ import {
   type CaptureLocalCandidateResult,
   openCandidateCapture,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { repositorySqlLayer } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/repositoryRuntime/adapters/sqlite/sqliteCandidateCapturePersistence.js";
 import { runTestProcess } from "./testProcess.js";
 
 export const captureLocalCandidate = (input: CaptureLocalCandidateInput) =>

@@ -120,4 +120,4 @@ valid:
   - runtime.provide(program)
 invalid:
   - repositorySqlLayer(config)
-  - import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+  - import { repositorySqlLayer } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";

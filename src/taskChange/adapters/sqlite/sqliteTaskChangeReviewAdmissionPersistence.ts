@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   admitTaskReview,
   taskReviewAdmissionRejection,
-} from "../../../sqlite/sqliteTaskReviewPersistence.js";
+} from "../../../repositoryRuntime/adapters/sqlite/sqliteTaskReviewPersistence.js";
 import type {
   AdmitTaskReviewInput,
   TaskReviewAdmissionPersistence,
