@@ -205,8 +205,8 @@ export const requireCoherentValidationCompletion = (
           );
           phaseOutcome = hasPhaseToolingFailure ? "tooling_failed" : "blocked";
           if (
-            finalGroup.phase !== validationPhase.checks &&
             finalGroup.phase !== validationPhase.specialistReview &&
+            (phaseOutcome === "blocked" || finalGroup.phase !== validationPhase.checks) &&
             finalResults.length !== finalGroup.producers.length
           ) {
             throw new Error("Terminal Validation phase evidence is incomplete");
