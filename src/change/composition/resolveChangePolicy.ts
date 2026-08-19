@@ -5,18 +5,19 @@ import { readGlobalConfig } from "../../init/adapters/globalConfig.js";
 import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import { readRepositoryFileAtCommit } from "../../submissionEnvironment/adapters/repositoryFile.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
-import type { ChangePolicy } from "../changePolicy.js";
+import {
+  type ChangePolicyResolution,
+  type ChangePolicyResolutionFailure,
+  resolveChangePolicyDefinitions,
+} from "../changePolicy.js";
 import { validateChangeReviewerConfigurationResources } from "../changeReviewerConfiguration.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
-import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 
-export type ChangePolicyResolution =
-  | { readonly ok: true; readonly policy: ChangePolicy }
-  | {
-      readonly ok: false;
-      readonly message: string;
-      readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
-    };
+const invalidChangePolicy = (message: string): ChangePolicyResolutionFailure => ({
+  ok: false,
+  code: "reviewer_configuration_invalid",
+  message,
+});
 
 const snapshotProfile = (
   profile: ResolvedReviewerPiAgentProfile,
@@ -64,9 +65,9 @@ export const resolveChangePolicyAtCommit = (input: {
       };
     }
     const global = readGlobalConfig(input.globalConfigPath);
-    if (!global.ok) return { ok: false, message: global.error.message };
-    const submit = submitRepoConfig(decoded.config);
-    if (!submit.ok) return { ok: false, message: submit.error.message };
+    if (!global.ok) return invalidChangePolicy(global.error.message);
+    const definitions = resolveChangePolicyDefinitions(decoded.config);
+    if (!definitions.ok) return invalidChangePolicy(definitions.message);
     const readRepoInstructions = (path: string) => {
       const read = readRepositoryFileAtCommit(input.repositoryRoot, input.commit, path);
       return read.ok
@@ -83,7 +84,7 @@ export const resolveChangePolicyAtCommit = (input: {
       globalConfigPath: input.globalConfigPath,
       readRepoInstructions,
     });
-    if (!specialist.ok) return { ok: false, message: specialist.error.message };
+    if (!specialist.ok) return invalidChangePolicy(specialist.error.message);
     const acceptance = input.acceptanceContextSupplied
       ? resolveAcceptanceReviewPolicy({
           repoConfig: decoded.config,
@@ -93,7 +94,7 @@ export const resolveChangePolicyAtCommit = (input: {
           readRepoInstructions,
         })
       : { ok: true as const, policy: null };
-    if (!acceptance.ok) return { ok: false, message: acceptance.error.message };
+    if (!acceptance.ok) return invalidChangePolicy(acceptance.error.message);
     const agentEnvironment = repoAgentEnvironment(decoded.config);
     const reviewerConfiguration = {
       acceptanceReview:
@@ -113,13 +114,13 @@ export const resolveChangePolicyAtCommit = (input: {
       reviewerConfiguration,
       input.repositoryRoot,
     );
-    if (!resources.ok) return resources;
+    if (!resources.ok) return invalidChangePolicy(resources.message);
     return {
       ok: true,
       policy: {
         reviewerConfiguration,
-        prepare: submit.config.prepare ?? null,
-        checks: submit.config.checks,
+        prepare: definitions.definitions.prepare,
+        checks: definitions.definitions.checks,
       },
     };
   });

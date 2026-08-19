@@ -7,12 +7,15 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
+import { defaultAcceptanceInstructions } from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -187,25 +190,105 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("starts an existing Todo Task with passing Task Review history", () =>
+  it.effect("starts an approved Task with the complete exact-base Change Policy", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Existing Todo", "Start approved work.\n");
       yield* passTaskReviewFixture(root, taskId, now);
-
-      const inspected = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
-      expect(inspected.status).toBe(0);
-      expect(JSON.parse(inspected.stdout)).toMatchObject({
-        task: {
-          id: taskId,
-          state: "todo",
-          review: { state: "complete", outcome: "passed", proposalCurrent: true },
-        },
-      });
+      const instructionsPath = join(root, ".but-why", "reviewers", "standards.md");
+      mkdirSync(dirname(instructionsPath), { recursive: true });
+      writeFileSync(instructionsPath, "Review the committed exact-base policy.\n");
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify(
+          {
+            idPrefix: "BY",
+            agentEnvironment: { command: ["env"] },
+            prepare: { command: "true" },
+            validation: {
+              checks: [
+                { id: "first", command: "true" },
+                { id: "second", command: "true", timeoutSeconds: 45 },
+              ],
+            },
+            review: {
+              acceptance: { agentProfile: { scope: "global", name: "test" } },
+              specialists: ["standards"],
+            },
+            reviewers: {
+              standards: { instructionsFile: ".but-why/reviewers/standards.md" },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      git(root, "add", ".but-why/config.json", ".but-why/reviewers/standards.md");
+      git(root, "commit", "-m", "Configure complete Change Policy");
+      git(root, "config", "--unset-all", `url.${initializedRepositoryTemplate}.insteadOf`);
+      configurePublicationRemote(root, root);
+      writeFileSync(instructionsPath, "Current checkout policy must not win.\n");
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
-      expect(started.status).toBe(0);
-      expect(JSON.parse(started.stdout)).toMatchObject({ change: { taskId } });
+      expect(started.status, started.stdout).toBe(0);
+      const startedOutput = JSON.parse(started.stdout) as ChangeOutput;
+      expect(startedOutput).toMatchObject({ change: { taskId } });
+
+      const persisted = yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const changes = yield* openSqliteChangeStartPersistence();
+          return yield* changes.getById(startedOutput.change.id);
+        }),
+      );
+      expect(persisted).toEqual({
+        id: startedOutput.change.id,
+        repositoryCommonDirectory: join(root, ".git"),
+        branchRef: startedOutput.branch,
+        baseRef: "refs/remotes/origin/main",
+        baseRemoteUrl: expect.any(String),
+        worktreePath: startedOutput.worktreePath,
+        acceptanceContext: {
+          version: 1,
+          title: "Existing Todo",
+          description: "Start approved work.\n",
+        },
+        policy: {
+          reviewerConfiguration: {
+            acceptanceReview: {
+              instructions: defaultAcceptanceInstructions,
+              instructionsSource: "built_in",
+              profile: {
+                agentProfile: "test",
+                scope: "global",
+                profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+                globalConfigDirectory: root,
+              },
+            },
+            specialistReviews: [
+              {
+                id: "standards",
+                instructions: "Review the committed exact-base policy.\n",
+                instructionsSource: "repo",
+                profile: {
+                  agentProfile: "test",
+                  scope: "global",
+                  profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+                  globalConfigDirectory: root,
+                },
+              },
+            ],
+            agentEnvironment: ["env"],
+          },
+          prepare: { command: "true", timeoutSeconds: 1200 },
+          checks: [
+            { id: "first", command: "true", timeoutSeconds: 1200 },
+            { id: "second", command: "true", timeoutSeconds: 45 },
+          ],
+        },
+        prepareFailure: null,
+        state: "open",
+      });
     }),
   );
 

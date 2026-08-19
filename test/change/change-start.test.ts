@@ -128,7 +128,11 @@ describe("Change Start orchestration", () => {
       const result = yield* captured.operations.startWithPolicyResolver((startingCommit) =>
         Effect.sync(() => {
           captured.events.push(`resolvePolicy:${startingCommit}`);
-          return { ok: false as const, message: "Exact-base Change policy is invalid." };
+          return {
+            ok: false as const,
+            code: "reviewer_configuration_invalid" as const,
+            message: "Exact-base Change policy is invalid.",
+          };
         }),
       );
       expect(result).toEqual({
@@ -150,7 +154,7 @@ describe("Change Start orchestration", () => {
         const result = yield* captured.operations.startWithPolicyResolver(() =>
           Effect.succeed({ ok: false as const, code, message: "categorized failure" }),
         );
-        expect(result).toEqual({ ok: false, code });
+        expect(result).toEqual({ ok: false, code, message: "categorized failure" });
         expect(captured.events).toEqual(["resolveIntent:default"]);
       }
     }),

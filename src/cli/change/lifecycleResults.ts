@@ -12,11 +12,17 @@ export const startResult = (result: ChangeStartResult | TaskChangeStartResult): 
         : unlinkedStartChangeView(result.change),
     );
   }
-  if (result.code === "reviewer_configuration_invalid") {
+  if (
+    result.code === "reviewer_configuration_invalid" ||
+    result.code === "committed_repo_config_missing" ||
+    result.code === "committed_repo_config_invalid"
+  ) {
     return runtimeError({
       code: result.code,
       message: result.message,
-      help: ["Fix the complete Change Policy inputs, then run Change Start again."],
+      help: [
+        "Fix the complete Change Policy inputs at the selected Change Base, then run Change Start again.",
+      ],
     });
   }
   if (result.code === "task_dependencies_unsatisfied") {

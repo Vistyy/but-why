@@ -10,17 +10,7 @@ export type ChangeStartGitIntent = {
 
 export type ResolveChangeStartGitResult =
   | { readonly ok: true; readonly intent: ChangeStartGitIntent }
-  | RemoteChangeBaseError
-  | {
-      readonly ok: false;
-      readonly code:
-        | "committed_repo_config_missing"
-        | "committed_repo_config_invalid"
-        | "change_start_conflict"
-        | "requested_base_conflict";
-      readonly requestedBaseBranch?: string;
-      readonly recordedBaseBranch?: string;
-    };
+  | RemoteChangeBaseError;
 
 export type ProvisionChangeWorktreeResult =
   | { readonly ok: true }

@@ -6,13 +6,16 @@ import {
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
-import type { ChangePolicy } from "./changePolicy.js";
+import type { ChangePolicyResolution, ChangePolicyResolutionFailure } from "./changePolicy.js";
 import type {
   ChangeStartGitOperations,
   ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
-import type { ChangeStartPersistence } from "./changeStartPersistence.js";
+import type {
+  ChangeStartCreationResult,
+  ChangeStartPersistence,
+} from "./changeStartPersistence.js";
 import type { ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
@@ -23,12 +26,9 @@ export type { ChangeImplementResult };
 
 export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
-  | {
-      readonly ok: false;
-      readonly code: "reviewer_configuration_invalid";
-      readonly message: string;
-    }
+  | ChangePolicyResolutionFailure
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
+  | Exclude<ChangeStartCreationResult, { readonly ok: true }>
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangePrepareResult =
@@ -43,14 +43,7 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly resolvePolicy: (startingCommit: string) => Effect.Effect<
-      | { readonly ok: true; readonly policy: ChangePolicy }
-      | {
-          readonly ok: false;
-          readonly message: string;
-          readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
-        }
-    >;
+    readonly resolvePolicy: (startingCommit: string) => Effect.Effect<ChangePolicyResolution>;
     readonly now: string;
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
@@ -58,15 +51,7 @@ export const startChange = <CreationFailure extends object = never>(
     const gitIntent = git.resolveIntent(input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
     const policy = yield* input.resolvePolicy(gitIntent.intent.startingCommit);
-    if (!policy.ok) {
-      return policy.code === undefined
-        ? {
-            ok: false as const,
-            code: "reviewer_configuration_invalid" as const,
-            message: policy.message,
-          }
-        : { ok: false as const, code: policy.code };
-    }
+    if (!policy.ok) return policy;
     const created = yield* store.create({
       baseRef: gitIntent.intent.baseRef,
       baseRemoteUrl: gitIntent.intent.baseRemoteUrl,

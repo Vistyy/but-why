@@ -95,8 +95,6 @@ const repoConfigSchema = Schema.Struct({
 });
 
 export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;
-export type RepoPrepareConfig = Schema.Schema.Type<typeof repoPrepareConfigSchema>;
-export type RepoCheckConfig = Schema.Schema.Type<typeof repoCheckConfigSchema>;
 export type ReviewerConfig = Schema.Schema.Type<typeof reviewerSchema>;
 
 export const decodeRepoConfig = (

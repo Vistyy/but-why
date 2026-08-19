@@ -17,11 +17,6 @@ const changeCloseReason = {
 export type ChangeState = (typeof changeState)[keyof typeof changeState];
 export type ChangeCloseReason = (typeof changeCloseReason)[keyof typeof changeCloseReason];
 
-export type ChangePrepareDefinition = {
-  readonly command: string;
-  readonly timeoutSeconds: number;
-};
-
 export const changePrepareFailureSchema = Schema.Struct({
   command: Schema.String,
   exitCode: Schema.Number.pipe(Schema.int()),

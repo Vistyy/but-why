@@ -137,6 +137,37 @@ it.effect("resolves and validates reviewer authority from the exact Change Base 
       },
     });
 
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        idPrefix: "BY",
+        validation: {
+          checks: [
+            { id: "quality", command: "first" },
+            { id: "quality", command: "second" },
+          ],
+        },
+      }),
+    );
+    runTestProcessOrThrow("git", ["add", ".but-why/config.json"], { cwd: root });
+    runTestProcessOrThrow("git", ["commit", "-m", "duplicate checks"], { cwd: root });
+    const duplicateChecksBase = runTestProcessOrThrow("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+    });
+    expect(
+      yield* resolveChangePolicyAtCommit({
+        repositoryRoot: root,
+        commit: duplicateChecksBase,
+        globalConfigPath,
+        acceptanceContextSupplied: false,
+        expectedIdPrefix: "BY",
+      }),
+    ).toEqual({
+      ok: false,
+      code: "reviewer_configuration_invalid",
+      message: "Duplicate check id: quality",
+    });
+
     runTestProcessOrThrow("git", ["rm", "-f", ".but-why/config.json"], { cwd: root });
     runTestProcessOrThrow("git", ["commit", "-m", "missing config"], { cwd: root });
     const missingBase = runTestProcessOrThrow("git", ["rev-parse", "HEAD"], { cwd: root });

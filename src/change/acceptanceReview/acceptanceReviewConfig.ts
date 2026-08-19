@@ -10,8 +10,8 @@ import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js
 import { defaultAcceptanceInstructions } from "../../reviewerPrompts/acceptanceReviewerPrompt.js";
 import {
   InvalidReviewerConfig,
-  type SubmitRejectionError,
-} from "../submit/submitRejectionErrors.js";
+  type ReviewerResolutionError,
+} from "../reviewerResolutionErrors.js";
 
 export type AcceptanceReviewPolicy = {
   readonly instructions: string;
@@ -31,7 +31,7 @@ export const resolveAcceptanceReviewPolicy = (input: {
     | { readonly ok: false; readonly message: string };
 }):
   | { readonly ok: true; readonly policy: AcceptanceReviewPolicy }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  | { readonly ok: false; readonly error: ReviewerResolutionError } => {
   const resolution = resolveAgentProfile({
     ...(input.repoConfig.review?.acceptance?.agentProfile === undefined
       ? {}

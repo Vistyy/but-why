@@ -5,7 +5,7 @@ import {
   prepareExistingChange,
   startChange,
 } from "../change/changeLifecycle.js";
-import type { ChangePolicy } from "../change/changePolicy.js";
+import type { ChangePolicyResolution } from "../change/changePolicy.js";
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
@@ -79,14 +79,7 @@ export const startTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: TaskChangeStartInput,
-  resolvePolicy: (startingCommit: string) => Effect.Effect<
-    | { readonly ok: true; readonly policy: ChangePolicy }
-    | {
-        readonly ok: false;
-        readonly message: string;
-        readonly code?: "committed_repo_config_missing" | "committed_repo_config_invalid";
-      }
-  >,
+  resolvePolicy: (startingCommit: string) => Effect.Effect<ChangePolicyResolution>,
 ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const prepared = yield* store.prepareTask(input.taskId);

@@ -8,7 +8,7 @@ import type {
   CandidateValidationOutcome,
   RecordCandidateValidationPrepareResultInput,
 } from "../candidateValidation/candidateValidationRunStore.js";
-import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
+import type { ChangePrepareDefinition } from "../changePolicy.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
@@ -22,7 +22,7 @@ import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCo
 
 export type RunPreparePhaseInput = {
   readonly validationRunId: number;
-  readonly prepare: SubmitPrepareConfig;
+  readonly prepare: ChangePrepareDefinition;
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -132,7 +132,7 @@ export const runPreparePhase = (
 
 const runPrepareCommand = (
   commandExecutor: WorkspaceCommandExecutor,
-  prepare: SubmitPrepareConfig,
+  prepare: ChangePrepareDefinition,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
   allowedUntrackedFiles: readonly string[] | undefined,
@@ -187,7 +187,7 @@ const recordPrepareResult = (
 
 const prepareFinding = (
   validationRunId: number,
-  prepare: SubmitPrepareConfig,
+  prepare: ChangePrepareDefinition,
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
@@ -208,7 +208,7 @@ const prepareFinding = (
 
 const writePrepareArtifacts = (input: {
   readonly validationRunId: number;
-  readonly prepare: SubmitPrepareConfig;
+  readonly prepare: ChangePrepareDefinition;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
   readonly durationMs: number;

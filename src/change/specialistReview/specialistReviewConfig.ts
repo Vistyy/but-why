@@ -9,8 +9,8 @@ import type { RepoConfig, ReviewerConfig } from "../../contracts/repoConfig.js";
 import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js";
 import {
   InvalidReviewerConfig,
-  type SubmitRejectionError,
-} from "../submit/submitRejectionErrors.js";
+  type ReviewerResolutionError,
+} from "../reviewerResolutionErrors.js";
 
 export type SpecialistReviewPolicy = {
   readonly id: string;
@@ -31,7 +31,7 @@ export const resolveSpecialistReviewPolicies = (input: {
     | { readonly ok: false; readonly message: string };
 }):
   | { readonly ok: true; readonly policies: readonly SpecialistReviewPolicy[] }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  | { readonly ok: false; readonly error: ReviewerResolutionError } => {
   const active =
     input.repoConfig.review?.specialists ?? input.globalConfig.review?.specialists ?? [];
   const seen = new Set<string>();
@@ -66,7 +66,7 @@ const resolveSpecialist = (
   id: string,
 ):
   | { readonly ok: true; readonly policy: SpecialistReviewPolicy }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  | { readonly ok: false; readonly error: ReviewerResolutionError } => {
   const repoDefinition = input.repoConfig.reviewers?.[id];
   const globalDefinition = input.globalConfig.reviewers?.[id];
   const definition: ReviewerConfig | typeof globalDefinition = repoDefinition ?? globalDefinition;

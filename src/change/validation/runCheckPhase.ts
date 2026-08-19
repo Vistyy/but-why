@@ -8,7 +8,7 @@ import type {
   CandidateValidationOutcome,
   RecordCandidateValidationCheckResultInput,
 } from "../candidateValidation/candidateValidationRunStore.js";
-import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
+import type { ChangeCheck } from "../changePolicy.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
@@ -22,7 +22,7 @@ import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCo
 
 export type RunCheckPhaseInput = {
   readonly validationRunId: number;
-  readonly checks: readonly SubmitCheckConfig[];
+  readonly checks: readonly ChangeCheck[];
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -113,7 +113,7 @@ export const runCheckPhase = (
 
 const runSingleCheck = (
   input: RunCheckPhaseInput,
-  check: SubmitCheckConfig,
+  check: ChangeCheck,
 ): Effect.Effect<CheckResult, ValidationToolingFailure, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
@@ -168,7 +168,7 @@ const recordCheckResult = (
 
 const checkFinding = (
   validationRunId: number,
-  check: SubmitCheckConfig,
+  check: ChangeCheck,
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
@@ -189,7 +189,7 @@ const checkFinding = (
 
 const runCheckCommand = (
   commandExecutor: WorkspaceCommandExecutor,
-  check: SubmitCheckConfig,
+  check: ChangeCheck,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
   allowedUntrackedFiles: readonly string[] | undefined,
@@ -242,7 +242,7 @@ const runCheckCommand = (
 
 const writeCheckArtifacts = (input: {
   readonly validationRunId: number;
-  readonly check: SubmitCheckConfig;
+  readonly check: ChangeCheck;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
   readonly durationMs: number;

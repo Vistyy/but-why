@@ -65,7 +65,33 @@ describe("Change lifecycle CLI results", () => {
           code: "reviewer_configuration_invalid",
           message: "Validation Checks are missing.",
         },
-        help: ["Fix the complete Change Policy inputs, then run Change Start again."],
+        help: [
+          "Fix the complete Change Policy inputs at the selected Change Base, then run Change Start again.",
+        ],
+      },
+    });
+  });
+
+  it.each([
+    "committed_repo_config_missing",
+    "committed_repo_config_invalid",
+  ] as const)("preserves %s as a Change Policy resolution failure", (code) => {
+    expect(
+      startResult({
+        ok: false,
+        code,
+        message: "The selected Change Base has unusable Repo Config.",
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code,
+          message: "The selected Change Base has unusable Repo Config.",
+        },
+        help: [
+          "Fix the complete Change Policy inputs at the selected Change Base, then run Change Start again.",
+        ],
       },
     });
   });

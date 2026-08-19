@@ -1,15 +1,13 @@
 import { Schema } from "effect";
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 import { nonBlankStringSchema } from "../contracts/agentConfig.js";
-import { checkIdSchema, timeoutSecondsSchema } from "../contracts/repoConfig.js";
+import { checkIdSchema, type RepoConfig, timeoutSecondsSchema } from "../contracts/repoConfig.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReview/acceptanceReviewConfig.js";
-import type { ChangePrepareDefinition } from "./change.js";
 import {
   decodeChangeReviewerConfiguration,
   encodeSqliteChangeReviewerConfiguration,
 } from "./changeReviewerConfiguration.js";
 import type { SpecialistReviewPolicy } from "./specialistReview/specialistReviewConfig.js";
-import type { SubmitCheckConfig } from "./submit/submitRepoConfig.js";
 
 export type ChangeReviewerConfiguration = {
   readonly acceptanceReview: AcceptanceReviewPolicy | null;
@@ -17,12 +15,80 @@ export type ChangeReviewerConfiguration = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
 };
 
-export type ChangeChecks = readonly [SubmitCheckConfig, ...SubmitCheckConfig[]];
+export type ChangePrepareDefinition = {
+  readonly command: string;
+  readonly timeoutSeconds: number;
+};
+
+export type ChangeCheck = {
+  readonly id: string;
+  readonly command: string;
+  readonly timeoutSeconds: number;
+};
+
+export type ChangeChecks = readonly [ChangeCheck, ...ChangeCheck[]];
 
 export type ChangePolicy = {
   readonly reviewerConfiguration: ChangeReviewerConfiguration;
   readonly prepare: ChangePrepareDefinition | null;
   readonly checks: ChangeChecks;
+};
+
+export type ChangePolicyResolutionFailure = {
+  readonly ok: false;
+  readonly code:
+    | "reviewer_configuration_invalid"
+    | "committed_repo_config_missing"
+    | "committed_repo_config_invalid";
+  readonly message: string;
+};
+
+export type ChangePolicyResolution =
+  | { readonly ok: true; readonly policy: ChangePolicy }
+  | ChangePolicyResolutionFailure;
+
+type ChangePolicyDefinitions = Pick<ChangePolicy, "prepare" | "checks">;
+
+const defaultCommandTimeoutSeconds = 1200;
+
+export const resolveChangePolicyDefinitions = (
+  config: RepoConfig,
+):
+  | { readonly ok: true; readonly definitions: ChangePolicyDefinitions }
+  | { readonly ok: false; readonly message: string } => {
+  const configuredChecks = config.validation?.checks;
+  if (configuredChecks === undefined || configuredChecks.length === 0) {
+    return { ok: false, message: "Repo config must define at least one validation.checks entry." };
+  }
+
+  const seenCheckIds = new Set<string>();
+  const checks: ChangeCheck[] = [];
+  for (const check of configuredChecks) {
+    if (seenCheckIds.has(check.id)) {
+      return { ok: false, message: `Duplicate check id: ${check.id}` };
+    }
+    seenCheckIds.add(check.id);
+    checks.push({
+      id: check.id,
+      command: check.command,
+      timeoutSeconds: check.timeoutSeconds ?? defaultCommandTimeoutSeconds,
+    });
+  }
+
+  const prepare = config.prepare;
+  return {
+    ok: true,
+    definitions: {
+      prepare:
+        prepare === undefined
+          ? null
+          : {
+              command: prepare.command,
+              timeoutSeconds: prepare.timeoutSeconds ?? defaultCommandTimeoutSeconds,
+            },
+      checks: checks as [ChangeCheck, ...ChangeCheck[]],
+    },
+  };
 };
 
 const changePrepareSchema = Schema.Struct({
