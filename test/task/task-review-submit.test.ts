@@ -159,10 +159,16 @@ it.effect("rejects Task Review evidence after every reviewer invocation without 
           reviewerCalls += 1;
           writeFileSync(join(input.commandCwd ?? ".", ".but-why", "config.json"), "changed\n");
           return Effect.succeed({
-            ok: true as const,
-            report: { findings: [] },
+            ok: false as const,
+            failure: {
+              kind: "output_contract" as const,
+              operationName: "decode_reviewer_output",
+              message: "Structured output correction is required.",
+              sessionReference: "session-1",
+            },
+            sessionUsability: "unknown" as const,
             attempts: 1,
-            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+            stdout: "invalid output",
           });
         },
       },

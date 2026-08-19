@@ -649,7 +649,18 @@ describe("Candidate Specialist Review phase", () => {
               review: () =>
                 Effect.sync(() => {
                   writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
-                  return success();
+                  return {
+                    ok: false as const,
+                    failure: new ReviewerExecutionFailed({
+                      kind: "output_contract",
+                      operationName: "decode_reviewer_output",
+                      message: "Structured output correction is required.",
+                      sessionReference: "session-1",
+                    }),
+                    sessionUsability: "unknown" as const,
+                    attempts: 1,
+                    stdout: "invalid output",
+                  };
                 }),
             },
             commandExecutor,

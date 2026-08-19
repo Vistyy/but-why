@@ -477,7 +477,18 @@ describe("Acceptance Review phase", () => {
   it.scoped("preserves post-review Snapshot Workspace integrity verification in Agent mode", () =>
     Effect.gen(function* () {
       const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-        Effect.succeed(cleanReport),
+        Effect.succeed({
+          ok: false,
+          failure: new ReviewerExecutionFailed({
+            kind: "output_contract",
+            operationName: "decode_reviewer_output",
+            message: "Structured output correction is required.",
+            sessionReference: "session-1",
+          }),
+          sessionUsability: "unknown",
+          attempts: 1,
+          stdout: "invalid output",
+        }),
       );
       const fixture = acceptancePhaseFixture(
         { review },
