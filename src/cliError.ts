@@ -9,9 +9,9 @@ export type StructuredErrorInput = {
 
 export const structuredError = (input: StructuredErrorInput): StructuredObject => ({
   error: {
+    ...(input.details ?? {}),
     code: input.code,
     message: input.message,
-    ...(input.details ?? {}),
   },
   help: input.help,
 });
