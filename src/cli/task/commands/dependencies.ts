@@ -3,11 +3,12 @@
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
-import { runtimeError, success, usageError } from "../../../cliResults.js";
+import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { TaskDependencyOperation } from "../../../task/taskStore.js";
 import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
+import { dependencyOptionRequiredError } from "../dependencyOptionUsage.js";
 import {
   resolveTaskId,
   type TaskCommandEnvironment,
@@ -20,20 +21,6 @@ export type TaskDependenciesCommand = {
   readonly taskId: string;
   readonly dependsOn: readonly string[];
 };
-
-export const dependencyOptionRequiredError = (operation: "add" | "remove" | "replace"): CliResult =>
-  usageError({
-    code: operation === "replace" ? "replace_requires_dependency" : "depends_on_required",
-    message:
-      operation === "replace"
-        ? "The replace operation requires at least one prerequisite."
-        : `The ${operation} operation requires at least one --depends-on value.`,
-    help: [
-      operation === "replace"
-        ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
-        : `Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`,
-    ],
-  });
 
 export const runDependenciesCommand = (
   command: TaskDependenciesCommand,

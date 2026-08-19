@@ -24,7 +24,7 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Change linked to a Task, use the complete `acceptanceContext` in the Change inspection as the accepted implementation intent.
 For a Change without a Task, no Acceptance Context exists.
-In a fresh Interactive Session for a Change without a Task, use the authorized outcome in the initial Implementer Prompt as current implementation direction without treating it as durable intent.
+In a separate Interactive Session for a Change without a Task, including a matching Done agent reused with a new initial handoff, use the authorized outcome in the initial Implementer Prompt as current implementation direction without treating it as durable intent.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
 This step is complete when the Change, accepted intent, and Managed Worktree are known.

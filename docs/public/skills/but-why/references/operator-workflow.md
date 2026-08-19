@@ -78,9 +78,11 @@ For a direct edit, implement only the authorized work in the current repository 
 A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.
 
 For a Change linked to a Task, confirm that the selected Task is approved and start or resume its Change with `<but-why> change start --task <task-id>`.
-Then start or verify a fresh Implementer Interactive Session.
+Then start or verify the Change's Implementer Interactive Session.
 
-For a Change without a Task, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a fresh Implementer Interactive Session.
+For a Change without a Task, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a separate Implementer Interactive Session.
+A separate Implementer Interactive Session runs outside the current Operator session.
+It may reuse the Change's matching Done agent with a new initial handoff and does not require a new agent identity.
 
 This section is complete when a direct edit is authorized or the exact Open Change and required session behavior are established for the selected work item.
 
@@ -88,7 +90,7 @@ This section is complete when a direct edit is authorized or the exact Open Chan
 
 The Implementer Prompt carries current non-authoritative information that Change inspection and packaged instructions do not supply.
 For a Change linked to a Task, the captured Acceptance Context supplies accepted intent, so provide a prompt only for additional current information.
-For a fresh Interactive Session for a Change without a Task, provide a prompt that states the authorized implementation outcome and applicable constraints because the Change has no Acceptance Context.
+For a separate Interactive Session for a Change without a Task, provide a prompt that states the authorized implementation outcome and applicable constraints because the Change has no Acceptance Context.
 Do not repeat bound identifiers, state, accepted context, or packaged instructions.
 Record facts that require durable authority through the applicable Task or Change operation.
 Do not include sensitive information.
@@ -102,7 +104,8 @@ Otherwise provide a UTF-8 Markdown file.
 ```
 
 Change Implement opens or reuses the Managed Worktree workspace, starts a named Pi agent through Herdr, and submits the initial handoff.
-`started` confirms that Herdr accepted agent readiness and the initial prompt.
+When the matching named agent is Done, Change Implement reuses it and submits the initial handoff without starting another agent.
+`started` confirms that Herdr accepted agent readiness and the initial prompt for a new or reused Done agent.
 `already_active` confirms that the active named agent was reused without another start or prompt.
 For `launch_indeterminate`, inspect the existing Herdr session and do not retry the uncertain start or prompt.
 Keep the current session open.

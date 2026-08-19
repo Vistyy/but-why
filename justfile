@@ -75,10 +75,9 @@ _fallow-static-check:
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
     exit "$status"
 
-# Run optional advisory analysis after rerunning all tests with coverage.
+# Run optional advisory code-health analysis.
 health:
-    just coverage
-    node scripts/run-health-report.mjs coverage/coverage-final.json
+    node scripts/run-health-report.mjs
 
 # Run focused Biome lint diagnostics.
 lint:
