@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { openHerdrInteractiveSessionHost } from "./change/interactiveSession/adapters/herdrInteractiveSessionHost.js";
 import { bestEffortStderrWriter } from "./cli/bestEffortStderr.js";
 import { mapRuntimeError, runCli } from "./cli.js";
 import { hostInterruptionExitCode, runWithHostInterruption } from "./command/hostInterruption.js";
@@ -12,6 +13,12 @@ const executablePath =
 const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
+// biome-ignore lint/complexity/useLiteralKeys: TS index signature
+const herdrSocketPath = process.env["HERDR_SOCKET_PATH"];
+const interactiveSessionHost = openHerdrInteractiveSessionHost(undefined, {
+  ...(herdrSocketPath === undefined ? {} : { socketPath: herdrSocketPath }),
+  platform: process.platform,
+});
 const writeStderr = bestEffortStderrWriter(process.stderr);
 
 void runWithHostInterruption(
@@ -21,6 +28,7 @@ void runWithHostInterruption(
     globalConfigPath: join(homedir(), ".config/but-why/config.json"),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
+    interactiveSessionHost,
     writeStderr,
   }),
   (completion) => {

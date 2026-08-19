@@ -9,6 +9,7 @@ export const herdr08InitialRequestTimeoutMs = 5_000;
 
 export type HerdrAgentPromptTransportInput = {
   readonly socketPath: string;
+  readonly platform: NodeJS.Platform;
   readonly target: string;
   readonly text: string;
   readonly timeoutMs: number;
@@ -79,6 +80,7 @@ export const sendHerdrAgentPrompt: HerdrAgentPromptTransport = async (input) => 
   if (!pingLine.ok) return pingLine;
   const ping = await exchangeHerdrRequest({
     socketPath: input.socketPath,
+    platform: input.platform,
     line: pingLine.line,
     timeoutMs: input.timeoutMs,
     signal: input.signal,
@@ -103,6 +105,7 @@ export const sendHerdrAgentPrompt: HerdrAgentPromptTransport = async (input) => 
 
   const prompted = await exchangeHerdrRequest({
     socketPath: input.socketPath,
+    platform: input.platform,
     line: promptLine.line,
     timeoutMs: input.timeoutMs,
     signal: input.signal,
@@ -147,6 +150,7 @@ const encodeRequest = (
 
 const exchangeHerdrRequest = (input: {
   readonly socketPath: string;
+  readonly platform: NodeJS.Platform;
   readonly line: string;
   readonly timeoutMs: number;
   readonly signal: AbortSignal | undefined;
@@ -157,7 +161,7 @@ const exchangeHerdrRequest = (input: {
     let writeStarted = false;
     let response = Buffer.alloc(0);
     const socketPath =
-      process.platform === "win32" ? `\\\\.\\pipe\\${input.socketPath}` : input.socketPath;
+      input.platform === "win32" ? `\\\\.\\pipe\\${input.socketPath}` : input.socketPath;
     const socket = createConnection(socketPath);
     const timeoutMs = Math.min(input.timeoutMs, herdr08InitialRequestTimeoutMs);
 

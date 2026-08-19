@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { observeUntil } from "./observe.js";
+import { startTestProcess } from "./testProcess.js";
 
 const helperPath = fileURLToPath(new URL("./herdrApiServerHelper.mjs", import.meta.url));
 
@@ -11,10 +12,10 @@ export const startFakeHerdrApiServer = async (input: {
   readonly capturePath: string;
   readonly readyPath: string;
 }): Promise<{ readonly stop: () => Promise<void> }> => {
-  const child = spawn(
+  const child = startTestProcess(
     process.execPath,
     [helperPath, input.socketPath, input.capturePath, input.readyPath],
-    { stdio: "ignore" },
+    { cwd: dirname(input.socketPath) },
   );
   await observeUntil({
     description: `fake Herdr API socket ${input.socketPath}`,

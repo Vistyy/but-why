@@ -5,13 +5,17 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  type HerdrAgentPromptTransportInput,
   herdr08MaxInitialRequestBytes,
   herdr08Protocol,
-  sendHerdrAgentPrompt,
+  sendHerdrAgentPrompt as sendPlatformHerdrAgentPrompt,
 } from "../../src/change/interactiveSession/adapters/herdrAgentPromptSocket.js";
 
 const roots: string[] = [];
 const servers: Server[] = [];
+
+const sendHerdrAgentPrompt = (input: Omit<HerdrAgentPromptTransportInput, "platform">) =>
+  sendPlatformHerdrAgentPrompt({ ...input, platform: "linux" });
 
 afterEach(async () => {
   await Promise.all(

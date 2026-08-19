@@ -42,6 +42,7 @@ const openHerdrInteractiveSessionHost = (
   options: HerdrInteractiveSessionHostOptions = {},
 ) =>
   openRawHerdrInteractiveSessionHost(execute, {
+    platform: "linux",
     ...options,
     promptTransport: options.promptTransport ?? confirmedPromptTransport,
   });

@@ -24,6 +24,7 @@ export type HerdrInteractiveSessionHostOptions = {
   readonly readinessTimeoutMs?: number;
   readonly observationRetries?: number;
   readonly socketPath?: string;
+  readonly platform?: NodeJS.Platform;
   readonly promptTransport?: HerdrAgentPromptTransport;
 };
 
@@ -123,8 +124,15 @@ const launchHerdrSession = async (
   const options = { ...defaultOptions, ...environment };
   const preflight = await preflightTrustedResources(input);
   if (!preflight.ok) return preflight.result;
-  // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
-  const socketPath = environment.socketPath ?? process.env["HERDR_SOCKET_PATH"];
+  const socketPath = environment.socketPath;
+  const platform = environment.platform;
+  if (platform === undefined) {
+    return {
+      ok: false,
+      code: "host_unavailable",
+      message: "The Interactive Session runtime platform is unavailable.",
+    };
+  }
   if (socketPath === undefined && environment.promptTransport === undefined) {
     return {
       ok: false,
@@ -164,6 +172,7 @@ const launchHerdrSession = async (
     command,
     promptTransport,
     socketPath ?? "injected",
+    platform,
     input,
     sessionName,
     signal,
@@ -388,6 +397,7 @@ const submitInitialPrompt = async (
   command: HerdrCommandExecutor,
   promptTransport: HerdrAgentPromptTransport,
   socketPath: string,
+  platform: NodeJS.Platform,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
   signal: AbortSignal | undefined,
@@ -401,6 +411,7 @@ const submitInitialPrompt = async (
   }
   const prompted = await promptTransport({
     socketPath,
+    platform,
     target: sessionName,
     text: input.initialPrompt,
     timeoutMs: options.commandTimeoutMs,
