@@ -41,13 +41,13 @@
     "typecheck": "effect-tsgo patch --typescript && tsc --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.84.0",
+    "@earendil-works/pi-coding-agent": "0.84.2",
     "jiti": "2.7.0"
   },
   "devDependencies": {
     "@ast-grep/cli": "^0.44.1",
     "@biomejs/biome": "^2.2.0",
-    "@earendil-works/pi-ai": "0.84.0",
+    "@earendil-works/pi-ai": "0.84.2",
     "@effect/cli": "0.74.0",
     "@effect/experimental": "0.59.0",
     "@effect/platform": "0.95.0",
