@@ -191,6 +191,99 @@ const passingReviewer: ReviewerAgentRuntime<TaskReviewerOutput> = {
     }),
 };
 
+it.effect("returns a missing Task Review only when completion and recovery lookup both miss", () =>
+  Effect.gen(function* () {
+    const taskId = publicTaskId("BY-1");
+    const reviewerProfile = {
+      agentProfile: "review",
+      scope: "global" as const,
+      profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test-model" } },
+    };
+    const reviewerPolicy = {
+      profile: reviewerProfile,
+      builtInInstructions: taskReviewBuiltInInstructions,
+      guidance: null,
+    };
+    const review: TaskReviewRecord = {
+      id: 1,
+      taskId,
+      proposal: { title: "Review me", description: "Exact", dependencyIds: [] },
+      dependencyEvidence: [],
+      baseRef: "refs/heads/main",
+      baseCommit: "a".repeat(40),
+      workspacePath: "/tmp/review-1",
+      state: "running",
+      outcome: null,
+      workspaceCleanup: "not_created",
+      cleanupBlockingReason: null,
+      toolingFailure: null,
+      findings: [],
+    };
+    const unused = () => Effect.die("Unexpected persistence operation");
+    const persistence: TaskReviewPersistence = {
+      reuseJudgment: () => Effect.succeed(undefined),
+      checkAdmission: () => Effect.succeed(undefined),
+      admit: () =>
+        Effect.succeed({
+          ok: true as const,
+          review,
+          policy: reviewerPolicy,
+          proposal: review.proposal,
+          dependencyEvidence: [],
+        }),
+      recordCleanup: () => Effect.void,
+      complete: () =>
+        Effect.succeed({ ok: false as const, code: "task_review_not_found" as const }),
+      abandon: unused,
+      getById: () => Effect.succeed(undefined),
+      getLatestForTask: unused,
+      listForTask: () => Effect.succeed([]),
+      getReviewerAgentSession: () => Effect.succeed(undefined),
+      getReviewerConfiguration: () => Effect.succeed(undefined),
+      linkAgentInvocation: defaultAgentLink,
+      settleAgentReview: () => () => Effect.void,
+      recordActiveFailure: unused,
+      proposalIsCurrent: unused,
+    };
+    const reviews = openTaskReviewUseCases({
+      repositoryRoot: createTestWorkspace(),
+      repositoryCommonDirectory: createTestWorkspace(),
+      loadRepoConfig: () => ({ ok: true, config: { idPrefix: "BY" } }),
+      resolvePolicy: () => ({
+        ok: true as const,
+        policy: { snapshot: reviewerPolicy, profile: reviewerProfile },
+      }),
+      persistence,
+      agentSessionStorageRoot: createTestWorkspace(),
+      agentPersistence: defaultAgentPersistence(),
+      reviewerRuntime: passingReviewer,
+      reviewerExecutor: { execute: () => Effect.die("unused") },
+      readReviewBase: () =>
+        Effect.succeed({
+          ok: true as const,
+          base: { ref: "refs/heads/main", commit: "a".repeat(40) },
+        }),
+      verifyReviewBase: () => Effect.succeed({ ok: true as const }),
+      runWorkspace: (workspaceInput) =>
+        workspaceInput.runInWorkspace === undefined
+          ? Effect.succeed({ ok: true as const })
+          : workspaceInput
+              .runInWorkspace({
+                commandExecutor: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                worktreePath: "/tmp/review-1",
+              })
+              .pipe(Effect.map((workspaceResult) => ({ ok: true as const, workspaceResult }))),
+      cleanupWorkspace: () => Effect.succeed({ workspace: "removed" as const }),
+      inspectWorkspace: () => Effect.succeed({ state: "absent" as const }),
+    });
+
+    expect(yield* reviews.submit(taskId, "2026-08-11T12:05:00.000Z")).toEqual({
+      ok: false,
+      code: "task_review_not_found",
+    });
+  }),
+);
+
 it.effect(
   "verifies the recorded Task Review Base without requiring its branch tip to remain fixed",
   () =>

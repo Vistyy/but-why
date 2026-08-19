@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
+import {
+  RepositoryPersistedDataInvalid,
+  RepositorySqlOperationFailed,
+} from "../../src/contracts/repositoryStorageError.js";
 import {
   createDetachedDisposableWorktree,
   prepareDisposableWorkspaceParent,
@@ -81,6 +84,84 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
           now,
         }),
       ).toEqual({ ok: false, code: "active_task_review", reviewId: 1 });
+    }),
+  ),
+);
+
+it.scoped("distinguishes missing completion from inactive recovery and gates retry admission", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const taskId = publicTaskId("BY-1");
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+
+      expect(yield* reviews.complete({ reviewId: 999, findings: [], now })).toEqual({
+        ok: false,
+        code: "task_review_not_found",
+      });
+      expect(yield* reviews.checkAdmission(taskId)).toBeUndefined();
+
+      const admitted = yield* reviews.admit({
+        taskId,
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(admitted.code);
+      expect(yield* reviews.checkAdmission(taskId)).toEqual({
+        ok: false,
+        code: "active_task_review",
+        reviewId: admitted.review.id,
+      });
+      expect(yield* reviews.complete({ reviewId: admitted.review.id, findings: [], now })).toEqual({
+        ok: false,
+        code: "task_review_not_active",
+      });
+    }),
+  ),
+);
+
+it.scoped("keeps malformed and SQL completion failures distinct", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const repository = yield* RepositorySql;
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+      const admitted = yield* reviews.admit({
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+      if (!admitted.ok) throw new Error(admitted.code);
+
+      yield* repository.operation(
+        "inject malformed Task Review completion state",
+        (sql) => sql`
+          UPDATE task_reviews
+          SET tooling_failure = '{"operation":"run_task_review","message":"Failed.","extra":true}'
+          WHERE id = ${admitted.review.id}
+        `,
+      );
+      expect(
+        yield* reviews
+          .complete({ reviewId: admitted.review.id, findings: [], now })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+      yield* repository.operation(
+        "remove Task Review storage",
+        (sql) => sql`DROP TABLE task_reviews`,
+      );
+      expect(
+        yield* reviews
+          .complete({ reviewId: admitted.review.id, findings: [], now })
+          .pipe(Effect.flip),
+      ).toBeInstanceOf(RepositorySqlOperationFailed);
     }),
   ),
 );
