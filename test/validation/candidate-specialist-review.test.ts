@@ -692,7 +692,10 @@ describe("Candidate Specialist Review phase", () => {
             outcome: "failed",
             findings: [],
             artifactRecords: [],
-            toolingFailure: { operationName: "verify_candidate_head" },
+            toolingFailure: {
+              errorKind: "git_tooling_failed",
+              operationName: "verify_candidate_head",
+            },
           },
         ]);
         expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);

@@ -504,7 +504,10 @@ describe("Acceptance Review phase", () => {
           outcome: "failed",
           findings: [],
           artifactRecords: [],
-          toolingFailure: { operationName: "verify_candidate_head" },
+          toolingFailure: {
+            errorKind: "git_tooling_failed",
+            operationName: "verify_candidate_head",
+          },
         },
       ]);
     }),

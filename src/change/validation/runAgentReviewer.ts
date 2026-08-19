@@ -88,6 +88,7 @@ export const runAgentReviewer = (
   FileSystem.FileSystem
 > => {
   let phaseOutcome: CandidateValidationOutcome | undefined;
+  let integrityFailure: ValidationToolingFailure | undefined;
   return Effect.gen(function* () {
     yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
       ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
@@ -117,9 +118,9 @@ export const runAgentReviewer = (
               operationName: `verify_${input.phase}_candidate`,
             }),
           );
-          return integrity._tag === "Right"
-            ? result
-            : integrityFailureResult(result, integrity.left);
+          if (integrity._tag === "Right") return result;
+          integrityFailure = integrity.left;
+          return integrityFailureResult(result, integrity.left);
         }),
       settleDomain: ({ result: runtimeResult, evidence }) =>
         Effect.gen(function* () {
@@ -132,6 +133,7 @@ export const runAgentReviewer = (
               result.failure.operationName === `verify_${input.phase}_candidate`)
           ) {
             phaseOutcome = "tooling_failed";
+            const failure = integrityFailure ?? result.failure;
             return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
@@ -140,7 +142,7 @@ export const runAgentReviewer = (
               findings: [],
               artifactRecords: [],
               toolingFailure: {
-                ...validationToolingFailureRecord(result.failure),
+                ...validationToolingFailureRecord(failure),
                 validationRunId: input.validationRunId,
               },
             });
