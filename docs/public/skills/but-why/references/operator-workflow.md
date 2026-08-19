@@ -102,7 +102,8 @@ Otherwise provide a UTF-8 Markdown file.
 ```
 
 Change Implement opens or reuses the Managed Worktree workspace, starts a named Pi agent through Herdr, and submits the initial handoff.
-`started` confirms that Herdr accepted agent readiness and the initial prompt.
+When the matching named agent is Done, Change Implement reuses it and submits the initial handoff without starting another agent.
+`started` confirms that Herdr accepted agent readiness and the initial prompt for a new or reused Done agent.
 `already_active` confirms that the active named agent was reused without another start or prompt.
 For `launch_indeterminate`, inspect the existing Herdr session and do not retry the uncertain start or prompt.
 Keep the current session open.

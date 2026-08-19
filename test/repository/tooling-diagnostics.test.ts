@@ -329,8 +329,7 @@ esac
     );
 
     expect(result.status).toBe(0);
-    expect(result.output).toContain("node scripts/run-health-report.mjs");
-    expect(result.output).not.toContain("just coverage");
+    expect(result.output.trim()).toBe("node scripts/run-health-report.mjs");
   });
 
   test.each([

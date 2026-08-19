@@ -372,9 +372,17 @@ const startNativeAgent = async (
   const afterStartAgents = afterStart.ok ? decodeAgentList(afterStart.stdout) : undefined;
   if (afterStartAgents !== undefined) {
     if (hasActiveSession(afterStartAgents, input, sessionName)) return phaseComplete(undefined);
-    if (hasUnknownSession(afterStartAgents, input, sessionName)) {
+    if (
+      hasUnknownSession(afterStartAgents, input, sessionName) ||
+      hasUnknownAgentInWorktree(afterStartAgents, input)
+    ) {
       return phaseStopped(
         launchIndeterminate("Herdr reported an unknown state after native agent start."),
+      );
+    }
+    if (hasActiveAgentInWorktree(afterStartAgents, input)) {
+      return phaseStopped(
+        launchFailure("Another Interactive Session is already active in this Managed Worktree."),
       );
     }
     if (hasCompletedSession(afterStartAgents, input, sessionName)) {

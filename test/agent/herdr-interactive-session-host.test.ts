@@ -35,6 +35,20 @@ const input = {
   initialPrompt: "Change identity: change-123.\n\nManaged Worktree: /workspace/change-123.",
 } as const;
 
+const listedAgents = (
+  agents: readonly Readonly<Record<"name" | "cwd" | "pane_id" | "agent_status", string>>[],
+): { readonly ok: true; readonly stdout: string } => ({
+  ok: true,
+  stdout: JSON.stringify({ result: { type: "agent_list", agents } }),
+});
+
+const matchingAgent = (status: string) => ({
+  name: input.hostSessionName,
+  cwd: input.worktreePath,
+  pane_id: "pane-1",
+  agent_status: status,
+});
+
 const confirmedPromptTransport: HerdrAgentPromptTransport = async () => ({ ok: true });
 
 const openHerdrInteractiveSessionHost = (
@@ -485,6 +499,125 @@ describe("Herdr Interactive Session Host", () => {
         text: input.initialPrompt,
       }),
     ]);
+  });
+
+  it("prompts a matching done session observed after opening the worktree", async () => {
+    const commands: string[][] = [];
+    let observations = 0;
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        observations += 1;
+        return observations === 1 ? emptyAgents() : listedAgents([matchingAgent("done")]);
+      }
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(0);
+    expect(promptAttempts).toBe(1);
+  });
+
+  it("prompts a matching done session observed after an uncertain native start", async () => {
+    const commands: string[][] = [];
+    let observations = 0;
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        observations += 1;
+        return observations < 3 ? emptyAgents() : listedAgents([matchingAgent("done")]);
+      }
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: false, message: "response lost" };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(1);
+    expect(promptAttempts).toBe(1);
+  });
+
+  it("does not prompt a done session while another agent is active in the worktree", async () => {
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async () =>
+      listedAgents([
+        matchingAgent("done"),
+        {
+          name: "other-session",
+          cwd: input.worktreePath,
+          pane_id: "pane-2",
+          agent_status: "working",
+        },
+      ]);
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
+
+    expect(promptAttempts).toBe(0);
+  });
+
+  it("does not prompt a done session found after an uncertain start when another agent is active", async () => {
+    let observations = 0;
+    let promptAttempts = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        observations += 1;
+        return observations < 3
+          ? emptyAgents()
+          : listedAgents([
+              matchingAgent("done"),
+              {
+                name: "other-session",
+                cwd: input.worktreePath,
+                pane_id: "pane-2",
+                agent_status: "working",
+              },
+            ]);
+      }
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: false, message: "response lost" };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async () => {
+          promptAttempts += 1;
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
+
+    expect(promptAttempts).toBe(0);
   });
 
   it("does not start or prompt another agent when the named session is active", async () => {
