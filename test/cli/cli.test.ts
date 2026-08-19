@@ -8,6 +8,7 @@ import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome } from "../../src/cli/cliPath.js";
 import { mapRuntimeError } from "../../src/cli.js";
+import { runtimeError } from "../../src/cliResults.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
@@ -286,6 +287,20 @@ describe("by CLI", () => {
     expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
       error: { code: "internal_error", message: "The command failed unexpectedly" },
       help: ["Report this failure with the command and workspace path"],
+    });
+  });
+
+  ordinaryIt("preserves the result code and message when details use the same keys", () => {
+    const result = runtimeError({
+      code: "stable_code",
+      message: "Stable message",
+      details: { code: "detail_code", message: "Detail message" },
+      help: [],
+    });
+
+    expect(result.stdout).toEqual({
+      error: { code: "stable_code", message: "Stable message" },
+      help: [],
     });
   });
 

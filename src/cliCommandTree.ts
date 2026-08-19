@@ -8,8 +8,11 @@ import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
 import { Console, Context, Effect, Layer, Logger, Option, Ref } from "effect";
 import type * as Types from "effect/Types";
-import type { ChangeCommandEnvironment } from "./cli/change/changeTypes.js";
 import { collapseHome } from "./cli/cliPath.js";
+import {
+  dependencyOptionRequiredError,
+  missingDependencyOperation,
+} from "./cli/task/dependencyOptionUsage.js";
 import type { CliEnvironment } from "./cli.js";
 import { type CliResult, success, usageError } from "./cliResults.js";
 import { taskStates } from "./task/lifecycle.js";
@@ -360,7 +363,7 @@ const changeDecisionAddCommand = withCliHandler(
             choice: values.choice,
             rationale: values.rationale,
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -372,10 +375,7 @@ const changeDecisionListCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/decision.js")).pipe(
       Effect.flatMap(({ runDecision }) =>
-        runDecision(
-          { action: "list", changeId: values.changeId },
-          environment as ChangeCommandEnvironment,
-        ),
+        runDecision({ action: "list", changeId: values.changeId }, environment),
       ),
     ),
 );
@@ -410,7 +410,7 @@ const changeBlockerRaiseCommand = withCliHandler(
             changeId: values.changeId,
             file: values.file,
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -433,7 +433,7 @@ const changeBlockerResolveCommand = withCliHandler(
             changeId: values.changeId,
             file: values.file,
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -443,10 +443,7 @@ const changeBlockerListCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(
       Effect.flatMap(({ runBlocker }) =>
-        runBlocker(
-          { action: "list", changeId: values.changeId },
-          environment as ChangeCommandEnvironment,
-        ),
+        runBlocker({ action: "list", changeId: values.changeId }, environment),
       ),
     ),
 );
@@ -472,7 +469,7 @@ const changeStartCommand = withCliHandler(
             taskId: Option.getOrUndefined(values.task),
             baseBranch: Option.getOrUndefined(values.base),
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -484,10 +481,7 @@ const changePrepareCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/prepare.js")).pipe(
       Effect.flatMap(({ runPrepare }) =>
-        runPrepare(
-          { changeId: Option.getOrUndefined(values.changeId) },
-          environment as ChangeCommandEnvironment,
-        ),
+        runPrepare({ changeId: Option.getOrUndefined(values.changeId) }, environment),
       ),
     ),
 );
@@ -495,9 +489,7 @@ const changeListCommand = withCliHandler(
   leaf("list", "List Changes oldest first.", { all: Options.boolean("all") }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/list.js")).pipe(
-      Effect.flatMap(({ runList }) =>
-        runList({ all: values.all }, environment as ChangeCommandEnvironment),
-      ),
+      Effect.flatMap(({ runList }) => runList({ all: values.all }, environment)),
     ),
 );
 const changeShowCommand = withCliHandler(
@@ -507,10 +499,7 @@ const changeShowCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/show.js")).pipe(
       Effect.flatMap(({ runShow }) =>
-        runShow(
-          { changeId: Option.getOrUndefined(values.changeId) },
-          environment as ChangeCommandEnvironment,
-        ),
+        runShow({ changeId: Option.getOrUndefined(values.changeId) }, environment),
       ),
     ),
 );
@@ -521,10 +510,7 @@ const changeFindingsCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/findings.js")).pipe(
       Effect.flatMap(({ runFindings }) =>
-        runFindings(
-          { changeId: Option.getOrUndefined(values.changeId) },
-          environment as ChangeCommandEnvironment,
-        ),
+        runFindings({ changeId: Option.getOrUndefined(values.changeId) }, environment),
       ),
     ),
 );
@@ -535,10 +521,7 @@ const changeValidationRunsCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/validationRuns.js")).pipe(
       Effect.flatMap(({ runValidationRuns }) =>
-        runValidationRuns(
-          { changeId: Option.getOrUndefined(values.changeId) },
-          environment as ChangeCommandEnvironment,
-        ),
+        runValidationRuns({ changeId: Option.getOrUndefined(values.changeId) }, environment),
       ),
     ),
 );
@@ -549,10 +532,7 @@ const changeSubmitCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/submit.js")).pipe(
       Effect.flatMap(({ runSubmit }) =>
-        runSubmit(
-          { changeId: Option.getOrUndefined(values.changeId) },
-          environment as ChangeCommandEnvironment,
-        ),
+        runSubmit({ changeId: Option.getOrUndefined(values.changeId) }, environment),
       ),
     ),
 );
@@ -569,7 +549,7 @@ const changeCancelCommand = withCliHandler(
             changeId: Option.getOrUndefined(values.changeId),
             reason: values.reason,
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -587,7 +567,7 @@ const changeReconcileCommand = withCliHandler(
             changeId: Option.getOrUndefined(values.changeId),
             discardWork: values.discardWork,
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -605,7 +585,7 @@ const changeImplementCommand = withCliHandler(
             changeId: Option.getOrUndefined(values.changeId),
             implementerPromptFile: Option.getOrUndefined(values.implementerPromptFile),
           },
-          environment as ChangeCommandEnvironment,
+          environment,
         ),
       ),
     ),
@@ -798,7 +778,7 @@ export const runCommandTree = (
           generatedText(commandResult.left.error),
         );
         if (missingOperation !== undefined) {
-          return dependencyOptionRequiredErrorResult(missingOperation);
+          return dependencyOptionRequiredError(missingOperation);
         }
         return usageError({
           code: "invalid_usage",
@@ -845,72 +825,6 @@ const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
       help: ["Run `by --help` for generated command help."],
     }),
   );
-
-const dependencyOptionRequiredErrorResult = (operation: "add" | "remove" | "replace"): CliResult =>
-  usageError({
-    code: operation === "replace" ? "replace_requires_dependency" : "depends_on_required",
-    message:
-      operation === "replace"
-        ? "The replace operation requires at least one prerequisite."
-        : `The ${operation} operation requires at least one --depends-on value.`,
-    help: [
-      operation === "replace"
-        ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
-        : `Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`,
-    ],
-  });
-
-const missingDependencyOperation = (
-  args: readonly string[],
-  validationMessage: string,
-): "add" | "remove" | "replace" | undefined => {
-  if (validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'") {
-    return undefined;
-  }
-  const positional = validGlobalOptionSyntax(args);
-  if (positional === undefined || positional.length !== 4) return undefined;
-  const [command, group, operation] = positional;
-  return command === "task" &&
-    group === "dependencies" &&
-    (operation === "add" || operation === "remove" || operation === "replace")
-    ? operation
-    : undefined;
-};
-
-const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | undefined => {
-  const seen = new Set<string>();
-  const positional: string[] = [];
-  const valueOptions = new Map([
-    [
-      "--log-level",
-      new Set(["all", "trace", "debug", "info", "warning", "error", "fatal", "none"]),
-    ],
-    ["--completions", new Set(["sh", "bash", "fish", "zsh"])],
-  ]);
-  const aliases = new Map<string, string>();
-  const flags = new Set(["--wizard", "--version", "--help", "-h"]);
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === undefined) return undefined;
-    if (!argument.startsWith("-")) {
-      positional.push(argument);
-      continue;
-    }
-    if (argument.includes("=")) return undefined;
-    const option = aliases.get(argument) ?? argument;
-    if (flags.has(option)) {
-      if (seen.has(option)) return undefined;
-      seen.add(option);
-      continue;
-    }
-    const values = valueOptions.get(option);
-    if (values === undefined || seen.has(option)) return undefined;
-    const value = args[++index];
-    if (value === undefined || value.startsWith("-") || !values.has(value)) return undefined;
-    seen.add(option);
-  }
-  return positional;
-};
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {
   const ansiEscape = String.fromCharCode(27);

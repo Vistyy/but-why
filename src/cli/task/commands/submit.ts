@@ -101,14 +101,12 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
       return runtimeError({
         code: result.code,
         message: result.message,
-        details: {},
         help: ["Restore the current worktree and its committed Repo Config, then retry."],
       });
     case "task_review_config_invalid":
       return runtimeError({
         code: result.code,
         message: result.message,
-        details: {},
         help: ["Correct the Task Review configuration and retry."],
       });
     case "task_review_not_found":

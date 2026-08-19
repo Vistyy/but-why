@@ -29,20 +29,7 @@ export const submitRecovery = (
   retryCommand: `by change submit ${changeId}`,
 });
 
-type DistributedChangeSubmitResult<Result = ChangeSubmitResult> = Result extends ChangeSubmitResult
-  ? Result extends { readonly ok: true; readonly status: infer Status extends string }
-    ? Status extends string
-      ? Omit<Result, "status"> & { readonly status: Status }
-      : never
-    : Result extends { readonly ok: false; readonly code: infer Code extends string }
-      ? Code extends string
-        ? Omit<Result, "code"> & { readonly code: Code }
-        : never
-      : never
-  : never;
-
-export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliResult => {
-  const result = submit as DistributedChangeSubmitResult;
+export const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult => {
   if (result.ok) {
     if (result.status === "nothing_to_submit") {
       return success({
@@ -314,6 +301,9 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
       help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
     });
   }
-  const exhaustiveResult: never = result;
-  return exhaustiveResult;
+  return runtimeError({
+    code: result.code,
+    message: "Change Submit could not validate or publish the current Candidate.",
+    help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
+  });
 };

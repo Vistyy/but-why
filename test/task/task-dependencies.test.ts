@@ -122,6 +122,39 @@ describe("Task dependency CLI", () => {
     }),
   );
 
+  it.effect("reports missing dependency options with structured guidance", () =>
+    Effect.gen(function* () {
+      const root = createTestWorkspace();
+
+      for (const operation of ["add", "remove", "replace"] as const) {
+        const result = yield* runByInProcessEffect(
+          root,
+          ["--log-level", "info", "task", "dependencies", operation, "BY-1"],
+          now,
+        );
+
+        expect(result.status).toBe(2);
+        expect(result.stderr).toBe("");
+        expect(JSON.parse(result.stdout)).toEqual({
+          error:
+            operation === "replace"
+              ? {
+                  code: "replace_requires_dependency",
+                  message: "The replace operation requires at least one prerequisite.",
+                }
+              : {
+                  code: "depends_on_required",
+                  message: `The ${operation} operation requires at least one --depends-on value.`,
+                },
+          help:
+            operation === "replace"
+              ? ["Use `by task dependencies clear <task-id>` to remove all prerequisites."]
+              : [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
+        });
+      }
+    }),
+  );
+
   it.effect("maps the defensive create-time dependency cycle result", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
