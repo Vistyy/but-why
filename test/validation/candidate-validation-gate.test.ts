@@ -3,15 +3,10 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { runCandidateValidationGate } from "../../src/change/candidateValidation/runCandidateValidationGate.js";
-import { ReviewerProcessToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
 
-const passed = { findings: 0 as const };
-const blocked = { findings: 1 as const };
-const specialistsPassed = {
-  findings: 0 as const,
-  reviewerEvidence: [],
-  toolingFailures: [],
-};
+const passed = { outcome: "passed" as const };
+const blocked = { outcome: "blocked" as const };
+const toolingFailed = { outcome: "tooling_failed" as const };
 const record = <A>(calls: string[], phase: string, result: A) =>
   Effect.sync(() => {
     calls.push(phase);
@@ -25,10 +20,10 @@ describe("Candidate Validation Gate", () => {
 
       const result = yield* runCandidateValidationGate({
         checks: () => record(calls, "checks", passed),
-        specialistReviews: () => record(calls, "specialists", specialistsPassed),
+        specialistReviews: () => record(calls, "specialists", passed),
       });
 
-      expect(result).toEqual({ outcome: "passed", toolingFailures: [] });
+      expect(result).toEqual(passed);
       expect(calls).toEqual(["checks", "specialists"]);
     }),
   );
@@ -40,9 +35,9 @@ describe("Candidate Validation Gate", () => {
         prepare: () => record(prepareCalls, "prepare", blocked),
         checks: () => record(prepareCalls, "checks", passed),
         acceptanceReview: () => record(prepareCalls, "acceptance", passed),
-        specialistReviews: () => record(prepareCalls, "specialists", specialistsPassed),
+        specialistReviews: () => record(prepareCalls, "specialists", passed),
       });
-      expect(prepareResult.outcome).toBe("blocked");
+      expect(prepareResult).toEqual(blocked);
       expect(prepareCalls).toEqual(["prepare"]);
 
       const checkCalls: string[] = [];
@@ -50,86 +45,41 @@ describe("Candidate Validation Gate", () => {
         prepare: () => record(checkCalls, "prepare", passed),
         checks: () => record(checkCalls, "checks", blocked),
         acceptanceReview: () => record(checkCalls, "acceptance", passed),
-        specialistReviews: () => record(checkCalls, "specialists", specialistsPassed),
+        specialistReviews: () => record(checkCalls, "specialists", passed),
       });
-      expect(checkResult.outcome).toBe("blocked");
+      expect(checkResult).toEqual(blocked);
       expect(checkCalls).toEqual(["prepare", "checks"]);
     }),
   );
 
-  it.effect("stops Specialists after blocking or failed Acceptance Review", () =>
+  it.effect("stops after Prepare, Check, or Acceptance Tooling Failure", () =>
     Effect.gen(function* () {
-      const calls: string[] = [];
+      for (const failedPhase of ["prepare", "checks", "acceptance"] as const) {
+        const calls: string[] = [];
+        const result = yield* runCandidateValidationGate({
+          prepare: () =>
+            record(calls, "prepare", failedPhase === "prepare" ? toolingFailed : passed),
+          checks: () => record(calls, "checks", failedPhase === "checks" ? toolingFailed : passed),
+          acceptanceReview: () =>
+            record(calls, "acceptance", failedPhase === "acceptance" ? toolingFailed : passed),
+          specialistReviews: () => record(calls, "specialists", passed),
+        });
 
-      const blockedResult = yield* runCandidateValidationGate({
-        checks: () => record(calls, "checks", passed),
-        acceptanceReview: () => record(calls, "acceptance", blocked),
-        specialistReviews: () => record(calls, "specialists", specialistsPassed),
-      });
-
-      expect(blockedResult.outcome).toBe("blocked");
-      expect(calls).toEqual(["checks", "acceptance"]);
-
-      calls.length = 0;
-      const failure = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_process",
-        message: "Acceptance Review tooling failed.",
-      });
-      const failedResult = yield* runCandidateValidationGate({
-        checks: () => record(calls, "checks", passed),
-        acceptanceReview: () =>
-          Effect.sync(() => {
-            calls.push("acceptance");
-            return { findings: 0 as const, toolingFailure: failure };
-          }),
-        specialistReviews: () => record(calls, "specialists", specialistsPassed),
-      });
-
-      expect(failedResult).toMatchObject({
-        outcome: "tooling_failed",
-        toolingFailures: [failure],
-      });
-      expect(calls).toEqual(["checks", "acceptance"]);
+        expect(result).toEqual(toolingFailed);
+        expect(calls.at(-1)).toBe(failedPhase);
+      }
     }),
   );
 
-  it.effect("translates final passing, blocking, and Tooling Failure results truthfully", () =>
+  it.effect("returns the Specialist outcome", () =>
     Effect.gen(function* () {
-      const failure = new ReviewerProcessToolingFailed({
-        operationName: "run_reviewer_process",
-        message: "Specialist tooling failed.",
-      });
-      const run = (
-        specialistResult:
-          | typeof specialistsPassed
-          | {
-              readonly findings: 1;
-              readonly reviewerEvidence: readonly [];
-              readonly toolingFailures: readonly [] | readonly [ReviewerProcessToolingFailed];
-            },
-      ) =>
-        runCandidateValidationGate({
+      for (const specialistResult of [passed, blocked, toolingFailed]) {
+        const result = yield* runCandidateValidationGate({
           checks: () => Effect.succeed(passed),
           specialistReviews: () => Effect.succeed(specialistResult),
         });
-
-      expect((yield* run(specialistsPassed)).outcome).toBe("passed");
-      expect(
-        (yield* run({
-          findings: 1,
-          reviewerEvidence: [],
-          toolingFailures: [],
-        })).outcome,
-      ).toBe("blocked");
-      const toolingResult = yield* run({
-        findings: 1,
-        reviewerEvidence: [],
-        toolingFailures: [failure],
-      });
-      expect(toolingResult).toMatchObject({
-        outcome: "tooling_failed",
-        toolingFailures: [failure],
-      });
+        expect(result).toEqual(specialistResult);
+      }
     }),
   );
 });

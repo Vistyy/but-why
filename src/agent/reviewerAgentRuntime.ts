@@ -17,7 +17,7 @@ export class ReviewerExecutionFailed extends Data.TaggedError("ReviewerExecution
   readonly message: string;
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
-  readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionUsability?: AgentContinuationUsability;
   readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
@@ -33,7 +33,7 @@ export type ReviewerRuntimeFailure = {
   readonly message: string;
   readonly diagnostics?: readonly ContractDiagnostic[];
   readonly correctionPrompt?: string;
-  readonly sessionUsability?: ReviewerSessionUsability;
+  readonly sessionUsability?: AgentContinuationUsability;
   readonly invocationUsage?: TokenUsage | null;
   readonly sessionReference?: string;
   readonly sessionFilePath?: string;
@@ -45,7 +45,7 @@ export type ReviewerAgentRuntime<Output = unknown> = {
   ) => Effect.Effect<ReviewerAgentResult<Output>>;
 };
 
-export type ReviewerSessionUsability = "unusable" | "unknown";
+export type AgentContinuationUsability = "unusable" | "unknown";
 
 export type ReviewerAgentInput<Output> = {
   readonly reviewerExecutor: ReviewerProcessExecutor;
@@ -76,7 +76,7 @@ export type ReviewerAgentResult<Output = unknown> =
   | {
       readonly ok: false;
       readonly failure: ReviewerRuntimeFailure;
-      readonly sessionUsability: ReviewerSessionUsability;
+      readonly sessionUsability: AgentContinuationUsability;
       readonly attempts: number;
       readonly stdout: string;
       readonly invocationUsage?: readonly (TokenUsage | null)[];

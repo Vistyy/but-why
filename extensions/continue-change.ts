@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { accessSync, constants, readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import {
   type ExtensionAPI,
   type ExtensionContext,
@@ -19,17 +16,17 @@ type ChangeCleanup = JsonObject & {
 };
 
 type CurrentCandidate = JsonObject & {
-  readonly id: string;
+  readonly id: number;
   readonly headSha: string;
 };
 
 type CurrentValidationRun = JsonObject & {
-  readonly id: string;
+  readonly id: number;
   readonly state: "running" | "complete";
 };
 
 type BlockerResolution = JsonObject & {
-  readonly id: string;
+  readonly blockerId: number;
   readonly content: string;
 };
 
@@ -47,7 +44,7 @@ export type ChangeInspectionSnapshot = {
   readonly pullRequest: Readonly<Record<string, unknown>> | null;
   readonly cleanup?: ChangeCleanup;
   readonly publication?: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly expectedHeadSha: string;
     readonly pullRequest: Readonly<Record<string, unknown>> | null;
   } | null;
@@ -72,8 +69,8 @@ export type RetryState = {
 type PersistedContinuationState = RetryState & {
   readonly changeId: string;
   readonly paused: boolean;
-  readonly resolutionId?: string | null;
-  readonly pendingResolutionId?: string | null;
+  readonly resolutionBlockerId?: number | null;
+  readonly pendingResolutionBlockerId?: number | null;
   readonly initialSubmissionHandled?: boolean;
 };
 
@@ -123,17 +120,13 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const blockerPollingIntervalMs = 30_000;
 const changeIdPattern = /^\s*Change identity:\s*([A-Z][A-Z0-9]{1,9}-C[1-9][0-9]*)\.?\s*$/mu;
-type ButWhyCommandPrefix = "just by" | "npx -y but-why";
-
-const defaultCommandPrefix: ButWhyCommandPrefix = "npx -y but-why";
-const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
-  [prefix, ...args].join(" ");
+const butWhyCommand = (...args: readonly string[]): string => ["by", ...args].join(" ");
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
 const submitCommandPattern =
-  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
+  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*by\s+change\s+submit(?:\s|$)/gu;
 
 type ShellLineState = {
   readonly quote: "'" | '"' | undefined;
@@ -435,18 +428,17 @@ export const decideContinuation = (
 export const buildContinuationMessage = (
   decision: ContinuationDecision,
   changeId: string,
-  commandPrefix: ButWhyCommandPrefix = defaultCommandPrefix,
 ): string => {
   if (decision.kind === "idle") return "";
   if (decision.kind === "findings") {
     return [
       `The Change ${changeId} has Findings.`,
-      `Inspect the Findings with \`${butWhyCommand(commandPrefix, "change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", changeId)}\`.`,
+      `Inspect the Findings with \`${butWhyCommand("change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", changeId)}\`.`,
     ].join(" ");
   }
   return [
     `Resume implementation of Change ${changeId}.`,
-    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
+    `Inspect \`${butWhyCommand("change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
     "Implement the complete accepted intent and continue until Change Submit passes.",
   ].join(" ");
 };
@@ -644,35 +636,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
-    try {
-      accessSync(join(cwd, "justfile"), constants.R_OK);
-      accessSync(join(cwd, "bin/by"), constants.X_OK);
-      const launcher = readFileSync(join(cwd, "bin/by"), "utf8");
-      return launcher.includes("main_checkout_unavailable") &&
-        launcher.includes("trusted_executable_unavailable")
-        ? "just by"
-        : "npx -y but-why";
-    } catch {
-      return "npx -y but-why";
-    }
-  };
-
-  const cliInvocation = (
-    prefix: ButWhyCommandPrefix,
-    args: readonly string[],
-  ): readonly [string, ...string[]] =>
-    prefix === "just by" ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
-
-  const inspectCommand = async (
+  const inspectCommand = (
     commandArgs: readonly string[],
     cwd: string,
     signal?: AbortSignal,
-  ): Promise<RunResult> => {
-    const prefix = commandPrefixFor(cwd);
-    const [command, ...args] = cliInvocation(prefix, commandArgs);
-    return run(command, args, cwd, signal);
-  };
+  ): Promise<RunResult> => run("by", commandArgs, cwd, signal);
 
   const inspect = async (
     ctx: ExtensionContext,
@@ -822,7 +790,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       fingerprint: "inspection-unavailable",
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: null,
+      resolutionBlockerId: null,
     };
     saveState({ ...previous, initialSubmissionHandled: true });
   };
@@ -870,33 +838,28 @@ export default function continueChange(pi: ExtensionAPI): void {
     return latest !== undefined && isResolution(latest) ? latest : null;
   };
 
-  const resolutionId = (resolution: BlockerResolution | null): string | null =>
-    resolution?.id ?? null;
+  const resolutionBlockerId = (resolution: BlockerResolution | null): number | null =>
+    resolution?.blockerId ?? null;
 
   const resolutionMessage = (
     id: string,
     resolution: BlockerResolution,
     hasFindings: boolean,
-    commandPrefix: ButWhyCommandPrefix,
   ): string => {
     const explanation = resolution.content;
     const next = hasFindings
-      ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
+      ? `Now inspect the earlier Findings with \`${butWhyCommand("change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", id)}\`.`
+      : `Now inspect \`${butWhyCommand("change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
-  const validationFailureMessage = (
-    id: string,
-    snapshot: ChangeInspectionSnapshot,
-    commandPrefix: ButWhyCommandPrefix,
-  ): string => {
+  const validationFailureMessage = (id: string, snapshot: ChangeInspectionSnapshot): string => {
     const runId = snapshot.currentValidationRun?.id;
     const detail =
       runId !== undefined
-        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", runId)}\`.`
-        : `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "change", "show", id)}\`.`;
-    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
+        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand("validation-run", "show", String(runId))}\`.`
+        : `Inspect the Validation Tooling Failure with \`${butWhyCommand("change", "show", id)}\`.`;
+    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand("change", "submit", id)}\`.`;
   };
 
   const clearBlockedPolling = (): void => {
@@ -933,20 +896,20 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     const latest = latestResolution(observed.blockerHistory);
-    const latestId = resolutionId(latest);
+    const latestBlockerId = resolutionBlockerId(latest);
     const previous = persisted;
-    const handledResolutionId = previous?.resolutionId ?? null;
-    const resolutionChanged = latestId !== null && latestId !== handledResolutionId;
-    const pendingResolutionId = resolutionChanged
-      ? latestId
-      : (previous?.pendingResolutionId ?? null);
+    const handledBlockerId = previous?.resolutionBlockerId ?? null;
+    const resolutionChanged = latestBlockerId !== null && latestBlockerId !== handledBlockerId;
+    const pendingBlockerId = resolutionChanged
+      ? latestBlockerId
+      : (previous?.pendingResolutionBlockerId ?? null);
     const initializedState: PersistedContinuationState = {
       changeId,
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: handledResolutionId,
-      pendingResolutionId,
+      resolutionBlockerId: handledBlockerId,
+      pendingResolutionBlockerId: pendingBlockerId,
       ...(previous?.initialSubmissionHandled === undefined
         ? {}
         : { initialSubmissionHandled: previous.initialSubmissionHandled }),
@@ -959,26 +922,19 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
     clearBlockedPolling();
     if (
-      pendingResolutionId !== null &&
+      pendingBlockerId !== null &&
       latest !== null &&
-      latest.id === pendingResolutionId &&
+      latest.blockerId === pendingBlockerId &&
       observed.snapshot.change.state === "open" &&
       ctx.isIdle()
     ) {
       saveState({
         ...initializedState,
-        resolutionId: latest.id,
-        pendingResolutionId: null,
+        resolutionBlockerId: latest.blockerId,
+        pendingResolutionBlockerId: null,
       });
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
-      pi.sendUserMessage(
-        resolutionMessage(
-          changeId,
-          latest,
-          observed.snapshot.findingCount > 0,
-          commandPrefixFor(ctx.cwd),
-        ),
-      );
+      pi.sendUserMessage(resolutionMessage(changeId, latest, observed.snapshot.findingCount > 0));
     }
   };
 
@@ -998,7 +954,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       fingerprint: "inspection-unavailable",
       unchangedRestarts: 0,
       paused: false,
-      resolutionId: null,
+      resolutionBlockerId: null,
     };
     saveState({ ...state, paused: true });
     showWatcher(ctx, { kind: "paused" });
@@ -1041,7 +997,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           fingerprint: "inspection-unavailable",
           unchangedRestarts: 0,
           paused: false,
-          resolutionId: null,
+          resolutionBlockerId: null,
         };
         if (!observed.transient) {
           saveState({ ...previous, paused: true });
@@ -1083,22 +1039,22 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const commandPrefix = commandPrefixFor(ctx.cwd);
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
         unchangedRestarts: 0,
         paused: false,
-        resolutionId: null,
+        resolutionBlockerId: null,
       };
       const currentResolution = latestResolution(observed.blockerHistory);
-      const currentResolutionId = resolutionId(currentResolution);
+      const currentResolutionBlockerId = resolutionBlockerId(currentResolution);
       const resolutionChanged =
-        previous.resolutionId !== undefined &&
-        currentResolutionId !== null &&
-        currentResolutionId !== previous.resolutionId;
+        previous.resolutionBlockerId !== undefined &&
+        currentResolutionBlockerId !== null &&
+        currentResolutionBlockerId !== previous.resolutionBlockerId;
       const pendingResolution =
-        currentResolutionId !== null && previous.pendingResolutionId === currentResolutionId;
+        currentResolutionBlockerId !== null &&
+        previous.pendingResolutionBlockerId === currentResolutionBlockerId;
       const retry = explicit
         ? { fingerprint: observed.fingerprint, unchangedRestarts: 0 }
         : nextRetryState(previous, observed.fingerprint);
@@ -1106,10 +1062,10 @@ export default function continueChange(pi: ExtensionAPI): void {
         ...previous,
         ...retry,
         paused: false,
-        resolutionId: previous.resolutionId ?? currentResolutionId,
-        pendingResolutionId: resolutionChanged
-          ? currentResolutionId
-          : (previous.pendingResolutionId ?? null),
+        resolutionBlockerId: previous.resolutionBlockerId ?? currentResolutionBlockerId,
+        pendingResolutionBlockerId: resolutionChanged
+          ? currentResolutionBlockerId
+          : (previous.pendingResolutionBlockerId ?? null),
       });
 
       if (observed.blockerHistory.active !== null && observed.snapshot.change.state === "open") {
@@ -1124,17 +1080,12 @@ export default function continueChange(pi: ExtensionAPI): void {
             ...previous,
             ...retry,
             paused: false,
-            resolutionId: currentResolutionId,
-            pendingResolutionId: null,
+            resolutionBlockerId: currentResolutionBlockerId,
+            pendingResolutionBlockerId: null,
           });
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
           pi.sendUserMessage(
-            resolutionMessage(
-              id,
-              currentResolution,
-              observed.snapshot.findingCount > 0,
-              commandPrefix,
-            ),
+            resolutionMessage(id, currentResolution, observed.snapshot.findingCount > 0),
           );
         } else {
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
@@ -1143,7 +1094,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       }
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
         showWatcher(ctx, { kind: "stopped" });
-        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, commandPrefix));
+        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot));
         return;
       }
 
@@ -1160,7 +1111,7 @@ export default function continueChange(pi: ExtensionAPI): void {
             pullRequestUrl: publicationPullRequestUrl(observed.snapshot),
           });
           pi.sendUserMessage(
-            `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand(commandPrefix, "change", "submit", id)} before publication.`,
+            `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand("change", "submit", id)} before publication.`,
           );
         } else {
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
@@ -1175,7 +1126,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         );
         return;
       }
-      const message = buildContinuationMessage(decision, id, commandPrefix);
+      const message = buildContinuationMessage(decision, id);
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
       if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {
@@ -1262,10 +1213,13 @@ export default function continueChange(pi: ExtensionAPI): void {
 }
 
 const isNonNegativeInteger = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 0;
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
-const isOptionalNullableString = (value: unknown): value is string | null | undefined =>
-  value === undefined || value === null || typeof value === "string";
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+
+const isOptionalNullablePositiveInteger = (value: unknown): value is number | null | undefined =>
+  value === undefined || value === null || isPositiveInteger(value);
 
 const isPersistedState = (value: unknown): value is PersistedContinuationState =>
   isRecord(value) &&
@@ -1273,19 +1227,19 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
   typeof recordValue(value, "fingerprint") === "string" &&
   isNonNegativeInteger(recordValue(value, "unchangedRestarts")) &&
   typeof recordValue(value, "paused") === "boolean" &&
-  isOptionalNullableString(recordValue(value, "resolutionId")) &&
-  isOptionalNullableString(recordValue(value, "pendingResolutionId")) &&
+  isOptionalNullablePositiveInteger(recordValue(value, "resolutionBlockerId")) &&
+  isOptionalNullablePositiveInteger(recordValue(value, "pendingResolutionBlockerId")) &&
   (recordValue(value, "initialSubmissionHandled") === undefined ||
     typeof recordValue(value, "initialSubmissionHandled") === "boolean");
 
 const isCandidate = (value: unknown): value is CurrentCandidate =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "id")) &&
   typeof recordValue(value, "headSha") === "string";
 
 const isValidationRun = (value: unknown): value is CurrentValidationRun =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "id")) &&
   (recordValue(value, "state") === "running" || recordValue(value, "state") === "complete");
 
 const isStringArray = (value: unknown): value is readonly string[] =>
@@ -1328,7 +1282,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     (publication === undefined ||
       publication === null ||
       (isRecord(publication) &&
-        typeof recordValue(publication, "candidateId") === "string" &&
+        isPositiveInteger(recordValue(publication, "candidateId")) &&
         typeof recordValue(publication, "expectedHeadSha") === "string" &&
         (recordValue(publication, "pullRequest") === null ||
           isRecord(recordValue(publication, "pullRequest")))))
@@ -1337,7 +1291,7 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
 
 const isResolution = (value: unknown): value is BlockerResolution =>
   isRecord(value) &&
-  typeof recordValue(value, "id") === "string" &&
+  isPositiveInteger(recordValue(value, "blockerId")) &&
   typeof recordValue(value, "content") === "string";
 
 const isBlockerHistory = (value: unknown): value is BlockerHistory => {

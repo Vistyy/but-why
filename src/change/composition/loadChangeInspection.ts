@@ -7,8 +7,6 @@ import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/reposi
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteChangeReadPort } from "../../sqlite/sqliteChangeInspectionPersistence.js";
-import { openSqliteChangeReviewerSessionPort } from "../../sqlite/sqliteChangeReviewerSessionPersistence.js";
-import { openSqliteChangeReviewerTranscriptPort } from "../../sqlite/sqliteChangeReviewerTranscriptPersistence.js";
 import { openSqliteChangeValidationReadPort } from "../../sqlite/sqliteChangeValidationReadPersistence.js";
 import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import type {
@@ -37,12 +35,11 @@ type LoadedChangeInspectionOperation<A> =
     }
   | { readonly ok: false; readonly error: LoadChangeInspectionError };
 
-type LoadInput = { readonly cwd: string; readonly operationalRepoRoot?: string };
+type LoadInput = { readonly cwd: string };
 
 type LoadedContext = Exclude<ReturnType<typeof loadContext>, { readonly ok: false }>;
 
-const loadContext = (input: LoadInput) =>
-  openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
 
 const loadOperation = <A>(
   input: LoadInput,
@@ -81,24 +78,19 @@ const loadChangeDetailOperation = <A>(
           changes: openSqliteChangeReadPort(),
           authority: openSqliteChangeAuthorityPort(),
           validation: openSqliteChangeValidationReadPort(),
-          reviewerSessions: openSqliteChangeReviewerSessionPort(),
-          reviewerTranscripts: openSqliteChangeReviewerTranscriptPort(),
         }).pipe(
-          Effect.flatMap(
-            ({ changes, authority, validation, reviewerSessions, reviewerTranscripts }) =>
-              query(
-                {
-                  getChangeById: changes.getChangeById,
-                  getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
-                  getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
-                  getRunById: validation.getRunById,
-                  listFindings: validation.listFindings,
-                  listToolingFailures: validation.listToolingFailures,
-                  listReviewerSessions: reviewerSessions.listReviewerSessions,
-                  listReviewerTranscripts: reviewerTranscripts.listReviewerTranscripts,
-                },
-                changeId,
-              ),
+          Effect.flatMap(({ changes, authority, validation }) =>
+            query(
+              {
+                getChangeById: changes.getChangeById,
+                getCurrentCandidateForChange: validation.getCurrentCandidateForChange,
+                getCurrentPassingEvidence: authority.getCurrentPassingEvidence,
+                getRunById: validation.getRunById,
+                listFindings: validation.listFindings,
+                listToolingFailures: validation.listToolingFailures,
+              },
+              changeId,
+            ),
           ),
         ),
       ),

@@ -8,7 +8,6 @@ type SubmitRecoveryAction =
   | "fix_validation_findings"
   | "integrate_change_base";
 
-import { structuredContractDiagnostics } from "../../output/contractDiagnostics.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
 
@@ -65,12 +64,6 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
         status: result.status,
         created: result.created,
         pullRequest: result.pullRequest,
-        ...(result.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: result.reviewerEvidence }),
-        ...(result.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
       });
     }
     const exhaustiveResult: never = result;
@@ -147,12 +140,6 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         findings: result.findings,
-        ...(result.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: result.reviewerEvidence }),
-        ...(result.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
         recovery: submitRecovery(
           result.changeId,
           "fix_validation_findings",
@@ -171,12 +158,6 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         toolingFailures: result.toolingFailures,
-        ...(result.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: result.reviewerEvidence }),
-        ...(result.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
       },
       help: ["Fix the validation tooling failure, then retry Change Submit."],
     });
@@ -277,17 +258,10 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
     return runtimeError({
       code: result.code,
       message: result.message,
-      ...(result.details === undefined
-        ? {}
-        : {
-            details: {
-              ...(result.details.path === undefined ? {} : { path: result.details.path }),
-              ...(result.details.diagnostics === undefined
-                ? {}
-                : { diagnostics: structuredContractDiagnostics(result.details.diagnostics) }),
-            },
-          }),
-      help: ["Fix Repo Config or Global Config, then retry Change Submit."],
+      help: [
+        "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
+        "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
+      ],
     });
   }
   if (

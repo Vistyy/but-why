@@ -10,19 +10,17 @@ import type {
 import type { ValidationRunAbandonmentPort } from "../../src/change/validation/changeValidationPorts.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
-const validationRunId = "run-1";
+const validationRunId = 1;
 const changeId = "change-1";
-const worktreePath = "/linked-main-worktrees/but-why/validation-runs/run-1";
 
 const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
-  candidateId: "candidate-1",
-  policy: { checks: [], copyFiles: [] },
+  candidateId: 1,
+  validationInput: {},
   implementationDecisions: [],
   state: "running",
   outcome: null,
-  createdAt: "2026-07-31T10:00:00.000Z",
-  updatedAt: "2026-07-31T10:00:00.000Z",
+  cleanup: { state: "pending", blockingReason: null },
 };
 
 const abandonmentContext: CandidateValidationRunAbandonmentContext = {
@@ -30,8 +28,6 @@ const abandonmentContext: CandidateValidationRunAbandonmentContext = {
   changeId,
   candidateId: runningRun.candidateId,
   submittedSha: "head-sha",
-  worktreePath,
-  cleanupWorkspace: "not_created",
 };
 
 const passThroughLock: ExecutionLock = {
@@ -41,10 +37,12 @@ const passThroughLock: ExecutionLock = {
 const persistenceFor = (overrides: {
   readonly recordToolingFailure?: ValidationRunAbandonmentPort["recordToolingFailure"];
   readonly abandon?: ValidationRunAbandonmentPort["abandon"];
+  readonly recordWorkspaceCleanup?: ValidationRunAbandonmentPort["recordWorkspaceCleanup"];
 }): ValidationRunAbandonmentPort => ({
   getAbandonmentContext: () => Effect.succeed(abandonmentContext),
   getRunById: () => Effect.succeed(runningRun),
   recordToolingFailure: overrides.recordToolingFailure ?? (() => Effect.succeed(undefined)),
+  recordWorkspaceCleanup: overrides.recordWorkspaceCleanup ?? (() => Effect.succeed(undefined)),
   abandon: overrides.abandon ?? (() => Effect.succeed(undefined)),
 });
 
@@ -60,9 +58,7 @@ describe("Validation Run abandonment cleanup seam", () => {
         workspaceCleanup: {
           cleanup: (input) =>
             Effect.sync(() => {
-              calls.push(
-                `cleanup:${input.validationRunId}:${input.submittedSha}:${input.recordedWorktreePath}`,
-              );
+              calls.push(`cleanup:${input.validationRunId}:${input.submittedSha}`);
               return { workspace: "removed" as const };
             }),
         },
@@ -73,7 +69,7 @@ describe("Validation Run abandonment cleanup seam", () => {
       });
 
       expect(abandoned).toEqual({ ok: true, status: "abandoned", validationRunId });
-      expect(calls).toEqual([`cleanup:${validationRunId}:head-sha:${worktreePath}`, "abandon"]);
+      expect(calls).toEqual([`cleanup:${validationRunId}:head-sha`, "abandon"]);
     }),
   );
 

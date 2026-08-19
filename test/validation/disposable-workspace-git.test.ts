@@ -7,23 +7,31 @@ import { describe } from "vitest";
 
 import { snapshotWorkspaceCleanupGit } from "../../src/change/validation/adapters/snapshotWorkspaceCleanupGit.js";
 import { expectedSnapshotWorkspacePath } from "../../src/change/validation/snapshotWorkspacePath.js";
+import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Snapshot Workspace Git cleanup verification", () => {
+  it("namespaces independent Task Review and Validation Run identities", () => {
+    const commonDirectory = "/tmp/repository/.git";
+
+    expect(expectedTaskReviewWorkspacePath(commonDirectory, 1)).not.toBe(
+      expectedSnapshotWorkspacePath(commonDirectory, 1),
+    );
+    expect(expectedTaskReviewWorkspacePath(commonDirectory, 1)).toContain("task-review-1");
+    expect(expectedSnapshotWorkspacePath(commonDirectory, 1)).toContain("validation-run-1");
+  });
+
   it.effect("removes one exact detached worktree idempotently", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const validationRunId = "run-1";
-      const worktreePath = expectedSnapshotWorkspacePath(repository, validationRunId);
+      const validationRunId = 1;
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, validationRunId);
       createSnapshotWorkspace(repository, worktreePath, commitSha);
-      const cleanup = snapshotWorkspaceCleanupGit(repository);
-      const input = {
-        validationRunId,
-        submittedSha: commitSha,
-        recordedWorktreePath: worktreePath,
-      };
+      const cleanup = snapshotWorkspaceCleanupGit(repository, commonDirectory);
+      const input = { validationRunId, submittedSha: commitSha };
 
       expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
       expect(yield* cleanup.cleanup(input)).toEqual({ workspace: "removed" });
@@ -31,64 +39,48 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     }),
   );
 
-  it.effect("leaves resources untouched when persisted identity mismatches", () =>
+  it.effect("leaves resources untouched when the Git Common Directory mismatches", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const commitSha = git(repository, "rev-parse", "HEAD");
-      const selectedPath = expectedSnapshotWorkspacePath(repository, "selected");
-      const unrelatedPath = expectedSnapshotWorkspacePath(repository, "unrelated");
-      createSnapshotWorkspace(repository, selectedPath, commitSha);
-      createSnapshotWorkspace(repository, unrelatedPath, commitSha);
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, 130);
+      createSnapshotWorkspace(repository, worktreePath, commitSha);
 
-      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "selected",
+      const unrelatedCommonDirectory = join(repository, "unrelated-common-directory");
+      const result = yield* snapshotWorkspaceCleanupGit(
+        repository,
+        unrelatedCommonDirectory,
+      ).cleanup({
+        validationRunId: 130,
         submittedSha: commitSha,
-        recordedWorktreePath: unrelatedPath,
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         workspace: "failed",
-        errorMessage:
-          "Recorded Snapshot Workspace identity does not match the expected workspace identity.",
+        errorMessage: expect.stringContaining(
+          "Local Repository Git Common Directory does not match Shared Repository State.",
+        ),
       });
-      expect(existsSync(selectedPath)).toBe(true);
-      expect(existsSync(unrelatedPath)).toBe(true);
-    }),
-  );
-
-  it.effect("rejects a Validation Run identity that escapes the owned namespace", () =>
-    Effect.gen(function* () {
-      const repository = initializedRepository();
-      const commitSha = git(repository, "rev-parse", "HEAD");
-      const escapedPath = expectedSnapshotWorkspacePath(repository, "../outside");
-      createSnapshotWorkspace(repository, escapedPath, commitSha);
-
-      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "../outside",
-        submittedSha: commitSha,
-        recordedWorktreePath: escapedPath,
-      });
-
-      expect(result).toMatchObject({ workspace: "failed" });
-      expect(existsSync(escapedPath)).toBe(true);
+      expect(existsSync(worktreePath)).toBe(true);
     }),
   );
 
   it.effect("leaves a registered worktree with an unrelated HEAD untouched", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
+      const commonDirectory = repositoryCommonDirectory(repository);
       const submittedSha = git(repository, "rev-parse", "HEAD");
       writeFileSync(join(repository, "tracked"), "successor\n");
       git(repository, "add", "tracked");
       git(repository, "commit", "-m", "Successor");
       const unrelatedSha = git(repository, "rev-parse", "HEAD");
-      const worktreePath = expectedSnapshotWorkspacePath(repository, "selected");
+      const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, 130);
       createSnapshotWorkspace(repository, worktreePath, unrelatedSha);
 
-      const result = yield* snapshotWorkspaceCleanupGit(repository).cleanup({
-        validationRunId: "selected",
-        submittedSha: submittedSha,
-        recordedWorktreePath: worktreePath,
+      const result = yield* snapshotWorkspaceCleanupGit(repository, commonDirectory).cleanup({
+        validationRunId: 130,
+        submittedSha,
       });
 
       expect(result).toMatchObject({ workspace: "failed" });
@@ -108,6 +100,9 @@ const initializedRepository = (): string => {
   git(repository, "commit", "-m", "Initialize repository");
   return repository;
 };
+
+const repositoryCommonDirectory = (repository: string): string =>
+  git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
 const createSnapshotWorkspace = (
   repository: string,

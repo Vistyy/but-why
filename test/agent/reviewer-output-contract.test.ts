@@ -12,7 +12,7 @@ describe("reviewer output contract", () => {
     Effect.gen(function* () {
       const finding = reviewerFinding({
         files: ["src/cli.ts"],
-        artifactRefs: ["artifact:by-1-09224d806043.v1/acceptance_review/acceptance/output.json"],
+        artifactRefs: ["artifact:12/acceptance_review/acceptance/output.json"],
       });
       const output = yield* decodeReviewerOutputContract({
         reviewer: "intent",
@@ -26,8 +26,7 @@ describe("reviewer output contract", () => {
 
   it.effect("accepts Candidate-owned Validation Run artifact references", () =>
     Effect.gen(function* () {
-      const artifactRef =
-        "artifact:123e4567-e89b-42d3-a456-426614174000/specialist_review/standards/stdout.txt";
+      const artifactRef = "artifact:42/specialist_review/standards/stdout.txt";
       const finding = reviewerFinding({ artifactRefs: [artifactRef] });
 
       const output = yield* decodeReviewerOutputContract({
@@ -42,7 +41,7 @@ describe("reviewer output contract", () => {
 
   it.effect("rejects artifact references that do not resolve within the Validation Run", () =>
     Effect.gen(function* () {
-      const dangling = "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt";
+      const dangling = "artifact:426614174000/checks/quality/stdout.txt";
       const output = {
         findings: [
           {
@@ -59,7 +58,7 @@ describe("reviewer output contract", () => {
         validateReviewerArtifactRefs({
           reviewer: "acceptance",
           attempts: 1,
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          validationRunId: 426614174000,
           output,
           availableArtifactRefs: [],
         }),

@@ -129,7 +129,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
+  it.effect("infers the Change from its Managed Worktree and rejects a non-managed worktree", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);
@@ -170,7 +170,7 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("lists open Changes by age, filters closed Changes, and shows Change facts", () =>
+  it.effect("lists open Changes, filters closed Changes, and shows compact Change facts", () =>
     Effect.gen(function* () {
       const root = createInspectionRepository();
       const older = yield* createChangeFixture(root, "refs/heads/older", firstNow);
@@ -183,14 +183,7 @@ describe("Change inspection CLI", () => {
       const closedShown = yield* runInspectionCommand(root, ["change", "show", newer.id]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({
-        changes: [
-          {
-            id: older.id,
-            state: "open",
-            createdAt: firstNow,
-            ageSeconds: 3_600,
-          },
-        ],
+        changes: [{ id: older.id, state: "open" }],
       });
       expect(
         JSON.parse(allResult.stdout).changes.map((change: { readonly id: string }) => change.id),
@@ -202,21 +195,18 @@ describe("Change inspection CLI", () => {
           closeReason: null,
           acceptanceContext: null,
           branchRef: "refs/heads/older",
-          baseRef: null,
-          worktreePath: null,
-          startingCommit: null,
-          createdAt: firstNow,
-          closedAt: null,
+          baseRef: "refs/remotes/origin/main",
+          worktreePath: join(root, "worktree-older"),
+          policy: {
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            prepare: null,
+            checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+          },
         },
         currentCandidate: null,
         currentValidationRun: null,
         findingCount: 0,
         toolingFailureCount: 0,
-        legacyReviewerEvidence: {
-          classification: "legacy",
-          sessions: [],
-          transcripts: [],
-        },
         pullRequest: null,
         cleanup: { state: "complete", blockingReason: null },
       });
@@ -297,28 +287,22 @@ describe("Change inspection CLI", () => {
         detailCommand: "by validation-run show <validation-run-id>",
         validationRuns: [
           {
+            id: olderCandidateRun.validationRunId,
+            candidateId: firstCandidate.id,
+            state: "complete",
+            outcome: "passed",
+          },
+          {
             id: currentCandidateRun.validationRunId,
             candidateId: secondCandidate.id,
             state: "complete",
             outcome: "passed",
-            createdAt: firstNow,
-            updatedAt: firstNow,
           },
           {
             id: newerRun.validationRunId,
             candidateId: secondCandidate.id,
             state: "running",
             outcome: null,
-            createdAt: secondNow,
-            updatedAt: secondNow,
-          },
-          {
-            id: olderCandidateRun.validationRunId,
-            candidateId: firstCandidate.id,
-            state: "complete",
-            outcome: "passed",
-            createdAt: commandNow,
-            updatedAt: commandNow,
           },
         ],
       });
@@ -328,8 +312,6 @@ describe("Change inspection CLI", () => {
           candidateId: secondCandidate.id,
           state: "complete",
           outcome: "passed",
-          createdAt: firstNow,
-          updatedAt: firstNow,
         },
         findingCount: 0,
         toolingFailureCount: 0,
@@ -486,22 +468,22 @@ describe("Change inspection CLI", () => {
           count: 2,
           decisions: [
             {
+              id: 1,
               changeId: change.id,
-              sequence: 1,
               choice: "Use an append-only record",
               rationale: "Keep material choices separate from rationale.",
             },
             {
+              id: 2,
               changeId: change.id,
-              sequence: 2,
               choice: "Keep the decision log one-line",
               rationale: "Match the one-line Choice contract.",
             },
           ],
         });
         expect(JSON.parse(shown.stdout).implementationDecisions).toMatchObject([
-          { sequence: 1, choice: "Use an append-only record" },
-          { sequence: 2, choice: "Keep the decision log one-line" },
+          { id: 1, choice: "Use an append-only record" },
+          { id: 2, choice: "Keep the decision log one-line" },
         ]);
       }),
   );
@@ -658,8 +640,11 @@ describe("Change inspection CLI", () => {
         changeId,
         active: { id: activeBlocker.id },
         blockers: [
-          { sequence: 1, resolvedAt: secondNow },
-          { sequence: 2, id: activeBlocker.id, resolvedAt: null },
+          {
+            id: 1,
+            resolution: { blockerId: 1, content: "The earlier issue was resolved." },
+          },
+          { id: activeBlocker.id, resolution: null },
         ],
       });
       yield* resolveImplementationBlockerFixture(root, activeBlocker.id, commandNow);

@@ -1,10 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { type Effect, Layer } from "effect";
 import { piReviewerProcessExecutor } from "../../../agent/adapters/piReviewerProcessExecutor.js";
-import type {
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
-} from "../../../agent/agentSession/agentSession.js";
+import type { AgentSessionPersistence } from "../../../agent/agentSession/agentSession.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -12,6 +9,7 @@ import {
 import type { ReviewerOutput } from "../../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
 import { runDisposableExactCommitWorkspace } from "../../../disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
+import type { ChangeAgentSessionPort } from "../../changePorts.js";
 import type { CandidateValidationExecutionPort } from "../../validation/changeValidationPorts.js";
 import { makeCreateSnapshotWorkspace } from "../../validation/createSnapshotWorkspace.js";
 import {
@@ -24,31 +22,28 @@ import {
 } from "../validateCandidate.js";
 
 export const candidateValidationLayer = (input: {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: string;
-    readonly phase: string;
-  }) => AgentSessionSqlLink;
+  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         NodeFileSystem.layer,
         Layer.succeed(CandidateValidationPaths, {
-          localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
+          localRepositoryRoot: input.localRepositoryRoot,
+          localRepositoryCommonDirectory: input.localRepositoryCommonDirectory,
           artifactsRoot: input.artifactsRoot,
-          reviewerSessionsRoot: input.reviewerSessionsRoot,
+          agentSessionsRoot: input.agentSessionsRoot,
           agentPersistence: input.agentPersistence,
           getAgentSession: input.getAgentSession,
           linkAgentInvocation: input.linkAgentInvocation,

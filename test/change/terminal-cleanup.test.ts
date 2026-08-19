@@ -364,10 +364,13 @@ const changeRecord = (input: {
   baseRef: "refs/heads/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
   taskId: input.taskId ?? null,
-  startingCommit: "base",
-  worktreePath: null,
+  worktreePath: "/repo/worktree",
   acceptanceContext: null,
-  prepare: null,
+  policy: {
+    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    prepare: null,
+    checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+  },
   prepareFailure: null,
   implementationDecisions: [],
   activeBlocker: null,
@@ -381,8 +384,8 @@ const changeRecord = (input: {
     expectedHeadSha: "head",
   },
   publication: {
-    candidateId: "candidate-1",
-    validationRunId: "run-1",
+    candidateId: 1,
+    validationRunId: 1,
     target,
     headBranch: "change-1",
     expectedHeadSha: "head",
@@ -392,9 +395,6 @@ const changeRecord = (input: {
   state: input.state ?? "closed",
   closeReason: input.closeReason,
   cancelReason: input.closeReason === "cancelled" ? "Stop" : null,
-  createdAt: now,
-  updatedAt: now,
-  closedAt: input.closeReason === null ? null : now,
 });
 
 const fakePersistence = (
@@ -427,8 +427,6 @@ const taskRecord = (state: TaskRecord["state"]): TaskRecord => ({
   title: "Cancel me",
   description: "Description",
   state,
-  createdAt: now,
-  updatedAt: now,
   startable: false,
   blockedBy: [],
   cancelReason: state === "cancelled" ? "Stop" : null,

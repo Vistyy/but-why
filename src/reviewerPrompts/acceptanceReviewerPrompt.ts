@@ -50,11 +50,11 @@ export const buildAcceptanceReviewerSystemPrompt = (instructions: string): strin
   ].join("\n\n");
 
 export const buildAcceptanceReviewerPrompt = (input: {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly availableArtifactRefs: readonly string[];
   readonly previousFindings?: readonly ReviewerFindingHistory[];
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -89,7 +89,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
 
 export const buildAcceptanceContinuationPrompt = (input: {
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -100,7 +100,7 @@ export const buildAcceptanceContinuationPrompt = (input: {
   readonly previousFindings: readonly unknown[];
 }): string =>
   [
-    "Continue the Acceptance Reviewer Session with the current evidence below.",
+    "Continue the Acceptance Agent Session with the current evidence below.",
     "Current Candidate:",
     JSON.stringify(input.candidate),
     "Acceptance Context:",

@@ -18,9 +18,10 @@ export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
+  readonly herdrSocketPath?: string;
   readonly now: () => Date;
+  readonly platform: NodeJS.Platform;
   readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly taskReviewInspectionUseCases?: TaskReviewInspectionUseCases;

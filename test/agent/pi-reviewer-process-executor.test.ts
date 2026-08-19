@@ -1,13 +1,15 @@
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 
@@ -42,10 +44,22 @@ describe("Pi reviewer process executor", () => {
   it.effect("runs direct Pi arguments and decodes invocation-local output and usage", () =>
     Effect.gen(function* () {
       let observed:
-        | { readonly command: string; readonly args?: readonly string[]; readonly cwd?: string }
+        | {
+            readonly command: string;
+            readonly args?: readonly string[];
+            readonly cwd?: string;
+            readonly stdin?: string;
+          }
         | undefined;
+      let systemPromptPath: string | undefined;
       const executor = createPiReviewerProcessExecutor((command) => {
         observed = command;
+        const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+        systemPromptPath = command.args?.[promptFlag + 1];
+        expect(systemPromptPath).toBeDefined();
+        expect(isAbsolute(systemPromptPath ?? "")).toBe(true);
+        expect(readFileSync(systemPromptPath ?? "", "utf8")).toBe(input.systemPrompt);
+        expect(statSync(systemPromptPath ?? "").mode & 0o777).toBe(0o600);
         return Effect.succeed({
           exitCode: 0,
           stderr: "",
@@ -83,13 +97,16 @@ describe("Pi reviewer process executor", () => {
           "read,grep",
           "--no-session",
           "--append-system-prompt",
-          "Act as the Acceptance Reviewer.",
+          expect.any(String),
           "--name",
           "acceptance Review",
-          "Review the Candidate.",
         ],
         cwd: "/validation/workspace",
+        stdin: "Review the Candidate.",
       });
+      expect(systemPromptPath).toBeDefined();
+      expect(existsSync(systemPromptPath ?? "")).toBe(false);
+      expect(observed?.args).not.toContain(input.systemPrompt);
       expect(result).toMatchObject({
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
         invocationUsage: {
@@ -103,13 +120,75 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("keeps unexpected command executor defects out of the expected failure channel", () =>
+  it.effect("preserves prompts over 128 KiB across a real fake Pi process boundary", () =>
     Effect.gen(function* () {
-      const defect = new Error("unexpected command executor defect");
-      const exit = yield* Effect.exit(
-        createPiReviewerProcessExecutor(() => Effect.die(defect)).execute(input),
+      const root = mkdtempSync(join(tmpdir(), "but-why-fake-pi-boundary-"));
+      const workspace = join(root, "workspace");
+      const fakePi = join(root, "fake-pi.cjs");
+      const capturePath = join(root, "capture.json");
+      const largeSystemPrompt = `system:${"s".repeat(170_000)}`;
+      const largeUserPrompt = `user:${"u".repeat(170_000)}`;
+      mkdirSync(workspace);
+      writeFileSync(
+        fakePi,
+        [
+          'const { readFileSync, writeFileSync } = require("node:fs");',
+          `const capturePath = ${JSON.stringify(capturePath)};`,
+          "const args = process.argv.slice(2);",
+          'const promptIndex = args.indexOf("--append-system-prompt");',
+          "let stdin = '';",
+          'process.stdin.setEncoding("utf8");',
+          'process.stdin.on("data", (chunk) => { stdin += chunk; });',
+          'process.stdin.on("end", () => {',
+          "  const systemPromptPath = args[promptIndex + 1];",
+          "  writeFileSync(capturePath, JSON.stringify({ args, systemPromptPath, systemPrompt: readFileSync(systemPromptPath, 'utf8'), stdin }));",
+          `  process.stdout.write(${JSON.stringify(`${messageEvent('<reviewer-output>{"findings":[]}</reviewer-output>')}\n`)});`,
+          "});",
+          "",
+        ].join("\n"),
       );
 
+      try {
+        yield* createPiReviewerProcessExecutor().execute({
+          ...input,
+          commandCwd: workspace,
+          systemPrompt: largeSystemPrompt,
+          prompt: largeUserPrompt,
+          agentEnvironment: [process.execPath, fakePi],
+        });
+
+        const observed = JSON.parse(readFileSync(capturePath, "utf8")) as {
+          readonly args: readonly string[];
+          readonly systemPromptPath: string;
+          readonly systemPrompt: string;
+          readonly stdin: string;
+        };
+        expect(observed.args[0]).toBe("pi");
+        expect(observed.systemPrompt).toBe(largeSystemPrompt);
+        expect(observed.stdin).toBe(largeUserPrompt);
+        expect(observed.args).not.toContain(largeSystemPrompt);
+        expect(observed.args).not.toContain(largeUserPrompt);
+        expect(existsSync(observed.systemPromptPath)).toBe(false);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("keeps executor defects out of the expected channel and cleans the staged prompt", () =>
+    Effect.gen(function* () {
+      const defect = new Error("unexpected command executor defect");
+      let systemPromptPath: string | undefined;
+      const exit = yield* Effect.exit(
+        createPiReviewerProcessExecutor((command) => {
+          const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+          systemPromptPath = command.args?.[promptFlag + 1];
+          return Effect.die(defect);
+        }).execute(input),
+      );
+
+      expect(systemPromptPath).toBeDefined();
+      expect(existsSync(systemPromptPath ?? "")).toBe(false);
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isSuccess(exit)) return;
       expect(Cause.failureOption(exit.cause)).toEqual(Option.none());
@@ -117,7 +196,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("retains a new Reviewer Session transcript", () =>
+  it.effect("retains a new Agent Session transcript", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-transcript-"));
       const sessions = join(root, "sessions");
@@ -156,7 +235,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("does not recursively discover a new Reviewer Session transcript", () =>
+  it.effect("does not recursively discover a new Agent Session transcript", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-nested-"));
       const sessions = join(root, "sessions");
@@ -188,7 +267,7 @@ describe("Pi reviewer process executor", () => {
     }),
   );
 
-  it.effect("rejects ambiguous direct Reviewer Session transcripts", () =>
+  it.effect("rejects ambiguous direct Agent Session transcripts", () =>
     Effect.gen(function* () {
       const root = mkdtempSync(join(tmpdir(), "but-why-pi-reviewer-ambiguous-"));
       const sessions = join(root, "sessions");
@@ -219,7 +298,7 @@ describe("Pi reviewer process executor", () => {
           _tag: "Left",
           left: {
             sessionUsability: "unusable",
-            message: expect.stringContaining("Multiple Reviewer Session transcripts"),
+            message: expect.stringContaining("Multiple Agent Session transcripts"),
           },
         });
       } finally {
@@ -378,7 +457,10 @@ describe("Pi reviewer process executor", () => {
         expect(command.args).toContain("--session");
         expect(command.args).toContain(sessionFile);
         expect(command.args).toContain("--append-system-prompt");
-        expect(command.args).toContain("Act as the Acceptance Reviewer.");
+        const promptFlag = command.args?.indexOf("--append-system-prompt") ?? -1;
+        const promptPath = command.args?.[promptFlag + 1] ?? "";
+        expect(readFileSync(promptPath, "utf8")).toBe(input.systemPrompt);
+        expect(command.args).not.toContain(input.systemPrompt);
         return Effect.succeed({
           exitCode: 0,
           stderr: "",
@@ -473,7 +555,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("classifies a confirmed missing resumed session as unusable", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-missing-reviewer-session-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-missing-agent-session-"));
       try {
         const result = yield* Effect.either(
           createPiReviewerProcessExecutor(() => Effect.die("must not execute")).execute({
@@ -495,7 +577,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("rejects a resumed transcript outside session storage", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-outside-reviewer-session-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-outside-agent-session-"));
       const sessions = join(root, "sessions");
       mkdirSync(sessions);
       const sessionId = "outside-session";
@@ -528,7 +610,7 @@ describe("Pi reviewer process executor", () => {
 
   it.effect("preserves session storage inspection failures as unknown", () =>
     Effect.gen(function* () {
-      const root = mkdtempSync(join(tmpdir(), "but-why-invalid-reviewer-session-root-"));
+      const root = mkdtempSync(join(tmpdir(), "but-why-invalid-agent-session-root-"));
       const storageFile = join(root, "not-a-directory");
       writeFileSync(storageFile, "not a session directory");
       try {

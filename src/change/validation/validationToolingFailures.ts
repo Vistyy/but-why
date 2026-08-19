@@ -11,7 +11,7 @@ import type {
 
 export class SnapshotWorkspaceSetupFailed extends Data.TaggedError("SnapshotWorkspaceSetupFailed")<{
   readonly operationName: SnapshotWorkspaceOperationName;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly submittedSha: string;
   readonly worktreePath: string;
   readonly errorMessage: string;
@@ -62,7 +62,7 @@ export type ValidationToolingFailure =
 export type ValidationToolingFailureRecordInput = {
   readonly errorKind: ValidationToolingFailureKind;
   readonly operationName: string;
-  readonly validationRunId?: string;
+  readonly validationRunId?: number;
   readonly submittedSha?: string;
   readonly worktreePath?: string;
   readonly errorMessage: string;

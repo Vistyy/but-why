@@ -8,6 +8,7 @@ export type HostCommandInput = {
   readonly command: string;
   readonly args?: readonly string[];
   readonly cwd?: string;
+  readonly stdin?: string;
   readonly signal?: AbortSignal;
 };
 
@@ -36,7 +37,7 @@ const runCommand = (
   Effect.scoped(
     Effect.gen(function* () {
       const baseCommand = Command.make(input.command, ...(input.args ?? [])).pipe(
-        Command.stdin(Stream.empty),
+        input.stdin === undefined ? Command.stdin(Stream.empty) : Command.feed(input.stdin),
       );
       const command =
         input.cwd === undefined ? baseCommand : Command.workingDirectory(baseCommand, input.cwd);

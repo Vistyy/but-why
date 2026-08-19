@@ -11,6 +11,7 @@ import type {
 import { piSessionIdForContinuation } from "../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 const positiveIntegerMax = 9_007_199_254_740_991;
 
@@ -73,6 +74,9 @@ const beginInvocation = (
   input: Parameters<AgentSessionPersistence["beginInvocation"]>[0],
 ) =>
   Effect.gen(function* () {
+    if (input.configuration.model.trim().length === 0) {
+      return yield* invalid("dispatch Agent Invocation", "Agent model must not be blank");
+    }
     const unsettled = yield* sql<{ readonly id: number }>`
       SELECT invocation.id
       FROM agent_invocations AS invocation
@@ -103,52 +107,27 @@ const beginInvocation = (
       ORDER BY id DESC LIMIT 1
     `;
     const current = currentRows[0];
-    const currentConfiguration: AgentSessionConfiguration | undefined =
-      current === undefined
-        ? undefined
-        : {
-            harness: decodeHarness(current.harness),
-            provider: current.provider,
-            model: current.model,
-            thinking: current.thinking === null ? null : decodeThinking(current.thinking),
-          };
+    const currentConfiguration = yield* decodePersisted(
+      "dispatch Agent Invocation",
+      (): AgentSessionConfiguration | undefined =>
+        current === undefined
+          ? undefined
+          : {
+              harness: decodeHarness(current.harness),
+              provider: current.provider,
+              model: requiredModel(current.model),
+              thinking: current.thinking === null ? null : decodeThinking(current.thinking),
+            },
+    );
     if (
       current !== undefined &&
       currentConfiguration !== undefined &&
       !sameConfiguration(currentConfiguration, input.configuration)
     ) {
-      const latest = yield* sql<{ readonly settlementKind: string | null }>`
-        SELECT invocation.settlement_kind AS settlementKind
-        FROM agent_invocations AS invocation
-        JOIN agent_continuations AS continuation
-          ON continuation.id = invocation.continuation_id
-        WHERE continuation.agent_session_id = ${sessionId}
-        ORDER BY invocation.id DESC LIMIT 1
-      `;
-      const returned = yield* sql<{ readonly id: number }>`
-        SELECT invocation.id
-        FROM agent_invocations AS invocation
-        JOIN agent_continuations AS continuation
-          ON continuation.id = invocation.continuation_id
-        WHERE continuation.agent_session_id = ${sessionId}
-          AND invocation.settlement_kind = 'returned'
-        LIMIT 1
-      `;
-      const transcript = yield* sql<{ readonly id: number }>`
-        SELECT id FROM agent_continuations
-        WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
-        LIMIT 1
-      `;
-      const correctionAllowed =
-        latest[0]?.settlementKind === "launch_failed" &&
-        current.transcriptPath === null &&
-        transcript.length === 0 &&
-        returned.length === 0;
-      if (!correctionAllowed)
-        return yield* invalid(
-          "dispatch Agent Invocation",
-          "Agent Session configuration is fixed after conversation establishment",
-        );
+      return yield* invalid(
+        "dispatch Agent Invocation",
+        "Agent Session configuration is immutable",
+      );
     }
     const continuation =
       current !== undefined &&
@@ -156,7 +135,7 @@ const beginInvocation = (
       current.unusableReason === null &&
       currentConfiguration !== undefined &&
       sameConfiguration(currentConfiguration, input.configuration)
-        ? decodeContinuation(current)
+        ? yield* decodePersisted("dispatch Agent Invocation", () => decodeContinuation(current))
         : yield* createContinuation(sql, sessionId, normalizeConfiguration(input.configuration));
 
     const created = yield* sql<{ readonly id: number }>`
@@ -353,7 +332,9 @@ const readInvocationHistory = (sql: SqlClient.SqlClient, agentSessionId: number)
       WHERE continuation.agent_session_id = ${agentSessionId}
       ORDER BY invocation.id
     `;
-    return rows.map(decodeInvocation);
+    return yield* decodePersisted("read Agent Invocation history", () =>
+      rows.map(decodeInvocation),
+    );
   });
 
 const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
@@ -361,7 +342,7 @@ const decodeContinuation = (row: ContinuationRow): AgentContinuationRecord => ({
   agentSessionId: row.agentSessionId,
   harness: decodeHarness(row.harness),
   provider: row.provider,
-  model: row.model,
+  model: requiredModel(row.model),
   thinking: row.thinking === null ? null : (decodeThinking(row.thinking) ?? null),
   transcriptPath: row.transcriptPath,
   unusableReason: row.unusableReason,
@@ -395,7 +376,7 @@ const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
       agentSessionId: row.agentSessionId,
       harness: decodeHarness(row.harness),
       provider: row.provider,
-      model: row.model,
+      model: requiredModel(row.model),
       thinking: row.thinking === null ? null : decodeThinking(row.thinking),
       transcriptPath: row.transcriptPath,
       unusableReason: row.unusableReason,
@@ -403,6 +384,10 @@ const decodeInvocation = (row: InvocationRow): AgentInvocationRecord => {
   };
 };
 
+const requiredModel = (value: string): string => {
+  if (value.trim().length === 0) throw new Error("Agent model is blank");
+  return value;
+};
 const decodeHarness = (value: string): "pi" => {
   if (value !== "pi") throw new Error(`Unsupported Agent Harness: ${value}`);
   return "pi";

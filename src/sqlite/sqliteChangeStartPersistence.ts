@@ -1,16 +1,13 @@
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import type { ChangePrepareFailure } from "../change/change.js";
 import { changeBranchRefForSlug } from "../change/changeBranch.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { decodeSqliteChangePolicy, encodeSqliteChangePolicy } from "../change/changePolicy.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type {
-  ChangeReviewerConfiguration,
-  ChangeStartRecord,
-  CreateChangeStartInput,
-} from "../change/changeStartStore.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -22,12 +19,7 @@ import {
   decodeSqliteChangePrepareFailure,
   encodeSqliteChangePrepareFailure,
 } from "./sqliteChangePreparation.js";
-import {
-  decodeChangeState,
-  decodeStoredNullableString,
-  decodeStoredPositiveInteger,
-  decodeStoredString,
-} from "./sqliteChangeValueDecoders.js";
+import { decodeStoredNullableString, decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeStartPersistence = (): Effect.Effect<
@@ -56,16 +48,13 @@ export const createChange = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const inserted = yield* insertChange(sql, input, idPrefix);
+    const inserted = yield* insertChangeRow(sql, input, null, idPrefix);
     if (!inserted.ok) return inserted;
     const change = yield* readChangeStartById(sql, inserted.changeId, idPrefix);
     return change === undefined
       ? yield* invalidData("create Change Start", "Change disappeared")
       : { ok: true as const, change };
   });
-
-const insertChange = (sql: SqlClient.SqlClient, input: CreateChangeStartInput, idPrefix: string) =>
-  insertChangeRow(sql, input, null, idPrefix);
 
 export const insertLinkedChange = (
   sql: SqlClient.SqlClient,
@@ -81,29 +70,26 @@ const insertChangeRow = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const conflicts = yield* sql<{ readonly id: number }>`
-      SELECT id FROM changes
-      WHERE (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${input.branchRef})
-        OR worktree_path = ${input.worktreePath}
-      LIMIT 1
-    `;
-    if (conflicts.length > 0) {
-      return { ok: false as const, code: "change_start_conflict" as const };
-    }
-
+    const policy = yield* Effect.try({
+      try: () => encodeSqliteChangePolicy(input.policy),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({ operationName: "create Change Start", cause }),
+    });
     const allocated = yield* sql<{ readonly id: number }>`
       INSERT INTO changes (
-        repository_common_directory, branch_ref, base_ref, base_remote_url,
-        starting_commit, worktree_path, acceptance_context, reviewer_configuration,
-        prepare_command, prepare_timeout_seconds, prepare_failure,
-        state, close_reason, created_at, updated_at, closed_at
+        branch_ref, base_ref, base_remote_url, worktree_path,
+        initial_acceptance_context, reviewer_configuration,
+        prepare_definition, checks_definition, prepare_failure, close_reason, cancel_reason,
+        cleanup_pending, cleanup_blocking_reason
       ) VALUES (
-        ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
-        ${input.baseRemoteUrl}, ${input.startingCommit}, ${input.worktreePath},
+        'refs/heads/but-why/pending-' || lower(hex(randomblob(16))),
+        ${input.baseRef}, ${input.baseRemoteUrl},
+        'pending-worktree-' || lower(hex(randomblob(16))),
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        ${JSON.stringify(input.reviewerConfiguration)},
-        ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
-        NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
+        ${policy.reviewerConfiguration},
+        ${policy.prepareDefinition},
+        ${policy.checksDefinition},
+        NULL, NULL, NULL, 0, NULL
       )
       RETURNING id
     `;
@@ -113,13 +99,10 @@ const insertChangeRow = (
     }
     const changeId = publicChangeId(idPrefix, allocatedId);
     const branchRef = changeBranchRefForSlug(changeId);
-    const worktreePath = join(dirname(input.worktreePath), changeId);
+    const worktreePath = join(input.managedWorktreeParent, changeId);
     const finalConflicts = yield* sql<{ readonly id: number }>`
       SELECT id FROM changes
-      WHERE id <> ${internalChangeId(changeId, idPrefix)} AND (
-        (repository_common_directory = ${input.repositoryCommonDirectory} AND branch_ref = ${branchRef})
-        OR worktree_path = ${worktreePath}
-      )
+      WHERE id <> ${allocatedId} AND (branch_ref = ${branchRef} OR worktree_path = ${worktreePath})
       LIMIT 1
     `;
     if (finalConflicts.length > 0) {
@@ -128,7 +111,7 @@ const insertChangeRow = (
     }
     yield* sql`
       UPDATE changes SET branch_ref = ${branchRef}, worktree_path = ${worktreePath}
-      WHERE id = ${internalChangeId(changeId, idPrefix)}
+      WHERE id = ${allocatedId}
     `;
     return { ok: true as const, changeId };
   });
@@ -137,12 +120,13 @@ export const recordPrepareOutcome = (
   sql: SqlClient.SqlClient,
   changeId: string,
   failure: ChangePrepareFailure | null,
-  now: string,
+  _now: string,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
     yield* sql`
-      UPDATE changes SET prepare_failure = ${failure === null ? null : encodeSqliteChangePrepareFailure(failure)}, updated_at = ${now}
+      UPDATE changes
+      SET prepare_failure = ${failure === null ? null : encodeSqliteChangePrepareFailure(failure)}
       WHERE id = ${internalChangeId(changeId, idPrefix)}
     `;
     const change = yield* readChangeStartById(sql, changeId, idPrefix);
@@ -152,13 +136,16 @@ export const recordPrepareOutcome = (
   });
 
 const changeStartSelectionColumns = `
-  id, repository_common_directory AS repositoryCommonDirectory,
-  branch_ref AS branchRef, base_ref AS baseRef, base_remote_url AS baseRemoteUrl,
-  starting_commit AS startingCommit, worktree_path AS worktreePath,
-  acceptance_context AS acceptanceContext, reviewer_configuration AS reviewerConfiguration,
-  prepare_command AS prepareCommand,
-  prepare_timeout_seconds AS prepareTimeoutSeconds,
-  prepare_failure AS prepareFailure, state
+  change_row.id,
+  identity.common_directory AS repositoryCommonDirectory,
+  change_row.branch_ref AS branchRef, change_row.base_ref AS baseRef,
+  change_row.base_remote_url AS baseRemoteUrl, change_row.worktree_path AS worktreePath,
+  change_row.initial_acceptance_context AS acceptanceContext,
+  change_row.reviewer_configuration AS reviewerConfiguration,
+  change_row.prepare_definition AS prepareDefinition,
+  change_row.checks_definition AS checksDefinition,
+  change_row.prepare_failure AS prepareFailure,
+  change_row.close_reason AS closeReason
 `;
 
 type StoredChangeStartRow = {
@@ -167,20 +154,22 @@ type StoredChangeStartRow = {
   readonly branchRef: unknown;
   readonly baseRef: unknown;
   readonly baseRemoteUrl: unknown;
-  readonly startingCommit: unknown;
   readonly worktreePath: unknown;
   readonly acceptanceContext: unknown;
   readonly reviewerConfiguration: unknown;
-  readonly prepareCommand: unknown;
-  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareDefinition: unknown;
+  readonly checksDefinition: unknown;
   readonly prepareFailure: unknown;
-  readonly state: unknown;
+  readonly closeReason: unknown;
 };
 
 export const readChangeStartById = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
   Effect.flatMap(
     sql.unsafe<StoredChangeStartRow>(
-      `SELECT ${changeStartSelectionColumns} FROM changes WHERE id = ?`,
+      `SELECT ${changeStartSelectionColumns}
+       FROM changes AS change_row
+       CROSS JOIN shared_state_identity AS identity
+       WHERE identity.id = 1 AND change_row.id = ?`,
       [internalChangeId(changeId, idPrefix)],
     ),
     (rows) => mapRow(rows[0], idPrefix),
@@ -192,43 +181,32 @@ const mapRow = (row: StoredChangeStartRow | undefined, idPrefix: string) =>
     : decodePersisted("read Change Start", () => decodeChangeStart(row, idPrefix));
 
 const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeStartRecord => {
-  const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
-  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
-  const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
-  const worktreePath = decodeStoredNullableString(row.worktreePath, "Change worktree path");
-  if (
-    baseRef === null ||
-    baseRemoteUrl === null ||
-    startingCommit === null ||
-    worktreePath === null
-  ) {
-    throw new Error("Stored Change Start relationship is incomplete");
-  }
   const encodedAcceptanceContext = decodeStoredNullableString(
     row.acceptanceContext,
     "Change Acceptance Context",
   );
-  const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
-  const prepareTimeoutSeconds =
-    row.prepareTimeoutSeconds === null
-      ? null
-      : decodeStoredPositiveInteger(row.prepareTimeoutSeconds, "Change prepare timeout");
-  if ((prepareCommand === null) !== (prepareTimeoutSeconds === null)) {
-    throw new Error("Stored Change preparation relationship is incomplete");
-  }
-  const encodedReviewerConfiguration = decodeStoredNullableString(
+  const encodedReviewerConfiguration = decodeStoredString(
     row.reviewerConfiguration,
     "Change Reviewer Configuration",
   );
-  const reviewerConfiguration =
-    encodedReviewerConfiguration === null
-      ? null
-      : decodeReviewerConfiguration(encodedReviewerConfiguration);
+  const encodedPrepareDefinition = decodeStoredNullableString(
+    row.prepareDefinition,
+    "Change prepare definition",
+  );
+  const encodedChecksDefinition = decodeStoredString(
+    row.checksDefinition,
+    "Change Checks definition",
+  );
   const encodedPrepareFailure = decodeStoredNullableString(
     row.prepareFailure,
     "Change prepare failure",
   );
-  if (encodedPrepareFailure !== null && prepareCommand === null) {
+  const policy = decodeSqliteChangePolicy({
+    reviewerConfiguration: encodedReviewerConfiguration,
+    prepareDefinition: encodedPrepareDefinition,
+    checksDefinition: encodedChecksDefinition,
+  });
+  if (encodedPrepareFailure !== null && policy.prepare === null) {
     throw new Error("Stored Change preparation failure relationship is incomplete");
   }
   return {
@@ -238,44 +216,20 @@ const decodeChangeStart = (row: StoredChangeStartRow, idPrefix: string): ChangeS
       "Change repository common directory",
     ),
     branchRef: decodeStoredString(row.branchRef, "Change branch ref"),
-    baseRef,
-    baseRemoteUrl,
-    startingCommit,
-    worktreePath,
+    baseRef: decodeStoredString(row.baseRef, "Change Base ref"),
+    baseRemoteUrl: decodeStoredString(row.baseRemoteUrl, "Change Base remote URL"),
+    worktreePath: decodeStoredString(row.worktreePath, "Change worktree path"),
     acceptanceContext:
       encodedAcceptanceContext === null
         ? null
         : decodeSqliteAcceptanceContextSnapshot(encodedAcceptanceContext),
-    reviewerConfiguration,
-    prepare:
-      prepareCommand === null || prepareTimeoutSeconds === null
-        ? null
-        : { command: prepareCommand, timeoutSeconds: prepareTimeoutSeconds },
+    policy,
     prepareFailure:
       encodedPrepareFailure === null
         ? null
         : decodeSqliteChangePrepareFailure(encodedPrepareFailure),
-    state: decodeChangeState(row.state),
+    state: row.closeReason === null ? "open" : "closed",
   };
-};
-
-const decodeReviewerConfiguration = (source: string): ChangeReviewerConfiguration => {
-  const value: unknown = JSON.parse(source) as unknown;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !Array.isArray((value as { specialistReviews?: unknown }).specialistReviews)
-  ) {
-    throw new Error("Stored Change Reviewer Configuration is invalid");
-  }
-  const configuration = value as ChangeReviewerConfiguration;
-  if (
-    configuration.acceptanceReview !== null &&
-    typeof configuration.acceptanceReview !== "object"
-  ) {
-    throw new Error("Stored Change Acceptance Reviewer Configuration is invalid");
-  }
-  return configuration;
 };
 
 const invalidData = (operationName: string, message: string) =>

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { piReviewerProcessExecutor } from "../../src/agent/adapters/piReviewerProcessExecutor.js";
-import type { ResolvedPiAgentProfile } from "../../src/agent/agentProfiles.js";
+import type { ResolvedReviewerPiAgentProfile } from "../../src/agent/agentProfiles.js";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   cleanupExactDisposableWorkspace,
@@ -15,7 +15,7 @@ import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentS
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import {
-  readCanonicalMainReviewBase,
+  readCurrentWorktreeReviewBase,
   verifyRecordedTaskReviewBase,
 } from "../../src/task/review/adapters/taskReviewGit.js";
 import { openTaskReviewUseCases } from "../../src/task/review/taskReviewUseCases.js";
@@ -41,7 +41,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
 
     const loaded = openRepositoryRuntime(root);
     if (!loaded.ok) throw new Error(`Could not open repository: ${loaded.error.code}`);
-    const profile: ResolvedPiAgentProfile = {
+    const profile: ResolvedReviewerPiAgentProfile = {
       agentProfile: "review",
       scope: "global",
       profile: {
@@ -62,10 +62,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
       builtInInstructions: taskReviewBuiltInInstructions,
       guidance: null,
     };
-    const sessionStorageRoot = join(
-      loaded.runtime.context.paths.operationalDir,
-      "task-review-sessions",
-    );
+    const sessionStorageRoot = loaded.runtime.context.paths.agentSessionsPath;
 
     const submitted = yield* loaded.runtime.provide(
       Effect.gen(function* () {
@@ -81,25 +78,31 @@ it.effect("submits through the supported Task Review operation with a real Agent
         if (!created.ok) return undefined;
 
         const useCases = openTaskReviewUseCases({
-          mainCheckoutRoot: root,
+          repositoryRoot: root,
+          repositoryCommonDirectory: loaded.runtime.context.commonDirectory,
           loadRepoConfig: () => ({ ok: true as const, config: { idPrefix: "BY" } }),
           resolvePolicy: () => ({
             ok: true as const,
             policy: { profile, snapshot: policy },
           }),
           persistence: reviews,
-          reviewerSessionStorageRoot: sessionStorageRoot,
+          agentSessionStorageRoot: sessionStorageRoot,
           agentPersistence: agents,
           reviewerRuntime: piReviewerAgentRuntime,
           reviewerExecutor: piReviewerProcessExecutor,
-          readReviewBase: (mainCheckoutRoot) => readCanonicalMainReviewBase(mainCheckoutRoot),
-          verifyReviewBase: (mainCheckoutRoot, base) =>
-            verifyRecordedTaskReviewBase(mainCheckoutRoot, base),
+          readReviewBase: (repositoryRoot) => readCurrentWorktreeReviewBase(repositoryRoot),
+          verifyReviewBase: (repositoryRoot, base) =>
+            verifyRecordedTaskReviewBase(repositoryRoot, base),
           runWorkspace: (input) => runDisposableExactCommitWorkspace(input),
-          cleanupWorkspace: (mainCheckoutRoot, cleanup) =>
-            cleanupExactDisposableWorkspace(mainCheckoutRoot, cleanup),
-          inspectWorkspace: (mainCheckoutRoot, workspaceId, commitSha, worktreePath) =>
-            inspectDisposableWorktree(mainCheckoutRoot, workspaceId, commitSha, worktreePath),
+          cleanupWorkspace: (repositoryRoot, repositoryCommonDirectory, cleanup) =>
+            cleanupExactDisposableWorkspace(repositoryRoot, repositoryCommonDirectory, cleanup),
+          inspectWorkspace: (repositoryRoot, repositoryCommonDirectory, workspaceId, commitSha) =>
+            inspectDisposableWorktree(
+              repositoryRoot,
+              repositoryCommonDirectory,
+              workspaceId,
+              commitSha,
+            ),
         });
         return yield* useCases.submit(publicTaskId("BY-1"), now);
       }),
@@ -126,7 +129,7 @@ it.effect("submits through the supported Task Review operation with a real Agent
       "task",
       "review",
       "show",
-      submitted.review.id,
+      String(submitted.review.id),
     ]);
     expect(shown.status, shown.stdout).toBe(0);
     expect(JSON.parse(shown.stdout)).toMatchObject({
@@ -137,16 +140,24 @@ it.effect("submits through the supported Task Review operation with a real Agent
           id: expect.any(Number),
           invocations: [
             {
+              id: expect.any(Number),
+              continuationId: expect.any(Number),
+              createdAt: expect.any(String),
+              settledAt: expect.any(String),
               settlementKind: "returned",
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1, total: 2 },
+              continuation: {
+                id: expect.any(Number),
+                agentSessionId: expect.any(Number),
+                harness: "pi",
+                provider: null,
+                model: "but-why-test/deterministic-reviewer",
+                thinking: "off",
+                transcriptPath: expect.any(String),
+                unusableReason: null,
+              },
             },
           ],
-        },
-        legacyReviewerEvidence: {
-          classification: "legacy",
-          legacyTaskReviewerSession: null,
-          sessions: [],
-          transcripts: [],
         },
       },
     });

@@ -4,8 +4,11 @@ import type { WorkspaceCommandExecutor } from "../../command/workspaceCommand.js
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import { runWithSubmitProgress, type SubmitProgress } from "../../submission/submissionProgress.js";
-import type { RecordCandidateValidationPrepareRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
-import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
+import type {
+  CandidateValidationOutcome,
+  RecordCandidateValidationPrepareResultInput,
+} from "../candidateValidation/candidateValidationRunStore.js";
+import type { ChangePrepareDefinition } from "../changePolicy.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
@@ -13,12 +16,13 @@ import {
   InfrastructureToolingFailed,
   PrepareCommandExecutionToolingFailed,
   type ValidationToolingFailure,
+  validationToolingFailureRecord,
 } from "./validationToolingFailures.js";
 import { type ValidationCommandArtifacts, writeCommandEvidence } from "./writeCommandEvidence.js";
 
 export type RunPreparePhaseInput = {
-  readonly validationRunId: string;
-  readonly prepare: SubmitPrepareConfig;
+  readonly validationRunId: number;
+  readonly prepare: ChangePrepareDefinition;
   readonly commandExecutor: WorkspaceCommandExecutor;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -26,22 +30,14 @@ export type RunPreparePhaseInput = {
   readonly expectedHeadSha?: string;
   readonly allowedUntrackedFiles?: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
-  readonly recordPrepareRound: (
-    input: RecordCandidateValidationPrepareRoundInput,
+  readonly recordPrepareResult: (
+    input: RecordCandidateValidationPrepareResultInput,
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
-export type RunPreparePhaseResult =
-  | {
-      readonly ok: true;
-      readonly findings: 0;
-    }
-  | {
-      readonly ok: true;
-      readonly findings: 1;
-      readonly validationRunId: string;
-    };
+export type RunPreparePhaseResult = {
+  readonly outcome: CandidateValidationOutcome;
+};
 
 type CommandResult = {
   readonly exitCode: number;
@@ -67,32 +63,48 @@ export const runPreparePhase = (
     phase: { kind: "prepare" },
     run: Effect.gen(function* () {
       const startedAt = yield* Clock.currentTimeMillis;
-      const { commandResult, timedOut } = yield* runPrepareCommand(
-        input.commandExecutor,
-        input.prepare,
-        input.commandCwd,
-        input.expectedHeadSha,
-        input.allowedUntrackedFiles,
+      const execution = yield* Effect.either(
+        Effect.gen(function* () {
+          const { commandResult, timedOut } = yield* runPrepareCommand(
+            input.commandExecutor,
+            input.prepare,
+            input.commandCwd,
+            input.expectedHeadSha,
+            input.allowedUntrackedFiles,
+          );
+          const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
+          const artifacts = yield* writePrepareArtifacts({
+            validationRunId: input.validationRunId,
+            prepare: input.prepare,
+            commandResult,
+            timedOut,
+            durationMs,
+            artifactsRoot: input.artifactsRoot,
+            ...(input.artifactMaxBytes === undefined
+              ? {}
+              : { artifactMaxBytes: input.artifactMaxBytes }),
+          });
+          return { commandResult, timedOut, ...artifacts };
+        }),
       );
-      const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
-      const { artifactRefs, artifactRecords } = yield* writePrepareArtifacts({
-        validationRunId: input.validationRunId,
-        prepare: input.prepare,
-        commandResult,
-        timedOut,
-        durationMs,
-        artifactsRoot: input.artifactsRoot,
-        ...(input.artifactMaxBytes === undefined
-          ? {}
-          : { artifactMaxBytes: input.artifactMaxBytes }),
-        now: input.now,
-      });
-      const failed = commandResult.exitCode !== 0;
+      if (execution._tag === "Left") {
+        yield* recordPrepareResult(input, {
+          validationRunId: input.validationRunId,
+          outcome: "failed",
+          artifactRecords: [],
+          toolingFailure: {
+            ...validationToolingFailureRecord(execution.left),
+            validationRunId: input.validationRunId,
+          },
+        });
+        return { outcome: "tooling_failed" as const };
+      }
 
-      yield* recordPrepareRound(input, {
+      const { commandResult, timedOut, artifactRefs, artifactRecords } = execution.right;
+      const failed = commandResult.exitCode !== 0;
+      yield* recordPrepareResult(input, {
         validationRunId: input.validationRunId,
-        roundNumber: 1,
-        roundStatus: failed ? "failed" : "passed",
+        outcome: failed ? "failed" : "passed",
         artifactRecords,
         ...(failed
           ? {
@@ -105,22 +117,22 @@ export const runPreparePhase = (
               ),
             }
           : {}),
-        now: input.now,
       });
 
-      if (failed) {
-        return { ok: true, findings: 1, validationRunId: input.validationRunId };
-      }
-
-      return { ok: true, findings: 0 };
+      return { outcome: failed ? ("blocked" as const) : ("passed" as const) };
     }),
-    outcome: (result) => (result.findings === 0 ? "passed" : "failed"),
-    details: (result) => (result.findings === 1 ? { reason: "findings" } : undefined),
+    outcome: (result) => (result.outcome === "passed" ? "passed" : "failed"),
+    details: (result) =>
+      result.outcome === "tooling_failed"
+        ? { reason: "tooling" as const }
+        : result.outcome === "blocked"
+          ? { reason: "findings" as const }
+          : undefined,
   });
 
 const runPrepareCommand = (
   commandExecutor: WorkspaceCommandExecutor,
-  prepare: SubmitPrepareConfig,
+  prepare: ChangePrepareDefinition,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
   allowedUntrackedFiles: readonly string[] | undefined,
@@ -168,19 +180,18 @@ const runPrepareCommand = (
     ),
   );
 
-const recordPrepareRound = (
+const recordPrepareResult = (
   input: RunPreparePhaseInput,
-  prepareRound: RecordCandidateValidationPrepareRoundInput,
-): Effect.Effect<void, RepositoryStorageError> => input.recordPrepareRound(prepareRound);
+  result: RecordCandidateValidationPrepareResultInput,
+): Effect.Effect<void, RepositoryStorageError> => input.recordPrepareResult(result);
 
 const prepareFinding = (
-  validationRunId: string,
-  prepare: SubmitPrepareConfig,
+  validationRunId: number,
+  prepare: ChangePrepareDefinition,
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
-): NonNullable<RecordCandidateValidationPrepareRoundInput["finding"]> => ({
-  id: `${validationRunId}-F1`,
+): NonNullable<RecordCandidateValidationPrepareResultInput["finding"]> => ({
   validationRunId,
   phase: validationPhase.prepare,
   producer: prepareProducer,
@@ -196,14 +207,13 @@ const prepareFinding = (
 });
 
 const writePrepareArtifacts = (input: {
-  readonly validationRunId: string;
-  readonly prepare: SubmitPrepareConfig;
+  readonly validationRunId: number;
+  readonly prepare: ChangePrepareDefinition;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
   readonly durationMs: number;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
-  readonly now: string;
 }): Effect.Effect<ValidationCommandArtifacts, ValidationToolingFailure, FileSystem.FileSystem> =>
   writeCommandEvidence({
     validationRunId: input.validationRunId,

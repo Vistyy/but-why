@@ -11,6 +11,7 @@ import {
   runBuiltByWithInput,
 } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
+import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -64,11 +65,6 @@ if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
   printf '{"result":{"type":"agent_started","agent":{"terminal_id":"terminal"}}}\\n'
   exit 0
 fi
-if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
-  printf '%s' "$4" > "$BY_FAKE_CAPTURE"
-  printf '{"result":{"type":"agent_prompted"}}\\n'
-  exit 0
-fi
 exit 1
 `,
         );
@@ -89,18 +85,30 @@ exit 1
           BY_FAKE_SESSION: fixture.id,
         };
 
-        const piped = runBuiltByWithInput(
-          root,
-          "Implementer prompt from piped stdin\n",
-          env,
-          "change",
-          "implement",
-          fixture.id,
-          "--implementer-prompt-file",
-          "-",
+        const socketPath = join(tools, "herdr.sock");
+        const server = yield* Effect.promise(() =>
+          startFakeHerdrApiServer({
+            socketPath,
+            capturePath: capture,
+            readyPath: join(tools, "herdr-api-ready"),
+          }),
         );
-        expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
-        expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
+        try {
+          const piped = runBuiltByWithInput(
+            root,
+            "Implementer prompt from piped stdin\n",
+            { ...env, HERDR_SOCKET_PATH: socketPath },
+            "change",
+            "implement",
+            fixture.id,
+            "--implementer-prompt-file",
+            "-",
+          );
+          expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
+          expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
+        } finally {
+          yield* Effect.promise(server.stop);
+        }
       }),
     30_000,
   );
@@ -119,10 +127,14 @@ exit 1
               "create process Change fixture",
               (sql) => sql`
               INSERT INTO changes (
-                id, repository_common_directory, branch_ref, state,
-                close_reason, created_at, updated_at, closed_at
-              ) VALUES
-                (${internalChangeId(changeId, "BY")}, ${join(root, ".git")}, 'refs/heads/process', 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+                id, branch_ref, base_ref, base_remote_url, worktree_path,
+                reviewer_configuration, checks_definition, cleanup_pending
+              ) VALUES (
+                ${internalChangeId(changeId, "BY")}, 'refs/heads/process',
+                'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
+                ${join(root, "process-worktree")},
+                '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
+              )
             `,
             );
           }),

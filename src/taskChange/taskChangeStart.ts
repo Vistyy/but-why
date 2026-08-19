@@ -5,13 +5,10 @@ import {
   prepareExistingChange,
   startChange,
 } from "../change/changeLifecycle.js";
+import type { ChangePolicyResolution } from "../change/changePolicy.js";
 import type { ChangeStartGitOperations } from "../change/changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
-import type {
-  ChangeReviewerConfiguration,
-  ChangeStartRecord,
-  CreateChangeStartInput,
-} from "../change/changeStartStore.js";
+import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { RepositoryPreparationEffectExecutor } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBaseRef.js";
@@ -67,10 +64,6 @@ export type TaskChangeStartInput = {
   readonly now: string;
 };
 
-export type TaskChangeReviewerConfigurationResolution =
-  | { readonly ok: true; readonly configuration: ChangeReviewerConfiguration }
-  | { readonly ok: false; readonly message: string };
-
 export type TaskChangeStartResult =
   | (ChangeStartResult & { readonly taskId: string })
   | TaskChangeStartEligibilityError
@@ -86,7 +79,7 @@ export const startTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationEffectExecutor,
   input: TaskChangeStartInput,
-  resolveReviewerConfiguration: () => TaskChangeReviewerConfigurationResolution,
+  resolvePolicy: (startingCommit: string) => Effect.Effect<ChangePolicyResolution>,
 ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const prepared = yield* store.prepareTask(input.taskId);
@@ -109,16 +102,6 @@ export const startTaskChange = (
       return { ...recovered, taskId: input.taskId };
     }
 
-    const reviewerConfiguration = resolveReviewerConfiguration();
-    if (!reviewerConfiguration.ok) {
-      return {
-        ok: false as const,
-        code: "reviewer_configuration_invalid" as const,
-        message: reviewerConfiguration.message,
-        taskId: input.taskId,
-      };
-    }
-
     const ownerStore: ChangeStartPersistence<TaskChangeStartEligibilityError> = {
       create: (createInput) =>
         store.createLinked({
@@ -130,7 +113,7 @@ export const startTaskChange = (
     };
     const started = yield* startChange(ownerStore, git, executor, {
       ...(input.baseBranch === undefined ? {} : { baseBranch: input.baseBranch }),
-      reviewerConfiguration: reviewerConfiguration.configuration,
+      resolvePolicy,
       now: input.now,
     });
     return { ...started, taskId: input.taskId };

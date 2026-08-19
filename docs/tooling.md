@@ -24,57 +24,35 @@ Health findings become implementation work only when repository evidence establi
 Repository-wide quality, unselected test, and unselected coverage workloads share a capacity lock.
 Focused test selections do not wait for that lock.
 
-## Source-repository executable
+## Installed executable and package tests
 
-Before npm publication, `just by ...` uses the Trusted But Why Executable and operational Repo Config from the canonical main checkout.
-The Source Checkout Guard preserves the caller checkout for command inputs and Git inspection while it binds operational policy to canonical main.
-It does not load CLI, migration code, or operational Repo Config from a Candidate worktree.
-Candidate CLI and migration behavior must be tested through supported test seams with independent temporary state.
+The globally installed built package and its `by` executable are the only supported CLI for live Shared Repository State.
+The source repository has no `just by` route and does not select an executable or operational Repo Config from another checkout.
+The installed CLI resolves the invoking current worktree and its Git Common Directory.
+No checkout is privileged.
 
-Change Submit treats the Candidate Repo Config as opaque to the Trusted But Why Executable.
-It resolves Repository Preparation, Checks, copied local files, and current reviewer policy from the exact fetched Change Base, while Change Start facts retain reviewer authority for the Change.
-The source repository's Change Base config includes the `candidate-repo-config` Check.
-After trusted Repository Preparation, that Check runs `just validate-candidate-repo-config` in the Snapshot Workspace so the Candidate source decoder validates the actual Candidate Repo Config.
-A nonzero result creates normal Check evidence and prevents reviewer execution and publication.
-The validator reads only `.but-why/config.json` and does not open Shared Repository State.
-Do not invoke the Candidate CLI for this validation.
+Candidate source and package artifacts execute only in disposable test repositories with independent Git Common Directories, user configuration, and SQLite state.
+Package contract tests own installed runtime behavior, packaged resources, and Repo Config behavior.
+Candidate code must not open live Shared Repository State.
 
-While the source repository is unreleased, the Pinned Predecessor Executable rule applies to every source-repository But Why command.
-The command must resolve the executable and operational Repo Config from the canonical main checkout before it reads or mutates Shared Repository State.
-A Candidate worktree must not supply its own CLI or Repo Config as trusted repository policy for those operations.
-Change Base-controlled validation remains the only path that decodes Candidate Repo Config.
-After publication, packaged commands use the published But Why Executable and the target repository's normal Repo Config resolution instead.
+Change Start reads Repo Config and referenced repository reviewer instructions directly from the exact starting Change Base and stores the complete immutable Change policy.
+Change Submit uses that stored policy and treats Candidate Repo Config as Candidate content rather than judgment authority.
 
-### Pinned Predecessor Executable for migration reconciliation
+### Prerelease release-baseline cutover
 
-For a prerelease migration Change, build the Pinned Predecessor Executable from canonical `main` immediately before merge.
-Preserve the self-contained executable bundle outside the checkout.
-The manifest's executable must contain the complete predecessor runtime that will execute reconciliation.
-Record the predecessor Git commit and the SHA-256 of that executable in an external manifest.
-The manifest path is supplied through `BUT_WHY_PINNED_PREDECESSOR_MANIFEST`.
-Its JSON shape is:
+The release-ready runtime supports only `0001_baseline` and does not open prerelease Shared Repository State.
+Use this minimum procedure for the one-time live cutover.
 
-```json
-{
-  "version": 1,
-  "changeId": "<exact-merged-change-id>",
-  "commit": "<pre-merge-git-commit>",
-  "sha256": "<sha-256-of-executable>",
-  "executable": "<bundle-executable-path-relative-to-this-manifest>"
-}
-```
+1. Keep the pre-merge source commit and build or retain its old executable before the baseline Change is merged.
+2. After the merged baseline Change is available, pause But Why operations that can open or write Shared Repository State.
+3. Invoke the old executable directly from the target checkout only for `change reconcile <merged-change-id>` with the exact merged baseline Change ID.
+4. Install the exact merged package tarball globally as `by`.
+5. Rename the old Git Common Directory But Why state directory as a dated low-value backup.
+6. Initialize fresh Shared Repository State from `0001_baseline` with installed `by` and the unchanged `idPrefix`.
+   Do not import or convert old rows.
+7. Run basic `init` and `task list` smoke checks, then resume work.
 
-The source launcher verifies the manifest, the executable permission, and the recorded SHA-256 before it starts the executable.
-The manifest is accepted only for `change reconcile <exact-merged-change-id>` and its `--discard-work` form.
-The launcher rejects every other command while this manifest is selected.
-The bundle receives the target Local Repository as its current working directory and runs only the exact reconciliation command.
-
-For the internal identity cutover only, pause all But Why operations after merge and before the new executable opens Shared Repository State.
-Preserve the exact merged `idPrefix` Repo Config, then temporarily install the pinned predecessor's `taskPrefix`-compatible Repo Config with the same prefix in canonical `main`.
-Run only the exact reconciliation command through the pinned-predecessor launcher, which sets `BUT_WHY_SOURCE_TRUSTED_ROOT` to canonical `main`.
-Restore the exact merged Repo Config immediately after the command, including on failure, and verify it against the merged commit before running the new executable.
-
-After reconciliation succeeds, remove the temporary bundle and manifest unless the release archive requires the Task 7 predecessor.
+This procedure requires no checksum, manifest, rehearsal, backup verification, archive reader, rollback command, or migration command.
 
 ## Check ownership
 

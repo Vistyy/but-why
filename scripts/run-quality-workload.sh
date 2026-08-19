@@ -74,7 +74,6 @@ if (( interrupted_status == 0 )); then
     test_pid=${child_pids[-1]}
     wait_for_child "$test_pid" || status=1
 fi
-
 trap - INT TERM
 if (( interrupted_status == 0 )) && [[ -s "${BY_CAPACITY_INTERRUPTION_FILE:-}" ]]; then
     interruption_status=$(<"$BY_CAPACITY_INTERRUPTION_FILE")

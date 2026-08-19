@@ -2,28 +2,15 @@ import type { RemoteChangeBaseError } from "../submissionEnvironment/remoteChang
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export type ChangeStartGitIntent = {
-  readonly repositoryCommonDirectory: string;
   readonly baseRef: string;
   readonly baseRemoteUrl: string;
-  readonly branchRef: string;
   readonly startingCommit: string;
-  readonly worktreePath: string;
-  readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
+  readonly managedWorktreeParent: string;
 };
 
 export type ResolveChangeStartGitResult =
   | { readonly ok: true; readonly intent: ChangeStartGitIntent }
-  | RemoteChangeBaseError
-  | {
-      readonly ok: false;
-      readonly code:
-        | "committed_repo_config_missing"
-        | "committed_repo_config_invalid"
-        | "change_start_conflict"
-        | "requested_base_conflict";
-      readonly requestedBaseBranch?: string;
-      readonly recordedBaseBranch?: string;
-    };
+  | RemoteChangeBaseError;
 
 export type ProvisionChangeWorktreeResult =
   | { readonly ok: true }
@@ -44,7 +31,6 @@ export type ProvisionChangeWorktreeResult =
       readonly code: "managed_branch_missing";
       readonly branch: string;
       readonly path: string;
-      readonly startingCommit: string;
     }
   | {
       readonly ok: false;
@@ -60,12 +46,10 @@ export type ProvisionChangeWorktreeFailure = Exclude<
 >;
 
 export type ChangeStartGitOperations = {
-  readonly resolveIntent: (
-    slug: string,
-    requestedBaseBranch?: string,
-  ) => ResolveChangeStartGitResult;
+  readonly resolveIntent: (requestedBaseBranch?: string) => ResolveChangeStartGitResult;
   readonly provisionWorktree: (
     start: ChangeStartRecord,
     recovering: boolean,
+    startingCommit?: string,
   ) => ProvisionChangeWorktreeResult;
 };

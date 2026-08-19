@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
@@ -6,16 +5,12 @@ import type {
   AgentSessionConfiguration,
   AgentSessionPersistence,
 } from "../../agent/agentSession/agentSession.js";
-import {
-  type AgentExecutionEvidence,
-  executeAgentSession,
-} from "../../agent/agentSession/executeAgentSession.js";
+import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
-import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
@@ -23,7 +18,6 @@ import type {
   ExactDisposableWorkspaceCleanupInput,
   ExactDisposableWorkspaceCleanupResult,
 } from "../../disposableWorkspace/disposableWorkspace.js";
-import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import {
@@ -53,13 +47,14 @@ import type {
   TaskReviewAdmissionPersistence,
   TaskReviewPersistence,
 } from "./taskReviewPersistence.js";
+import { taskReviewWorkspaceId } from "./taskReviewWorkspace.js";
 
 export type TaskReviewSubmitResult =
   | CompleteTaskReviewSuccess
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: string }
   | { readonly ok: false; readonly code: "task_change_linked"; readonly changeId: string }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string }
+  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: number }
   | { readonly ok: false; readonly code: "review_base_unavailable"; readonly message: string }
   | { readonly ok: false; readonly code: "task_review_config_invalid"; readonly message: string }
   | {
@@ -92,7 +87,7 @@ export type TaskReviewIdentityInspection =
 
 export type TaskReviewInspectionUseCases = {
   readonly getById: (
-    reviewId: string,
+    reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
   readonly getLatestForTask: (
     taskId: PublicTaskId,
@@ -110,7 +105,7 @@ export type TaskReviewInspectionUseCases = {
 
 export type TaskReviewRecoveryUseCases = {
   readonly abandon: (
-    reviewId: string,
+    reviewId: number,
     reason: string,
     now: string,
   ) => Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError>;
@@ -131,19 +126,18 @@ type WorkspaceExecution =
   | {
       readonly ok: true;
       readonly output: TaskReviewerOutput;
-      readonly evidence: ReviewerExecutionEvidence;
       readonly sessionReference: string | null;
     }
   | {
       readonly ok: false;
       readonly failure: TaskReviewToolingFailure;
-      readonly evidence?: ReviewerExecutionEvidence;
       readonly sessionReference?: string | null;
       readonly findings?: TaskReviewerOutput["findings"];
     };
 
 export const openTaskReviewUseCases = (input: {
-  readonly mainCheckoutRoot: string;
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
   readonly loadRepoConfig: (
     commit: string,
   ) =>
@@ -155,30 +149,31 @@ export const openTaskReviewUseCases = (input: {
   ) => TaskReviewPolicyResolutionResult;
   readonly persistence: TaskReviewPersistence;
   readonly admission?: TaskReviewAdmissionPersistence;
-  readonly reviewerSessionStorageRoot: string;
+  readonly agentSessionStorageRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly reviewerRuntime: ReviewerAgentRuntime<TaskReviewerOutput>;
   readonly reviewerExecutor: ReviewerProcessExecutor;
   readonly readReviewBase: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
   ) => Effect.Effect<
     | { readonly ok: true; readonly base: TaskReviewBase }
     | { readonly ok: false; readonly message: string }
   >;
   readonly verifyReviewBase: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
     recorded: TaskReviewBase,
   ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
   readonly runWorkspace: RunDisposableExactCommitWorkspace;
   readonly cleanupWorkspace: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
+    repositoryCommonDirectory: string,
     cleanup: ExactDisposableWorkspaceCleanupInput,
   ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   readonly inspectWorkspace: (
-    mainCheckoutRoot: string,
+    repositoryRoot: string,
+    repositoryCommonDirectory: string,
     workspaceId: string,
     expectedCommitSha: string,
-    worktreePath: string,
   ) => Effect.Effect<DisposableWorktreeInspection>;
   readonly progress?: SubmitProgress;
 }): TaskReviewUseCases => ({
@@ -203,24 +198,16 @@ const submitTaskReview = (
     const rejected = yield* admission.checkAdmission(taskId);
     if (rejected !== undefined) return rejected;
 
-    const base = yield* input.readReviewBase(input.mainCheckoutRoot);
+    const base = yield* input.readReviewBase(input.repositoryRoot);
     if (!base.ok)
       return { ok: false, code: "review_base_unavailable", message: base.message } as const;
     const config = input.loadRepoConfig(base.base.commit);
     if (!config.ok)
       return { ok: false, code: "review_base_unavailable", message: config.message } as const;
     const repoConfig = config.config;
-    const storedPolicy =
-      input.persistence.getReviewerConfiguration === undefined
-        ? undefined
-        : yield* input.persistence.getReviewerConfiguration(taskId);
-    const configurationCanBeCorrected =
-      storedPolicy !== undefined &&
-      input.persistence.reviewerConfigurationCanBeCorrected !== undefined
-        ? yield* input.persistence.reviewerConfigurationCanBeCorrected(taskId)
-        : false;
+    const storedPolicy = yield* input.persistence.getReviewerConfiguration(taskId);
     const resolvedPolicy =
-      storedPolicy === undefined || configurationCanBeCorrected
+      storedPolicy === undefined
         ? input.resolvePolicy(repoConfig, base.base.commit)
         : taskReviewPolicyFromSnapshot(storedPolicy);
     if (!resolvedPolicy.ok) {
@@ -230,30 +217,26 @@ const submitTaskReview = (
         message: resolvedPolicy.message,
       } as const;
     }
-    const reviewId = randomUUID();
-    const workspacePath = expectedDisposableWorkspacePath(input.mainCheckoutRoot, reviewId);
     const admitted = yield* admission.admit({
-      reviewId,
       taskId,
       policy: resolvedPolicy.policy.snapshot,
       baseRef: base.base.ref,
       baseCommit: base.base.commit,
-      workspacePath,
       now,
     });
     if (!admitted.ok) return admitted;
+    const reviewId = admitted.review.id;
 
     let taskReviewProgress: StartedSubmitProgress | undefined;
-    let taskReviewEvidence: ReviewerExecutionEvidence | undefined;
     const result = yield* runAfterSubmitProgressStarted({
       progress: input.progress,
       started: () => taskReviewProgress,
       run: Effect.gen(function* () {
         const workspace = yield* input.runWorkspace<WorkspaceExecution, RepositoryStorageError>({
-          repoRoot: input.mainCheckoutRoot,
-          workspaceId: reviewId,
+          repositoryRoot: input.repositoryRoot,
+          repositoryCommonDirectory: input.repositoryCommonDirectory,
+          workspaceId: taskReviewWorkspaceId(reviewId),
           commitSha: base.base.commit,
-          copyFiles: repoConfig.snapshotWorkspace?.copyFiles ?? [],
           runInWorkspace: (active) =>
             Effect.gen(function* () {
               const prepare = repoConfig.prepare;
@@ -317,16 +300,15 @@ const submitTaskReview = (
                       }),
                   ),
                 );
-              const reviewerSessionId = yield* input.persistence.getReviewerAgentSession(taskId);
+              const agentSessionId = yield* input.persistence.getReviewerAgentSession(taskId);
               const execution = yield* executeAgentSession({
-                ...(reviewerSessionId === undefined ? {} : { agentSessionId: reviewerSessionId }),
+                ...(agentSessionId === undefined ? {} : { agentSessionId }),
                 configuration: agentConfiguration(resolvedPolicy.policy.profile),
                 agentPersistence: input.agentPersistence,
                 linkInvocation: input.persistence.linkAgentInvocation({
                   taskId,
                   reviewId,
-                  configuration: agentConfiguration(resolvedPolicy.policy.profile),
-                  configurationSnapshot: resolvedPolicy.policy.snapshot,
+                  admittedPolicy: admitted.policy,
                 }),
                 reviewerRuntime: input.reviewerRuntime,
                 reviewerExecutor: input.reviewerExecutor,
@@ -342,7 +324,7 @@ const submitTaskReview = (
                 resourceRoot: active.worktreePath,
                 profile: resolvedPolicy.policy.profile,
                 reviewer: "task",
-                sessionStorageRoot: input.reviewerSessionStorageRoot,
+                sessionStorageRoot: input.agentSessionStorageRoot,
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {
@@ -378,16 +360,12 @@ const submitTaskReview = (
                     });
                   }),
               });
-              taskReviewEvidence = reviewerEvidenceFromAgent(
-                execution.evidence as AgentExecutionEvidence,
-              );
               const reviewed = execution.result;
               const sessionReference = reviewed.sessionReference ?? null;
               return reviewed.ok
                 ? ({
                     ok: true,
                     output: reviewed.report,
-                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const)
                 : ({
@@ -396,7 +374,6 @@ const submitTaskReview = (
                       operation: reviewed.failure.operationName,
                       message: reviewed.failure.message,
                     },
-                    evidence: taskReviewEvidence,
                     sessionReference,
                   } as const);
             }),
@@ -427,7 +404,6 @@ const submitTaskReview = (
           findings: execution.ok ? execution.output.findings : (execution.findings ?? []),
           ...(execution.ok ? {} : { toolingFailure: execution.failure }),
           now,
-          agentSettlement: true,
         });
         if (!completed.ok) {
           const active = yield* input.persistence.getById(reviewId);
@@ -437,28 +413,16 @@ const submitTaskReview = (
         return completed;
       }),
       outcome: (result) => (result.ok && result.outcome === "passed" ? "passed" : "failed"),
-      details: () => taskReviewProgressDetails(taskReviewEvidence),
-      failureDetails: () => taskReviewProgressDetails(taskReviewEvidence),
     });
     return result;
   });
 
 const taskReviewPolicyFromSnapshot = (
   snapshot: TaskReviewPolicySnapshot,
-): TaskReviewPolicyResolutionResult =>
-  snapshot.profile.profile === null
-    ? { ok: false, message: "Stored Task Reviewer configuration has no Agent Profile." }
-    : {
-        ok: true,
-        policy: {
-          snapshot,
-          profile: {
-            agentProfile: snapshot.profile.agentProfile,
-            scope: snapshot.profile.scope,
-            profile: snapshot.profile.profile,
-          },
-        },
-      };
+): TaskReviewPolicyResolutionResult => ({
+  ok: true,
+  policy: { snapshot, profile: snapshot.profile },
+});
 
 const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfiguration => ({
   harness: "pi",
@@ -466,18 +430,6 @@ const agentConfiguration = (profile: ResolvedPiAgentProfile): AgentSessionConfig
   model: profile.profile.runtimeConfig?.model ?? "",
   thinking: profile.profile.runtimeConfig?.thinking ?? null,
 });
-
-const reviewerEvidenceFromAgent = (
-  evidence: AgentExecutionEvidence,
-): ReviewerExecutionEvidence => ({
-  agentSessionId: evidence.agentSessionId,
-  invocations: evidence.invocations,
-});
-
-const taskReviewProgressDetails = (evidence: ReviewerExecutionEvidence | undefined) =>
-  evidence?.continuity === undefined || evidence.reviewCalls === undefined
-    ? undefined
-    : { continuity: evidence.continuity, reviewCalls: evidence.reviewCalls };
 
 const taskReviewProgressProfile = (profile: ResolvedPiAgentProfile): SubmitProgressProfile => ({
   name: profile.agentProfile,
@@ -492,31 +444,32 @@ const taskReviewStorageErrorMessage = (error: RepositoryStorageError): string =>
 
 export const inspectTaskReviewIdentity = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: TaskReviewBase,
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly inspectWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       workspaceId: string,
       expectedCommitSha: string,
-      worktreePath: string,
     ) => Effect.Effect<DisposableWorktreeInspection>;
   },
   review: TaskReviewRecord,
 ): Effect.Effect<TaskReviewIdentityInspection> =>
   Effect.gen(function* () {
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.repositoryRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
     if (!base.ok) return { verified: false, message: base.message } as const;
     const workspace = yield* input.inspectWorkspace(
-      input.mainCheckoutRoot,
-      review.id,
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
+      taskReviewWorkspaceId(review.id),
       review.baseCommit,
-      review.workspacePath,
     );
     return workspace.state === "unproven"
       ? ({ verified: false, message: workspace.message } as const)
@@ -525,18 +478,20 @@ export const inspectTaskReviewIdentity = (
 
 export const abandonTaskReview = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly persistence: TaskReviewPersistence;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: TaskReviewBase,
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly cleanupWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       cleanup: ExactDisposableWorkspaceCleanupInput,
     ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },
-  reviewId: string,
+  reviewId: number,
   reason: string,
   now: string,
 ): Effect.Effect<TaskReviewAbandonResult, RepositoryStorageError> =>
@@ -570,7 +525,7 @@ const buildTaskReviewContinuationPrompt = (input: {
   readonly currentPrompt: string;
 }): string =>
   [
-    "Continue the compatible Task Reviewer Session with the complete current proposal below.",
+    "Continue the compatible Task Agent Session with the complete current proposal below.",
     "Deterministic proposal diff from the most recent prior Review:",
     JSON.stringify({
       previous: input.previousProposal ?? null,

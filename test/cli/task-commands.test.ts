@@ -31,8 +31,6 @@ const taskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
   id: "BY-1",
   title: "First",
   state: "new",
-  createdAt: firstNow,
-  updatedAt: firstNow,
   startable: false,
   blockedBy: [],
   ...overrides,
@@ -48,15 +46,15 @@ const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
 });
 
 const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReviewRecord => ({
-  id: "review-1",
+  id: 1,
   taskId: "BY-1",
   proposal: { title: "Inspect task", description: "Description", dependencyIds: [] },
   dependencyEvidence: [],
-  policy: {
+  reviewerConfiguration: {
     profile: {
       agentProfile: "review",
       scope: "global",
-      profile: { agentRuntime: "pi" },
+      profile: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } },
     },
     builtInInstructions: "Review the exact proposal.",
     guidance: null,
@@ -67,13 +65,9 @@ const taskReviewRecord = (overrides: Partial<TaskReviewRecord> = {}): TaskReview
   state: "complete",
   outcome: "passed",
   workspaceCleanup: "removed",
+  cleanupBlockingReason: null,
   toolingFailure: null,
-  abandonReason: null,
   findings: [],
-  sessions: [],
-  transcripts: [],
-  createdAt: firstNow,
-  updatedAt: firstNow,
   ...overrides,
 });
 
@@ -104,7 +98,7 @@ describe("Task command Adapters", () => {
     const running = taskReviewRecord({ state: "running", outcome: null });
 
     expect(taskReviewView(running).recovery.nextActions).toEqual([
-      "Run `by task-review show review-1` to inspect recovery.",
+      "Run `by task-review show 1` to inspect recovery.",
     ]);
     expect(
       taskReviewView(running, false, {
@@ -119,7 +113,7 @@ describe("Task command Adapters", () => {
       }).recovery.nextActions,
     ).toEqual([
       "Stop the Task Review process before abandonment.",
-      'Run `by task review abandon review-1 --reason "..."` after the process stops.',
+      'Run `by task review abandon 1 --reason "..."` after the process stops.',
     ]);
     expect(taskReviewView(taskReviewRecord()).recovery.nextActions).toEqual([]);
   });
@@ -226,7 +220,7 @@ describe("Task command Adapters", () => {
       expect(passed).toEqual({
         exitCode: 0,
         stdout: {
-          review: { id: "review-1", state: "complete", outcome: "passed" },
+          review: { id: 1, state: "complete", outcome: "passed" },
           task: { id: "BY-1", state: "todo" },
           help: ["Run `by task show BY-1` to inspect its startability and next action."],
         },
@@ -237,10 +231,10 @@ describe("Task command Adapters", () => {
           error: {
             code: "task_review_findings",
             message: "Task Review is blocked by Findings; the Task remains New.",
-            review: { id: "review-1", state: "complete", outcome: "blocked", findings },
+            review: { id: 1, state: "complete", outcome: "blocked", findings },
             task: { id: "BY-1", state: "new" },
           },
-          help: ["Run `by task-review show review-1` to inspect the Task Review."],
+          help: ["Run `by task-review show 1` to inspect the Task Review."],
         },
       });
       expect(failed).toEqual({
@@ -250,7 +244,7 @@ describe("Task command Adapters", () => {
             code: "task_review_tooling_failed",
             message: "Task Review had a Tooling Failure; the Task remains New.",
             review: {
-              id: "review-1",
+              id: 1,
               state: "complete",
               outcome: "tooling_failed",
               toolingFailure: {
@@ -260,7 +254,7 @@ describe("Task command Adapters", () => {
             },
             task: { id: "BY-1", state: "new" },
           },
-          help: ["Run `by task-review show review-1` to inspect the Task Review."],
+          help: ["Run `by task-review show 1` to inspect the Task Review."],
         },
       });
     }),
@@ -336,7 +330,7 @@ describe("Task command Adapters", () => {
   it.effect("renders Task Show navigation, its retained Review, and Task Context", () =>
     Effect.gen(function* () {
       const retainedReview = taskReviewRecord({
-        id: "review-retained",
+        id: 2,
         state: "complete",
         outcome: "blocked",
         workspaceCleanup: "removed",
@@ -348,12 +342,10 @@ describe("Task command Adapters", () => {
             files: ["docs/spec.md"],
           },
         ],
-        updatedAt: secondNow,
       });
       const commandEnvironment = environment(
         fakeTaskUseCases({
-          getTaskForInspection: () =>
-            taskRecord({ title: "Inspect task", state: "todo", updatedAt: secondNow }),
+          getTaskForInspection: () => taskRecord({ title: "Inspect task", state: "todo" }),
           getTaskContextById: () => ({
             id: "BY-1",
             title: "Inspect task",
@@ -372,13 +364,11 @@ describe("Task command Adapters", () => {
           id: "BY-1",
           title: "Inspect task",
           state: "todo",
-          createdAt: firstNow,
-          updatedAt: secondNow,
           prerequisites: [],
           dependents: [],
           change: null,
           review: {
-            id: "review-retained",
+            id: 2,
             state: "complete",
             outcome: "blocked",
             proposalCurrent: false,
@@ -396,7 +386,7 @@ describe("Task command Adapters", () => {
           },
         },
         contextCommand: "by task context BY-1",
-        reviewCommand: "by task-review show review-retained",
+        reviewCommand: "by task-review show 2",
         help: ["Run `by task revise BY-1` before changing approved Task intent."],
       });
       expect(context.stdout).toEqual({
@@ -411,7 +401,7 @@ describe("Task command Adapters", () => {
 
   it.effect("renders Task revision mutation and rejection results", () =>
     Effect.gen(function* () {
-      const revised = taskRecord({ state: "new", updatedAt: secondNow });
+      const revised = taskRecord({ state: "new" });
       const successResult = yield* runReviseCommand(
         { taskId: "BY-1" },
         environment(
@@ -432,7 +422,7 @@ describe("Task command Adapters", () => {
       expect(successResult).toMatchObject({
         exitCode: 0,
         stdout: {
-          task: { id: "BY-1", state: "new", changed: true, updatedAt: secondNow },
+          task: { id: "BY-1", state: "new", changed: true },
           help: [
             "Edit Task BY-1 with `by task context draft BY-1` and `by task context apply BY-1`.",
           ],
@@ -457,7 +447,6 @@ describe("Task command Adapters", () => {
     Effect.gen(function* () {
       const persistedTask = taskRecord({
         description: "Updated description",
-        updatedAt: secondNow,
       });
       const commandEnvironment = environment(
         fakeTaskUseCases({
@@ -485,7 +474,7 @@ describe("Task command Adapters", () => {
         draft: { path: "/tmp/task-context-draft.md", content: "Original description" },
       });
       expect(applied.stdout).toMatchObject({
-        task: { id: "BY-1", state: "new", updatedAt: secondNow },
+        task: { id: "BY-1", state: "new" },
         context: { id: "BY-1", title: "First", description: "Updated description" },
       });
     }),
@@ -600,7 +589,6 @@ describe("Task command Adapters", () => {
                 id: "BY-2",
                 title: "Start this task",
                 state: "todo",
-                updatedAt: secondNow,
                 startable: true,
               }),
             ],
@@ -617,8 +605,6 @@ describe("Task command Adapters", () => {
             id: "BY-2",
             title: "Start this task",
             state: "todo",
-            createdAt: firstNow,
-            updatedAt: secondNow,
           },
         ],
       });

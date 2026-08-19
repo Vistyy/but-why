@@ -42,7 +42,7 @@ export const detectGitHubPrTarget = (
   };
 };
 
-const parseGitHubRemoteUrl = (
+export const parseGitHubRemoteUrl = (
   url: string,
 ): { readonly owner: string; readonly repo: string } | undefined => {
   const normalized = url

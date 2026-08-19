@@ -1,6 +1,10 @@
 import { expectedDisposableWorkspacePath } from "../../disposableWorkspace/disposableWorkspacePath.js";
 
+export const snapshotWorkspaceId = (validationRunId: number): string =>
+  `validation-run-${validationRunId}`;
+
 export const expectedSnapshotWorkspacePath = (
-  mainCheckoutRoot: string,
-  validationRunId: string,
-): string => expectedDisposableWorkspacePath(mainCheckoutRoot, validationRunId);
+  repositoryCommonDirectory: string,
+  validationRunId: number,
+): string =>
+  expectedDisposableWorkspacePath(repositoryCommonDirectory, snapshotWorkspaceId(validationRunId));

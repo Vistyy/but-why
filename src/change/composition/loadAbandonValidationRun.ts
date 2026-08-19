@@ -17,9 +17,8 @@ export type LoadAbandonValidationRunResult =
 
 export const loadAbandonValidationRun = (input: {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
 }): LoadAbandonValidationRunResult => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return loaded;
   const { context } = loaded.runtime;
 
@@ -31,7 +30,7 @@ export const loadAbandonValidationRun = (input: {
           openAbandonValidationRun({
             persistence,
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
-            workspaceCleanup: snapshotWorkspaceCleanupGit(context.mainCheckoutRoot),
+            workspaceCleanup: snapshotWorkspaceCleanupGit(context.root, context.commonDirectory),
           }).abandon(command),
         ).pipe(loaded.runtime.provide),
     },

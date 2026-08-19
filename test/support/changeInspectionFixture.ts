@@ -1,10 +1,18 @@
-import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
+import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
+import {
+  decodeImplementationBlockerHistory,
+  implementationBlockerReadColumns,
+  type StoredImplementationBlockerRow,
+} from "../../src/sqlite/sqliteChangeAuthorityHistory.js";
+import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "./by-cli.js";
 import { withTestRepository } from "./repository.js";
@@ -95,12 +103,8 @@ export const createTaskFixture = (
       yield* repository.operation(
         "create Task inspection fixture",
         (sql) => sql`
-          INSERT INTO tasks (
-            id, title, description, state, cancel_reason, created_at, updated_at
-          ) VALUES (
-            ${input.numericId}, ${input.title}, ${input.description}, ${input.state},
-            NULL, ${input.createdAt}, ${input.updatedAt}
-          )
+          INSERT INTO tasks (id, title, description, state)
+          VALUES (${input.numericId}, ${input.title}, ${input.description}, ${input.state})
         `,
       );
     }),
@@ -109,7 +113,7 @@ export const createTaskFixture = (
 export const createChangeFixture = (
   root: string,
   branchRef: string,
-  createdAt: string,
+  _createdAt: string,
   options: CreateChangeInspectionFixtureOptions = {},
 ): Effect.Effect<{ readonly id: string }, RepositoryStorageError> =>
   withTestRepository(
@@ -122,9 +126,7 @@ export const createChangeFixture = (
         const tasks = yield* repository.operation(
           "read linked Task inspection fixture",
           (sql) => sql<{ readonly title: string; readonly description: string }>`
-            SELECT title, description
-            FROM tasks
-            WHERE id = ${internalTaskId(taskId, "BY")}
+            SELECT title, description FROM tasks WHERE id = ${internalTaskId(taskId, "BY")}
           `,
         );
         const task = tasks[0];
@@ -139,35 +141,33 @@ export const createChangeFixture = (
           description: task.description,
         });
       }
-      const taskBacked = taskId !== undefined;
       const inserted = yield* repository.operation(
         "create Change inspection fixture",
         (sql) => sql<{ readonly id: number }>`
           INSERT INTO changes (
-            repository_common_directory, branch_ref, acceptance_context, state,
-            close_reason, created_at, updated_at, closed_at, base_ref, base_remote_url,
-            worktree_path, starting_commit
+            branch_ref, base_ref, base_remote_url, worktree_path,
+            initial_acceptance_context, reviewer_configuration,
+            checks_definition, cleanup_pending
           ) VALUES (
-            ${join(root, ".git")}, ${branchRef}, ${acceptanceContext}, 'open', NULL,
-            ${createdAt}, ${createdAt}, NULL,
-            ${options.baseRef === undefined && taskBacked ? "refs/remotes/origin/main" : (options.baseRef ?? null)},
-            ${taskBacked ? "https://github.test/acme/repo.git" : null},
-            ${options.worktreePath === undefined && taskBacked ? join(root, "worktree") : (options.worktreePath ?? null)},
-            ${options.startingCommit === undefined && taskBacked ? "inspection-base" : (options.startingCommit ?? null)}
+            ${branchRef}, ${options.baseRef ?? "refs/remotes/origin/main"},
+            'https://github.test/acme/repo.git',
+            ${options.worktreePath ?? join(root, `worktree-${branchRef.split("/").at(-1) ?? "change"}`)},
+            ${acceptanceContext}, '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
           )
           RETURNING id
         `,
       );
       const allocatedId = inserted[0]?.id;
-      if (typeof allocatedId !== "number")
+      if (typeof allocatedId !== "number") {
         return yield* Effect.dieMessage("Change identity was not allocated.");
+      }
       const id = publicChangeId("BY", allocatedId);
       if (taskId !== undefined) {
         yield* repository.operation(
           "link Change inspection fixture to its Task",
           (sql) => sql`
             INSERT INTO task_change_links (task_id, change_id)
-            VALUES (${internalTaskId(taskId, "BY")}, ${internalChangeId(id, "BY")})
+            VALUES (${internalTaskId(taskId, "BY")}, ${allocatedId})
           `,
         );
       }
@@ -179,7 +179,7 @@ export const closeChangeFixture = (
   root: string,
   changeId: string,
   reason: "cancelled" | "completed",
-  closedAt: string,
+  _closedAt: string,
 ): Effect.Effect<void, RepositoryStorageError> =>
   withTestRepository(
     root,
@@ -189,11 +189,9 @@ export const closeChangeFixture = (
         "close Change inspection fixture",
         (sql) => sql`
           UPDATE changes
-          SET state = 'closed',
-              close_reason = ${reason},
-              closed_at = ${closedAt},
-              updated_at = ${closedAt},
-              cleanup_state = 'pending'
+          SET close_reason = ${reason},
+              cancel_reason = ${reason === "cancelled" ? "Cancelled by inspection fixture." : null},
+              cleanup_pending = 1
           WHERE id = ${internalChangeId(changeId, "BY")}
         `,
       );
@@ -201,8 +199,7 @@ export const closeChangeFixture = (
         yield* repository.operation(
           "complete linked Task inspection fixture",
           (sql) => sql`
-            UPDATE tasks
-            SET state = 'done', updated_at = ${closedAt}
+            UPDATE tasks SET state = 'done'
             WHERE id = (
               SELECT task_id FROM task_change_links WHERE change_id = ${internalChangeId(changeId, "BY")}
             )
@@ -216,26 +213,23 @@ export const captureCandidateFixture = (
   root: string,
   changeId: string,
   headSha: string,
-  capturedAt: string,
-): Effect.Effect<{ readonly id: string; readonly headSha: string }, RepositoryStorageError> =>
+  _capturedAt: string,
+): Effect.Effect<{ readonly id: number; readonly headSha: string }, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const id = randomUUID();
       const repository = yield* RepositorySql;
-      yield* repository.operation("create Candidate inspection fixture", (sql) =>
-        Effect.gen(function* () {
-          yield* sql`
-            INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
-            VALUES (${id}, ${internalChangeId(changeId, "BY")}, 'target-sha', ${headSha}, ${capturedAt})
-          `;
-          yield* sql`
-            INSERT INTO current_candidates (change_id, candidate_id)
-            VALUES (${internalChangeId(changeId, "BY")}, ${id})
-            ON CONFLICT (change_id) DO UPDATE SET candidate_id = excluded.candidate_id
-          `;
-        }),
+      const inserted = yield* repository.operation(
+        "create Candidate inspection fixture",
+        (sql) => sql<{ readonly id: number }>`
+          INSERT INTO candidates (change_id, base_commit, head_commit)
+          VALUES (${internalChangeId(changeId, "BY")}, 'target-sha', ${headSha})
+          RETURNING id
+        `,
       );
+      const id = inserted[0]?.id;
+      if (id === undefined)
+        return yield* Effect.dieMessage("Candidate identity was not allocated.");
       return { id, headSha };
     }),
   );
@@ -244,60 +238,68 @@ export const createValidationRunFixture = (
   root: string,
   input: {
     readonly changeId: string;
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly state: "running" | "complete";
     readonly outcome: "passed" | "blocked" | "tooling_failed" | null;
     readonly createdAt: string;
     readonly updatedAt: string;
   },
 ): Effect.Effect<
-  { readonly id: string; readonly validationRunId: string },
+  { readonly id: number; readonly validationRunId: number },
   RepositoryStorageError
 > =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const id = randomUUID();
       const repository = yield* RepositorySql;
-      const authority = yield* repository.operation(
-        "read Validation Run authority fixture",
-        (sql) => sql<{ readonly acceptance_context: string | null }>`
-          SELECT acceptance_context FROM changes WHERE id = ${internalChangeId(input.changeId, "BY")}
-        `,
+      const inserted = yield* repository.operation(
+        "create Validation Run inspection fixture",
+        (sql) =>
+          Effect.gen(function* () {
+            const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+              SELECT initial_acceptance_context AS acceptanceContext
+              FROM changes WHERE id = ${internalChangeId(input.changeId, "BY")}
+            `;
+            const initialContext =
+              changeRows[0]?.acceptanceContext === null || changeRows[0] === undefined
+                ? null
+                : decodeSqliteAcceptanceContextSnapshot(changeRows[0].acceptanceContext);
+            const blockerRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
+              `SELECT ${implementationBlockerReadColumns}
+               FROM implementation_blockers WHERE change_id = ? ORDER BY id`,
+              [internalChangeId(input.changeId, "BY")],
+            );
+            const blockerHistory = decodeImplementationBlockerHistory(
+              blockerRows,
+              input.changeId,
+              "BY",
+            );
+            const acceptanceContext = deriveAcceptanceContext(initialContext, blockerHistory);
+            const validationInputSnapshot = encodeSqliteValidationInputSnapshot(
+              acceptanceContext === null ? {} : { acceptanceContext },
+            );
+            return yield* sql<{ readonly id: number }>`
+              INSERT INTO validation_runs (
+                candidate_id, validation_input_snapshot, highest_decision_id, highest_blocker_id,
+                outcome, cleanup_pending
+              ) VALUES (
+                ${input.candidateId}, ${validationInputSnapshot},
+                (SELECT MAX(id) FROM implementation_decisions WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
+                (SELECT MAX(id) FROM implementation_blockers WHERE change_id = ${internalChangeId(input.changeId, "BY")}),
+                ${input.state === "running" ? null : input.outcome}, 0
+              )
+              RETURNING id
+            `;
+          }),
       );
-      const acceptanceContext = authority[0]?.acceptance_context;
-      const policy = {
-        checks: [{ id: "types", command: "typecheck", timeoutSeconds: 60 }],
-        copyFiles: [],
-        ...(acceptanceContext === null || acceptanceContext === undefined
-          ? {}
-          : { acceptanceContext: JSON.parse(acceptanceContext) as unknown }),
-      };
-      yield* repository.operation("create Validation Run inspection fixture", (sql) =>
-        Effect.gen(function* () {
-          yield* sql`
-            INSERT INTO candidate_validation_runs (
-              id, candidate_id, policy_snapshot, implementation_decisions,
-              latest_resolved_blocker_id, state, outcome, created_at, updated_at
-            ) VALUES (
-              ${id}, ${input.candidateId}, ${JSON.stringify(policy)}, '[]',
-              (
-                SELECT id FROM implementation_blockers
-                WHERE change_id = ${internalChangeId(input.changeId, "BY")} AND resolved_at <= ${input.createdAt}
-                ORDER BY resolved_at DESC, sequence DESC LIMIT 1
-              ),
-              ${input.state}, ${input.outcome}, ${input.createdAt}, ${input.updatedAt}
-            )
-          `;
-        }),
-      );
-      if (input.state === "running") {
-        yield* repository.operation(
-          "create active Validation Run inspection fixture",
-          (sql) => sql`
-            INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
-            VALUES (${internalChangeId(input.changeId, "BY")}, ${id}, ${input.createdAt})
-          `,
+      const id = inserted[0]?.id;
+      if (id === undefined) {
+        return yield* Effect.dieMessage("Validation Run identity was not allocated.");
+      }
+      const completedOutcome = input.state === "complete" ? input.outcome : null;
+      if (completedOutcome !== null) {
+        yield* repository.operation("create Validation completion evidence fixture", (sql) =>
+          recordValidationCompletionEvidence(sql, id, completedOutcome),
         );
       }
       return { id, validationRunId: id };
@@ -306,36 +308,71 @@ export const createValidationRunFixture = (
 
 export const completeValidationRunFixture = (
   root: string,
-  validationRunId: string,
+  validationRunId: number,
   outcome: "passed" | "blocked" | "tooling_failed",
-  updatedAt: string,
+  _updatedAt: string,
 ): Effect.Effect<void, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "complete Validation Run inspection fixture",
-        (sql) => sql`
-          UPDATE candidate_validation_runs
-          SET state = 'complete', outcome = ${outcome}, updated_at = ${updatedAt}
-          WHERE id = ${validationRunId}
-        `,
-      );
-      yield* repository.operation(
-        "remove active Validation Run inspection fixture",
-        (sql) => sql`
-          DELETE FROM active_validation_runs WHERE validation_run_id = ${validationRunId}
-        `,
+      yield* repository.operation("complete Validation Run inspection fixture", (sql) =>
+        Effect.zipRight(
+          recordValidationCompletionEvidence(sql, validationRunId, outcome),
+          sql`UPDATE validation_runs SET outcome = ${outcome} WHERE id = ${validationRunId}`,
+        ),
       );
     }),
   );
+
+const recordValidationCompletionEvidence = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  outcome: "passed" | "blocked" | "tooling_failed",
+) => {
+  if (outcome === "tooling_failed") {
+    return sql`
+      UPDATE validation_runs SET run_tooling_failure = ${JSON.stringify({
+        errorKind: "snapshot_workspace_setup_failed",
+        operationName: "set_up_snapshot_workspace",
+        errorMessage: "Snapshot Workspace setup failed.",
+      })}
+      WHERE id = ${validationRunId}
+    `;
+  }
+  if (outcome === "passed") {
+    return sql`
+      INSERT INTO validation_phase_results (
+        validation_run_id, phase, producer, outcome, findings, artifacts
+      ) VALUES (
+        ${validationRunId}, 'checks', 'quality', 'passed', '[]', '[]'
+      )
+    `;
+  }
+  return sql`
+    INSERT INTO validation_phase_results (
+      validation_run_id, phase, producer, outcome, findings, artifacts
+    ) VALUES (
+      ${validationRunId}, 'checks', 'quality', 'failed',
+      ${JSON.stringify([
+        {
+          title: "Check failed: types",
+          description: "Type checking failed.",
+          evidence: "exitCode: 1",
+          files: ["src/main.ts"],
+          artifactRefs: [],
+        },
+      ])},
+      '[]'
+    )
+  `;
+};
 
 export const createFindingFixture = (
   root: string,
   input: {
     readonly id: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly createdAt: string;
   },
 ): Effect.Effect<void, RepositoryStorageError> =>
@@ -344,23 +381,22 @@ export const createFindingFixture = (
     Effect.gen(function* () {
       const repository = yield* RepositorySql;
       yield* repository.operation(
-        "create Finding round inspection fixture",
-        (sql) => sql`
-          INSERT INTO candidate_validation_rounds (
-            validation_run_id, phase, producer, round_number, status, created_at
-          ) VALUES (${input.validationRunId}, 'checks', 'types', 1, 'failed', ${input.createdAt})
-        `,
-      );
-      yield* repository.operation(
         "create Finding inspection fixture",
         (sql) => sql`
-          INSERT INTO candidate_validation_findings (
-            id, validation_run_id, phase, producer, title, description,
-            evidence, files, artifact_refs, created_at, updated_at
+          INSERT INTO validation_phase_results (
+            validation_run_id, phase, producer, outcome, findings, artifacts
           ) VALUES (
-            ${input.id}, ${input.validationRunId}, 'checks', 'types', 'Check failed: types',
-            'Type checking failed.', 'exitCode: 1', '["src/main.ts"]', '[]',
-            ${input.createdAt}, ${input.createdAt}
+            ${input.validationRunId}, 'checks', 'types', 'failed',
+            ${JSON.stringify([
+              {
+                title: "Check failed: types",
+                description: "Type checking failed.",
+                evidence: "exitCode: 1",
+                files: ["src/main.ts"],
+                artifactRefs: [],
+              },
+            ])},
+            '[]'
           )
         `,
       );
@@ -369,8 +405,8 @@ export const createFindingFixture = (
 
 export const createToolingFailureFixture = (
   root: string,
-  validationRunId: string,
-  createdAt: string,
+  validationRunId: number,
+  _createdAt: string,
 ): Effect.Effect<void, RepositoryStorageError> =>
   withTestRepository(
     root,
@@ -379,12 +415,14 @@ export const createToolingFailureFixture = (
       yield* repository.operation(
         "create Validation Tooling Failure inspection fixture",
         (sql) => sql`
-          INSERT INTO candidate_validation_tooling_failures (
-            validation_run_id, error_kind, operation_name, error_message, created_at
-          ) VALUES (
-            ${validationRunId}, 'snapshot_workspace_setup_failed',
-            'cleanup_snapshot_workspace', 'Could not remove worktree.', ${createdAt}
-          )
+          UPDATE validation_phase_results
+          SET tooling_failure = ${JSON.stringify({
+            errorKind: "snapshot_workspace_setup_failed",
+            operationName: "cleanup_snapshot_workspace",
+            errorMessage: "Could not remove worktree.",
+          })}
+          WHERE validation_run_id = ${validationRunId}
+            AND phase = 'checks' AND producer = 'types'
         `,
       );
     }),
@@ -394,19 +432,21 @@ export const recordImplementationDecisionFixture = (
   root: string,
   changeId: string,
   input: { readonly choice: string; readonly rationale: string; readonly now: string },
-): Effect.Effect<{ readonly id: string }, RepositoryStorageError> =>
+): Effect.Effect<{ readonly id: number }, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const id = randomUUID();
       const repository = yield* RepositorySql;
-      yield* repository.operation(
+      const inserted = yield* repository.operation(
         "create Implementation Decision inspection fixture",
-        (sql) => sql`
-          INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
-          VALUES (${id}, ${internalChangeId(changeId, "BY")}, ${input.now}, ${input.choice}, ${input.rationale})
+        (sql) => sql<{ readonly id: number }>`
+          INSERT INTO implementation_decisions (change_id, choice, rationale)
+          VALUES (${internalChangeId(changeId, "BY")}, ${input.choice}, ${input.rationale})
+          RETURNING id
         `,
       );
+      const id = inserted[0]?.id;
+      if (id === undefined) return yield* Effect.dieMessage("Decision identity was not allocated.");
       return { id };
     }),
   );
@@ -419,34 +459,32 @@ export const createImplementationBlockerFixture = (
     readonly resolvedAt?: string;
     readonly resolutionContent?: string;
   },
-): Effect.Effect<{ readonly id: string }, RepositoryStorageError> =>
+): Effect.Effect<{ readonly id: number }, RepositoryStorageError> =>
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const id = randomUUID();
       const repository = yield* RepositorySql;
-      const resolutionId = input.resolvedAt === undefined ? null : randomUUID();
-      yield* repository.operation(
+      const inserted = yield* repository.operation(
         "create Implementation Blocker inspection fixture",
-        (sql) => sql`
-          INSERT INTO implementation_blockers (
-            id, change_id, reported_at, content, resolved_at,
-            resolution_id, resolution_recorded_at, resolution_content
-          ) VALUES (
-            ${id}, ${internalChangeId(changeId, "BY")}, ${input.reportedAt}, 'Wait for an external decision.',
-            ${input.resolvedAt ?? null}, ${resolutionId}, ${input.resolvedAt ?? null},
-            ${input.resolutionContent ?? null}
+        (sql) => sql<{ readonly id: number }>`
+          INSERT INTO implementation_blockers (change_id, content, resolution_content)
+          VALUES (
+            ${internalChangeId(changeId, "BY")}, 'Wait for an external decision.',
+            ${input.resolvedAt === undefined ? null : (input.resolutionContent ?? "Proceed.")}
           )
+          RETURNING id
         `,
       );
+      const id = inserted[0]?.id;
+      if (id === undefined) return yield* Effect.dieMessage("Blocker identity was not allocated.");
       return { id };
     }),
   );
 
 export const resolveImplementationBlockerFixture = (
   root: string,
-  blockerId: string,
-  resolvedAt: string,
+  blockerId: number,
+  _resolvedAt: string,
 ): Effect.Effect<void, RepositoryStorageError> =>
   withTestRepository(
     root,
@@ -456,10 +494,7 @@ export const resolveImplementationBlockerFixture = (
         "resolve Implementation Blocker inspection fixture",
         (sql) => sql`
           UPDATE implementation_blockers
-          SET resolved_at = ${resolvedAt},
-              resolution_id = ${randomUUID()},
-              resolution_recorded_at = ${resolvedAt},
-              resolution_content = 'Proceed with the accepted implementation.'
+          SET resolution_content = 'Proceed with the accepted implementation.'
           WHERE id = ${blockerId}
         `,
       );

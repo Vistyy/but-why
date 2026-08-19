@@ -63,7 +63,7 @@ Change execution
 ## Required later evidence
 
 Before selecting a session policy or durable schema, run one cumulative historical replay with a fixed recorded Unit plan.
-Compare one continuing reviewer Agent Session with fresh reviewer sessions while holding the model, prompts, commit boundaries, and reviewer responsibility constant.
+Compare one continuing reviewer Agent Session with fresh reviewer Agent Sessions while holding the model, prompts, commit boundaries, and reviewer responsibility constant.
 Measure material Finding recall, unsupported Findings, escaped final defects, correction rounds, elapsed time, and exact Invocation token evidence.
 
 The replay must apply corrections before advancing and finish with a complete integration judgment.

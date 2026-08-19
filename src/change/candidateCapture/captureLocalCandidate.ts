@@ -9,7 +9,6 @@ import type {
 
 export type CaptureLocalCandidateInput = {
   readonly cwd: string;
-  readonly now: string;
   readonly changeId?: string;
   readonly baseRef?: string;
   readonly allowRebind?: boolean;
@@ -20,7 +19,7 @@ export type CaptureLocalCandidateResult =
   | {
       readonly ok: true;
       readonly changeId: string;
-      readonly candidateId: string;
+      readonly candidateId: number;
       readonly branchRef: string;
       readonly changeBaseSha: string;
       readonly headSha: string;
@@ -142,7 +141,6 @@ const captureLocalCandidate = (
       baseRef: base.ref,
       changeBaseSha,
       headSha: workspace.facts.headSha,
-      now: input.now,
     });
     if (!committed.ok) return { ok: false, code: mapCommitError(committed.code) };
 

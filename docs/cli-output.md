@@ -47,7 +47,7 @@ Help describes an available action but does not grant authority to mutate reposi
 When an operation can authorize recovery, that authority must be explicit structured data tied to the exact operation and target.
 Portable workflow instructions define how the applicable actor uses that authority.
 
-Shared Repository State failures preserve distinct classifications for unavailable state, invalid persisted data, retired transient state, and repository identity conflicts.
+Shared Repository State failures preserve distinct classifications for unavailable state, invalid persisted data, and repository identity conflicts.
 Operation-specific codecs and tests own their exact fields.
 
 ## Progress

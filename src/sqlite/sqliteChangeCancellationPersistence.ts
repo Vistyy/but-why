@@ -2,67 +2,17 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { changeState } from "../change/change.js";
 import { internalChangeId } from "../change/changeId.js";
-import type {
-  ChangeCancellationOwnerPort,
-  ChangeCancellationRecord,
-} from "../change/changePorts.js";
+import type { ChangeCancellationRecord } from "../change/changePorts.js";
 import type { CancelChangeInput } from "../change/changeStore.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeChangeLifecycle, decodeStoredNullableString } from "./sqliteChangeValueDecoders.js";
-import {
-  completeMergedChange as completeChangeOnly,
-  readChangeLifecycle,
-} from "./sqliteCompleteMergedChangeStorage.js";
+import { readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,
   type StoredTerminalChangeRow,
   terminalChangeSelectionColumns,
 } from "./sqliteTerminalChangeStorage.js";
-
-export const openSqliteChangeCancellationPort = () =>
-  Effect.map(
-    RepositorySql,
-    (repository): ChangeCancellationOwnerPort => ({
-      getChangeById: (changeId) =>
-        repository.transaction("read Change for cancellation", (sql) =>
-          readCancellationChange(
-            sql,
-            changeId,
-            "read Change for cancellation",
-            repository.idPrefix,
-          ),
-        ),
-      completeMergedChange: (input) =>
-        repository.transactionImmediate("complete merged Change", (sql) =>
-          Effect.gen(function* () {
-            const result = yield* completeChangeOnly(sql, input, repository.idPrefix);
-            if (!result.ok) return result;
-            const change = yield* requireCancellationChange(
-              sql,
-              input.changeId,
-              repository.idPrefix,
-            );
-            return { ...result, change };
-          }),
-        ),
-      cancelChange: (input) =>
-        repository.transactionImmediate("cancel Change", (sql) =>
-          Effect.gen(function* () {
-            const result = yield* cancelChange(sql, input, repository.idPrefix);
-            if (!result.ok) return result;
-            const change = yield* requireCancellationChange(
-              sql,
-              input.changeId,
-              repository.idPrefix,
-            );
-            return { ...result, change };
-          }),
-        ),
-    }),
-  );
 
 const decodeCancellationChange = (
   row: StoredCancellationChangeRow,
@@ -110,15 +60,6 @@ export const readCancellationChange = (
     return selected;
   });
 
-const requireCancellationChange = (sql: SqlClient.SqlClient, changeId: string, idPrefix: string) =>
-  Effect.flatMap(
-    readCancellationChange(sql, changeId, "read committed cancellation", idPrefix),
-    (change) =>
-      change === undefined
-        ? invalidData("read committed cancellation", "Change disappeared")
-        : Effect.succeed(change),
-  );
-
 export const cancelChange = (
   sql: SqlClient.SqlClient,
   input: CancelChangeInput,
@@ -134,15 +75,11 @@ export const cancelChange = (
       return { ok: true as const, changed: false };
     }
     yield* sql`UPDATE changes
-      SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${input.reason},
-          cleanup_state = 'pending', cleanup_blocking_reason = NULL,
-          updated_at = ${input.now}, closed_at = ${input.now}
-      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND state = 'open'`;
+      SET close_reason = 'cancelled', cancel_reason = ${input.reason},
+          cleanup_pending = 1, cleanup_blocking_reason = NULL
+      WHERE id = ${internalChangeId(input.changeId, idPrefix)} AND close_reason IS NULL`;
     return { ok: true as const, changed: true };
   });
-
-const invalidData = (operationName: string, message: string) =>
-  Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type StoredCancellationChangeRow = StoredTerminalChangeRow & {
   readonly closeReason: unknown;

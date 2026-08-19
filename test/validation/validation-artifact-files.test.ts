@@ -16,7 +16,7 @@ describe("Validation Run artifacts", () => {
       const root = createTestWorkspace();
       const artifact = yield* writeValidationRunArtifactFile({
         artifactsRoot: root,
-        validationRunId: "run",
+        validationRunId: 132,
         phase: "checks",
         producer: "check",
         fileName: "stdout.txt",

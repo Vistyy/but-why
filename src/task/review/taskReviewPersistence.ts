@@ -1,8 +1,5 @@
 import type { Effect } from "effect";
-import type {
-  AgentSessionConfiguration,
-  AgentSessionSqlLink,
-} from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionSqlLink } from "../../agent/agentSession/agentSession.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { DisposableWorkspaceCleanupState } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskState } from "../lifecycle.js";
@@ -17,12 +14,10 @@ import type {
 } from "./taskReview.js";
 
 export type AdmitTaskReviewInput = {
-  readonly reviewId: string;
   readonly taskId: PublicTaskId;
   readonly policy: TaskReviewPolicySnapshot;
   readonly baseRef: string;
   readonly baseCommit: string;
-  readonly workspacePath: string;
   readonly now: string;
 };
 
@@ -34,23 +29,23 @@ export type TaskReviewAdmissionRejection =
       readonly code: "task_change_linked";
       readonly changeId: string;
     }
-  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: string };
+  | { readonly ok: false; readonly code: "active_task_review"; readonly reviewId: number };
 
 export type AdmitTaskReviewResult =
   | {
       readonly ok: true;
       readonly review: TaskReviewRecord;
+      readonly policy: TaskReviewPolicySnapshot;
       readonly proposal: TaskReviewProposal;
       readonly dependencyEvidence: readonly TaskReviewDependencyEvidence[];
     }
   | TaskReviewAdmissionRejection;
 
 export type CompleteTaskReviewInput = {
-  readonly reviewId: string;
+  readonly reviewId: number;
   readonly findings: readonly TaskReviewFinding[];
   readonly toolingFailure?: TaskReviewToolingFailure;
   readonly now: string;
-  readonly agentSettlement?: boolean;
 };
 
 type CompletedTaskReviewRecord = Omit<TaskReviewRecord, "state" | "outcome"> & {
@@ -110,20 +105,21 @@ export type TaskReviewPersistence = {
     input: AdmitTaskReviewInput,
   ) => Effect.Effect<AdmitTaskReviewResult, RepositoryStorageError>;
   readonly recordCleanup: (
-    reviewId: string,
+    reviewId: number,
     cleanup: DisposableWorkspaceCleanupState,
     now: string,
+    cleanupBlockingReason?: string,
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly complete: (
     input: CompleteTaskReviewInput,
   ) => Effect.Effect<CompleteTaskReviewResult, RepositoryStorageError>;
   readonly abandon: (
-    reviewId: string,
+    reviewId: number,
     reason: string,
     now: string,
   ) => Effect.Effect<CompleteTaskReviewResult, RepositoryStorageError>;
   readonly getById: (
-    reviewId: string,
+    reviewId: number,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
   readonly getLatestForTask: (
     taskId: PublicTaskId,
@@ -134,27 +130,23 @@ export type TaskReviewPersistence = {
   readonly getReviewerAgentSession: (
     taskId: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly getReviewerConfiguration?: (
+  readonly getReviewerConfiguration: (
     taskId: string,
   ) => Effect.Effect<TaskReviewPolicySnapshot | undefined, RepositoryStorageError>;
-  readonly reviewerConfigurationCanBeCorrected?: (
-    taskId: string,
-  ) => Effect.Effect<boolean, RepositoryStorageError>;
   readonly linkAgentInvocation: (input: {
     readonly taskId: string;
-    readonly reviewId: string;
-    readonly configuration: AgentSessionConfiguration;
-    readonly configurationSnapshot?: unknown;
+    readonly reviewId: number;
+    readonly admittedPolicy: TaskReviewPolicySnapshot;
   }) => AgentSessionSqlLink;
   readonly settleAgentReview: (input: {
-    readonly reviewId: string;
+    readonly reviewId: number;
     readonly findings: readonly TaskReviewFinding[];
     readonly toolingFailure?: TaskReviewToolingFailure;
     readonly now: string;
     readonly complete: boolean;
   }) => AgentSessionSqlLink;
   readonly recordActiveFailure: (
-    reviewId: string,
+    reviewId: number,
     failure: TaskReviewToolingFailure,
     now: string,
   ) => Effect.Effect<void, RepositoryStorageError>;

@@ -33,7 +33,7 @@ Future design must decide whether provider estimates or billing records are suff
 V1 resolves Pi Agent Profiles from explicit Repo or Global references.
 Each profile selects its model, thinking level, and optional Pi resource allowlists.
 The Reviewer Agent Runtime accepts a swappable Reviewer Process Executor, so another Adapter can provide the current Pi process contract.
-The input profile and Reviewer Session behavior remain Pi-shaped, so an arbitrary Codex or Claude harness is not a process-executor-only substitution.
+The input profile and Agent Continuation behavior remain Pi-shaped, so an arbitrary Codex or Claude harness is not a process-executor-only substitution.
 The remaining design question is whether a later harness requires a separate execution identity and session interface.
 
 ## How should But Why represent and review planning above individual Tasks?

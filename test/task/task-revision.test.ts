@@ -18,14 +18,17 @@ const policy = {
   profile: {
     agentProfile: "review",
     scope: "global" as const,
-    profile: { agentRuntime: "pi" as const },
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "test-model" },
+    },
   },
   builtInInstructions: taskReviewBuiltInInstructions,
   guidance: null,
 };
 
 it.scoped("revises an unlinked Todo Task while preserving its intent and Review evidence", () =>
-  withTemporaryRepositoryState(() =>
+  withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const reviews = yield* openSqliteTaskReviewPersistence();
@@ -36,17 +39,7 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         dependsOn: [publicTaskId("BY-1")],
         now,
       });
-      yield* reviews.admit({
-        reviewId: "review-retained",
-        taskId: publicTaskId("BY-2"),
-        policy,
-        baseRef: "refs/heads/main",
-        baseCommit: "a".repeat(40),
-        workspacePath: "/tmp/review-retained",
-        now,
-      });
-      yield* reviews.recordCleanup("review-retained", "removed", now);
-      yield* reviews.complete({ reviewId: "review-retained", findings: [], now });
+      const completed = yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), now);
       const before = yield* tasks.getTaskById(publicTaskId("BY-2"));
 
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject({
@@ -56,7 +49,6 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
           id: "BY-2",
           state: "new",
           description: "Approved intent",
-          updatedAt: later,
           prerequisites: [{ id: "BY-1" }],
         },
       });
@@ -66,13 +58,13 @@ it.scoped("revises an unlinked Todo Task while preserving its intent and Review 
         description: "Approved intent",
       });
       expect(yield* reviews.listForTask(publicTaskId("BY-2"))).toMatchObject([
-        { id: "review-retained", state: "complete", outcome: "passed" },
+        { id: completed.review.id, state: "complete", outcome: "passed" },
       ]);
-      expect(before).toMatchObject({ state: "todo", updatedAt: now });
+      expect(before).toMatchObject({ state: "todo" });
       expect(yield* reviews.reuseJudgment(publicTaskId("BY-2"), later)).toMatchObject({
         ok: true,
         outcome: "passed",
-        review: { id: "review-retained" },
+        review: { id: completed.review.id },
         task: { id: "BY-2", state: "todo" },
       });
     }),
@@ -88,7 +80,7 @@ it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
       expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-1"), now: later })).toMatchObject({
         ok: true,
         changed: false,
-        task: { state: "new", updatedAt: now },
+        task: { state: "new" },
       });
     }),
   ),
@@ -97,7 +89,7 @@ it.scoped("treats eligible New Task revision as an idempotent no-op", () =>
 it.scoped(
   "rejects revision for linked, actively reviewed, and terminal Tasks without mutation",
   () =>
-    withTemporaryRepositoryState(() =>
+    withTemporaryRepositoryState(({ repositoryRoot }) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence();
         const reviews = yield* openSqliteTaskReviewPersistence();
@@ -106,17 +98,17 @@ it.scoped(
         for (const title of ["Linked", "Reviewed", "Done", "Cancelled"]) {
           yield* tasks.createTask({ title, description: `${title} intent`, now });
         }
-        yield* passTaskReviewFixture(publicTaskId("BY-1"), now);
+        yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), now);
         yield* repository.operation(
           "link Todo Task fixture to Change",
           (sql) => sql`INSERT INTO changes (
-          id, repository_common_directory, branch_ref, state, acceptance_context,
-          base_ref, base_remote_url, starting_commit, worktree_path, created_at, updated_at
+          id, branch_ref, base_ref, base_remote_url, worktree_path,
+          initial_acceptance_context, reviewer_configuration, checks_definition, cleanup_pending
         ) VALUES (
-          1, '/repo/.git', 'refs/heads/change-linked', 'open',
+          1, 'refs/heads/change-linked', 'refs/remotes/origin/main',
+          'https://example.test/repo.git', '/repo-worktrees/change-linked',
           '{"version":1,"title":"Linked","description":"Linked intent"}',
-          'refs/remotes/origin/main', 'https://example.test/repo.git', ${"a".repeat(40)},
-          '/repo-worktrees/change-linked', ${now}, ${now}
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0
         )`,
         );
         yield* repository.operation(
@@ -127,12 +119,10 @@ it.scoped(
           `,
         );
         yield* reviews.admit({
-          reviewId: "review-active",
           taskId: publicTaskId("BY-2"),
           policy,
           baseRef: "refs/heads/main",
           baseCommit: "a".repeat(40),
-          workspacePath: "/tmp/review-active",
           now,
         });
         yield* setTerminalTaskStateFixture(publicTaskId("BY-3"), "done", now);
@@ -145,11 +135,12 @@ it.scoped(
             changeId: "BY-C1",
           },
         );
-        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toEqual({
-          ok: false,
-          code: "active_task_review",
-          reviewId: "review-active",
-        });
+        expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-2"), now: later })).toMatchObject(
+          {
+            ok: false,
+            code: "active_task_review",
+          },
+        );
         expect(yield* tasks.reviseTask({ taskId: publicTaskId("BY-3"), now: later })).toEqual({
           ok: false,
           code: "invalid_task_state",
@@ -161,7 +152,7 @@ it.scoped(
           state: "cancelled",
         });
         for (const id of ["BY-1", "BY-2", "BY-3", "BY-4"] as const) {
-          expect(yield* tasks.getTaskById(publicTaskId(id))).toMatchObject({ updatedAt: now });
+          expect(yield* tasks.getTaskById(publicTaskId(id))).toBeDefined();
         }
       }),
     ),

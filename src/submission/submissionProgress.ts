@@ -20,8 +20,6 @@ export type SubmitProgressPhase =
 
 export type SubmitProgressCompletion = {
   readonly reason?: "findings" | "tooling";
-  readonly continuity?: "fresh" | "resumed" | "restarted";
-  readonly reviewCalls?: number;
 };
 
 export type SubmitProgress = {
@@ -142,11 +140,7 @@ const profileFacts = (profile: SubmitProgressProfile): string =>
 
 const formatCompletionDetails = (details: SubmitProgressCompletion | undefined): string => {
   if (details === undefined) return "";
-  const facts = [
-    ...(details.reason === undefined ? [] : [`reason=${details.reason}`]),
-    ...(details.continuity === undefined ? [] : [`continuity=${details.continuity}`]),
-    ...(details.reviewCalls === undefined ? [] : [`reviewCalls=${details.reviewCalls}`]),
-  ];
+  const facts = details.reason === undefined ? [] : [`reason=${details.reason}`];
   return facts.length === 0 ? "" : ` ${facts.join(" ")}`;
 };
 

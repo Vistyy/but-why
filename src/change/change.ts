@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
+import type { ChangePolicy } from "./changePolicy.js";
 import type { ImplementationBlocker } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
@@ -16,11 +16,6 @@ const changeCloseReason = {
 
 export type ChangeState = (typeof changeState)[keyof typeof changeState];
 export type ChangeCloseReason = (typeof changeCloseReason)[keyof typeof changeCloseReason];
-
-export type ChangePrepareDefinition = {
-  readonly command: string;
-  readonly timeoutSeconds: number;
-};
 
 export const changePrepareFailureSchema = Schema.Struct({
   command: Schema.String,
@@ -60,8 +55,8 @@ export type ChangeCleanup = {
 };
 
 export type ChangePublication = {
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly target: ChangePublicationTarget;
   readonly headBranch: string;
   readonly expectedHeadSha: string;
@@ -73,7 +68,7 @@ export type TerminalCleanupChange = {
   readonly state: ChangeState;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly worktreePath: string | null;
+  readonly worktreePath: string;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
   readonly remoteChangeBranch: RemoteChangeBranch | null;
@@ -83,14 +78,12 @@ export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
+  readonly baseRef: string;
+  readonly baseRemoteUrl: string;
+  readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
+  readonly policy: ChangePolicy;
   readonly implementationDecisions: readonly ImplementationDecision[];
-  readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;
   readonly cleanup: ChangeCleanup;
@@ -98,7 +91,4 @@ export type ChangeRecord = {
   readonly activeBlocker: ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly cancelReason: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
 };

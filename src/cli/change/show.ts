@@ -28,7 +28,6 @@ export const runShow = (
               currentValidationRun: support.compactValidationRunView(detail.currentValidationRun),
               findingCount: detail.findings.length,
               toolingFailureCount: detail.toolingFailures.length,
-              legacyReviewerEvidence: detail.legacyReviewerEvidence,
               ...(detail.findings.length === 0
                 ? {}
                 : { findingsCommand: `by change findings ${detail.change.id}` }),

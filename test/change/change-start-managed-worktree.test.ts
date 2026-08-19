@@ -7,12 +7,15 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/adapters/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
+import { defaultAcceptanceInstructions } from "../../src/reviewerPrompts/acceptanceReviewerPrompt.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/adapters/remoteChangeBase.js";
 import { passTaskReviewFixture, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -48,7 +51,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           change: { id: expect.any(String), taskId: null },
           branch: expect.stringMatching(/^refs\/heads\/but-why\/BY-C[1-9][0-9]*$/u),
           baseRef: "refs/remotes/origin/main",
-          startingCommit,
           worktreePath: expect.any(String),
         });
         expect(output.worktreePath).toMatch(
@@ -60,7 +62,40 @@ describe("Change Start Managed Worktree boundaries", () => {
         expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
         expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(startingCommit);
         expect(existsSync(join(output.worktreePath, "dirty.txt"))).toBe(false);
+        const persisted = yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const changes = yield* openSqliteChangeStartPersistence();
+            return yield* changes.getById(output.change.id);
+          }),
+        );
+        expect(persisted?.policy.prepare).toBeNull();
       }),
+  );
+
+  it.effect("rejects a Change Base without Checks before creating a Change", () =>
+    Effect.gen(function* () {
+      const root = initializedRepository();
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify({ idPrefix: "BY" }, null, 2)}\n`,
+      );
+      git(root, "add", ".but-why/config.json");
+      git(root, "commit", "-m", "Remove required Checks");
+
+      const started = yield* runByInProcessEffect(root, ["change", "start"], now);
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: {
+          code: "reviewer_configuration_invalid",
+          message: "Repo config must define at least one validation.checks entry.",
+        },
+      });
+
+      const listed = yield* runByInProcessEffect(root, ["change", "list", "--all"], now);
+      expect(listed.status).toBe(0);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+    }),
   );
 
   it.effect("ignores the retired Change Start placeholder branch", () =>
@@ -98,7 +133,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       expect(started.status).toBe(0);
       const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output.startingCommit).toBe(remoteCommit);
+      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(remoteCommit);
       expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(remoteCommit);
       expect(git(root, "rev-parse", "refs/heads/main^{commit}")).toBe(localCommit);
       expect(existsSync(join(output.worktreePath, "local-only.txt"))).toBe(false);
@@ -111,8 +146,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       const remote = yield* repositoryCopy();
       git(remote, "branch", "release", "main");
       configurePublicationRemote(root, remote);
-      const releaseCommit = git(remote, "rev-parse", "refs/heads/release^{commit}");
-
       const started = yield* runByInProcessEffect(
         root,
         ["change", "start", "--base", "release"],
@@ -122,7 +155,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(started.status).toBe(0);
       expect(JSON.parse(started.stdout)).toMatchObject({
         baseRef: "refs/remotes/origin/release",
-        startingCommit: releaseCommit,
       });
     }),
   );
@@ -166,25 +198,105 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("starts an existing Todo Task with passing Task Review history", () =>
+  it.effect("starts an approved Task with the complete exact-base Change Policy", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Existing Todo", "Start approved work.\n");
       yield* passTaskReviewFixture(root, taskId, now);
-
-      const inspected = yield* runByInProcessEffect(root, ["task", "show", taskId], now);
-      expect(inspected.status).toBe(0);
-      expect(JSON.parse(inspected.stdout)).toMatchObject({
-        task: {
-          id: taskId,
-          state: "todo",
-          review: { state: "complete", outcome: "passed", proposalCurrent: true },
-        },
-      });
+      const instructionsPath = join(root, ".but-why", "reviewers", "standards.md");
+      mkdirSync(dirname(instructionsPath), { recursive: true });
+      writeFileSync(instructionsPath, "Review the committed exact-base policy.\n");
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify(
+          {
+            idPrefix: "BY",
+            agentEnvironment: { command: ["env"] },
+            prepare: { command: "true" },
+            validation: {
+              checks: [
+                { id: "first", command: "true" },
+                { id: "second", command: "true", timeoutSeconds: 45 },
+              ],
+            },
+            review: {
+              acceptance: { agentProfile: { scope: "global", name: "test" } },
+              specialists: ["standards"],
+            },
+            reviewers: {
+              standards: { instructionsFile: ".but-why/reviewers/standards.md" },
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      git(root, "add", ".but-why/config.json", ".but-why/reviewers/standards.md");
+      git(root, "commit", "-m", "Configure complete Change Policy");
+      git(root, "config", "--unset-all", `url.${initializedRepositoryTemplate}.insteadOf`);
+      configurePublicationRemote(root, root);
+      writeFileSync(instructionsPath, "Current checkout policy must not win.\n");
 
       const started = yield* runByInProcessEffect(root, ["change", "start", "--task", taskId], now);
-      expect(started.status).toBe(0);
-      expect(JSON.parse(started.stdout)).toMatchObject({ change: { taskId } });
+      expect(started.status, started.stdout).toBe(0);
+      const startedOutput = JSON.parse(started.stdout) as ChangeOutput;
+      expect(startedOutput).toMatchObject({ change: { taskId } });
+
+      const persisted = yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const changes = yield* openSqliteChangeStartPersistence();
+          return yield* changes.getById(startedOutput.change.id);
+        }),
+      );
+      expect(persisted).toEqual({
+        id: startedOutput.change.id,
+        repositoryCommonDirectory: join(root, ".git"),
+        branchRef: startedOutput.branch,
+        baseRef: "refs/remotes/origin/main",
+        baseRemoteUrl: expect.any(String),
+        worktreePath: startedOutput.worktreePath,
+        acceptanceContext: {
+          version: 1,
+          title: "Existing Todo",
+          description: "Start approved work.\n",
+        },
+        policy: {
+          reviewerConfiguration: {
+            acceptanceReview: {
+              instructions: defaultAcceptanceInstructions,
+              instructionsSource: "built_in",
+              profile: {
+                agentProfile: "test",
+                scope: "global",
+                profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+                globalConfigDirectory: root,
+              },
+            },
+            specialistReviews: [
+              {
+                id: "standards",
+                instructions: "Review the committed exact-base policy.\n",
+                instructionsSource: "repo",
+                profile: {
+                  agentProfile: "test",
+                  scope: "global",
+                  profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+                  globalConfigDirectory: root,
+                },
+              },
+            ],
+            agentEnvironment: ["env"],
+          },
+          prepare: { command: "true", timeoutSeconds: 1200 },
+          checks: [
+            { id: "first", command: "true", timeoutSeconds: 1200 },
+            { id: "second", command: "true", timeoutSeconds: 45 },
+          ],
+        },
+        prepareFailure: null,
+        state: "open",
+      });
     }),
   );
 
@@ -286,32 +398,35 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout upstream from main and linked worktrees", () =>
+  it.effect("uses the invoking worktree without selecting a privileged checkout", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
+      const originUrl = git(root, "config", "--get", "remote.origin.url");
       configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
+      git(root, "config", "--add", `url.${initializedRepositoryTemplate}.insteadOf`, originUrl);
       git(root, "config", "branch.main.remote", "upstream");
+      git(root, "config", "branch.main.merge", "refs/heads/main");
       const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
       git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
 
       const fromMain = yield* runByInProcessEffect(root, ["change", "start"], now);
       const fromLinked = yield* runByInProcessEffect(linkedWorktree, ["change", "start"], now);
 
-      expect(fromMain.status).toBe(0);
-      expect(fromLinked.status).toBe(0);
+      expect(fromMain.status, fromMain.stdout).toBe(0);
+      expect(fromLinked.status, fromLinked.stdout).toBe(0);
       const mainOutput = JSON.parse(fromMain.stdout) as ChangeOutput;
       const linkedOutput = JSON.parse(fromLinked.stdout) as ChangeOutput;
-      const upstreamCommit = git(root, "rev-parse", "refs/remotes/upstream/main^{commit}");
       expect(mainOutput).toMatchObject({
         baseRef: "refs/remotes/upstream/main",
-        startingCommit: upstreamCommit,
       });
       expect(linkedOutput).toMatchObject({
-        baseRef: "refs/remotes/upstream/main",
-        startingCommit: upstreamCommit,
+        baseRef: "refs/remotes/origin/main",
       });
-      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
+      expect(dirname(dirname(mainOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),
+      );
+      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
+        join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
       );
     }),
   );
@@ -342,7 +457,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           expect.stringContaining("Move the repository to a writable parent"),
         ],
       });
-      expect(git(root, "rev-parse", failure.error.branch)).toBe(failure.error.startingCommit);
 
       rmSync(siblingRoot);
       const retried = yield* runByInProcessEffect(
@@ -366,7 +480,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(output.worktreePath, "add", "advanced.txt");
       git(output.worktreePath, "commit", "-m", "Advanced commit");
       const advancedCommit = git(output.worktreePath, "rev-parse", "HEAD^{commit}");
-      expect(advancedCommit).not.toBe(output.startingCommit);
+      expect(advancedCommit).not.toBe(git(root, "rev-parse", "refs/remotes/origin/main"));
 
       git(root, "worktree", "remove", output.worktreePath);
 
@@ -553,7 +667,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(siblingRoot, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_unavailable",
         path: start.worktreePath,
@@ -575,7 +689,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(siblingRoot, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_unavailable",
         path: start.worktreePath,
@@ -596,7 +710,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         worktreePath: join(dirname(root), `${basename(root)}-worktrees`, "but-why", "change-1"),
       };
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "git_tooling_error",
       });
@@ -607,13 +721,17 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
+        ok: true,
+      });
       git(root, "worktree", "remove", start.worktreePath);
       const emptyTree = git(root, "mktree");
       const currentCommit = git(root, "commit-tree", emptyTree, "-m", "Current branch commit");
       git(root, "update-ref", start.branchRef, currentCommit);
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
+        ok: true,
+      });
       expect(git(start.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(currentCommit);
     }),
   );
@@ -622,14 +740,16 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const start = changeStartRecord(root);
-      expect(provisionChangeWorktree(root, start, false)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
+        ok: true,
+      });
       git(root, "worktree", "remove", start.worktreePath);
       const blobPath = join(root, "not-a-commit.txt");
       writeFileSync(blobPath, "not a commit\n");
       const blob = git(root, "hash-object", "-w", blobPath);
       writeFileSync(join(start.repositoryCommonDirectory, start.branchRef), `${blob}\n`);
 
-      expect(provisionChangeWorktree(root, start, true)).toEqual({
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
         ok: false,
         code: "git_tooling_error",
       });
@@ -643,7 +763,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const start = changeStartRecord(root);
       git(root, "branch", start.branchRef.slice("refs/heads/".length), start.startingCommit);
 
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "change_start_conflict",
       });
@@ -651,7 +771,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(root, "branch", "-D", start.branchRef.slice("refs/heads/".length));
       mkdirSync(start.worktreePath, { recursive: true });
       writeFileSync(join(start.worktreePath, "keep.txt"), "do not overwrite\n");
-      expect(provisionChangeWorktree(root, start, false)).toEqual({
+      expect(provisionChangeWorktree(root, start, false, start.startingCommit)).toEqual({
         ok: false,
         code: "managed_worktree_path_conflict",
         branch: start.branchRef,
@@ -660,7 +780,9 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(existsSync(join(start.worktreePath, "keep.txt"))).toBe(true);
 
       rmSync(start.worktreePath, { recursive: true });
-      expect(provisionChangeWorktree(root, start, true)).toEqual({ ok: true });
+      expect(provisionChangeWorktree(root, start, true, start.startingCommit)).toEqual({
+        ok: true,
+      });
       expect(git(start.worktreePath, "symbolic-ref", "HEAD")).toBe(start.branchRef);
     }),
   );
@@ -673,7 +795,6 @@ type ChangeOutput = {
   };
   readonly branch: string;
   readonly baseRef: string;
-  readonly startingCommit: string;
   readonly worktreePath: string;
   readonly prepareFailure?: {
     readonly command: string;
@@ -696,6 +817,17 @@ const initializedRepository = (workspace?: string): string => {
     }),
   );
   git(root, "branch", "-M", "main");
+  writeFileSync(
+    join(root, ".but-why", "config.json"),
+    `${JSON.stringify(
+      {
+        idPrefix: "BY",
+        validation: { checks: [{ id: "test", command: "true", timeoutSeconds: 30 }] },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   writeFileSync(join(root, "README.md"), "# Test repository\n");
   git(root, "add", "README.md", ".but-why/config.json");
   git(root, "commit", "-m", "Initialize repository");
@@ -718,7 +850,9 @@ const configurePublicationRemote = (
   else git(root, "remote", "add", remoteName, url);
 };
 
-const changeStartRecord = (root: string): ChangeStartRecord => {
+const changeStartRecord = (
+  root: string,
+): ChangeStartRecord & { readonly startingCommit: string } => {
   const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
   return {
     id: "change-1",
@@ -729,8 +863,11 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
-    reviewerConfiguration: null,
-    prepare: null,
+    policy: {
+      reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+      prepare: null,
+      checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+    },
     prepareFailure: null,
     state: "open",
   };

@@ -61,7 +61,6 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
         changed: result.changed,
         status: result.status,
         reason: result.task.cancelReason,
-        updatedAt: result.task.updatedAt,
       },
       ...(result.change === null
         ? {}

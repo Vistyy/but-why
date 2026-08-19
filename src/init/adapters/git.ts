@@ -5,17 +5,11 @@ export type GitRootResult =
   | {
       readonly ok: true;
       readonly root: string;
-      readonly mainCheckoutRoot: string;
       readonly commonDirectory: string;
     }
   | {
       readonly ok: false;
       readonly code: "not_initialized";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "main_checkout_unavailable";
-      readonly path?: string;
     };
 
 export type CurrentWorktreeFacts = {
@@ -74,36 +68,9 @@ export const findGitRoot = (cwd: string): GitRootResult => {
     return { ok: false, code: "not_initialized" };
   }
 
-  const worktrees = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  if (worktrees.status !== 0) return { ok: false, code: "main_checkout_unavailable" };
-  const mainWorktree = worktrees.stdout.split("\0\0", 1)[0];
-  const mainCheckoutRoot = mainWorktree
-    ?.split("\0")
-    .find((line) => line.startsWith("worktree "))
-    ?.slice("worktree ".length);
-  if (
-    mainCheckoutRoot === undefined ||
-    mainCheckoutRoot.length === 0 ||
-    mainWorktree?.split("\0").includes("bare") === true
-  ) {
-    return { ok: false, code: "main_checkout_unavailable" };
-  }
-
-  let resolvedMainCheckoutRoot: string;
-  try {
-    resolvedMainCheckoutRoot = realpathSync(mainCheckoutRoot);
-  } catch {
-    return { ok: false, code: "main_checkout_unavailable", path: mainCheckoutRoot };
-  }
-
   return {
     ok: true,
-    root,
-    mainCheckoutRoot: resolvedMainCheckoutRoot,
+    root: realpathSync(root),
     commonDirectory: realpathSync(commonDirectory),
   };
 };

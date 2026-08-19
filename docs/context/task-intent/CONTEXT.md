@@ -49,8 +49,12 @@ _Avoid_: Display title, raw Task ID in process names
 **Task Review**:
 One review of one exact Task proposal submitted from New.
 The proposal identity is the complete selected Task Context and exact direct Task Dependency set.
-A Task Review captures dependency evidence, a Review Base, and the immutable effective Task Review policy, and it ends as passed, blocked by Findings, or tooling failed.
-The effective policy contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
+A Task Review captures dependency evidence and a Review Base, and it ends as passed, blocked by Findings, or tooling failed.
+The Task stores the resolved Task Reviewer configuration and Task Agent Session atomically with the first linked Agent Invocation.
+The configuration contains the mandatory built-in review core, the resolved Agent Profile configuration, and at most one optional Repo or Global guidance file.
+A Review that fails before any Invocation used no executed reviewer configuration, so inspection reports no reviewer configuration or Agent Session for that Review.
+Inspection attributes the immutable Task configuration to every Review whose linked Invocation evidence matches the Task authority.
+Earlier invoked Reviews retain that configuration and exact Invocation evidence after later Reviews run.
 When no reusable judgment exists, a Task Review can continue the most recent compatible usable Task Agent Session but always receives and judges the complete current proposal.
 Passing completion approves the exact reviewed Task atomically by moving it from New to Todo.
 Ordinary Task Submission selects the newest completed Review for the exact unchanged New Task proposal and reuses it only when it passed.
@@ -64,11 +68,6 @@ _Avoid_: Task Submission, Acceptance Review, Validation Run
 An Agent Session owned by one Task under one compatible resolved Task Review policy.
 It can continue across changed proposals so the reviewer can reuse repository orientation, but it does not reuse an earlier judgment.
 _Avoid_: Task Review, cross-Task Agent Session, reusable judgment
-
-**Legacy Task Reviewer Session**:
-A historical Reviewer Session record retained for read-only Task Review evidence.
-Current Task Review execution does not write this record.
-_Avoid_: Task Agent Session, current execution
 
 **Task Agent Transcript**:
 The complete Pi session conversation observed while executing a Task Agent Session.
@@ -87,9 +86,9 @@ Captured dependency Context and lifecycle facts are evidence for that review and
 _Avoid_: Acceptance Context, dependency evidence, Task revision
 
 **Review Base**:
-The canonical main checkout branch ref and exact commit captured for one Task Review.
+The invoking current worktree branch ref and exact commit captured for one Task Review.
 Repository Preparation and reviewer execution use a disposable exact workspace at that commit.
-_Avoid_: Change Base, caller checkout HEAD, Candidate
+_Avoid_: Change Base, mutable branch tip, Candidate
 
 **Task Revision**:
 The transition that returns an unlinked Todo Task to New before the Operator changes its approved intent.
@@ -104,11 +103,6 @@ Todo means approved and unfinished, even while a linked Change reports Change Ac
 A Task without a link cannot transition to Done.
 Coordination records the Done transition for a linked Task only after exact merged Change evidence.
 _Avoid_: Validation Run state, Change Activity, generic pipeline
-
-**Transient Task State**:
-A retired persisted Task-state value other than New, Todo, Done, or Cancelled.
-It has no current lifecycle meaning and a migration stops rather than mapping it to a supported state.
-_Avoid_: Change Activity, active Task state
 
 **Task Dependency**:
 A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.

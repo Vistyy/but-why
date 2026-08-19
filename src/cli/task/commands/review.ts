@@ -12,9 +12,9 @@ import {
 import { taskReviewHistoryView, taskReviewView } from "./taskReviewView.js";
 
 export type TaskReviewCommand =
-  | { readonly action: "show"; readonly reviewId: string }
+  | { readonly action: "show"; readonly reviewId: number }
   | { readonly action: "list"; readonly taskId: string }
-  | { readonly action: "abandon"; readonly reviewId: string; readonly reason: string };
+  | { readonly action: "abandon"; readonly reviewId: number; readonly reason: string };
 
 export const runTaskReviewCommand = (
   command: TaskReviewCommand,
@@ -113,7 +113,7 @@ export const runTaskReviewCommand = (
   );
 };
 
-const reviewNotFound = (reviewId: string): CliResult =>
+const reviewNotFound = (reviewId: number): CliResult =>
   runtimeError({
     code: "task_review_not_found",
     message: `Task Review was not found: ${reviewId}`,

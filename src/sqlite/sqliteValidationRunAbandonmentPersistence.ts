@@ -1,8 +1,10 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { assertValidationToolingFailureEvidence } from "../change/candidateValidation/candidateValidationEvidence.js";
 import type { CandidateValidationRunAbandonmentContext } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { publicChangeId } from "../change/changeId.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
@@ -25,16 +27,27 @@ export const openSqliteValidationRunAbandonmentPort = () =>
             repository.idPrefix,
           ),
         ),
+      recordWorkspaceCleanup: (input) =>
+        repository.transactionImmediate("record Candidate Snapshot Workspace cleanup", (sql) =>
+          recordWorkspaceCleanup(
+            sql,
+            input.validationRunId,
+            input.cleanupWorkspace,
+            input.cleanupBlockingReason,
+          ),
+        ),
       recordToolingFailure: (input) =>
-        repository.operation("record Candidate validation Tooling Failure", (sql) =>
-          Effect.asVoid(sql`
-            INSERT INTO candidate_validation_tooling_failures (
-              validation_run_id, error_kind, operation_name, error_message, created_at
-            ) VALUES (
-              ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
-              ${input.errorMessage}, ${input.now}
-            )
-          `),
+        repository.transactionImmediate("record Candidate validation Tooling Failure", (sql) =>
+          Effect.gen(function* () {
+            const operationName = "record Candidate validation Tooling Failure";
+            const failure = toolingFailureValue(input);
+            yield* requireValidToolingFailure(failure, operationName);
+            yield* sql`
+              UPDATE validation_runs
+              SET run_tooling_failure = ${JSON.stringify(failure)}
+              WHERE id = ${input.validationRunId} AND outcome IS NULL
+            `;
+          }).pipe(Effect.asVoid),
         ),
       abandon: (input) =>
         repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
@@ -44,49 +57,64 @@ export const openSqliteValidationRunAbandonmentPort = () =>
   );
 
 type StoredAbandonmentContextRow = {
-  readonly validationRunId: string;
-  readonly runCandidateId: string;
+  readonly validationRunId: number;
+  readonly runCandidateId: number;
   readonly changeId: number;
   readonly storedChangeId: number;
-  readonly candidateId: string;
+  readonly candidateId: number;
   readonly submittedSha: string;
-  readonly setupValidationRunId: string | null;
-  readonly setupExpectedCommitSha: string | null;
-  readonly worktreePath: string | null;
-  readonly cleanupWorkspace: CandidateValidationRunAbandonmentContext["cleanupWorkspace"];
 };
 
 const getAbandonmentContext = (
   sql: SqlClient.SqlClient,
-  validationRunId: string,
+  validationRunId: number,
   idPrefix: string,
 ) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<StoredAbandonmentContextRow>`
+  Effect.flatMap(
+    sql<StoredAbandonmentContextRow>`
       SELECT run.id AS validationRunId, run.candidate_id AS runCandidateId,
         candidate.change_id AS changeId, change_row.id AS storedChangeId,
-        candidate.id AS candidateId, candidate.head_sha AS submittedSha,
-        setup.validation_run_id AS setupValidationRunId,
-        setup.expected_commit_sha AS setupExpectedCommitSha,
-        setup.workspace_path AS worktreePath, setup.cleanup_workspace AS cleanupWorkspace
-      FROM candidate_validation_runs AS run
+        candidate.id AS candidateId, candidate.head_commit AS submittedSha
+      FROM validation_runs AS run
       LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
       LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      LEFT JOIN candidate_snapshot_workspaces AS setup ON setup.validation_run_id = run.id
       WHERE run.id = ${validationRunId}
+    `,
+    (rows) =>
+      rows[0] === undefined
+        ? Effect.succeed(undefined)
+        : decodePersisted("read Candidate Validation Run abandonment context", () =>
+            decodeAbandonmentContext(
+              rows[0] as StoredAbandonmentContextRow,
+              validationRunId,
+              idPrefix,
+            ),
+          ),
+  );
+
+const recordWorkspaceCleanup = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  cleanupWorkspace: "removed" | "not_created" | "failed",
+  cleanupBlockingReason?: string,
+) =>
+  Effect.gen(function* () {
+    const reason =
+      cleanupWorkspace === "failed"
+        ? (cleanupBlockingReason ?? "Snapshot Workspace cleanup failed.")
+        : null;
+    yield* sql`
+      UPDATE validation_runs
+      SET cleanup_pending = ${cleanupWorkspace === "failed" ? 1 : 0},
+        cleanup_blocking_reason = ${reason}
+      WHERE id = ${validationRunId} AND outcome IS NULL
     `;
-    const row = rows[0];
-    return row === undefined
-      ? undefined
-      : yield* decodePersisted("read Candidate Validation Run abandonment context", () =>
-          decodeAbandonmentContext(row, validationRunId, idPrefix),
-        );
-  });
+  }).pipe(Effect.asVoid);
 
 const abandon = (
   sql: SqlClient.SqlClient,
   input: {
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly errorKind: string;
     readonly operationName: string;
     readonly errorMessage: string;
@@ -94,6 +122,8 @@ const abandon = (
   },
 ) =>
   Effect.gen(function* () {
+    const failure = toolingFailureValue(input);
+    yield* requireValidToolingFailure(failure, "abandon Candidate Validation Run");
     const linked = yield* sql<{ readonly invocationId: number }>`
       SELECT agent_invocation_id AS invocationId
       FROM validation_phase_agent_invocations
@@ -106,41 +136,17 @@ const abandon = (
       `Validation Run abandonment confirmed that the reviewer process stopped. ${input.errorMessage}`,
     );
     yield* sql`
-      UPDATE candidate_snapshot_workspaces
-      SET cleanup_workspace = 'removed'
-      WHERE validation_run_id = ${input.validationRunId}
+      UPDATE validation_runs
+      SET cleanup_pending = 0, cleanup_blocking_reason = NULL,
+        run_tooling_failure = ${JSON.stringify(failure)},
+        outcome = 'tooling_failed'
+      WHERE id = ${input.validationRunId} AND outcome IS NULL
     `;
-    yield* sql`
-      INSERT INTO candidate_validation_tooling_failures (
-        validation_run_id, error_kind, operation_name, error_message, created_at
-      ) VALUES (
-        ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
-        ${input.errorMessage}, ${input.now}
-      )
-    `;
-    yield* complete(sql, {
-      validationRunId: input.validationRunId,
-      outcome: "tooling_failed",
-      now: input.now,
-    });
   }).pipe(Effect.asVoid);
-
-const complete = (
-  sql: SqlClient.SqlClient,
-  input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
-) =>
-  Effect.zipRight(
-    sql`
-      UPDATE candidate_validation_runs
-      SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
-      WHERE id = ${input.validationRunId}
-    `,
-    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
-  ).pipe(Effect.asVoid);
 
 const decodeAbandonmentContext = (
   row: StoredAbandonmentContextRow,
-  expectedValidationRunId: string,
+  expectedValidationRunId: number,
   idPrefix: string,
 ): CandidateValidationRunAbandonmentContext => {
   if (row.validationRunId !== expectedValidationRunId || row.runCandidateId !== row.candidateId) {
@@ -149,28 +155,29 @@ const decodeAbandonmentContext = (
   if (row.changeId !== row.storedChangeId) {
     throw new Error("Validation Run Candidate belongs to an unknown Change");
   }
-  if (
-    row.setupValidationRunId !== null &&
-    (row.setupValidationRunId !== row.validationRunId ||
-      row.setupExpectedCommitSha !== row.submittedSha)
-  ) {
-    throw new Error("Snapshot Workspace Setup relationship is inconsistent");
-  }
-  if (row.setupValidationRunId === null && row.cleanupWorkspace !== null) {
-    throw new Error("Validation Run cleanup state has no Snapshot Workspace Setup");
-  }
-  if (
-    row.setupValidationRunId !== null &&
-    (row.worktreePath === null || row.cleanupWorkspace === null)
-  ) {
-    throw new Error("Snapshot Workspace Setup is incomplete");
-  }
   return {
     validationRunId: row.validationRunId,
     changeId: publicChangeId(idPrefix, row.changeId),
     candidateId: row.candidateId,
     submittedSha: row.submittedSha,
-    ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
-    cleanupWorkspace: row.cleanupWorkspace,
   };
 };
+
+const requireValidToolingFailure = (
+  failure: Parameters<typeof assertValidationToolingFailureEvidence>[0],
+  operationName: string,
+) =>
+  Effect.try({
+    try: () => assertValidationToolingFailureEvidence(failure),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
+const toolingFailureValue = (input: {
+  readonly errorKind: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
+}) => ({
+  errorKind: input.errorKind,
+  operationName: input.operationName,
+  errorMessage: input.errorMessage,
+});

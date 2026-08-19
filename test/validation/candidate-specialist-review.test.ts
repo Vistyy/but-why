@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -18,7 +19,6 @@ import {
   runSpecialistReviewPhase as runSpecialistReviewPhaseWithFileSystem,
 } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../../src/change/specialistReview/specialistReviewConfig.js";
-import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { repoRoot } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -36,9 +36,8 @@ const unusedReviewerExecutor: ReviewerProcessExecutor = {
   execute: () => Effect.die("Captured Specialist runtime must not execute a reviewer process."),
 };
 
-const now = "2026-07-15T10:00:00.000Z";
 const candidate = {
-  candidateId: "candidate-1",
+  candidateId: 1,
   changeBaseSha: "1".repeat(40),
   headSha: "2".repeat(40),
 };
@@ -131,8 +130,8 @@ const runSpecialistReviewPhase = (input: RunSpecialistReviewPhaseInput) =>
   runSpecialistReviewPhaseWithFileSystem(input).pipe(Effect.provide(NodeFileSystem.layer));
 
 type PhaseHarness = {
-  readonly rounds: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+  readonly results: Parameters<
+    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][];
   readonly run: (
     runtime: ReviewerAgentRuntime<ReviewerOutput>,
@@ -143,8 +142,8 @@ type PhaseHarness = {
 
 const phaseHarness = (): PhaseHarness => {
   const artifactsRoot = createTestWorkspace();
-  const rounds: Parameters<
-    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+  const results: Parameters<
+    NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
   const commandExecutor = () =>
     Effect.succeed({
@@ -154,10 +153,10 @@ const phaseHarness = (): PhaseHarness => {
     });
 
   return {
-    rounds,
+    results,
     run: (runtime, overrides = {}, includeAcceptanceContext = true) =>
       runSpecialistReviewPhase({
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        validationRunId: 426614174000,
         changeId: "change-1",
         candidate,
         policies: [policy("standards")],
@@ -173,16 +172,19 @@ const phaseHarness = (): PhaseHarness => {
         agentPersistence: defaultAgentPersistence(),
         getAgentSession: () => Effect.succeed(undefined),
         linkAgentInvocation: () => () => Effect.void,
-        settleAgentInvocationRound: (round) => {
-          rounds.push(round);
+        settleAgentInvocationResult: (result) => {
+          results.push(result);
           return () => Effect.void;
         },
+        recordSpecialistResult: (result) =>
+          Effect.sync(() => {
+            results.push({ ...result, phase: "specialist_review" });
+          }),
         allowedUntrackedFiles: [],
-        now,
         listArtifacts: () =>
           Effect.succeed([
             {
-              ref: "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt",
+              ref: "artifact:1/checks/quality/stdout.txt",
             },
           ]),
         listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
@@ -238,39 +240,36 @@ describe("Candidate Specialist Review phase", () => {
           );
           expect(input.prompt).toContain(acceptanceContext.description);
           expect(input.prompt).not.toContain("reviewer-output");
-          expect(input.prompt).not.toContain(candidate.candidateId);
+          expect(input.prompt).toContain(candidate.candidateId);
           for (const other of ["zeta", "broken", "alpha"].filter(
             (producer) => producer !== input.reviewer,
           )) {
             expect(input.prompt).not.toContain(`${other} concern instructions`);
           }
         }
-        expect(result).toMatchObject({
-          findings: 1,
-          reviewerEvidence: [{ producer: "zeta" }, { producer: "broken" }, { producer: "alpha" }],
+        expect(result).toEqual({ outcome: "tooling_failed" });
+        expect(harness.results[1]?.toolingFailure).toMatchObject({
+          errorKind: "reviewer_output_contract_failed",
         });
-        expect(result.toolingFailures).toHaveLength(1);
         expect(
-          harness.rounds.map(({ producer, roundNumber, roundStatus, findings }) => ({
+          harness.results.map(({ producer, outcome, findings }) => ({
             producer,
-            roundNumber,
-            roundStatus,
+            outcome,
             findingTitles: findings.map((item) => item.title),
           })),
         ).toEqual([
           {
             producer: "zeta",
-            roundNumber: 1,
-            roundStatus: "failed",
+            outcome: "failed",
             findingTitles: ["Zeta Finding"],
           },
-          { producer: "broken", roundNumber: 2, roundStatus: "failed", findingTitles: [] },
-          { producer: "alpha", roundNumber: 3, roundStatus: "passed", findingTitles: [] },
+          { producer: "broken", outcome: "failed", findingTitles: [] },
+          { producer: "alpha", outcome: "passed", findingTitles: [] },
         ]);
-        for (const round of harness.rounds) {
-          expect(round.artifactRecords).toEqual(
+        for (const result of harness.results) {
+          expect(result.artifactRecords).toEqual(
             expect.arrayContaining([
-              expect.objectContaining({ phase: "specialist_review", producer: round.producer }),
+              expect.objectContaining({ phase: "specialist_review", producer: result.producer }),
             ]),
           );
         }
@@ -306,26 +305,13 @@ describe("Candidate Specialist Review phase", () => {
 
       const result = yield* harness.run(piReviewerAgentRuntime, {
         policies: [configuredPolicy],
-        agentEnvironment: [],
+        agentEnvironment: ["env"],
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
       });
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: [
-          {
-            producer: "standards",
-            invocations: [
-              {
-                settlementKind: "returned",
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ],
-          },
-        ],
-      });
+      expect(result).toEqual({ outcome: "passed" });
     }),
   );
 
@@ -345,41 +331,39 @@ describe("Candidate Specialist Review phase", () => {
         },
       );
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailures: [],
-        reviewerEvidence: [{ producer: "standards" }],
-      });
+      expect(result).toEqual({ outcome: "passed" });
       expect(review).toHaveBeenCalledOnce();
       expect(review.mock.calls[0]?.[0].prompt).toContain(earlier.title);
       expect(review.mock.calls[0]?.[0].resumeSession).toBeUndefined();
-      expect(harness.rounds[0]?.roundStatus).toBe("passed");
+      expect(harness.results[0]?.outcome).toBe("passed");
     }),
   );
 
   it.scoped(
-    "persists producer-specific rounds, Findings, Tooling Failures, and Artifacts across a clean successor",
+    "persists producer-specific results, Findings, Tooling Failures, and Artifacts across a clean successor",
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
-        const first = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        const first = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
         const artifactsRoot = join(commonDirectory(repo), "but-why", "artifacts");
         const validation = candidateValidationForTest({
-          localRepositoryMainCheckoutRoot: repo,
+          localRepositoryRoot: repo,
           artifactsRoot,
           repository: {
             statePath: candidateRepositoryConfig(repo).statePath,
             commonDirectory: commonDirectory(repo),
           },
         });
-        const broken = outputFailure("broken", "Broken durable Specialist output.");
         const firstReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
           input.reviewer === "standards"
             ? Effect.succeed(success([finding("Durable Specialist Finding")]))
             : Effect.succeed({
                 ok: false as const,
-                failure: broken,
+                failure: outputFailure(
+                  input.reviewer,
+                  `Broken durable ${input.reviewer} Specialist output.`,
+                ),
                 sessionUsability: "unknown" as const,
                 attempts: 2,
                 stdout: "invalid durable output",
@@ -391,77 +375,94 @@ describe("Candidate Specialist Review phase", () => {
           policies: readonly SpecialistReviewPolicy[],
           runtime: ReviewerAgentRuntime<ReviewerOutput>,
           outcome: "passed" | "blocked" | "tooling_failed",
-          runNow: string,
         ) =>
-          validation.runWithPersistence((persistence) =>
-            Effect.gen(function* () {
-              const started = yield* persistence.execution.startOrReuse({
-                candidateId: captured.candidateId,
-                headSha: captured.headSha,
-                changeBaseSha: captured.changeBaseSha,
-                policy: { checks: [], copyFiles: [], specialistReviews: policies },
-                now: runNow,
-              });
-              if (started.reused || "blocked" in started)
-                throw new Error("Expected a new unblocked Specialist Validation Run");
-              const result = yield* runSpecialistReviewPhase({
-                validationRunId: started.validationRunId,
-                changeId: captured.changeId,
-                candidate: captured,
-                policies,
-                runtime,
-                commandExecutor: () =>
-                  Effect.succeed({
-                    exitCode: 0,
-                    stdout: `${captured.headSha}\n`,
-                    stderr: "",
-                  }),
-                reviewerExecutor: unusedReviewerExecutor,
-                artifactsRoot,
-                commandCwd: repo,
-                resourceRoot: repo,
-                sessionStorageRoot: artifactsRoot,
-                agentPersistence: persistence.agentPersistence,
-                getAgentSession: persistence.reviewerSessions.getAgentSession,
-                linkAgentInvocation: persistence.reviewerSessions.linkAgentInvocation,
-                settleAgentInvocationRound: persistence.execution.settleAgentInvocationRound,
-                allowedUntrackedFiles: [],
-                now: runNow,
-                listArtifacts: persistence.reads.listArtifacts,
-                listPreviousCandidateReviewerFindings:
-                  persistence.execution.listPreviousCandidateReviewerFindings,
-              });
-              for (const toolingFailure of result.toolingFailures) {
-                yield* persistence.execution.recordToolingFailure({
-                  validationRunId: started.validationRunId,
-                  ...validationToolingFailureRecord(toolingFailure),
-                  now: runNow,
-                });
-              }
-              yield* persistence.execution.complete({
-                validationRunId: started.validationRunId,
-                outcome,
-                now: runNow,
-              });
-              return { validationRunId: started.validationRunId, result };
-            }),
+          Effect.sync(() => {
+            const database = new DatabaseSync(candidateRepositoryConfig(repo).statePath);
+            try {
+              database.prepare("UPDATE changes SET reviewer_configuration = ? WHERE id = 1").run(
+                JSON.stringify({
+                  acceptanceReview: null,
+                  specialistReviews: policies,
+                }),
+              );
+            } finally {
+              database.close();
+            }
+          }).pipe(
+            Effect.zipRight(
+              validation.runWithPersistence((persistence) =>
+                Effect.gen(function* () {
+                  const started = yield* persistence.execution.startOrReuse({
+                    candidateId: captured.candidateId,
+                    headSha: captured.headSha,
+                    changeBaseSha: captured.changeBaseSha,
+                  });
+                  if (started.reused || "blocked" in started)
+                    throw new Error("Expected a new unblocked Specialist Validation Run");
+                  yield* persistence.execution.recordCheckResult({
+                    validationRunId: started.validationRunId,
+                    producer: "quality",
+                    outcome: "passed",
+                    artifactRecords: [],
+                  });
+                  const result = yield* runSpecialistReviewPhase({
+                    validationRunId: started.validationRunId,
+                    changeId: captured.changeId,
+                    candidate: captured,
+                    policies,
+                    runtime,
+                    commandExecutor: () =>
+                      Effect.succeed({
+                        exitCode: 0,
+                        stdout: `${captured.headSha}\n`,
+                        stderr: "",
+                      }),
+                    reviewerExecutor: unusedReviewerExecutor,
+                    artifactsRoot,
+                    commandCwd: repo,
+                    resourceRoot: repo,
+                    sessionStorageRoot: artifactsRoot,
+                    agentPersistence: persistence.agentPersistence,
+                    getAgentSession: persistence.agentSessions.getAgentSession,
+                    linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+                    settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+                    recordSpecialistResult: persistence.execution.recordSpecialistResult,
+                    allowedUntrackedFiles: [],
+                    listArtifacts: persistence.reads.listArtifacts,
+                    listPreviousCandidateReviewerFindings:
+                      persistence.execution.listPreviousCandidateReviewerFindings,
+                  });
+                  yield* persistence.execution.recordWorkspaceCleanup({
+                    validationRunId: started.validationRunId,
+                    cleanupWorkspace: "not_created",
+                  });
+                  expect(result.outcome).toBe(outcome);
+                  yield* persistence.execution.complete({
+                    validationRunId: started.validationRunId,
+                    outcome: result.outcome,
+                  });
+                  return { validationRunId: started.validationRunId, result };
+                }),
+              ),
+            ),
           );
 
+        const frozenPolicies = [
+          policy("standards"),
+          policy("broken-first"),
+          policy("broken-second"),
+        ];
         const durable = yield* Effect.suspend(() =>
-          runPersisted(
-            first,
-            [policy("standards"), policy("broken")],
-            { review: firstReview },
-            "tooling_failed",
-            now,
-          ),
+          runPersisted(first, frozenPolicies, { review: firstReview }, "tooling_failed"),
         );
-        expect(yield* Effect.suspend(() => validation.listRounds(durable.validationRunId))).toEqual(
-          [
-            { producer: "standards", status: "failed" },
-            { producer: "broken", status: "failed" },
-          ],
-        );
+        expect(
+          yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
+        ).toEqual([
+          { producer: "quality", outcome: "passed" },
+          { producer: "standards", outcome: "failed" },
+          { producer: "broken-first", outcome: "failed" },
+          { producer: "broken-second", outcome: "failed" },
+        ]);
         expect(
           (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
             (item) => item.title,
@@ -472,7 +473,13 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual([
           expect.objectContaining({
             errorKind: "reviewer_output_contract_failed",
-            errorMessage: expect.stringContaining("Broken durable Specialist output."),
+            errorMessage: expect.stringContaining("Broken durable broken-first Specialist output."),
+          }),
+          expect.objectContaining({
+            errorKind: "reviewer_output_contract_failed",
+            errorMessage: expect.stringContaining(
+              "Broken durable broken-second Specialist output.",
+            ),
           }),
         ]);
         expect(
@@ -480,14 +487,13 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
-            expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
+            expect.objectContaining({ phase: "specialist_review", producer: "broken-first" }),
+            expect.objectContaining({ phase: "specialist_review", producer: "broken-second" }),
           ]),
         );
 
         git(repo, "commit", "--allow-empty", "-m", "failed Specialist successor");
-        const failedSuccessor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:03:00.000Z" }),
-        );
+        const failedSuccessor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!failedSuccessor.ok)
           throw new Error(`Candidate capture failed: ${failedSuccessor.code}`);
         const failedReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -500,34 +506,22 @@ describe("Candidate Specialist Review phase", () => {
           }),
         );
         yield* Effect.suspend(() =>
-          runPersisted(
-            failedSuccessor,
-            [policy("standards")],
-            { review: failedReview },
-            "tooling_failed",
-            "2026-07-15T10:03:00.000Z",
-          ),
+          runPersisted(failedSuccessor, frozenPolicies, { review: failedReview }, "tooling_failed"),
         );
 
         git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
-        const successor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:05:00.000Z" }),
-        );
+        const successor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
         const successorReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
         const clean = yield* Effect.suspend(() =>
-          runPersisted(
-            successor,
-            [policy("standards")],
-            { review: successorReview },
-            "passed",
-            "2026-07-15T10:05:00.000Z",
-          ),
+          runPersisted(successor, frozenPolicies, { review: successorReview }, "passed"),
         );
-        expect(successorReview).toHaveBeenCalledOnce();
-        expect(successorReview.mock.calls[0]?.[0].prompt).toContain("Durable Specialist Finding");
+        expect(successorReview).toHaveBeenCalledTimes(3);
+        expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
+          "Durable Specialist Finding",
+        );
         expect(yield* Effect.suspend(() => validation.listFindings(clean.validationRunId))).toEqual(
           [],
         );
@@ -538,23 +532,15 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual(["Durable Specialist Finding"]);
 
         git(repo, "commit", "--allow-empty", "-m", "later Specialist successor");
-        const laterSuccessor = yield* Effect.suspend(() =>
-          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:10:00.000Z" }),
-        );
+        const laterSuccessor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!laterSuccessor.ok) throw new Error(`Candidate capture failed: ${laterSuccessor.code}`);
         const laterReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
         yield* Effect.suspend(() =>
-          runPersisted(
-            laterSuccessor,
-            [policy("standards")],
-            { review: laterReview },
-            "passed",
-            "2026-07-15T10:10:00.000Z",
-          ),
+          runPersisted(laterSuccessor, frozenPolicies, { review: laterReview }, "passed"),
         );
-        expect(laterReview).toHaveBeenCalledTimes(1);
+        expect(laterReview).toHaveBeenCalledTimes(3);
         expect(laterReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
       }),
     15_000,
@@ -580,11 +566,8 @@ describe("Candidate Specialist Review phase", () => {
             }),
         }),
       );
-      expect(runtimeResult).toMatchObject({
-        findings: 0,
-        toolingFailures: [{ message: "Reviewer launch failed." }],
-      });
-      expect(runtimeHarness.rounds[0]?.roundStatus).toBe("failed");
+      expect(runtimeResult).toEqual({ outcome: "tooling_failed" });
+      expect(runtimeHarness.results[0]?.outcome).toBe("failed");
 
       const artifactHarness = phaseHarness();
       const nonDirectory = join(createTestWorkspace(), "not-a-directory");
@@ -595,16 +578,41 @@ describe("Candidate Specialist Review phase", () => {
           { artifactsRoot: nonDirectory },
         ),
       );
-      expect(artifactFailure).toMatchObject({
-        toolingFailures: [
-          { _tag: "InfrastructureToolingFailed", operationName: "record_reviewer_artifacts" },
-        ],
-      });
-      expect(artifactHarness.rounds).toMatchObject([
+      expect(artifactFailure).toEqual({ outcome: "tooling_failed" });
+      expect(artifactHarness.results).toMatchObject([
         {
-          roundStatus: "failed",
+          outcome: "failed",
           artifactRecords: [],
           toolingFailure: { operationName: "record_reviewer_artifacts" },
+        },
+      ]);
+    }),
+  );
+
+  it.scoped("records initial Candidate-integrity failure for its Specialist producer", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+        Effect.succeed(success()),
+      );
+      const harness = phaseHarness();
+      const result = yield* harness.run(
+        { review },
+        {
+          commandExecutor: () =>
+            Effect.succeed({ exitCode: 0, stdout: "different-head-sha\n", stderr: "" }),
+        },
+      );
+
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(review).not.toHaveBeenCalled();
+      expect(harness.results).toMatchObject([
+        {
+          phase: "specialist_review",
+          producer: "standards",
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "verify_candidate_head" },
         },
       ]);
     }),
@@ -615,10 +623,10 @@ describe("Candidate Specialist Review phase", () => {
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
-        const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo, now }));
+        const captured = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-        const rounds: Parameters<
-          NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationRound"]>
+        const results: Parameters<
+          NonNullable<RunSpecialistReviewPhaseInput["settleAgentInvocationResult"]>
         >[0][] = [];
         const commandExecutor = (command: string, options?: { readonly cwd?: string }) =>
           Effect.sync(() => {
@@ -633,7 +641,7 @@ describe("Candidate Specialist Review phase", () => {
           });
         const integrityFailure = yield* Effect.suspend(() =>
           runSpecialistReviewPhase({
-            validationRunId: "323e4567-e89b-42d3-a456-426614174000",
+            validationRunId: 426614174001,
             changeId: captured.changeId,
             candidate: captured,
             policies: [policy("standards")],
@@ -653,24 +661,24 @@ describe("Candidate Specialist Review phase", () => {
             agentPersistence: defaultAgentPersistence(),
             getAgentSession: () => Effect.succeed(undefined),
             linkAgentInvocation: () => () => Effect.void,
-            settleAgentInvocationRound: (round) => {
-              rounds.push(round);
+            settleAgentInvocationResult: (result) => {
+              results.push(result);
               return () => Effect.void;
             },
+            recordSpecialistResult: (result) =>
+              Effect.sync(() => {
+                results.push({ ...result, phase: "specialist_review" });
+              }),
             allowedUntrackedFiles: [],
-            now,
             listArtifacts: () => Effect.succeed([]),
             listPreviousCandidateReviewerFindings: () => Effect.succeed([]),
           }),
         );
 
-        expect(integrityFailure).toMatchObject({
-          findings: 0,
-          toolingFailures: [{ _tag: "GitToolingFailed", operationName: "verify_candidate_head" }],
-        });
-        expect(rounds).toMatchObject([
+        expect(integrityFailure).toEqual({ outcome: "tooling_failed" });
+        expect(results).toMatchObject([
           {
-            roundStatus: "failed",
+            outcome: "failed",
             findings: [],
             artifactRecords: [],
             toolingFailure: { operationName: "verify_candidate_head" },

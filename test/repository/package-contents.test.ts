@@ -8,14 +8,16 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 
-import { createGitRepo, repoRoot } from "../support/by-cli.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { commitButWhyConfigAndRecordDefault, createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
-import { runTestProcess } from "../support/testProcess.js";
+import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -286,6 +288,94 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
+  it.effect("initializes the release baseline through the installed executable", () => {
+    const repositoryRoot = createGitRepo();
+    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+    expect(JSON.parse(initialized.stdout)).toMatchObject({ init: { status: "initialized" } });
+
+    const listed = runTestProcess(bin, ["task", "list"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(listed.status, listed.stderr || listed.stdout).toBe(0);
+    expect(JSON.parse(listed.stdout)).toMatchObject({ tasks: [] });
+
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const migrations = yield* repository.operation(
+          "inspect installed migration ledger",
+          (sql) =>
+            sql<{ readonly migrationId: number }>`
+            SELECT migration_id AS migrationId
+            FROM effect_sql_migrations
+            ORDER BY migration_id
+          `,
+        );
+        expect(migrations).toEqual([{ migrationId: 1 }]);
+
+        const tables = yield* repository.operation(
+          "inspect installed product tables",
+          (sql) =>
+            sql<{ readonly name: string }>`
+            SELECT name FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name NOT LIKE 'effect_sql_%'
+            ORDER BY name
+          `,
+        );
+        expect(tables).toHaveLength(18);
+        expect(tables.map(({ name }) => name)).toContain("shared_state_identity");
+        expect(tables.map(({ name }) => name)).toContain("validation_runs");
+      }).pipe(
+        Effect.provide(
+          repositorySqlLayer({
+            commonDirectory: join(repositoryRoot, ".git"),
+            statePath: join(repositoryRoot, ".git", "but-why", "state.sqlite"),
+            lifecycle: "open",
+          }),
+        ),
+      ),
+    );
+  });
+
+  it("uses a linked invoking worktree through the installed executable", () => {
+    const repositoryRoot = createGitRepo();
+    const bin = join(prepared.installedRoot, "node_modules", ".bin", "by");
+    const initialized = runTestProcess(bin, ["init", "--id-prefix", "BY"], {
+      cwd: repositoryRoot,
+      timeout: packageProcessTimeoutMs,
+    });
+    expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
+    commitButWhyConfigAndRecordDefault(repositoryRoot);
+
+    const linkedWorktree = join(
+      dirname(repositoryRoot),
+      `${basename(repositoryRoot)}-installed-linked-caller`,
+    );
+    runTestProcessOrThrow(
+      "git",
+      ["worktree", "add", "-b", "installed-linked-caller", linkedWorktree, "main"],
+      { cwd: repositoryRoot },
+    );
+    const started = runTestProcess(bin, ["change", "start"], {
+      cwd: linkedWorktree,
+      timeout: packageProcessTimeoutMs,
+    });
+
+    expect(started.status, started.stderr || started.stdout).toBe(0);
+    const result = JSON.parse(started.stdout) as { readonly worktreePath: string };
+    expect(dirname(dirname(result.worktreePath))).toBe(
+      join(dirname(linkedWorktree), `${basename(linkedWorktree)}-worktrees`),
+    );
+  });
+
   it.effect(
     "loads installed continuation assets and reports invalid or missing extensions truthfully",
     () =>
@@ -330,21 +420,18 @@ if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
   printf '{"result":{"type":"agent_started","agent":{"terminal_id":"terminal"}}}\\n'
   exit 0
 fi
-if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
-  printf '%s' "$4" > "$BY_FAKE_CAPTURE"
-  printf '{"result":{"type":"agent_prompted"}}\\n'
-  exit 0
-fi
 exit 1
 `,
         );
         chmodSync(join(tools, "gh"), 0o755);
         chmodSync(join(tools, "herdr"), 0o755);
         const bin = join(installed, "node_modules", ".bin", "by");
+        const socketPath = join(tools, "herdr.sock");
         const env = {
           // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
           PATH: `${tools}:${process.env["PATH"] ?? ""}`,
           BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
+          HERDR_SOCKET_PATH: socketPath,
         };
         const isolatedHome = createTestWorkspace();
         mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
@@ -355,16 +442,29 @@ exit 1
             agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
           })}\n`,
         );
-        const implement = runTestProcess(bin, ["change", "implement", change.id], {
-          cwd: repository,
-          env: {
-            ...env,
-            BY_FAKE_WORKTREE: change.worktreePath,
-            BY_FAKE_SESSION: change.id,
-          },
-          isolatedHome,
-          timeout: packageProcessTimeoutMs,
-        });
+        const implement = yield* Effect.acquireUseRelease(
+          Effect.promise(() =>
+            startFakeHerdrApiServer({
+              socketPath,
+              capturePath: env.BY_FAKE_CAPTURE,
+              readyPath: join(tools, "herdr-api-ready"),
+            }),
+          ),
+          () =>
+            Effect.sync(() =>
+              runTestProcess(bin, ["change", "implement", change.id], {
+                cwd: repository,
+                env: {
+                  ...env,
+                  BY_FAKE_WORKTREE: change.worktreePath,
+                  BY_FAKE_SESSION: change.id,
+                },
+                isolatedHome,
+                timeout: packageProcessTimeoutMs,
+              }),
+            ),
+          (server) => Effect.promise(server.stop),
+        );
         expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
         const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
         const extension = join(installedPackage, "extensions/continue-change.ts");

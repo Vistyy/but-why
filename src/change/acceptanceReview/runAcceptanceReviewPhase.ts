@@ -32,22 +32,25 @@ import {
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  type ValidationToolingFailure,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 
 export type RunAcceptanceReviewPhaseInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly changeId: string;
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -72,21 +75,21 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: AcceptanceReviewPolicy;
   }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationRound: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationRound"]
+  readonly settleAgentInvocationResult: NonNullable<
+    CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
+  readonly recordAcceptanceResult: CandidateValidationExecutionPort["recordAcceptanceResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
   readonly listArtifacts: (
-    validationRunId: string,
+    validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly phase: "acceptance_review";
     readonly producer: "acceptance";
   }) => Effect.Effect<
@@ -102,10 +105,7 @@ export type RunAcceptanceReviewPhaseInput = {
 };
 
 export type RunAcceptanceReviewPhaseResult = {
-  readonly findings: 0 | 1;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence?: ReviewerExecutionEvidence;
-  readonly toolingFailure?: ValidationToolingFailure;
+  readonly outcome: CandidateValidationOutcome;
 };
 
 export const runAcceptanceReviewPhase = (
@@ -119,7 +119,21 @@ export const runAcceptanceReviewPhase = (
     progress: input.progress,
     phase: { kind: "acceptance", profile: progressProfile(input.policy.profile) },
     run: Effect.gen(function* () {
-      yield* verifyIntegrity(input);
+      const integrity = yield* Effect.either(verifyIntegrity(input));
+      if (integrity._tag === "Left") {
+        yield* input.recordAcceptanceResult({
+          validationRunId: input.validationRunId,
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: {
+            ...validationToolingFailureRecord(integrity.left),
+            validationRunId: input.validationRunId,
+          },
+        });
+        return { outcome: "tooling_failed" as const };
+      }
+
       const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
         (artifact) => artifact.ref,
       );
@@ -154,7 +168,6 @@ export const runAcceptanceReviewPhase = (
         validationRunId: input.validationRunId,
         phase: validationPhase.acceptanceReview,
         producer: "acceptance",
-        roundNumber: 1,
         reviewer: "acceptance",
         configuration: agentConfiguration(input.policy.profile),
         agentPersistence: input.agentPersistence,
@@ -210,7 +223,6 @@ export const runAcceptanceReviewPhase = (
           : { artifactMaxBytes: input.artifactMaxBytes }),
         allowedUntrackedFiles: input.allowedUntrackedFiles,
         expectedHeadSha: input.candidate.headSha,
-        now: input.now,
         makeFindings: (result) =>
           result.ok
             ? result.report.findings.map((finding, index) => ({
@@ -221,45 +233,17 @@ export const runAcceptanceReviewPhase = (
                 ...finding,
               }))
             : [],
-        settleAgentInvocationRound: input.settleAgentInvocationRound,
+        settleAgentInvocationResult: input.settleAgentInvocationResult,
       });
-      const findings = execution.result.ok ? execution.result.report.findings : [];
-      if (execution.toolingFailure !== undefined) {
-        return {
-          findings: 0,
-          persistedToolingFailures: [execution.toolingFailure],
-          reviewerEvidence: execution.reviewerEvidence,
-          toolingFailure: execution.toolingFailure,
-        };
-      }
-      if (!execution.result.ok) {
-        return {
-          findings: 0,
-          reviewerEvidence: execution.reviewerEvidence,
-          toolingFailure: execution.result.failure,
-        };
-      }
-      return {
-        findings: findings.length === 0 ? 0 : 1,
-        reviewerEvidence: execution.reviewerEvidence,
-      };
+      return execution;
     }),
-    outcome: (result) =>
-      result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
-    details: (result) => ({
-      ...(result.toolingFailure !== undefined
+    outcome: (result) => (result.outcome === "passed" ? "passed" : "failed"),
+    details: (result) =>
+      result.outcome === "tooling_failed"
         ? { reason: "tooling" as const }
-        : result.findings === 1
+        : result.outcome === "blocked"
           ? { reason: "findings" as const }
-          : {}),
-      ...(result.reviewerEvidence?.continuity === undefined ||
-      result.reviewerEvidence.reviewCalls === undefined
-        ? {}
-        : {
-            continuity: result.reviewerEvidence.continuity,
-            reviewCalls: result.reviewerEvidence.reviewCalls,
-          }),
-    }),
+          : undefined,
   });
 
 const agentConfiguration = (
@@ -267,16 +251,16 @@ const agentConfiguration = (
 ): AgentSessionConfiguration => ({
   harness: "pi",
   provider: null,
-  model: profile.profile.runtimeConfig?.model ?? "",
-  thinking: profile.profile.runtimeConfig?.thinking ?? null,
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? null,
 });
 
 const progressProfile = (
   profile: RunAcceptanceReviewPhaseInput["policy"]["profile"],
 ): SubmitProgressProfile => ({
   name: profile.agentProfile,
-  model: profile.profile.runtimeConfig?.model ?? "unknown",
-  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? "default",
 });
 
 const verifyIntegrity = (

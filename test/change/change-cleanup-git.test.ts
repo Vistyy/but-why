@@ -107,7 +107,7 @@ describe("Change cleanup Git adapter", () => {
     expect(existsSync(sharedStatePath)).toBe(true);
   });
 
-  it("retains the Change-owned Reviewer Session storage during cleanup", () => {
+  it("retains the Change-owned Agent Session storage during cleanup", () => {
     const repository = initializedRepository();
     const commonDirectory = git(
       repository,
@@ -116,13 +116,13 @@ describe("Change cleanup Git adapter", () => {
       "--git-common-dir",
     );
     const worktreePath = join(commonDirectory, "but-why", "worktrees", "feature");
-    const reviewerSessionPath = join(commonDirectory, "but-why", "change-1");
+    const agentSessionPath = join(commonDirectory, "but-why", "change-1");
     git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
-    mkdirSync(join(reviewerSessionPath, "acceptance", "reviewer-sessions"), {
+    mkdirSync(join(agentSessionPath, "acceptance", "agent-sessions"), {
       recursive: true,
     });
     writeFileSync(
-      join(reviewerSessionPath, "acceptance", "reviewer-sessions", "review_session.jsonl"),
+      join(agentSessionPath, "acceptance", "agent-sessions", "agent_session.jsonl"),
       '{"type":"session"}\n',
     );
 
@@ -134,8 +134,8 @@ describe("Change cleanup Git adapter", () => {
         remoteChangeBranch: null,
       }),
     ).toEqual({ state: "complete" });
-    expect(existsSync(reviewerSessionPath)).toBe(true);
-    expect(existsSync(join(reviewerSessionPath, "acceptance", "reviewer-sessions"))).toBe(true);
+    expect(existsSync(agentSessionPath)).toBe(true);
+    expect(existsSync(join(agentSessionPath, "acceptance", "agent-sessions"))).toBe(true);
   });
 
   it("preserves a Managed Worktree behind a symlinked sibling container", () => {

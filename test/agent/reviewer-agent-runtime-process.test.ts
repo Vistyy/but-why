@@ -147,7 +147,6 @@ describe("Pi reviewer agent runtime process boundary", () => {
             rpcArgs[rpcArgs.indexOf("json")] = "rpc";
             const nameIndex = rpcArgs.indexOf("--name");
             rpcArgs.splice(nameIndex, 2);
-            rpcArgs.pop();
             rpcArgs.push("--extension", probeExtension);
             const spawned = runTestProcess(command.command, rpcArgs, {
               cwd: workspace,

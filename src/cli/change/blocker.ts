@@ -23,11 +23,7 @@ export const runBlocker = (
 ): Effect.Effect<CliResult> => {
   const action = command.action;
   const changeId = command.changeId;
-  const rejected = support.rejectedExplicitChangeId(
-    changeId,
-    environment.cwd,
-    environment.operationalRepoRoot,
-  );
+  const rejected = support.rejectedExplicitChangeId(changeId, environment.cwd);
   if (rejected !== undefined) return Effect.succeed(rejected);
   if (action === "list") {
     const loaded = loadImplementationBlockers(support.changeOperationInput(environment));

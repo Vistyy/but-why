@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -25,7 +25,7 @@ import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 const candidate = {
-  candidateId: "candidate-current",
+  candidateId: 109,
   changeBaseSha: "base-sha",
   headSha: "head-sha",
 };
@@ -47,35 +47,26 @@ const policy = {
   },
 };
 const decision: ImplementationDecision = {
-  id: "decision-1",
+  id: 1,
   changeId: "change-1",
-  sequence: 1,
-  recordedAt: now,
   choice: "Keep the phase owner",
   rationale: "This keeps Acceptance-specific evidence local.",
 };
 const blockerHistory: ImplementationBlockerHistory = {
   blockers: [
     {
-      id: "blocker-1",
+      id: 1,
       changeId: "change-1",
-      sequence: 1,
-      reportedAt: now,
       content: "Authority was ambiguous.",
-      resolvedAt: now,
       resolution: {
-        id: "resolution-1",
-        blockerId: "blocker-1",
-        recordedAt: now,
+        blockerId: 1,
         content: "Use the captured Acceptance Context.",
       },
     },
   ],
   resolutions: [
     {
-      id: "resolution-1",
-      blockerId: "blocker-1",
-      recordedAt: now,
+      blockerId: 1,
       content: "Use the captured Acceptance Context.",
     },
   ],
@@ -113,19 +104,13 @@ describe("Acceptance Review phase", () => {
           implementationDecisions: [decision],
           blockerHistory,
           previousFindings: [finding("Earlier Acceptance Finding")],
-          availableArtifactRefs: ["artifact:validation-1/checks/quality/stdout.txt"],
+          availableArtifactRefs: ["artifact:1/checks/quality/stdout.txt"],
         },
       );
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: {
-          agentSessionId: 1,
-          invocations: [{ settlementKind: "returned", usage: null }],
-        },
-      });
+      expect(result).toEqual({ outcome: "passed" });
       expect(review).toHaveBeenCalledOnce();
       const call = review.mock.calls[0]?.[0];
       expect(call).toMatchObject({
@@ -140,7 +125,7 @@ describe("Acceptance Review phase", () => {
       expect(call?.prompt).toContain(decision.choice);
       expect(call?.prompt).toContain(blockerHistory.resolutions[0]?.content);
       expect(call?.prompt).toContain("Earlier Acceptance Finding");
-      expect(call?.prompt).toContain("artifact:validation-1/checks/quality/stdout.txt");
+      expect(call?.prompt).toContain("artifact:1/checks/quality/stdout.txt");
       expect(call?.prompt).not.toContain("reviewer-output");
       expect(call?.systemPrompt).toContain(
         "The supplied Acceptance Context is the authoritative implementation intent",
@@ -148,10 +133,10 @@ describe("Acceptance Review phase", () => {
       expect(call?.systemPrompt).toContain(
         "Each Finding must include title, description, evidence, files, and artifactRefs",
       );
-      expect(fixture.rounds).toEqual([
+      expect(fixture.results).toEqual([
         expect.objectContaining({
-          validationRunId: "validation-1",
-          roundStatus: "passed",
+          validationRunId: 1,
+          outcome: "passed",
           findings: [],
           artifactRecords: expect.arrayContaining([
             expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
@@ -161,7 +146,7 @@ describe("Acceptance Review phase", () => {
     }),
   );
 
-  it.scoped("runs the normal Pi reviewer process through the Acceptance Candidate boundary", () =>
+  it.scoped("runs an oversized Acceptance Context through the normal Pi reviewer process", () =>
     Effect.gen(function* () {
       const workspace = createTestWorkspace();
       const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
@@ -202,8 +187,8 @@ describe("Acceptance Review phase", () => {
       const linkAgentInvocation: NonNullable<RunAcceptanceReviewPhaseInput["linkAgentInvocation"]> =
         () => () =>
           Effect.void;
-      const settleAgentInvocationRound: NonNullable<
-        RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]
+      const settleAgentInvocationResult: NonNullable<
+        RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]
       > = () => () => Effect.void;
       const actualPolicy = {
         ...policy,
@@ -220,11 +205,15 @@ describe("Acceptance Review phase", () => {
         },
       };
       const fixture = acceptancePhaseFixture(piReviewerAgentRuntime, {
+        acceptanceContext: {
+          ...acceptanceContext,
+          description: "Accepted detail. ".repeat(10_000),
+        },
         policy: actualPolicy,
-        agentEnvironment: [],
+        agentEnvironment: ["env"],
         agentPersistence,
         linkAgentInvocation,
-        settleAgentInvocationRound,
+        settleAgentInvocationResult,
         commandCwd: workspace,
         resourceRoot: workspace,
         reviewerExecutor: createPiReviewerProcessExecutor(),
@@ -232,26 +221,7 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: {
-          agentSessionId: 1,
-          invocations: [
-            {
-              id: 1,
-              continuationId: 1,
-              settlementKind: "returned",
-              usage: {
-                inputTokens: 1,
-                outputTokens: 1,
-                totalTokens: 2,
-              },
-            },
-          ],
-        },
-      });
-      expect(result.reviewerEvidence).not.toHaveProperty("continuity");
-      expect(result.reviewerEvidence).not.toHaveProperty("reviewCalls");
+      expect(result).toEqual({ outcome: "passed" });
     }),
   );
 
@@ -262,8 +232,8 @@ describe("Acceptance Review phase", () => {
       writeFileSync(artifactsRoot, "not a directory");
       const settledInvocationIds: number[] = [];
       const settlementKinds: string[] = [];
-      const rounds: Parameters<
-        NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]>
+      const results: Parameters<
+        NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
       >[0][] = [];
       const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
         beginInvocation: ({ agentSessionId, configuration, createdAt }) => {
@@ -309,8 +279,8 @@ describe("Acceptance Review phase", () => {
         {
           agentPersistence,
           linkAgentInvocation: () => () => Effect.void,
-          settleAgentInvocationRound: (round) => {
-            rounds.push(round);
+          settleAgentInvocationResult: (result) => {
+            results.push(result);
             return () => Effect.void;
           },
           artifactsRoot,
@@ -319,28 +289,22 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        reviewerEvidence: {
-          invocations: [{ settlementKind: "returned" }],
-        },
-        toolingFailure: { _tag: "InfrastructureToolingFailed" },
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(settledInvocationIds).toEqual([1]);
       expect(settlementKinds).toEqual(["returned"]);
-      expect(rounds).toMatchObject([
+      expect(results).toMatchObject([
         {
-          roundStatus: "failed",
+          outcome: "failed",
           findings: [],
           artifactRecords: [],
           toolingFailure: {
-            validationRunId: "validation-1",
+            validationRunId: 1,
             errorKind: "infrastructure_tooling_failed",
             operationName: "record_reviewer_artifacts",
           },
         },
       ]);
-      expect(fixture.rounds).toEqual([]);
+      expect(fixture.results).toEqual([]);
     }),
   );
 
@@ -351,48 +315,86 @@ describe("Acceptance Review phase", () => {
       );
       const fixture = acceptancePhaseFixture({ review }, { observedHeadSha: "different-head-sha" });
 
-      const failure = yield* Effect.flip(fixture.run());
+      const result = yield* fixture.run();
 
-      expect(failure).toMatchObject({
-        _tag: "GitToolingFailed",
-        operationName: "verify_candidate_head",
-      });
+      expect(result).toEqual({ outcome: "tooling_failed" });
       expect(review).not.toHaveBeenCalled();
-      expect(fixture.rounds).toEqual([]);
+      expect(fixture.results).toMatchObject([
+        {
+          outcome: "failed",
+          findings: [],
+          artifactRecords: [],
+          toolingFailure: { operationName: "verify_candidate_head" },
+        },
+      ]);
     }),
   );
 
-  it.scoped("keeps every valid reported Finding in the failed Acceptance round", () =>
+  it.scoped("keeps every valid reported Finding in the failed Acceptance result", () =>
     Effect.gen(function* () {
       const findings = [finding("First mismatch"), finding("Second mismatch")];
-      const fixture = acceptancePhaseFixture({
-        review: () =>
-          Effect.succeed({
-            ok: true,
-            report: { findings },
-            attempts: 1,
-            stdout: "review evidence",
-          }),
-      });
+      const artifactsRoot = createTestWorkspace();
+      const fixture = acceptancePhaseFixture(
+        {
+          review: () =>
+            Effect.succeed({
+              ok: true,
+              report: { findings },
+              attempts: 1,
+              stdout: "review evidence",
+            }),
+        },
+        { artifactsRoot },
+      );
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({ findings: 1 });
-      expect(fixture.rounds).toHaveLength(1);
-      expect(fixture.rounds[0]).toMatchObject({
-        roundStatus: "failed",
+      expect(result).toEqual({ outcome: "blocked" });
+      expect(fixture.results).toHaveLength(1);
+      expect(fixture.results[0]).toMatchObject({
+        outcome: "failed",
         findings: [
-          { id: "validation-1-acceptance-F1", title: "First mismatch" },
-          { id: "validation-1-acceptance-F2", title: "Second mismatch" },
+          { id: "1-acceptance-F1", title: "First mismatch" },
+          { id: "1-acceptance-F2", title: "Second mismatch" },
         ],
       });
-      expect(fixture.rounds[0]?.artifactRecords).toEqual(
+      expect(fixture.results[0]?.artifactRecords).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
           expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
           expect.objectContaining({ path: expect.stringContaining("execution.json") }),
         ]),
       );
+      const executionArtifact = fixture.results[0]?.artifactRecords.find((artifact) =>
+        artifact.path.endsWith("execution.json"),
+      );
+      expect(executionArtifact).toBeDefined();
+      const execution = JSON.parse(
+        readFileSync(join(artifactsRoot, executionArtifact?.path ?? "missing"), "utf8"),
+      );
+      expect(execution).toEqual({
+        agentSessionId: 1,
+        invocations: [
+          {
+            id: 1,
+            continuationId: 1,
+            createdAt: expect.any(String),
+            settledAt: expect.any(String),
+            settlementKind: "returned",
+            usage: null,
+            continuation: {
+              id: 1,
+              agentSessionId: 1,
+              harness: "pi",
+              provider: null,
+              model: "review-model",
+              thinking: "high",
+              transcriptPath: null,
+              unusableReason: "transcript_capture_unavailable",
+            },
+          },
+        ],
+      });
     }),
   );
 
@@ -415,15 +417,9 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "ReviewerProcessToolingFailed",
-          operationName: "run_reviewer_process",
-        },
-      });
-      expect(fixture.rounds).toEqual([
-        expect.objectContaining({ roundStatus: "failed", findings: [] }),
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(fixture.results).toEqual([
+        expect.objectContaining({ outcome: "failed", findings: [] }),
       ]);
     }),
   );
@@ -448,22 +444,15 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "ReviewerOutputContractFailed",
-          operationName: "decode_reviewer_output",
-          attempts: 2,
-        },
-      });
-      expect(fixture.rounds[0]).toMatchObject({ roundStatus: "failed", findings: [] });
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(fixture.results[0]).toMatchObject({ outcome: "failed", findings: [] });
     }),
   );
 
   it.scoped("settles an Agent Invocation when Artifact recording fails", () =>
     Effect.gen(function* () {
       const artifactsRoot = createTestWorkspace();
-      writeFileSync(join(artifactsRoot, "validation-1"), "blocks the artifact directory");
+      writeFileSync(join(artifactsRoot, "1"), "blocks the artifact directory");
       const fixture = acceptancePhaseFixture(
         { review: () => Effect.succeed(cleanReport) },
         {
@@ -473,16 +462,10 @@ describe("Acceptance Review phase", () => {
 
       const result = yield* fixture.run();
 
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "InfrastructureToolingFailed",
-          operationName: "record_reviewer_artifacts",
-        },
-      });
-      expect(fixture.rounds).toMatchObject([
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(fixture.results).toMatchObject([
         {
-          roundStatus: "failed",
+          outcome: "failed",
           findings: [],
           artifactRecords: [],
           toolingFailure: { operationName: "record_reviewer_artifacts" },
@@ -504,16 +487,10 @@ describe("Acceptance Review phase", () => {
       const result = yield* fixture.run();
 
       expect(review).toHaveBeenCalledOnce();
-      expect(result).toMatchObject({
-        findings: 0,
-        toolingFailure: {
-          _tag: "GitToolingFailed",
-          operationName: "verify_candidate_head",
-        },
-      });
-      expect(fixture.rounds).toMatchObject([
+      expect(result).toEqual({ outcome: "tooling_failed" });
+      expect(fixture.results).toMatchObject([
         {
-          roundStatus: "failed",
+          outcome: "failed",
           findings: [],
           artifactRecords: [],
           toolingFailure: { operationName: "verify_candidate_head" },
@@ -524,15 +501,17 @@ describe("Acceptance Review phase", () => {
 });
 
 type FixtureOptions = {
-  readonly validationRunId?: string;
+  readonly validationRunId?: number;
   readonly candidate?: typeof candidate;
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly policy?: RunAcceptanceReviewPhaseInput["policy"];
   readonly agentEnvironment?: RunAcceptanceReviewPhaseInput["agentEnvironment"];
   readonly reviewerExecutor?: RunAcceptanceReviewPhaseInput["reviewerExecutor"];
   readonly agentPersistence?: RunAcceptanceReviewPhaseInput["agentPersistence"];
   readonly getAgentSession?: RunAcceptanceReviewPhaseInput["getAgentSession"];
   readonly linkAgentInvocation?: RunAcceptanceReviewPhaseInput["linkAgentInvocation"];
-  readonly settleAgentInvocationRound?: RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"];
+  readonly settleAgentInvocationResult?: RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"];
+  readonly recordAcceptanceResult?: RunAcceptanceReviewPhaseInput["recordAcceptanceResult"];
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
   readonly sessionStorageRoot?: string;
@@ -553,10 +532,10 @@ const acceptancePhaseFixture = (
   runtime: ReviewerAgentRuntime<ReviewerOutput>,
   options: FixtureOptions = {},
 ) => {
-  const validationRunId = options.validationRunId ?? "validation-1";
+  const validationRunId = options.validationRunId ?? 1;
   const exactCandidate = options.candidate ?? candidate;
-  const rounds: Parameters<
-    NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationRound"]>
+  const results: Parameters<
+    NonNullable<RunAcceptanceReviewPhaseInput["settleAgentInvocationResult"]>
   >[0][] = [];
   let integrityCheck = 0;
   const commandExecutor = () =>
@@ -570,21 +549,31 @@ const acceptancePhaseFixture = (
   const agentPersistence = options.agentPersistence ?? defaultAgentPersistence();
   const getAgentSession = options.getAgentSession ?? (() => Effect.succeed(undefined));
   const linkAgentInvocation = options.linkAgentInvocation ?? (() => () => Effect.void);
-  const settleAgentInvocationRound =
-    options.settleAgentInvocationRound ??
-    ((round) => {
-      rounds.push(round);
+  const settleAgentInvocationResult =
+    options.settleAgentInvocationResult ??
+    ((result) => {
+      results.push(result);
       return () => Effect.void;
     });
+  const recordAcceptanceResult =
+    options.recordAcceptanceResult ??
+    ((result) =>
+      Effect.sync(() => {
+        results.push({
+          ...result,
+          phase: "acceptance_review",
+          producer: "acceptance",
+        });
+      }));
 
   return {
-    rounds,
+    results,
     run: () =>
       runAcceptanceReviewPhase({
         validationRunId,
         changeId: "change-1",
         candidate: exactCandidate,
-        acceptanceContext,
+        acceptanceContext: options.acceptanceContext ?? acceptanceContext,
         implementationDecisions: options.implementationDecisions ?? [],
         ...(options.blockerHistory === undefined ? {} : { blockerHistory: options.blockerHistory }),
         policy: phasePolicy,
@@ -599,16 +588,16 @@ const acceptancePhaseFixture = (
         agentPersistence,
         getAgentSession,
         linkAgentInvocation,
-        settleAgentInvocationRound,
+        settleAgentInvocationResult,
+        recordAcceptanceResult,
         allowedUntrackedFiles: [],
-        now,
         listArtifacts: () =>
           Effect.succeed((options.availableArtifactRefs ?? []).map((ref) => ({ ref }))),
         listPreviousCandidateReviewerFindings: () =>
           Effect.succeed(
             (options.previousFindings ?? []).map((previous, index) => ({
               id: `previous-${index + 1}`,
-              validationRunId: "validation-previous",
+              validationRunId: 123,
               phase: "acceptance_review" as const,
               producer: "acceptance",
               ...previous,

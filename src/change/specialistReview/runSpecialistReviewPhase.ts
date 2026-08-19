@@ -32,20 +32,23 @@ import {
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../../submission/submissionProgress.js";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import { runAgentReviewer } from "../validation/runAgentReviewer.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  type ValidationToolingFailure,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 
 export type RunSpecialistReviewPhaseInput = {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly changeId: string;
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -68,21 +71,21 @@ export type RunSpecialistReviewPhaseInput = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: SpecialistReviewPolicy;
   }) => AgentSessionSqlLink;
-  readonly settleAgentInvocationRound: NonNullable<
-    CandidateValidationExecutionPort["settleAgentInvocationRound"]
+  readonly settleAgentInvocationResult: NonNullable<
+    CandidateValidationExecutionPort["settleAgentInvocationResult"]
   >;
+  readonly recordSpecialistResult: CandidateValidationExecutionPort["recordSpecialistResult"];
   readonly allowedUntrackedFiles: readonly string[];
   readonly progress?: SubmitProgress;
-  readonly now: string;
   readonly listArtifacts: (
-    validationRunId: string,
+    validationRunId: number,
   ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly phase: "specialist_review";
     readonly producer: string;
   }) => Effect.Effect<
@@ -97,15 +100,8 @@ export type RunSpecialistReviewPhaseInput = {
   >;
 };
 
-export type SpecialistReviewerContinuityEvidence = ReviewerExecutionEvidence & {
-  readonly producer: string;
-};
-
 export type RunSpecialistReviewPhaseResult = {
-  readonly findings: 0 | 1;
-  readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-  readonly toolingFailures: readonly ValidationToolingFailure[];
-  readonly reviewerEvidence: readonly SpecialistReviewerContinuityEvidence[];
+  readonly outcome: CandidateValidationOutcome;
 };
 
 export const runSpecialistReviewPhase = (
@@ -116,12 +112,9 @@ export const runSpecialistReviewPhase = (
   FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
-    let hasFindings = false;
-    const persistedToolingFailures: ValidationToolingFailure[] = [];
-    const toolingFailures: ValidationToolingFailure[] = [];
-    const reviewerEvidence: SpecialistReviewerContinuityEvidence[] = [];
+    let outcome: CandidateValidationOutcome = "passed";
 
-    for (const [index, policy] of input.policies.entries()) {
+    for (const policy of input.policies) {
       const result = yield* runWithSubmitProgress({
         progress: input.progress,
         phase: {
@@ -129,56 +122,47 @@ export const runSpecialistReviewPhase = (
           id: policy.id,
           profile: progressProfile(policy.profile),
         },
-        run: runSpecialist(input, policy, index + 1),
-        outcome: (review) =>
-          review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
-        details: (review) => ({
-          ...(review.toolingFailure !== undefined
+        run: runSpecialist(input, policy),
+        outcome: (review) => (review.outcome === "passed" ? "passed" : "failed"),
+        details: (review) =>
+          review.outcome === "tooling_failed"
             ? { reason: "tooling" as const }
-            : review.hasFindings
+            : review.outcome === "blocked"
               ? { reason: "findings" as const }
-              : {}),
-          ...(review.reviewerEvidence?.continuity === undefined ||
-          review.reviewerEvidence.reviewCalls === undefined
-            ? {}
-            : {
-                continuity: review.reviewerEvidence.continuity,
-                reviewCalls: review.reviewerEvidence.reviewCalls,
-              }),
-        }),
+              : undefined,
       });
-      if (result.hasFindings) hasFindings = true;
-      if (result.toolingFailure !== undefined) {
-        toolingFailures.push(result.toolingFailure);
-        if (result.toolingFailurePersisted) persistedToolingFailures.push(result.toolingFailure);
-      }
-      if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
+      if (result.outcome === "tooling_failed") outcome = "tooling_failed";
+      else if (result.outcome === "blocked" && outcome === "passed") outcome = "blocked";
     }
 
-    return {
-      findings: hasFindings ? 1 : 0,
-      ...(persistedToolingFailures.length === 0 ? {} : { persistedToolingFailures }),
-      toolingFailures,
-      reviewerEvidence,
-    };
+    return { outcome };
   });
 
 const runSpecialist = (
   input: RunSpecialistReviewPhaseInput,
   policy: SpecialistReviewPolicy,
-  roundNumber: number,
 ): Effect.Effect<
-  {
-    readonly hasFindings: boolean;
-    readonly toolingFailure?: ValidationToolingFailure;
-    readonly toolingFailurePersisted?: boolean;
-    readonly reviewerEvidence?: SpecialistReviewerContinuityEvidence;
-  },
+  RunSpecialistReviewPhaseResult,
   ValidationToolingFailure | RepositoryStorageError,
   FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
-    yield* verifyIntegrity(input);
+    const integrity = yield* Effect.either(verifyIntegrity(input));
+    if (integrity._tag === "Left") {
+      yield* input.recordSpecialistResult({
+        validationRunId: input.validationRunId,
+        producer: policy.id,
+        outcome: "failed",
+        findings: [],
+        artifactRecords: [],
+        toolingFailure: {
+          ...validationToolingFailureRecord(integrity.left),
+          validationRunId: input.validationRunId,
+        },
+      });
+      return { outcome: "tooling_failed" as const };
+    }
+
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );
@@ -222,7 +206,6 @@ const runSpecialist = (
       validationRunId: input.validationRunId,
       phase: validationPhase.specialistReview,
       producer: policy.id,
-      roundNumber,
       reviewer: policy.id,
       configuration: agentConfiguration(policy.profile),
       agentPersistence: input.agentPersistence,
@@ -274,7 +257,6 @@ const runSpecialist = (
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       allowedUntrackedFiles: input.allowedUntrackedFiles,
       expectedHeadSha: input.candidate.headSha,
-      now: input.now,
       makeFindings: (result) =>
         result.ok
           ? result.report.findings.map((finding, findingIndex) => ({
@@ -285,31 +267,9 @@ const runSpecialist = (
               ...finding,
             }))
           : [],
-      settleAgentInvocationRound: input.settleAgentInvocationRound,
+      settleAgentInvocationResult: input.settleAgentInvocationResult,
     });
-    const specialistEvidence: SpecialistReviewerContinuityEvidence = {
-      producer: policy.id,
-      ...execution.reviewerEvidence,
-    };
-    if (execution.toolingFailure !== undefined) {
-      return {
-        hasFindings: false,
-        toolingFailure: execution.toolingFailure,
-        toolingFailurePersisted: true,
-        reviewerEvidence: specialistEvidence,
-      };
-    }
-    if (!execution.result.ok) {
-      return {
-        hasFindings: false,
-        toolingFailure: execution.result.failure,
-        reviewerEvidence: specialistEvidence,
-      };
-    }
-    return {
-      hasFindings: execution.result.report.findings.length > 0,
-      reviewerEvidence: specialistEvidence,
-    };
+    return execution;
   });
 
 const agentConfiguration = (
@@ -317,14 +277,14 @@ const agentConfiguration = (
 ): AgentSessionConfiguration => ({
   harness: "pi",
   provider: null,
-  model: profile.profile.runtimeConfig?.model ?? "",
-  thinking: profile.profile.runtimeConfig?.thinking ?? null,
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? null,
 });
 
 const progressProfile = (profile: SpecialistReviewPolicy["profile"]): SubmitProgressProfile => ({
   name: profile.agentProfile,
-  model: profile.profile.runtimeConfig?.model ?? "unknown",
-  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+  model: profile.profile.runtimeConfig.model,
+  thinking: profile.profile.runtimeConfig.thinking ?? "default",
 });
 
 const verifyIntegrity = (

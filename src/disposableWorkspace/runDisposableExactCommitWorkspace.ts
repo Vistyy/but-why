@@ -7,10 +7,10 @@ import type {
 } from "./disposableWorkspace.js";
 
 export type RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error> = {
-  readonly repoRoot: string;
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
   readonly workspaceId: string;
   readonly commitSha: string;
-  readonly copyFiles: readonly string[];
   readonly recordWorkspaceCleanup?: (
     cleanupResult: DisposableWorkspaceCleanupResult,
   ) => Effect.Effect<void, Error>;

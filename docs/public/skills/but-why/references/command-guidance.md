@@ -1,11 +1,9 @@
 # But Why command guidance
 
-Resolve one But Why command prefix before you run a But Why command.
-Use `just by` in the But Why source repository.
-After But Why is published, use `pnpx but-why` or `npx -y but-why` from the published package.
-Do not use the published-package prefixes for an unreleased Candidate.
-Let `<but-why>` represent the resolved prefix in packaged instructions.
-Use that prefix for every But Why command in the session.
+Use the globally installed built `by` executable for every But Why command.
+Do not run But Why source or Candidate package artifacts against live Shared Repository State.
+Candidate package tests must use disposable repositories with independent Git Common Directories, user configuration, and SQLite state.
+Let `<but-why>` represent `by` in packaged instructions.
 
 Every But Why command returns one compact JSON document on stdout.
 Decode the JSON before using result fields in a program.

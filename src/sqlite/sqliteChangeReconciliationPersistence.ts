@@ -4,7 +4,6 @@ import { publicChangeId } from "../change/changeId.js";
 import type { ChangeReconciliationPort } from "../change/changePorts.js";
 import { RepositorySql } from "./repositorySql.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
-import { decodeStoredString } from "./sqliteChangeValueDecoders.js";
 import { completeMergedChange as completeChangeOnly } from "./sqliteCompleteMergedChangeStorage.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
@@ -43,6 +42,7 @@ export const openSqliteChangeReconciliationPort = () =>
         ),
     }),
   );
+
 const listReconciliationChanges = (
   sql: SqlClient.SqlClient,
   commonDirectory: string,
@@ -50,18 +50,22 @@ const listReconciliationChanges = (
 ) =>
   Effect.gen(function* () {
     const operationName = "list Changes for reconciliation";
-    const rows = yield* sql.unsafe<StoredTerminalChangeRow & { readonly createdAt: string }>(
-      `SELECT ${terminalChangeSelectionColumns}, created_at AS createdAt FROM changes
-       WHERE repository_common_directory = ?
-         AND ((state = 'open' AND publication_pr_number IS NOT NULL)
-           OR (state = 'closed' AND cleanup_state = 'pending'))`,
+    const rows = yield* sql.unsafe<StoredTerminalChangeRow>(
+      `SELECT ${terminalChangeSelectionColumns} FROM changes
+       WHERE (SELECT common_directory FROM shared_state_identity WHERE id = 1) = ?
+         AND ((close_reason IS NULL AND EXISTS (
+                SELECT 1 FROM github_publications
+                WHERE github_publications.change_id = changes.id
+                  AND github_publications.pull_request_number IS NOT NULL
+              ))
+           OR (close_reason IS NOT NULL AND cleanup_pending = 1))
+       ORDER BY changes.id`,
       [commonDirectory],
     );
-    const selected = yield* Effect.forEach(rows, (row) =>
+    return yield* Effect.forEach(rows, (row) =>
       Effect.gen(function* () {
-        const changeId = publicChangeId(idPrefix, row.id);
         const change = yield* decodePersisted(operationName, () =>
-          decodeTerminalChange(row, changeId, idPrefix),
+          decodeTerminalChange(row, publicChangeId(idPrefix, row.id), idPrefix),
         );
         yield* validateChangePublicationRelationships(
           sql,
@@ -70,17 +74,7 @@ const listReconciliationChanges = (
           operationName,
           idPrefix,
         );
-        const createdAt = decodeStoredString(row.createdAt, "Change creation time");
-        return { change, createdAt };
+        return change;
       }),
     );
-    return selected
-      .sort(
-        (left, right) =>
-          compareStoredStrings(left.createdAt, right.createdAt) ||
-          compareStoredStrings(left.change.id, right.change.id),
-      )
-      .map(({ change }) => change);
   });
-const compareStoredStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;

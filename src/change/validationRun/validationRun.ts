@@ -7,6 +7,13 @@ export const validationPhase = {
 
 export type ValidationPhase = (typeof validationPhase)[keyof typeof validationPhase];
 
+export const isValidationRunEligibleForCurrentChangeAuthority = (input: {
+  readonly hasAcceptanceContext: boolean;
+  readonly runHighestBlockerId: number | null;
+  readonly currentHighestBlockerId: number | null;
+}): boolean =>
+  input.hasAcceptanceContext || input.runHighestBlockerId === input.currentHighestBlockerId;
+
 export type GitHubPrTarget = {
   readonly owner: string;
   readonly repo: string;
@@ -16,8 +23,7 @@ export type GitHubPrTarget = {
 };
 
 export type ValidationRunFindingRecord = {
-  readonly id: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly title: string;
@@ -25,18 +31,15 @@ export type ValidationRunFindingRecord = {
   readonly evidence: string;
   readonly files: readonly string[];
   readonly artifactRefs: readonly string[];
-  readonly createdAt: string;
-  readonly updatedAt: string;
 };
 
 export type ValidationRunArtifactRecord = {
   readonly ref: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly path: string;
-  readonly originalBytes?: number;
-  readonly storedBytes?: number;
-  readonly truncated?: boolean;
-  readonly createdAt: string;
+  readonly originalBytes: number;
+  readonly storedBytes: number;
+  readonly truncated: boolean;
 };

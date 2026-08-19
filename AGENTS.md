@@ -3,7 +3,8 @@
 - But Why validates submitted code against approved human intent.
 - But Why is task-based.
 - `by` is an agent-first, non-interactive CLI.
-- This repository is unreleased.
+- The globally installed built `by` executable is the only CLI permitted to open or mutate live Shared Repository State.
+- Candidate source and package artifacts may run only in disposable test repositories with independent Git Common Directories and state.
 - Shared Repository State uses immutable ordered Effect SQL migrations beginning with `0001_baseline`.
 - SQLite Tasks are the source of truth for active work and accepted implementation intent.
 - Use current domain terms in code, storage, and documentation.
@@ -39,19 +40,22 @@
 - `src/change/packageAssetPath.ts`: package-asset resolution.
 - `src/change/candidate/`: Candidate domain records.
 - `src/change/candidateCapture/`: Candidate capture interfaces and Git Adapters.
-- `src/change/candidateValidation/`: Candidate validation policy, execution, inspection, and composition.
+- `src/change/changePolicy.ts`: immutable Change Policy representation, pure definition resolution, and persistence codecs.
+- `src/change/composition/resolveChangePolicy.ts`: complete Change Policy resolution from exact-commit repository inputs, Global Config, and installed resources.
+- `src/change/candidateValidation/`: Candidate validation execution, inspection, and composition.
 - `src/change/validation/`: Change Validation Gate and validation Adapters.
 - `src/change/validationRun/`: Validation Run domain records and evidence.
-- `src/agent/reviewerSession/`: shared Reviewer Session execution, compatibility, storage paths, and transcript discovery.
+- `src/agent/agentSession/`: shared Agent Session execution, continuation and invocation records, transcript paths, and token evidence.
 - `src/change/publication/`: Candidate publication policy and Git Adapter.
-- `src/change/submit/`: Change submission configuration and errors.
+- `src/change/submitChange.ts`: Change submission orchestration.
+- `src/change/reviewerResolutionErrors.ts`: Change reviewer resolution errors.
 - `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/contracts/`: configuration, output, and shared error contracts.
 - `src/repositoryRuntime/`: Local Repository resolution, initialization coordination, and the Shared Repository State open lifecycle.
 - `src/init/`: initialization-specific Git and Repo Config Adapters.
 - `src/output/`: structured output codecs and serializers.
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
-- `src/disposableWorkspace/`: project-owned native Git Snapshot Workspace creation, identity verification, Effect command execution, interruption handling, and cleanup.
+- `src/disposableWorkspace/`: shared exact-commit disposable Git workspace creation, identity verification, Effect command execution, interruption handling, and cleanup for Task Review and Change Validation.
 - `src/sqlite/`: SQLite persistence Adapters.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
 
@@ -67,4 +71,5 @@ Do not merge, rebase, or reset automatically.
 
 Run `just` to list available recipes.
 Use Just recipes for repository workflows.
-Use `just by ...` only when developing But Why from this source checkout.
+Use the globally installed `by` executable for But Why commands.
+The source repository does not provide a `just by` route.

@@ -16,13 +16,14 @@ import type {
   SnapshotWorkspaceOperationName,
   SnapshotWorkspaceToolingError,
 } from "./snapshotWorkspace.js";
+import { snapshotWorkspaceId } from "./snapshotWorkspacePath.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type CreateSnapshotWorkspaceInput = {
-  readonly repoRoot: string;
-  readonly validationRunId: string;
+  readonly repositoryRoot: string;
+  readonly repositoryCommonDirectory: string;
+  readonly validationRunId: number;
   readonly submittedSha: string;
-  readonly copyFiles: readonly string[];
   readonly recordWorkspaceCleanup?: (
     cleanupResult: SnapshotWorkspaceCleanupResult,
   ) => Effect.Effect<void, RepositoryStorageError>;
@@ -90,10 +91,10 @@ const createSnapshotWorkspaceAdapter = (
       ActiveSnapshotWorkspaceResult,
       ValidationToolingFailure | RepositoryStorageError
     > = {
-      repoRoot: input.repoRoot,
-      workspaceId: input.validationRunId,
+      repositoryRoot: input.repositoryRoot,
+      repositoryCommonDirectory: input.repositoryCommonDirectory,
+      workspaceId: snapshotWorkspaceId(input.validationRunId),
       commitSha: input.submittedSha,
-      copyFiles: input.copyFiles,
       recordWorkspaceCleanup: (cleanupResult) =>
         Effect.sync(() => observeCleanup(cleanupResult)).pipe(
           Effect.zipRight(input.recordWorkspaceCleanup?.(cleanupResult) ?? Effect.void),
@@ -101,7 +102,11 @@ const createSnapshotWorkspaceAdapter = (
       ...(input.runInWorkspace === undefined ? {} : { runInWorkspace: input.runInWorkspace }),
     };
     const result = yield* runDisposableExactCommitWorkspace(workspaceInput);
-    if (!result.ok) return { ok: false, toolingError: validationError(result.toolingError) };
+    if (!result.ok)
+      return {
+        ok: false,
+        toolingError: validationError(result.toolingError, input.validationRunId),
+      };
     return {
       ok: true,
       ...(result.workspaceResult === undefined
@@ -110,9 +115,12 @@ const createSnapshotWorkspaceAdapter = (
     };
   });
 
-const validationError = (error: DisposableWorkspaceError): SnapshotWorkspaceToolingError => ({
+const validationError = (
+  error: DisposableWorkspaceError,
+  validationRunId: number,
+): SnapshotWorkspaceToolingError => ({
   operationName: snapshotWorkspaceOperation(error.operationName),
-  validationRunId: error.workspaceId,
+  validationRunId,
   expectedCommitSha: error.commitSha,
   worktreePath: error.worktreePath,
   errorMessage: error.errorMessage,
@@ -127,8 +135,6 @@ const snapshotWorkspaceOperation = (
       return "create_snapshot_workspace";
     case "cleanup_disposable_workspace":
       return "cleanup_snapshot_workspace";
-    case "copy_allowlisted_file":
-      return "copy_allowlisted_file";
   }
 };
 

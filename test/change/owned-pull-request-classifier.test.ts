@@ -10,8 +10,8 @@ import {
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 
 const publication: OwnedPublication = {
-  candidateId: "candidate-1",
-  validationRunId: "run-1",
+  candidateId: 1,
+  validationRunId: 1,
   target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
   headBranch: "change-1",
   expectedHeadSha: "published-head",
@@ -112,27 +112,28 @@ describe("owned pull request classifier", () => {
 });
 
 describe("owned pull request observation", () => {
-  const change = (publication: ChangePublication | null): ChangeRecord =>
-    ({
-      id: "change-1",
-      repositoryCommonDirectory: "/repo/.git",
-      branchRef: "refs/heads/change-1",
-      baseRef: "refs/remotes/origin/main",
-      baseRemoteUrl: "https://github.com/acme/repo.git",
-      startingCommit: null,
-      worktreePath: "/repo",
-      acceptanceContext: null,
+  const change = (publication: ChangePublication | null): ChangeRecord => ({
+    id: "change-1",
+    repositoryCommonDirectory: "/repo/.git",
+    branchRef: "refs/heads/change-1",
+    baseRef: "refs/remotes/origin/main",
+    baseRemoteUrl: "https://github.com/acme/repo.git",
+    worktreePath: "/repo",
+    acceptanceContext: null,
+    policy: {
+      reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
       prepare: null,
-      prepareFailure: null,
-      publication,
-      cleanup: { state: "complete", blockingReason: null },
-      state: "open",
-      closeReason: null,
-      cancelReason: null,
-      createdAt: "2026-07-24T10:00:00.000Z",
-      updatedAt: "2026-07-24T10:00:00.000Z",
-      closedAt: null,
-    }) as ChangeRecord;
+      checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+    },
+    prepareFailure: null,
+    publication,
+    implementationDecisions: [],
+    activeBlocker: null,
+    cleanup: { state: "complete", blockingReason: null },
+    state: "open",
+    closeReason: null,
+    cancelReason: null,
+  });
 
   it("reports not owned only when no owned pull request facts exist", () => {
     expect(

@@ -8,20 +8,6 @@ import type { StructuredObject } from "../../src/output/structured.js";
 import { structuredValue } from "../../src/output/structuredValue.js";
 
 const changeId = "change-1";
-const reviewerEvidence = {
-  continuity: "fresh",
-  identityFingerprint: "acceptance-fingerprint",
-  durationMs: 10,
-  reviewCalls: 1,
-  invocationUsage: [null],
-} as const;
-const specialistReviewerEvidence = [
-  {
-    ...reviewerEvidence,
-    producer: "specialist:security",
-    identityFingerprint: "specialist-fingerprint",
-  },
-] as const;
 
 const change: ChangeRecord = {
   id: changeId,
@@ -29,10 +15,13 @@ const change: ChangeRecord = {
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
-  startingCommit: "starting",
   worktreePath: "/repo-worktrees/change-1",
   acceptanceContext: null,
-  prepare: null,
+  policy: {
+    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    prepare: null,
+    checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+  },
   prepareFailure: null,
   publication: null,
   implementationDecisions: [],
@@ -41,9 +30,6 @@ const change: ChangeRecord = {
   state: "closed",
   closeReason: "completed",
   cancelReason: null,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  closedAt: "2026-01-01T00:00:00.000Z",
 };
 
 const errorResult = (
@@ -118,24 +104,20 @@ const cases = {
       ok: true,
       status: "published",
       changeId,
-      candidateId: "candidate-1",
-      validationRunId: "run-1",
+      candidateId: 1,
+      validationRunId: 1,
       created: true,
       pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: {
       exitCode: 0,
       stdout: {
         changeId,
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
         status: "published",
         created: true,
         pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        reviewerEvidence,
-        specialistReviewerEvidence,
       },
     },
   },
@@ -148,11 +130,9 @@ const cases = {
       ok: false,
       code: "validation_findings",
       changeId,
-      candidateId: "candidate-1",
-      validationRunId: "run-1",
+      candidateId: 1,
+      validationRunId: 1,
       findings: [],
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: errorResult(
       "validation_findings",
@@ -160,11 +140,9 @@ const cases = {
       ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
       {
         changeId,
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
         findings: [],
-        reviewerEvidence,
-        specialistReviewerEvidence,
         recovery: {
           authority: "change_submit",
           changeId,
@@ -181,11 +159,9 @@ const cases = {
       ok: false,
       code: "validation_tooling_failed",
       changeId,
-      candidateId: "candidate-1",
-      validationRunId: "run-1",
+      candidateId: 1,
+      validationRunId: 1,
       toolingFailures: [],
-      reviewerEvidence,
-      specialistReviewerEvidence,
     },
     expected: errorResult(
       "validation_tooling_failed",
@@ -193,11 +169,9 @@ const cases = {
       ["Fix the validation tooling failure, then retry Change Submit."],
       {
         changeId,
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
         toolingFailures: [],
-        reviewerEvidence,
-        specialistReviewerEvidence,
       },
     ),
   },
@@ -211,14 +185,14 @@ const cases = {
     ),
   },
   active_validation_run: {
-    result: { ok: false, code: "active_validation_run", changeId, validationRunId: "run-1" },
+    result: { ok: false, code: "active_validation_run", changeId, validationRunId: 1 },
     expected: errorResult(
       "active_validation_run",
-      "Validation Run run-1 remains active for this Change.",
+      "Validation Run 1 remains active for this Change.",
       [
-        "After stopping every process from the run, execute `by validation-run abandon run-1 --reason <reason>`.",
+        "After stopping every process from the run, execute `by validation-run abandon 1 --reason <reason>`.",
       ],
-      { changeId, validationRunId: "run-1" },
+      { changeId, validationRunId: 1 },
     ),
   },
   change_not_found: {
@@ -339,7 +313,8 @@ const cases = {
   validation_policy_invalid: {
     result: { ok: false, code: "validation_policy_invalid", message: "Policy is invalid." },
     expected: errorResult("validation_policy_invalid", "Policy is invalid.", [
-      "Fix Repo Config or Global Config, then retry Change Submit.",
+      "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
+      "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
     ]),
   },
   publication_remote_missing: {

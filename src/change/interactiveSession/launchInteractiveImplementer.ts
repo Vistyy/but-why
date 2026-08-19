@@ -59,7 +59,6 @@ export const launchInteractiveImplementer = (input: {
           {
             changeId: change.id,
             hostSessionName: hostSessionNameForChange(change),
-            agentSessionName: agentSessionNameForChange(change),
             repositoryPath,
             worktreePath: change.worktreePath,
             systemPromptPaths: buildImplementerSystemPromptPaths(),
@@ -101,8 +100,3 @@ export const launchInteractiveImplementer = (input: {
   });
 
 const hostSessionNameForChange = (change: ChangeStartRecord): string => change.id.toLowerCase();
-
-const agentSessionNameForChange = (change: ChangeStartRecord): string =>
-  change.acceptanceContext === null
-    ? `Change ${change.id}`
-    : `${change.id} ${change.acceptanceContext.title}`;

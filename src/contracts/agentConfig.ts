@@ -9,6 +9,16 @@ export const nonBlankStringSchema = Schema.String.pipe(
 
 export const configNameSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9._-]*$/u));
 
+export const isPackageAgentResource = (source: string): boolean =>
+  /^(?:npm|git|github|https?|ssh):/u.test(source);
+
+export const packageAgentResourceSchema = nonBlankStringSchema.pipe(
+  Schema.filter(isPackageAgentResource, {
+    identifier: "package Agent resource",
+    message: () => "Expected a package Agent resource URI",
+  }),
+);
+
 const thinkingSchema = Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh");
 
 export const agentProfileReferenceSchema = Schema.Struct({

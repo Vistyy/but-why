@@ -1,115 +1,70 @@
-import { randomUUID } from "node:crypto";
 import * as FileSystem from "@effect/platform/FileSystem";
 import { Context, Effect, Layer } from "effect";
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type {
-  AgentSessionPersistence,
-  AgentSessionSqlLink,
-} from "../../agent/agentSession/agentSession.js";
+import type { AgentSessionPersistence } from "../../agent/agentSession/agentSession.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../../submission/submissionProgress.js";
-import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
-import {
-  runSpecialistReviewPhase,
-  type SpecialistReviewerContinuityEvidence,
-} from "../specialistReview/runSpecialistReviewPhase.js";
-import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
-import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
+import type { ChangeAgentSessionPort } from "../changePorts.js";
+import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { CandidateValidationExecutionPort } from "../validation/changeValidationPorts.js";
 import type { CreateSnapshotWorkspace } from "../validation/createSnapshotWorkspace.js";
-import { runCheckPhase } from "../validation/runCheckRound.js";
+import { runCheckPhase } from "../validation/runCheckPhase.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import type { ActiveSnapshotWorkspace } from "../validation/snapshotWorkspace.js";
-import { expectedSnapshotWorkspacePath } from "../validation/snapshotWorkspacePath.js";
 import {
   SnapshotWorkspaceSetupFailed,
   type ValidationToolingFailure,
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
-import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type {
   CandidateValidationAuthority,
   CandidateValidationOutcome,
 } from "./candidateValidationRunStore.js";
 import { runCandidateValidationGate } from "./runCandidateValidationGate.js";
 
-export type CandidateValidationPolicy = {
-  readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly prepare?: SubmitPrepareConfig;
-  readonly checks: readonly SubmitCheckConfig[];
-  readonly copyFiles: readonly string[];
-  readonly specialistReviews: readonly SpecialistReviewPolicy[];
-};
-
-export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPolicy & {
-  readonly acceptanceReview: AcceptanceReviewPolicy;
-};
-
 export type ValidateCandidateInput = {
-  readonly changeId: string;
-  readonly candidateId: string;
+  readonly candidateId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
-  readonly resourceRoot?: string;
-  readonly policy: CandidateValidationPolicy;
   readonly progress?: SubmitProgress;
-  readonly now: string;
 };
 
-type ValidateAcceptanceContextCandidateInput = {
-  readonly changeId: string;
-  readonly candidateId: string;
-  readonly changeBaseSha: string;
-  readonly headSha: string;
-  readonly resourceRoot?: string;
-  readonly progress?: SubmitProgress;
-  readonly policy: AcceptanceContextCandidateValidationPolicy;
-  readonly now: string;
-};
+type ValidateAcceptanceContextCandidateInput = ValidateCandidateInput;
 
 type ValidateCandidateResult =
   | {
       readonly ok: true;
       readonly reused: boolean;
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly outcome: CandidateValidationOutcome;
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
       readonly code: "active_validation_run";
-      readonly validationRunId: string;
+      readonly validationRunId: number;
     }
   | { readonly ok: false; readonly code: "blocked" }
   | {
       readonly ok: false;
-      readonly validationRunId: string;
+      readonly validationRunId: number;
       readonly outcome: "tooling_failed";
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     };
 
 type CandidateValidationPathsValue = {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: (
     changeId: string,
     producer: string,
   ) => Effect.Effect<number | undefined, RepositoryStorageError>;
-  readonly linkAgentInvocation: (input: {
-    readonly changeId: string;
-    readonly producer: string;
-    readonly validationRunId: string;
-    readonly phase: string;
-  }) => AgentSessionSqlLink;
+  readonly linkAgentInvocation: ChangeAgentSessionPort["linkAgentInvocation"];
 };
 
 export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<
@@ -146,10 +101,10 @@ export type CandidateValidationService = {
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly listFindings: CandidateValidationExecutionPort["listFindings"];
   readonly listToolingFailures: CandidateValidationExecutionPort["listToolingFailures"];
-  readonly listRounds: (validationRunId: string) => Effect.Effect<
+  readonly listPhaseResults: (validationRunId: number) => Effect.Effect<
     readonly {
       readonly producer: string;
-      readonly status: "passed" | "failed";
+      readonly outcome: "passed" | "failed";
     }[],
     RepositoryStorageError
   >;
@@ -179,13 +134,14 @@ export const CandidateValidationLive = Layer.effect(
 );
 
 const makeCandidateValidation = (dependencies: {
-  readonly localRepositoryMainCheckoutRoot: string;
+  readonly localRepositoryRoot: string;
+  readonly localRepositoryCommonDirectory: string;
   readonly artifactsRoot: string;
   readonly fileSystem: FileSystem.FileSystem;
   readonly persistence: CandidateValidationExecutionPort;
   readonly reviewerExecution: CandidateReviewerExecutionValue;
   readonly createSnapshotWorkspace: CreateSnapshotWorkspace;
-  readonly reviewerSessionsRoot: string;
+  readonly agentSessionsRoot: string;
   readonly agentPersistence: AgentSessionPersistence;
   readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
   readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
@@ -193,20 +149,10 @@ const makeCandidateValidation = (dependencies: {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   ) {
-    const validationRunId = randomUUID();
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
-      policy: input.policy,
-      validationRunId,
-      workspaceSetup: {
-        worktreePath: expectedSnapshotWorkspacePath(
-          dependencies.localRepositoryMainCheckoutRoot,
-          validationRunId,
-        ),
-      },
-      now: input.now,
     });
     if ("blocked" in started) {
       return { ok: false, code: "blocked" } as const;
@@ -218,17 +164,27 @@ const makeCandidateValidation = (dependencies: {
         validationRunId: started.validationRunId,
       } as const;
     }
-    if (started.reused) return { ok: true, ...started } as const;
+    if (started.reused) {
+      return {
+        ok: true,
+        reused: true,
+        validationRunId: started.validationRunId,
+        outcome: started.outcome,
+      } as const;
+    }
 
     const workspace = yield* dependencies.createSnapshotWorkspace({
-      repoRoot: dependencies.localRepositoryMainCheckoutRoot,
+      repositoryRoot: dependencies.localRepositoryRoot,
+      repositoryCommonDirectory: dependencies.localRepositoryCommonDirectory,
       validationRunId: started.validationRunId,
       submittedSha: started.authority.candidate.headSha,
-      copyFiles: started.authority.policy.copyFiles,
       recordWorkspaceCleanup: (cleanupResult) =>
         dependencies.persistence.recordWorkspaceCleanup({
           validationRunId: started.validationRunId,
           cleanupWorkspace: cleanupResult.workspace,
+          ...(cleanupResult.errorMessage === undefined
+            ? {}
+            : { cleanupBlockingReason: cleanupResult.errorMessage }),
         }),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(
@@ -261,7 +217,6 @@ const makeCandidateValidation = (dependencies: {
       yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...failure,
-        now: input.now,
       });
       if (cleanupResult.workspace === "failed") {
         return {
@@ -273,7 +228,6 @@ const makeCandidateValidation = (dependencies: {
       yield* dependencies.persistence.complete({
         validationRunId: started.validationRunId,
         outcome: "tooling_failed",
-        now: input.now,
       });
       return {
         ok: false,
@@ -282,51 +236,23 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    const activeResult = workspace.activeWorkspaceResult;
-    const toolingFailures =
-      (
-        activeResult as
-          | { readonly toolingFailures?: readonly ValidationToolingFailure[] }
-          | undefined
-      )?.toolingFailures ?? [];
-    const persistedToolingFailures = activeResult?.persistedToolingFailures ?? [];
-    for (const toolingFailure of toolingFailures) {
-      if (persistedToolingFailures.includes(toolingFailure)) continue;
-      yield* dependencies.persistence.recordToolingFailure({
-        validationRunId: started.validationRunId,
-        ...validationToolingFailureRecord(toolingFailure),
-        now: input.now,
-      });
-    }
-    const outcome: CandidateValidationOutcome = activeResult?.outcome ?? "passed";
+    const outcome: CandidateValidationOutcome =
+      workspace.activeWorkspaceResult?.outcome ?? "passed";
     yield* dependencies.persistence.complete({
       validationRunId: started.validationRunId,
       outcome,
-      now: input.now,
     });
     return outcome === "tooling_failed"
       ? ({
           ok: false,
           validationRunId: started.validationRunId,
           outcome,
-          ...(activeResult?.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: activeResult.reviewerEvidence }),
-          ...(activeResult?.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const)
       : ({
           ok: true,
           reused: false,
           validationRunId: started.validationRunId,
           outcome,
-          ...(activeResult?.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: activeResult.reviewerEvidence }),
-          ...(activeResult?.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const);
   });
 
@@ -335,9 +261,9 @@ const makeCandidateValidation = (dependencies: {
     validateAcceptanceContextCandidate: (input) => validate(input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
-    listRounds: (validationRunId) =>
-      Effect.map(dependencies.persistence.listRounds(validationRunId), (rounds) =>
-        rounds.map(({ producer, status }) => ({ producer, status })),
+    listPhaseResults: (validationRunId) =>
+      Effect.map(dependencies.persistence.listPhaseResults(validationRunId), (results) =>
+        results.map(({ producer, outcome }) => ({ producer, outcome })),
       ),
   };
 };
@@ -348,54 +274,48 @@ const runCandidatePhases = (
     readonly fileSystem: FileSystem.FileSystem;
     readonly persistence: CandidateValidationExecutionPort;
     readonly reviewerExecution: CandidateReviewerExecutionValue;
-    readonly reviewerSessionsRoot: string;
+    readonly agentSessionsRoot: string;
     readonly agentPersistence: AgentSessionPersistence;
     readonly getAgentSession: CandidateValidationPathsValue["getAgentSession"];
     readonly linkAgentInvocation: CandidateValidationPathsValue["linkAgentInvocation"];
   },
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   authority: CandidateValidationAuthority,
-  validationRunId: string,
+  validationRunId: number,
   activeWorkspace: ActiveSnapshotWorkspace,
 ): Effect.Effect<
-  {
-    readonly outcome: CandidateValidationOutcome;
-    readonly persistedToolingFailures?: readonly ValidationToolingFailure[];
-    readonly reviewerEvidence?: ReviewerExecutionEvidence;
-    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
-    readonly toolingFailures: readonly ValidationToolingFailure[];
-  },
+  { readonly outcome: CandidateValidationOutcome },
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
-    const policy = authority.policy;
-    const agentEnvironment = policy.agentEnvironment;
+    const changePolicy = authority.changePolicy;
+    const agentEnvironment = changePolicy.reviewerConfiguration.agentEnvironment;
     const resourceRoot = activeWorkspace.worktreePath;
-    const prepare = policy.prepare;
+    const prepare = changePolicy.prepare;
     const acceptanceContext =
-      policy.acceptanceContext === undefined
+      authority.validationInput.acceptanceContext === undefined
         ? undefined
         : {
-            version: policy.acceptanceContext.version,
-            title: policy.acceptanceContext.title,
-            description: policy.acceptanceContext.description,
-            ...(policy.acceptanceContext.comments === undefined
+            version: authority.validationInput.acceptanceContext.version,
+            title: authority.validationInput.acceptanceContext.title,
+            description: authority.validationInput.acceptanceContext.description,
+            ...(authority.validationInput.acceptanceContext.comments === undefined
               ? {}
-              : { comments: [...policy.acceptanceContext.comments] }),
-            ...(policy.acceptanceContext.resolutions === undefined
+              : { comments: [...authority.validationInput.acceptanceContext.comments] }),
+            ...(authority.validationInput.acceptanceContext.resolutions === undefined
               ? {}
-              : { resolutions: [...policy.acceptanceContext.resolutions] }),
+              : { resolutions: [...authority.validationInput.acceptanceContext.resolutions] }),
           };
-    const acceptanceReview = policy.acceptanceReview;
+    const acceptanceReview = changePolicy.reviewerConfiguration.acceptanceReview;
     const sessionOptions = {
-      sessionStorageRoot: dependencies.reviewerSessionsRoot,
+      sessionStorageRoot: dependencies.agentSessionsRoot,
       agentPersistence: dependencies.agentPersistence,
       getAgentSession: dependencies.getAgentSession,
       linkAgentInvocation: dependencies.linkAgentInvocation,
-      settleAgentInvocationRound: dependencies.persistence.settleAgentInvocationRound,
+      settleAgentInvocationResult: dependencies.persistence.settleAgentInvocationResult,
     };
     return yield* runCandidateValidationGate({
-      ...(prepare === undefined
+      ...(prepare === null
         ? {}
         : {
             prepare: () =>
@@ -407,28 +327,26 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 expectedHeadSha: authority.candidate.headSha,
-                allowedUntrackedFiles: policy.copyFiles,
+                allowedUntrackedFiles: [],
                 ...(input.progress === undefined ? {} : { progress: input.progress }),
-                now: input.now,
-                recordPrepareRound: dependencies.persistence.recordPrepareRound,
+                recordPrepareResult: dependencies.persistence.recordPrepareResult,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
       checks: () =>
         runCheckPhase({
           validationRunId,
-          checks: policy.checks,
+          checks: changePolicy.checks,
           commandExecutor: activeWorkspace.commandExecutor,
           artifactsRoot: dependencies.artifactsRoot,
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           expectedHeadSha: authority.candidate.headSha,
-          allowedUntrackedFiles: policy.copyFiles,
+          allowedUntrackedFiles: [],
           ...(input.progress === undefined ? {} : { progress: input.progress }),
-          now: input.now,
           continueAfterFinding: true,
-          recordCheckRound: dependencies.persistence.recordCheckRound,
+          recordCheckResult: dependencies.persistence.recordCheckResult,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
-      ...(acceptanceContext === undefined || acceptanceReview === undefined
+      ...(acceptanceContext === undefined || acceptanceReview === null
         ? {}
         : {
             acceptanceReview: () =>
@@ -449,11 +367,11 @@ const runCandidatePhases = (
                 artifactMaxBytes: maxValidationArtifactBytes,
                 commandCwd: activeWorkspace.worktreePath,
                 resourceRoot,
-                allowedUntrackedFiles: policy.copyFiles,
-                now: input.now,
+                allowedUntrackedFiles: [],
                 listArtifacts: dependencies.persistence.listArtifacts,
                 listPreviousCandidateReviewerFindings:
                   dependencies.persistence.listPreviousCandidateReviewerFindings,
+                recordAcceptanceResult: dependencies.persistence.recordAcceptanceResult,
                 ...sessionOptions,
               }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
           }),
@@ -462,7 +380,7 @@ const runCandidatePhases = (
           validationRunId,
           changeId: authority.candidate.changeId,
           candidate: candidateIdentity(authority),
-          policies: policy.specialistReviews ?? [],
+          policies: changePolicy.reviewerConfiguration.specialistReviews,
           ...(acceptanceContext === undefined ? {} : { acceptanceContext }),
           ...(input.progress === undefined ? {} : { progress: input.progress }),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
@@ -473,11 +391,11 @@ const runCandidatePhases = (
           artifactMaxBytes: maxValidationArtifactBytes,
           commandCwd: activeWorkspace.worktreePath,
           resourceRoot,
-          allowedUntrackedFiles: policy.copyFiles,
-          now: input.now,
+          allowedUntrackedFiles: [],
           listArtifacts: dependencies.persistence.listArtifacts,
           listPreviousCandidateReviewerFindings:
             dependencies.persistence.listPreviousCandidateReviewerFindings,
+          recordSpecialistResult: dependencies.persistence.recordSpecialistResult,
           ...sessionOptions,
         }).pipe(Effect.provideService(FileSystem.FileSystem, dependencies.fileSystem)),
     });

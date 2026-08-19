@@ -41,8 +41,6 @@ export const runTaskShowCommand = (
               id: task.id,
               title: task.title,
               state: task.state,
-              createdAt: task.createdAt,
-              updatedAt: task.updatedAt,
               ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
               prerequisites: task.prerequisites,
               dependents: task.dependents,

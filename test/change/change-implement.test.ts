@@ -154,7 +154,6 @@ describe("by change implement", () => {
       expect(launches[0]).toMatchObject({
         changeId: fixture.id,
         hostSessionName: fixture.id.toLowerCase(),
-        agentSessionName: `Change ${fixture.id}`,
         repositoryPath: root,
         worktreePath: fixture.worktreePath,
       });
@@ -202,36 +201,34 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect(
-    "names a session for a Change linked to a Task from its Change ID and immutable title",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* readyRepository();
-        const taskId = "BY-172";
-        const fixture = yield* createChangeImplementFixture(root, {
-          taskId,
-          acceptanceContext: {
-            title: "Record cancellation reasons",
-            description: "Implement this Change.\n",
+  it.effect("uses the Change ID for the host session of a Change linked to a Task", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const taskId = "BY-172";
+      const fixture = yield* createChangeImplementFixture(root, {
+        taskId,
+        acceptanceContext: {
+          title: "Record cancellation reasons",
+          description: "Implement this Change.\n",
+        },
+      });
+      let launchInput: unknown;
+      const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
+        interactiveSessionHost: {
+          launch: async (input) => {
+            launchInput = input;
+            return { ok: true, host: "herdr", status: "started" };
           },
-        });
-        let launchInput: unknown;
-        const result = yield* runByInProcessEffect(root, ["change", "implement", fixture.id], now, {
-          interactiveSessionHost: {
-            launch: async (input) => {
-              launchInput = input;
-              return { ok: true, host: "herdr", status: "started" };
-            },
-          },
-        });
+        },
+      });
 
-        expect(result.status).toBe(0);
-        expect(launchInput).toMatchObject({
-          changeId: fixture.id,
-          hostSessionName: fixture.id.toLowerCase(),
-          agentSessionName: `${fixture.id} Record cancellation reasons`,
-        });
-      }),
+      expect(result.status).toBe(0);
+      expect(launchInput).toMatchObject({
+        changeId: fixture.id,
+        hostSessionName: fixture.id.toLowerCase(),
+      });
+      expect(launchInput).not.toHaveProperty("agentSessionName");
+    }),
   );
 
   it.effect("rejects missing profile resources before launching Herdr", () =>
@@ -274,7 +271,7 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout from a linked caller checkout", () =>
+  it.effect("uses the invoking worktree from a linked caller checkout", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
@@ -333,7 +330,7 @@ describe("by change implement", () => {
           }),
           expect.objectContaining({
             changeId: change.change.id,
-            repositoryPath: root,
+            repositoryPath: linkedCheckout,
             worktreePath: change.worktreePath,
           }),
         ]);

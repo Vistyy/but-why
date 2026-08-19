@@ -14,7 +14,7 @@ const firstNow = "2026-08-09T12:00:00.000Z";
 const secondNow = "2026-08-09T12:05:00.000Z";
 
 it.scoped("decodes valid current Task states, relationships, Context, and Change Start facts", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ repositoryRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const links = yield* openSqliteTaskChangeLinkPort();
@@ -26,10 +26,10 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
       yield* createTask(tasks, "Done Task");
       yield* createTask(tasks, "Cancelled Task");
       yield* createTask(tasks, "Task with Resolution");
-      yield* passTaskReviewFixture(publicTaskId("BY-2"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-4"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-5"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-4"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-5"), secondNow);
       yield* repository.operation("set terminal Task fixtures", (sql) =>
         sql.unsafe(`
           UPDATE tasks
@@ -39,28 +39,22 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
         `),
       );
       const started = yield* starts.create({
-        id: "change-with-resolution",
-        repositoryCommonDirectory: commonDirectory,
-        branchRef: "refs/heads/but-why/change-with-resolution",
         baseRef: "refs/remotes/origin/main",
         baseRemoteUrl: "https://github.com/acme/repo.git",
-        startingCommit: "1111111111111111111111111111111111111111",
-        worktreePath: `${commonDirectory}/worktrees/change-with-resolution`,
+        managedWorktreeParent: `${commonDirectory}/worktrees`,
         taskId: publicTaskId("BY-5"),
-        now: secondNow,
-        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        policy: {
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+          prepare: null,
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+        },
       });
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation("insert resolved Blocker fixture", (sql) =>
         sql.unsafe(`
-        INSERT INTO implementation_blockers (
-          id, change_id, reported_at, content, resolved_at,
-          resolution_id, resolution_recorded_at, resolution_content
-        ) VALUES (
-          'blocker-1', 1, '${secondNow}', 'Question', '${secondNow}',
-          'resolution-1', '${secondNow}', 'Approved resolution'
-        )
-      `),
+          INSERT INTO implementation_blockers (change_id, content, resolution_content)
+          VALUES (1, 'Question', 'Approved resolution')
+        `),
       );
 
       expect(yield* tasks.listTasks({ includeDone: true })).toMatchObject({
@@ -100,7 +94,7 @@ it.scoped("decodes valid current Task states, relationships, Context, and Change
 );
 
 it.scoped("rejects malformed Task states selected by Change Start", () =>
-  withTemporaryRepositoryState(({ commonDirectory }) =>
+  withTemporaryRepositoryState(({ repositoryRoot, commonDirectory }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
@@ -108,8 +102,8 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       yield* createTask(tasks, "Prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1"]);
       yield* createTask(tasks, "Task with existing Change");
-      yield* passTaskReviewFixture(publicTaskId("BY-2"), secondNow);
-      yield* passTaskReviewFixture(publicTaskId("BY-3"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-3"), secondNow);
 
       yield* repository.operation("inject malformed prerequisite Task state", (sql) =>
         Effect.gen(function* () {
@@ -124,16 +118,15 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
       );
 
       const started = yield* starts.create({
-        id: "change-with-malformed-task-state",
-        repositoryCommonDirectory: commonDirectory,
-        branchRef: "refs/heads/but-why/change-with-malformed-task-state",
         baseRef: "refs/remotes/origin/main",
         baseRemoteUrl: "https://github.com/acme/repo.git",
-        startingCommit: "1111111111111111111111111111111111111111",
-        worktreePath: `${commonDirectory}/worktrees/change-with-malformed-task-state`,
+        managedWorktreeParent: `${commonDirectory}/worktrees`,
         taskId: publicTaskId("BY-3"),
-        now: secondNow,
-        reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+        policy: {
+          reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+          prepare: null,
+          checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+        },
       });
       if (!started.ok) throw new Error(started.code);
       yield* repository.operation(
@@ -146,13 +139,13 @@ it.scoped("rejects malformed Task states selected by Change Start", () =>
 );
 
 it.scoped("rejects a self-referential Task dependency as a graph rule", () =>
-  withTemporaryRepositoryState(() =>
+  withTemporaryRepositoryState(({ repositoryRoot }) =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
       const starts = yield* openSqliteChangeStartPersistence();
       const repository = yield* RepositorySql;
       yield* createTask(tasks, "Self-dependent Task");
-      yield* passTaskReviewFixture(publicTaskId("BY-1"), secondNow);
+      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), secondNow);
       yield* repository.operation("insert self-referential Task dependency", (sql) =>
         sql.unsafe(`
           INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)

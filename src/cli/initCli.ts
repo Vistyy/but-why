@@ -7,8 +7,6 @@ import { Effect } from "effect";
 import type { CliEnvironment } from "../cli.js";
 import {
   type CliResult,
-  predecessorReconciliationRequired,
-  restoredTransientState,
   runtimeError,
   stateStoreUnavailable,
   success,
@@ -23,9 +21,6 @@ export const runInitCommand = (
 ): Effect.Effect<CliResult> =>
   initializeRepositoryRuntime({
     cwd: environment.cwd,
-    ...(environment.operationalRepoRoot === undefined
-      ? {}
-      : { operationalRepoRoot: environment.operationalRepoRoot }),
     idPrefix: command.idPrefix,
   }).pipe(
     Effect.map((initResult) => {
@@ -84,10 +79,6 @@ export const runInitCommand = (
                 "Restore the repository's own shared state, then run `by init --id-prefix <prefix>`.",
               ],
             });
-          case "predecessor_reconciliation_required":
-            return predecessorReconciliationRequired(initResult.error.blocked);
-          case "restored_transient_state":
-            return restoredTransientState(initResult.error.tasks, initResult.error.changes);
           case "state_store_unavailable":
             return stateStoreUnavailable(command.idPrefix);
         }

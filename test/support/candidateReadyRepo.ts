@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { createInitializedRepo } from "./initializedRepo.js";
 import { runTestProcess } from "./testProcess.js";
 
@@ -17,7 +18,78 @@ export const candidateReadyRepo = (workspace?: string): string => {
   git(root, "commit", "-m", "initialize but why");
   git(root, "checkout", "-b", "feature");
   git(root, "commit", "--allow-empty", "-m", "feature");
+  const database = new DatabaseSync(join(root, ".git", "but-why", "state.sqlite"));
+  try {
+    database
+      .prepare(`
+        INSERT INTO changes (
+          id, branch_ref, base_ref, base_remote_url, worktree_path,
+          reviewer_configuration, checks_definition, cleanup_pending
+        ) VALUES (1, 'refs/heads/feature', 'refs/remotes/origin/main',
+          'https://github.com/acme/widgets.git', ?,
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
+      `)
+      .run(root);
+  } finally {
+    database.close();
+  }
   return root;
+};
+
+export const registerCandidateChange = (
+  root: string,
+  branchRef: string,
+  worktreePath: string,
+): void => {
+  const database = new DatabaseSync(join(commonDirectory(root), "but-why", "state.sqlite"));
+  try {
+    database
+      .prepare(`
+        INSERT INTO changes (
+          branch_ref, base_ref, base_remote_url, worktree_path,
+          reviewer_configuration, checks_definition, cleanup_pending
+        ) VALUES (?, 'refs/remotes/origin/main', 'https://github.com/acme/widgets.git', ?,
+          '{"acceptanceReview":null,"specialistReviews":[]}', '[{"id":"quality","command":"true","timeoutSeconds":30}]', 0)
+      `)
+      .run(branchRef, worktreePath);
+  } finally {
+    database.close();
+  }
+};
+
+export const setCandidateChangePolicy = (
+  root: string,
+  branchRef: string,
+  policy: {
+    readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
+    readonly checks: readonly {
+      readonly id: string;
+      readonly command: string;
+      readonly timeoutSeconds: number;
+    }[];
+    readonly reviewerConfiguration?: unknown;
+  },
+): void => {
+  const database = new DatabaseSync(join(commonDirectory(root), "but-why", "state.sqlite"));
+  try {
+    database
+      .prepare(`
+        UPDATE changes
+        SET prepare_definition = ?, checks_definition = ?,
+          reviewer_configuration = COALESCE(?, reviewer_configuration)
+        WHERE branch_ref = ?
+      `)
+      .run(
+        policy.prepare === undefined ? null : JSON.stringify(policy.prepare),
+        policy.checks.length === 0 ? null : JSON.stringify(policy.checks),
+        policy.reviewerConfiguration === undefined
+          ? null
+          : JSON.stringify(policy.reviewerConfiguration),
+        branchRef,
+      );
+  } finally {
+    database.close();
+  }
 };
 
 export const git = (cwd: string, ...args: readonly string[]): string => {

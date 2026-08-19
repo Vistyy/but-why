@@ -8,8 +8,6 @@ import type {
 } from "../../src/change/candidateCapture/candidateCapturePersistence.js";
 import { openCandidateCapture } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 
-const now = "2026-07-12T10:00:00.000Z";
-
 describe("Change Candidate capture orchestration", () => {
   it.effect("captures through supplied persistence and Git interfaces", () =>
     Effect.gen(function* () {
@@ -34,7 +32,7 @@ describe("Change Candidate capture orchestration", () => {
             return {
               ok: true as const,
               changeId: "change-1",
-              candidateId: "candidate-1",
+              candidateId: 1,
               reused: false,
             };
           }),
@@ -47,7 +45,6 @@ describe("Change Candidate capture orchestration", () => {
               ok: true as const,
               facts: {
                 repositoryCommonDirectory: "/repo/.git",
-                primaryRoot: "/repo",
                 branchRef: "refs/heads/feature",
                 headSha: "head",
               },
@@ -63,14 +60,13 @@ describe("Change Candidate capture orchestration", () => {
 
       const result = yield* capture.capture({
         cwd: "/repo/worktree",
-        now,
         changeBaseSha: "fetched-target",
       });
 
       expect(result).toEqual({
         ok: true,
         changeId: "change-1",
-        candidateId: "candidate-1",
+        candidateId: 1,
         branchRef: "refs/heads/feature",
         changeBaseSha: "fetched-target",
         headSha: "head",
@@ -86,7 +82,7 @@ describe("Change Candidate capture orchestration", () => {
         id: "change-1",
         repositoryCommonDirectory: "/repo/.git",
         branchRef: "refs/heads/original",
-        baseRef: null,
+        baseRef: "refs/remotes/origin/main",
         state: "open",
       };
       const destination: CandidateCaptureChange = {
@@ -96,7 +92,6 @@ describe("Change Candidate capture orchestration", () => {
       };
       const workspace = {
         repositoryCommonDirectory: "/repo/.git",
-        primaryRoot: "/repo",
         branchRef: "refs/heads/feature",
         headSha: "head",
       };
@@ -147,7 +142,7 @@ describe("Change Candidate capture orchestration", () => {
             return Effect.succeed({
               ok: true,
               changeId: "change-1",
-              candidateId: "candidate-1",
+              candidateId: 1,
               reused: false,
             } as const);
           },
@@ -176,7 +171,6 @@ describe("Change Candidate capture orchestration", () => {
 
         const result = yield* openCandidateCapture({ persistence, git }).capture({
           cwd: "/repo/worktree",
-          now,
           ...("input" in testCase ? testCase.input : {}),
         });
 

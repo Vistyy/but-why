@@ -1,12 +1,16 @@
 import { dirname, join } from "node:path";
-import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/agentProfiles.js";
+import {
+  type ResolvedReviewerPiAgentProfile,
+  resolveAgentProfile,
+} from "../../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
+import { isPackageAgentResource } from "../../contracts/agentConfig.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type ResolvedTaskReviewPolicy = {
-  readonly profile: ResolvedPiAgentProfile;
+  readonly profile: ResolvedReviewerPiAgentProfile;
   readonly snapshot: TaskReviewPolicySnapshot;
 };
 
@@ -29,7 +33,6 @@ export const resolveTaskReviewPolicy = (input: {
   ) =>
     | { readonly ok: true; readonly content: string }
     | { readonly ok: false; readonly message: string };
-  readonly repoResourceExists: (path: string) => boolean;
 }): TaskReviewPolicyResolutionResult => {
   const profileResolution = resolveAgentProfile({
     ...(input.repoConfig.review?.task?.agentProfile === undefined
@@ -54,7 +57,7 @@ export const resolveTaskReviewPolicy = (input: {
   }
 
   const profile = profileResolution.resolved;
-  const resources = validateTaskReviewResources(profile, input.repoResourceExists);
+  const resources = validateTaskReviewResources(profile);
   if (!resources.ok) return resources;
 
   const guidance = resolveGuidance(input);
@@ -69,6 +72,9 @@ export const resolveTaskReviewPolicy = (input: {
           agentProfile: profile.agentProfile,
           scope: profile.scope,
           profile: profile.profile,
+          ...(profile.globalConfigDirectory === undefined
+            ? {}
+            : { globalConfigDirectory: profile.globalConfigDirectory }),
         },
         builtInInstructions: input.builtInInstructions,
         guidance: guidance.guidance,
@@ -129,8 +135,7 @@ const nonEmptyGuidance = (
     : { ok: true, guidance: { content, source } };
 
 const validateTaskReviewResources = (
-  profile: ResolvedPiAgentProfile,
-  repoResourceExists: (path: string) => boolean,
+  profile: ResolvedReviewerPiAgentProfile,
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
   if (profile.scope === "global") {
     const validated = validatePiAgentProfileResources(profile, ".");
@@ -138,24 +143,16 @@ const validateTaskReviewResources = (
   }
 
   const resources = [
-    ...(profile.profile.runtimeConfig?.extensions ?? []).map((path) => ({
-      type: "extension" as const,
-      path,
-    })),
-    ...(profile.profile.runtimeConfig?.skills ?? []).map((path) => ({
-      type: "skill" as const,
-      path,
-    })),
+    ...(profile.profile.runtimeConfig?.extensions ?? []),
+    ...(profile.profile.runtimeConfig?.skills ?? []),
   ];
-  for (const resource of resources) {
-    if (!repoResourceExists(resource.path)) {
-      return {
+  const unsupported = resources.find((source) => !isPackageAgentResource(source));
+  return unsupported === undefined
+    ? { ok: true }
+    : {
         ok: false,
-        message: `Agent Profile "${profile.agentProfile}" in repo scope has a missing ${resource.type} resource at Review Base path "${resource.path}".`,
+        message: `Agent Profile "${profile.agentProfile}" in repo scope uses unsupported repository-relative Task Review resource "${unsupported}".`,
       };
-    }
-  }
-  return { ok: true };
 };
 
 const profileResolutionMessage = (

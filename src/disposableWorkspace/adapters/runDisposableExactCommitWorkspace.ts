@@ -15,7 +15,6 @@ import type {
 } from "../runDisposableExactCommitWorkspace.js";
 import {
   cleanupExactDisposableWorkspace,
-  copyDisposableWorkspaceFiles,
   createDetachedDisposableWorktree,
   inspectDisposableWorktree,
   prepareDisposableWorkspaceParent,
@@ -38,7 +37,10 @@ export const runDisposableExactCommitWorkspace = <WorkspaceResult, Error>(
   input: RunDisposableExactCommitWorkspaceInput<WorkspaceResult, Error>,
 ): Effect.Effect<RunDisposableExactCommitWorkspaceResult<WorkspaceResult>, Error> =>
   Effect.gen(function* () {
-    const worktreePath = expectedDisposableWorkspacePath(input.repoRoot, input.workspaceId);
+    const worktreePath = expectedDisposableWorkspacePath(
+      input.repositoryCommonDirectory,
+      input.workspaceId,
+    );
     const cleanupResult = yield* Ref.make<DisposableWorkspaceCleanupResult>(initialCleanupResult);
 
     const workspaceExit = yield* Effect.exit(
@@ -90,46 +92,48 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
   cleanupResult: Ref.Ref<DisposableWorkspaceCleanupResult>,
 ): Effect.Effect<SetupAttempt<WorkspaceResult>, Error, Scope.Scope> =>
   Effect.gen(function* () {
-    const parent = yield* prepareDisposableWorkspaceParent(input.repoRoot);
+    const parent = yield* prepareDisposableWorkspaceParent(
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
+    );
     if (!parent.ok) return setupFailed("create_disposable_workspace", parent.message);
 
     yield* Effect.acquireRelease(Effect.succeed(worktreePath), () =>
-      cleanupExactDisposableWorkspace(input.repoRoot, {
+      cleanupExactDisposableWorkspace(input.repositoryRoot, input.repositoryCommonDirectory, {
         workspaceId: input.workspaceId,
         expectedCommitSha: input.commitSha,
-        recordedWorktreePath: worktreePath,
       }).pipe(
-        Effect.flatMap((cleanup) =>
-          Ref.set(cleanupResult, {
-            workspace: cleanup.workspace,
-          } satisfies DisposableWorkspaceCleanupResult),
-        ),
+        Effect.flatMap((cleanup) => Ref.set(cleanupResult, cleanup)),
         Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
         Effect.flatMap((result) =>
           result._tag === "Some"
             ? Effect.void
             : Ref.set(cleanupResult, {
                 workspace: "failed",
+                errorMessage: "Snapshot Workspace cleanup timed out.",
               } satisfies DisposableWorkspaceCleanupResult),
         ),
       ),
     );
 
     const existing = yield* inspectDisposableWorktree(
-      input.repoRoot,
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
       input.workspaceId,
       input.commitSha,
-      worktreePath,
     );
     if (existing.state === "unproven") {
       return setupFailed("create_disposable_workspace", existing.message);
     }
     if (existing.state === "matching" && existing.dirty) {
-      const removed = yield* cleanupExactDisposableWorkspace(input.repoRoot, {
-        workspaceId: input.workspaceId,
-        expectedCommitSha: input.commitSha,
-        recordedWorktreePath: worktreePath,
-      });
+      const removed = yield* cleanupExactDisposableWorkspace(
+        input.repositoryRoot,
+        input.repositoryCommonDirectory,
+        {
+          workspaceId: input.workspaceId,
+          expectedCommitSha: input.commitSha,
+        },
+      );
       if (removed.workspace !== "removed") {
         return setupFailed(
           "create_disposable_workspace",
@@ -139,7 +143,7 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
     }
     if (existing.state === "absent" || (existing.state === "matching" && existing.dirty)) {
       const created = yield* createDetachedDisposableWorktree(
-        input.repoRoot,
+        input.repositoryRoot,
         worktreePath,
         input.commitSha,
       );
@@ -147,10 +151,10 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
     }
 
     const verified = yield* inspectDisposableWorktree(
-      input.repoRoot,
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
       input.workspaceId,
       input.commitSha,
-      worktreePath,
     );
     if (verified.state !== "matching") {
       return setupFailed(
@@ -160,13 +164,6 @@ const runWorkspaceScope = <WorkspaceResult, Error>(
           : "Snapshot Workspace disappeared after acquisition.",
       );
     }
-
-    const copied = yield* copyDisposableWorkspaceFiles(
-      input.repoRoot,
-      worktreePath,
-      input.copyFiles,
-    );
-    if (!copied.ok) return setupFailed("copy_allowlisted_file", copied.message);
 
     if (input.runInWorkspace === undefined) return { ok: true } as const;
     const workspaceResult = yield* input.runInWorkspace({

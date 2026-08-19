@@ -222,6 +222,14 @@ describe("Agent Profiles", () => {
       },
       "MissingAgentModel",
     ],
+    [
+      "a blank required model",
+      {
+        defaultSelection: { scope: "global" as const, name: "review" },
+        globalProfiles: { review: piProfile("  ") },
+      },
+      "MissingAgentModel",
+    ],
   ] as const)("returns a typed error for %s", (_name, input, tag) => {
     const result = resolveAgentProfile(input);
 

@@ -17,6 +17,7 @@ import { rejectedExplicitChangeId, resolveChangeId } from "./changeTarget.js";
 
 export { rejectedExplicitChangeId };
 
+import { structuredValue } from "../../output/structuredValue.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { prepareFailureView } from "./sharedResults.js";
 
@@ -26,7 +27,7 @@ export const withResolvedChangeId = <E, R>(
   commandName: string,
   use: (changeId: string) => Effect.Effect<CliResult, E, R>,
 ): Effect.Effect<CliResult, E, R> =>
-  resolveChangeId(changeId, environment.cwd, commandName, environment.operationalRepoRoot).pipe(
+  resolveChangeId(changeId, environment.cwd, commandName).pipe(
     Effect.flatMap((resolved) =>
       resolved.ok ? use(resolved.changeId) : Effect.succeed(resolved.result),
     ),
@@ -40,10 +41,8 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
-  startingCommit: change.startingCommit,
   acceptanceContext: change.acceptanceContext,
-  createdAt: change.createdAt,
-  closedAt: change.closedAt,
+  policy: structuredValue(change.policy),
   ...(change.prepareFailure === null
     ? {}
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),
@@ -57,8 +56,6 @@ export const compactValidationRunView = (run: CandidateValidationRunRecord | nul
         candidateId: run.candidateId,
         state: run.state,
         outcome: run.outcome,
-        createdAt: run.createdAt,
-        updatedAt: run.updatedAt,
       };
 
 export const validationRunHistoryView = (runs: readonly CandidateValidationRunRecord[]) => {
@@ -94,13 +91,14 @@ export const inspectionFailure = <A>(
 
 export const changeOperationInput = (environment: ChangeCommandEnvironment) => ({
   cwd: environment.cwd,
-  ...(environment.operationalRepoRoot === undefined
+  globalConfigPath: environment.globalConfigPath,
+  ...(environment.herdrSocketPath === undefined
     ? {}
-    : { operationalRepoRoot: environment.operationalRepoRoot }),
+    : { herdrSocketPath: environment.herdrSocketPath }),
   ...(environment.interactiveSessionHost === undefined
     ? {}
     : { interactiveSessionHost: environment.interactiveSessionHost }),
-  globalConfigPath: environment.globalConfigPath,
+  platform: environment.platform,
 });
 
 export const loadedChangeOperation = (

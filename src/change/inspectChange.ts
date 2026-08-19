@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "./candidate/candidate.js";
 import type {
@@ -9,14 +8,7 @@ import type {
 } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ChangeRecord } from "./change.js";
 import type { ChangeAuthorityPort, ChangeReadPort } from "./changePorts.js";
-import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { ChangeValidationReadPort } from "./validation/changeValidationPorts.js";
-
-export type ChangeLegacyReviewerEvidence = {
-  readonly classification: "legacy";
-  readonly sessions: readonly ReviewerSessionRecord[];
-  readonly transcripts: readonly LegacyReviewerTranscriptReference[];
-};
 
 export type ChangeDetail = {
   readonly change: ChangeRecord;
@@ -24,7 +16,6 @@ export type ChangeDetail = {
   readonly currentValidationRun: CandidateValidationRunRecord | null;
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
-  readonly legacyReviewerEvidence: ChangeLegacyReviewerEvidence;
 };
 
 export type ChangeFindings = {
@@ -47,12 +38,6 @@ type ChangeDetailDependencies = {
   readonly getRunById: ChangeValidationReadPort["getRunById"];
   readonly listFindings: ChangeValidationReadPort["listFindings"];
   readonly listToolingFailures: ChangeValidationReadPort["listToolingFailures"];
-  readonly listReviewerSessions: (
-    changeId: string,
-  ) => Effect.Effect<readonly ReviewerSessionRecord[], RepositoryStorageError>;
-  readonly listReviewerTranscripts: (
-    changeId: string,
-  ) => Effect.Effect<readonly LegacyReviewerTranscriptReference[], RepositoryStorageError>;
 };
 
 export const queryChangeDetail = (
@@ -78,11 +63,6 @@ export const queryChangeDetail = (
       findings: validationRun === null ? [] : yield* dependencies.listFindings(validationRun.id),
       toolingFailures:
         validationRun === null ? [] : yield* dependencies.listToolingFailures(validationRun.id),
-      legacyReviewerEvidence: {
-        classification: "legacy",
-        sessions: yield* dependencies.listReviewerSessions(changeId),
-        transcripts: yield* dependencies.listReviewerTranscripts(changeId),
-      },
     };
   });
 
@@ -121,11 +101,6 @@ export const queryChangeValidationRuns = (
     );
     return {
       change,
-      validationRuns: validationRuns
-        .flat()
-        .toSorted(
-          (left, right) =>
-            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-        ),
+      validationRuns: validationRuns.flat().toSorted((left, right) => left.id - right.id),
     };
   });

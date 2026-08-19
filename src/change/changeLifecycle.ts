@@ -6,13 +6,17 @@ import {
   runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { type ChangePrepareFailure, changeState } from "./change.js";
+import type { ChangePolicyResolution, ChangePolicyResolutionFailure } from "./changePolicy.js";
 import type {
   ChangeStartGitOperations,
   ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
-import type { ChangeStartPersistence } from "./changeStartPersistence.js";
-import type { ChangeReviewerConfiguration, ChangeStartRecord } from "./changeStartStore.js";
+import type {
+  ChangeStartCreationResult,
+  ChangeStartPersistence,
+} from "./changeStartPersistence.js";
+import type { ChangeStartRecord } from "./changeStartStore.js";
 import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
 import type { InteractiveSessionProfileLoader } from "./interactiveSession/interactiveSessionProfile.js";
 import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
@@ -22,12 +26,9 @@ export type { ChangeImplementResult };
 
 export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
-  | {
-      readonly ok: false;
-      readonly code: "reviewer_configuration_invalid";
-      readonly message: string;
-    }
+  | ChangePolicyResolutionFailure
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
+  | Exclude<ChangeStartCreationResult, { readonly ok: true }>
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangePrepareResult =
@@ -42,31 +43,29 @@ export const startChange = <CreationFailure extends object = never>(
   executor: RepositoryPreparationEffectExecutor,
   input: {
     readonly baseBranch?: string;
-    readonly reviewerConfiguration?: ChangeReviewerConfiguration;
+    readonly resolvePolicy: (startingCommit: string) => Effect.Effect<ChangePolicyResolution>;
     readonly now: string;
   },
 ): Effect.Effect<ChangeStartResult | CreationFailure, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (input.reviewerConfiguration === undefined) {
-      return {
-        ok: false as const,
-        code: "reviewer_configuration_invalid" as const,
-        message: "A reviewer configuration is required to create a Change.",
-      };
-    }
-
-    const gitIntent = git.resolveIntent("pending-change-start", input.baseBranch);
+    const gitIntent = git.resolveIntent(input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
+    const policy = yield* input.resolvePolicy(gitIntent.intent.startingCommit);
+    if (!policy.ok) return policy;
     const created = yield* store.create({
-      id: "pending-change-start",
-      ...gitIntent.intent,
-      reviewerConfiguration: input.reviewerConfiguration,
-      now: input.now,
+      baseRef: gitIntent.intent.baseRef,
+      baseRemoteUrl: gitIntent.intent.baseRemoteUrl,
+      managedWorktreeParent: gitIntent.intent.managedWorktreeParent,
+      policy: policy.policy,
     });
     if (!("ok" in created)) return created;
     if (!created.ok) return created;
 
-    const provisioned = git.provisionWorktree(created.change, false);
+    const provisioned = git.provisionWorktree(
+      created.change,
+      false,
+      gitIntent.intent.startingCommit,
+    );
     if (!provisioned.ok) return { ...provisioned, change: created.change };
     return yield* prepareExistingChange(store, executor, created.change, input.now);
   });
@@ -121,7 +120,7 @@ export const prepareExistingChange = (
   now: string,
 ): Effect.Effect<PreparationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const prepare = change.prepare;
+    const prepare = change.policy.prepare;
     if (prepare === null) {
       const recorded = yield* store.recordPrepareOutcome(change.id, null, now);
       return { ok: true as const, change: recorded };

@@ -13,16 +13,17 @@ const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
-const operationalRepoRoot = process.env["BUT_WHY_SOURCE_TRUSTED_ROOT"];
+const herdrSocketPath = process.env["HERDR_SOCKET_PATH"];
 const writeStderr = bestEffortStderrWriter(process.stderr);
 
 void runWithHostInterruption(
   runCli(args, {
     executablePath,
     cwd: process.cwd(),
-    ...(operationalRepoRoot === undefined ? {} : { operationalRepoRoot }),
     globalConfigPath: join(homedir(), ".config/but-why/config.json"),
+    ...(herdrSocketPath === undefined ? {} : { herdrSocketPath }),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
+    platform: process.platform,
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
     writeStderr,
   }),

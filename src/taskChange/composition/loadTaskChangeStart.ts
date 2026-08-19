@@ -4,7 +4,7 @@ import {
   resolveChangeStartGitIntent,
 } from "../../change/adapters/changeStartGit.js";
 import type { ChangeStartGitOperations } from "../../change/changeStartGitOperations.js";
-import { resolveChangeReviewerConfiguration } from "../../change/composition/resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "../../change/composition/resolveChangePolicy.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { executeLocalRepositoryPreparation } from "../../repositoryPreparation/adapters/localRepositoryPreparation.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
@@ -29,23 +29,24 @@ export const openTaskChangeStartOperation = (input: {
         ): Effect.Effect<TaskChangeStartResult, RepositoryStorageError> =>
           Effect.gen(function* () {
             const git: ChangeStartGitOperations = {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(input.context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(input.context.root, change, recovering),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(input.context, requestedBaseBranch),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(input.context.root, change, recovering, startingCommit),
             };
             return yield* startTaskChange(
               store,
               git,
               executeLocalRepositoryPreparation,
               command,
-              () =>
-                resolveChangeReviewerConfiguration(
-                  input.context.config,
-                  input.globalConfigPath,
-                  input.context.root,
-                  true,
-                ),
+              (startingCommit) =>
+                resolveChangePolicyAtCommit({
+                  repositoryRoot: input.context.root,
+                  commit: startingCommit,
+                  globalConfigPath: input.globalConfigPath,
+                  acceptanceContextSupplied: true,
+                  expectedIdPrefix: input.context.idPrefix,
+                }),
             );
           }),
     ),

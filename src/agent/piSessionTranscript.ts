@@ -15,14 +15,14 @@ export const findUniquePiSessionTranscript = (
     throw error;
   }
   if (!rootStat.isDirectory()) {
-    throw new Error(`Reviewer Session storage root "${root}" is not a directory.`);
+    throw new Error(`Agent Session storage root "${root}" is not a directory.`);
   }
   const matches = readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
     .map((entry) => join(root, entry.name))
     .filter((path) => hasSessionHeader(path, sessionId));
   if (matches.length > 1) {
-    throw new Error(`Multiple Reviewer Session transcripts have id "${sessionId}".`);
+    throw new Error(`Multiple Agent Session transcripts have id "${sessionId}".`);
   }
   return matches[0];
 };

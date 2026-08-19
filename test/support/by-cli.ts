@@ -1,4 +1,4 @@
-import { cpSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
@@ -19,7 +19,8 @@ import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-export const byExecutable = join(repoRoot, "bin/by");
+export const byExecutable = "by";
+const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
 const cliProcessTimeoutMs = 30_000;
@@ -144,10 +145,11 @@ const runByInProcessEffectRaw = (
   options: InProcessCliOptions = {},
 ): Effect.Effect<InProcessCliResult> =>
   runCli(args, {
-    executablePath: byExecutable,
+    executablePath: inProcessExecutablePath,
     cwd,
     globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
     now: () => new Date(now),
+    platform: "linux",
     stdin: options.stdin ?? { fd: -1, isTerminal: true },
     ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
     ...(options.cancellationUseCases === undefined
@@ -174,7 +176,9 @@ export const passTaskReviewFixture = (
 ) => {
   const loaded = openRepositoryRuntime(root);
   if (!loaded.ok) throw new Error(`Could not open Task fixture repository: ${loaded.error.code}`);
-  return loaded.runtime.provide(passStoredTaskReviewFixture(publicTaskId(taskId), now));
+  return loaded.runtime.provide(
+    passStoredTaskReviewFixture(loaded.runtime.context.root, publicTaskId(taskId), now),
+  );
 };
 
 export const createGitRepo = (root = createTestWorkspace()) => {
@@ -186,6 +190,19 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
   runGit(root, "config", "user.name", "But Why Test");
   runGit(root, "config", "user.email", "but-why@example.test");
   runGit(root, "branch", "-M", "main");
+  const configPath = join(root, ".but-why", "config.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  writeFileSync(
+    configPath,
+    `${JSON.stringify(
+      {
+        ...config,
+        validation: { checks: [{ id: "test", command: "true", timeoutSeconds: 30 }] },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   runGit(root, "add", ".but-why/config.json");
   runGit(root, "commit", "-m", "Initialize But Why");
   const publicationUrl = "https://github.com/acme/repo.git";

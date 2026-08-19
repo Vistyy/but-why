@@ -13,7 +13,7 @@ import {
 import { candidateValidationArtifactContentView } from "../validationRunViews.js";
 import { notFound, type ValidationRunCommandEnvironment } from "./validationRunSupport.js";
 
-const artifactFailure = (code: string, id: string, ref: string): CliResult =>
+const artifactFailure = (code: string, id: number, ref: string): CliResult =>
   code === "validation_run_not_found"
     ? notFound(id)
     : runtimeError({
@@ -30,14 +30,11 @@ const artifactFailure = (code: string, id: string, ref: string): CliResult =>
         ],
       });
 export const runArtifactCommand = (
-  command: { readonly validationRunId: string; readonly artifactRef: string },
+  command: { readonly validationRunId: number; readonly artifactRef: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   const loaded = loadCandidateValidationRunInspection({
     cwd: environment.cwd,
-    ...(environment.operationalRepoRoot === undefined
-      ? {}
-      : { operationalRepoRoot: environment.operationalRepoRoot }),
   });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
   return loaded.inspection.readArtifact(command.validationRunId, command.artifactRef).pipe(

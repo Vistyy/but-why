@@ -1,4 +1,4 @@
-import type { ChangeCleanup, ChangeCloseReason, ChangeState } from "../change/change.js";
+import type { ChangeCloseReason, ChangeState } from "../change/change.js";
 
 export const decodeStoredString = (value: unknown, field: string): string => {
   if (typeof value !== "string") throw new Error(`${field} is not a string`);
@@ -35,18 +35,4 @@ export const decodeChangeLifecycle = (input: {
     throw new Error("Change lifecycle relationship is invalid");
   }
   return { state, closeReason };
-};
-
-export const decodeChangeCleanup = (state: unknown, blockingReason: unknown): ChangeCleanup => {
-  if (state !== "complete" && state !== "pending") {
-    throw new Error("Change cleanup state is unsupported");
-  }
-  const decodedBlockingReason = decodeStoredNullableString(
-    blockingReason,
-    "Change cleanup blocking reason",
-  );
-  if (state === "complete" && decodedBlockingReason !== null) {
-    throw new Error("Change cleanup relationship is invalid");
-  }
-  return { state, blockingReason: decodedBlockingReason };
 };

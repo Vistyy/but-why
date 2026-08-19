@@ -48,8 +48,8 @@ export type CandidatePublication = {
 
 export type PublishCandidateInput = {
   readonly changeId: string;
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly changeBaseSha: string;
   readonly target: ChangePublicationTarget;
   readonly now: string;
@@ -112,7 +112,12 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
     const publication = change.publication;
     if (publication === null) {
-      const metadata = metadataFor(change, evidence.headSha, dependencies.git);
+      const metadata = metadataFor(
+        change,
+        evidence.changeBaseSha,
+        evidence.headSha,
+        dependencies.git,
+      );
       if ("ok" in metadata) return metadata;
       return yield* create(
         dependencies,
@@ -338,7 +343,7 @@ const createRecoveryAttempt = (
   change: CandidatePublicationChange,
 ): PublicationEffect =>
   Effect.gen(function* () {
-    const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
+    const metadata = metadataFor(change, input.changeBaseSha, expectedHeadSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     const pending = { ...facts(input, headBranch, expectedHeadSha), now: input.now };
     const created = dependencies.github.createPullRequest({
@@ -809,6 +814,7 @@ const bodyFor = (change: CandidatePublicationChange): string =>
 
 const metadataFor = (
   change: CandidatePublicationChange,
+  changeBaseSha: string,
   headSha: string,
   git: CandidatePublicationGit,
 ): Metadata | Extract<PublishCandidateResult, { readonly ok: false }> => {
@@ -817,8 +823,7 @@ const metadataFor = (
       title: change.acceptanceContext.title,
       body: bodyFor(change),
     };
-  if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
-  const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
+  const subject = git.readFirstNonMergeCommitSubject(changeBaseSha, headSha);
   return !subject.ok
     ? { ok: false, code: "commit_history_unavailable" }
     : {
@@ -906,8 +911,8 @@ const isExactOpenPullRequest = (
   expectedHeadSha: string,
 ): boolean => {
   const expected: OwnedPublication = {
-    candidateId: "mutation-postcondition",
-    validationRunId: "mutation-postcondition",
+    candidateId: 1,
+    validationRunId: 1,
     target,
     headBranch,
     expectedHeadSha,

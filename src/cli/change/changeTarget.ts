@@ -14,14 +14,8 @@ type ChangeTargetResolution =
   | { readonly ok: true; readonly changeId: string }
   | { readonly ok: false; readonly result: CliResult };
 
-export const rejectedExplicitChangeId = (
-  changeId: string,
-  cwd: string,
-  operationalRepoRoot?: string,
-): CliResult | undefined => {
-  const idPrefix = hasPublicChangeIdShape(changeId)
-    ? resolveRepositoryIdPrefix(cwd, operationalRepoRoot)
-    : undefined;
+export const rejectedExplicitChangeId = (changeId: string, cwd: string): CliResult | undefined => {
+  const idPrefix = hasPublicChangeIdShape(changeId) ? resolveRepositoryIdPrefix(cwd) : undefined;
   if (idPrefix === undefined && hasPublicChangeIdShape(changeId)) return undefined;
   return idPrefix !== undefined && isPublicChangeIdForPrefix(changeId, idPrefix)
     ? undefined
@@ -36,19 +30,15 @@ export const resolveChangeId = (
   changeId: string | undefined,
   cwd: string,
   commandName: string,
-  operationalRepoRoot?: string,
 ): Effect.Effect<ChangeTargetResolution> => {
   if (changeId !== undefined) {
-    const rejected = rejectedExplicitChangeId(changeId, cwd, operationalRepoRoot);
+    const rejected = rejectedExplicitChangeId(changeId, cwd);
     return Effect.succeed(
       rejected === undefined ? { ok: true, changeId } : { ok: false, result: rejected },
     );
   }
 
-  const loaded = loadChangeList({
-    cwd,
-    ...(operationalRepoRoot === undefined ? {} : { operationalRepoRoot }),
-  });
+  const loaded = loadChangeList({ cwd });
   if (!loaded.ok) return Effect.succeed({ ok: false, result: repoStateLoadError(loaded.error) });
 
   const facts = findCurrentRepositoryWorktreeFacts(cwd);

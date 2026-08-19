@@ -6,6 +6,7 @@ import type {
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { TaskReviewRecord, TaskReviewToolingFailure } from "./taskReview.js";
 import type { TaskReviewPersistence } from "./taskReviewPersistence.js";
+import { taskReviewWorkspaceId } from "./taskReviewWorkspace.js";
 
 type TaskReviewEvidencePersistence = Pick<
   TaskReviewPersistence,
@@ -22,14 +23,16 @@ export type TaskReviewEvidenceSettlementResult =
 
 export const settleTaskReviewEvidence = (
   input: {
-    readonly mainCheckoutRoot: string;
+    readonly repositoryRoot: string;
+    readonly repositoryCommonDirectory: string;
     readonly persistence: TaskReviewEvidencePersistence;
     readonly verifyReviewBase: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
       recorded: { readonly ref: string; readonly commit: string },
     ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
     readonly cleanupWorkspace: (
-      mainCheckoutRoot: string,
+      repositoryRoot: string,
+      repositoryCommonDirectory: string,
       cleanup: ExactDisposableWorkspaceCleanupInput,
     ) => Effect.Effect<ExactDisposableWorkspaceCleanupResult>;
   },
@@ -37,7 +40,7 @@ export const settleTaskReviewEvidence = (
   now: string,
 ): Effect.Effect<TaskReviewEvidenceSettlementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const base = yield* input.verifyReviewBase(input.mainCheckoutRoot, {
+    const base = yield* input.verifyReviewBase(input.repositoryRoot, {
       ref: review.baseRef,
       commit: review.baseCommit,
     });
@@ -53,13 +56,16 @@ export const settleTaskReviewEvidence = (
       );
     }
 
-    const cleanup = yield* input.cleanupWorkspace(input.mainCheckoutRoot, {
-      workspaceId: review.id,
-      expectedCommitSha: review.baseCommit,
-      recordedWorktreePath: review.workspacePath,
-    });
+    const cleanup = yield* input.cleanupWorkspace(
+      input.repositoryRoot,
+      input.repositoryCommonDirectory,
+      {
+        workspaceId: taskReviewWorkspaceId(review.id),
+        expectedCommitSha: review.baseCommit,
+      },
+    );
     const cleanupRecorded = yield* Effect.either(
-      input.persistence.recordCleanup(review.id, cleanup.workspace, now),
+      input.persistence.recordCleanup(review.id, cleanup.workspace, now, cleanup.errorMessage),
     );
     if (cleanupRecorded._tag === "Left") {
       return yield* settlementFailed(
@@ -101,7 +107,7 @@ const settlementFailed = (
     const current = yield* persistence.getById(review.id);
     return {
       ok: false,
-      review: current ?? { ...review, toolingFailure: failure, updatedAt: now },
+      review: current ?? { ...review, toolingFailure: failure },
       message: failure.message,
     } as const;
   });

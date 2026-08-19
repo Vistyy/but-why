@@ -17,7 +17,6 @@ export const runSubmit = (
   support.withResolvedChangeId(command.changeId, environment, "submit", (changeId) => {
     const loaded = loadChangeSubmit({
       cwd: environment.cwd,
-      globalConfigPath: environment.globalConfigPath,
       ...(environment.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),

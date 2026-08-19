@@ -1,12 +1,13 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { MissingAgentProfile } from "../../src/agent/agentProfileErrors.js";
 import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { ChangeSubmissionPort } from "../../src/change/changePorts.js";
@@ -18,18 +19,15 @@ import type {
   PublishCandidateInput,
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
-import type { SubmitRejectionError } from "../../src/change/submit/submitRejectionErrors.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
-import { GlobalConfigValidationFailed } from "../../src/contracts/configErrors.js";
 import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
-import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
   ok: true,
   changeId: "change-1",
-  candidateId: "candidate-1",
+  candidateId: 1,
   branchRef: "refs/heads/change-1",
   changeBaseSha: "base",
   headSha: "head",
@@ -37,8 +35,6 @@ const candidate = {
 } as const;
 const changeWithoutTaskPolicy = {
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
-  copyFiles: [],
-  specialistReviews: [],
 } as const;
 const storedAcceptanceReviewer = {
   instructions: "Review intent",
@@ -47,19 +43,6 @@ const storedAcceptanceReviewer = {
     agentProfile: "default",
     scope: "global" as const,
     profile: { agentRuntime: "pi" as const, runtimeConfig: { model: "test/model" } },
-  },
-};
-const storedCandidateReviewer = {
-  id: "candidate",
-  instructions: "Candidate reviewer",
-  instructionsSource: "repo" as const,
-  profile: {
-    agentProfile: "candidate-reviewer",
-    scope: "repo" as const,
-    profile: {
-      agentRuntime: "pi" as const,
-      runtimeConfig: { model: "candidate/model" },
-    },
   },
 };
 
@@ -73,12 +56,12 @@ describe("Change Submit orchestration", () => {
           Effect.succeed({
             ok: false as const,
             code: "active_validation_run" as const,
-            validationRunId: "run-active",
+            validationRunId: 102,
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -89,34 +72,9 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "active_validation_run",
         changeId: "change-1",
-        validationRunId: "run-active",
+        validationRunId: 102,
       });
       expect(events).toEqual(["capture", "detect_target"]);
-    }),
-  );
-
-  it.effect("rejects a legacy Change without stored reviewer configuration", () =>
-    Effect.gen(function* () {
-      const submit = openChangeSubmit(
-        dependencies({ change: readyChange({ reviewerConfiguration: null }) }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Current reviewer configuration must not be used"),
-        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toEqual({
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      });
     }),
   );
 
@@ -146,7 +104,7 @@ describe("Change Submit orchestration", () => {
             validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
             listFindings: () => Effect.succeed([]),
             listToolingFailures: () => Effect.succeed([]),
-            listRounds: () => Effect.succeed([]),
+            listPhaseResults: () => Effect.succeed([]),
           }),
         ),
       );
@@ -161,6 +119,76 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("requires and then reuses a restored frozen Global reviewer resource", () => {
+    const globalConfigDirectory = mkdtempSync(join(tmpdir(), "by-submit-resource-"));
+    const extensionDirectory = join(globalConfigDirectory, "extensions");
+    const extensionPath = join(extensionDirectory, "review.ts");
+    const events: string[] = [];
+    const change = readyChange({
+      policy: {
+        reviewerConfiguration: {
+          acceptanceReview: {
+            ...storedAcceptanceReviewer,
+            profile: {
+              ...storedAcceptanceReviewer.profile,
+              globalConfigDirectory,
+              profile: {
+                agentRuntime: "pi",
+                runtimeConfig: {
+                  model: "test/model",
+                  extensions: ["extensions/review.ts"],
+                },
+              },
+            },
+          },
+          specialistReviews: [],
+        },
+        prepare: null,
+        checks: changeWithoutTaskPolicy.checks,
+      },
+    });
+    const submit = openChangeSubmit(dependencies({ events, change }));
+    const validationLayer = Layer.succeed(CandidateValidation, {
+      validateCandidate: () =>
+        Effect.sync(() => {
+          events.push("validate");
+          return {
+            ok: true,
+            reused: false,
+            validationRunId: 1,
+            outcome: "passed",
+          } as const;
+        }),
+      validateAcceptanceContextCandidate: () =>
+        Effect.die("Acceptance Context validation was not expected"),
+      listFindings: () => Effect.succeed([]),
+      listToolingFailures: () => Effect.succeed([]),
+      listPhaseResults: () => Effect.succeed([]),
+    });
+
+    return Effect.gen(function* () {
+      const missing = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      expect(missing).toMatchObject({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: expect.stringContaining(extensionPath),
+      });
+      expect(events).not.toContain("validate");
+      expect(events).not.toContain("publish");
+
+      mkdirSync(extensionDirectory);
+      writeFileSync(extensionPath, "export default {};\n");
+      const restored = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      expect(restored).toMatchObject({ ok: true, status: "published" });
+      expect(events).toContain("validate");
+      expect(events).toContain("publish");
+    }).pipe(Effect.ensuring(Effect.sync(() => rmSync(globalConfigDirectory, { recursive: true }))));
+  });
+
   it.effect(
     "uses the Agent Environment to validate and publish a passing Change without a Task Candidate",
     () =>
@@ -169,8 +197,17 @@ describe("Change Submit orchestration", () => {
         const submit = openChangeSubmit(
           dependencies({
             events,
-            change: readyChange(),
-            agentEnvironment: ["nix", "develop", "-c"],
+            change: readyChange({
+              policy: {
+                reviewerConfiguration: {
+                  acceptanceReview: storedAcceptanceReviewer,
+                  specialistReviews: [],
+                  agentEnvironment: ["nix", "develop", "-c"],
+                },
+                prepare: null,
+                checks: changeWithoutTaskPolicy.checks,
+              },
+            }),
             publication: {
               publish: () => {
                 events.push("publish");
@@ -187,11 +224,11 @@ describe("Change Submit orchestration", () => {
           validateCandidate: (input) =>
             Effect.sync(() => {
               events.push("validate_changeWithoutTask");
-              expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+              expect(input).not.toHaveProperty("policy");
               return {
                 ok: true,
                 reused: false,
-                validationRunId: "run-1",
+                validationRunId: 1,
                 outcome: "passed",
               } as const;
             }),
@@ -199,7 +236,7 @@ describe("Change Submit orchestration", () => {
             Effect.die("Acceptance Review was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -210,8 +247,8 @@ describe("Change Submit orchestration", () => {
           ok: true,
           status: "published",
           changeId: "change-1",
-          candidateId: "candidate-1",
-          validationRunId: "run-1",
+          candidateId: 1,
+          validationRunId: 1,
           created: true,
           pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
         });
@@ -259,14 +296,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -281,23 +318,20 @@ describe("Change Submit orchestration", () => {
 
   it.effect("retries a pending publication for a newer Candidate through Submit", () =>
     Effect.gen(function* () {
-      const publishedCandidates: string[] = [];
+      const publishedCandidates: number[] = [];
       const submit = openChangeSubmit(
         dependencies({
           change: readyChange({
             publication: {
-              candidateId: "candidate-0",
-              validationRunId: "run-0",
+              candidateId: 102,
+              validationRunId: 105,
               target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
               headBranch: "change-1",
               expectedHeadSha: "old-head",
               pullRequest: null,
             },
           }),
-          captureResults: [
-            candidate,
-            { ...candidate, candidateId: "candidate-2", headSha: "head-2" },
-          ],
+          captureResults: [candidate, { ...candidate, candidateId: 2, headSha: "head-2" }],
           publication: {
             publish: (input) => {
               publishedCandidates.push(input.candidateId);
@@ -320,14 +354,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: `run-${validationRuns}`,
+              validationRunId: validationRuns,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -343,191 +377,7 @@ describe("Change Submit orchestration", () => {
         status: "published",
         created: false,
       });
-      expect(publishedCandidates).toEqual(["candidate-1", "candidate-2"]);
-    }),
-  );
-
-  it.effect("resolves validation policy only from trusted Change Base facts", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange({
-            reviewerConfiguration: {
-              acceptanceReview: storedAcceptanceReviewer,
-              specialistReviews: [storedCandidateReviewer],
-            },
-          }),
-          trackPolicyResolution: true,
-          baselineRepoConfig: { idPrefix: "BY", review: { specialists: ["baseline"] } },
-          refreshResult: { ok: true, base: refreshedBase },
-          resolvePolicy: (_acceptanceContextSupplied, repoConfig) => {
-            expect(repoConfig.review?.specialists).toEqual(["baseline"]);
-            return {
-              ok: true,
-              resolved: {
-                acceptanceContextSupplied: false,
-                policy: {
-                  ...changeWithoutTaskPolicy,
-                  specialistReviews: [storedCandidateReviewer],
-                },
-              },
-            } satisfies CandidateValidationPolicyResolution;
-          },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: (input) =>
-          Effect.sync(() => {
-            events.push("validate_changeWithoutTask");
-            expect(input.policy.specialistReviews).toEqual([storedCandidateReviewer]);
-            return {
-              ok: true,
-              reused: false,
-              validationRunId: "run-1",
-              outcome: "passed",
-            } as const;
-          }),
-        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toMatchObject({ ok: true, status: "published" });
-      expect(events).toEqual([
-        "refresh_base",
-        "capture",
-        "load_base_repo_config",
-        "resolve_policy",
-        "detect_target",
-        "validate_changeWithoutTask",
-        "publish",
-      ]);
-    }),
-  );
-
-  it.effect("rejects invalid Change Base Repo Config after Candidate capture", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          baselineRepoConfigError: "Change Base Repo Config is invalid.",
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toEqual({
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "Change Base Repo Config is invalid.",
-      });
-      expect(events).toEqual(["capture"]);
-    }),
-  );
-
-  it.effect("rejects a missing reviewer Agent Profile before Validation starts", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          policyRejection: new MissingAgentProfile({
-            profileName: "missing-reviewer",
-            scope: "repo",
-            selection: "explicit",
-          }),
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toEqual({
-        ok: false,
-        code: "validation_policy_invalid",
-        message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-      });
-      expect(events).toEqual(["capture"]);
-    }),
-  );
-
-  it.effect("propagates malformed Global Config path and diagnostics without Git", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          policyRejection: new GlobalConfigValidationFailed({
-            path: "/repo/global-config.json",
-            diagnostics: [
-              {
-                path: ["agentProfiles", "implementation", "agentModel"],
-                expected: "a Pi runtimeConfig model",
-                actual: undefined,
-                message: "Required value is missing.",
-              },
-            ],
-            message: "Global Config is invalid.",
-          }),
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
-
-      const result = yield* submit
-        .submit({ changeId: "change-1", now })
-        .pipe(Effect.provide(validationLayer));
-
-      expect(result).toEqual({
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "Global Config is invalid.",
-        details: {
-          path: "/repo/global-config.json",
-          diagnostics: [
-            {
-              path: ["agentProfiles", "implementation", "agentModel"],
-              expected: "a Pi runtimeConfig model",
-              actual: undefined,
-              message: "Required value is missing.",
-            },
-          ],
-        },
-      });
-      expect(events).toEqual(["capture"]);
+      expect(publishedCandidates).toEqual([1, 2]);
     }),
   );
 
@@ -548,20 +398,20 @@ describe("Change Submit orchestration", () => {
           captureResults: [
             {
               ...candidate,
-              candidateId: "candidate-old-target",
+              candidateId: 104,
               changeBaseSha: oldTargetSha,
               headSha,
             },
             {
               ...candidate,
-              candidateId: "candidate-new-target",
+              candidateId: 105,
               changeBaseSha: newTargetSha,
               headSha,
             },
           ],
         }),
       );
-      const validatedCandidates: string[] = [];
+      const validatedCandidates: number[] = [];
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: (input) =>
           Effect.sync(() => {
@@ -570,15 +420,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId:
-                input.candidateId === "candidate-old-target" ? "run-old-target" : "run-new-target",
+              validationRunId: input.candidateId === 104 ? 202 : 201,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const oldTarget = yield* submit
@@ -590,15 +439,15 @@ describe("Change Submit orchestration", () => {
 
       expect(oldTarget).toMatchObject({
         ok: true,
-        candidateId: "candidate-old-target",
-        validationRunId: "run-old-target",
+        candidateId: 104,
+        validationRunId: 202,
       });
       expect(newTarget).toMatchObject({
         ok: true,
-        candidateId: "candidate-new-target",
-        validationRunId: "run-new-target",
+        candidateId: 105,
+        validationRunId: 201,
       });
-      expect(validatedCandidates).toEqual(["candidate-old-target", "candidate-new-target"]);
+      expect(validatedCandidates).toEqual([104, 105]);
       expect(events).toEqual([
         "refresh_base",
         "capture",
@@ -627,17 +476,15 @@ describe("Change Submit orchestration", () => {
         },
         implementationDecisions: [
           {
-            id: "decision-1",
+            id: 1,
             changeId: "change-1",
-            sequence: 1,
-            recordedAt: now,
             choice: "Keep the same owned pull request",
             rationale: "Preserve the existing owned pull request.",
           },
         ],
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -659,7 +506,6 @@ describe("Change Submit orchestration", () => {
               };
             },
           },
-          acceptanceContextSupplied: true,
           branchHeadSha: "base",
           captureResult: {
             ...candidate,
@@ -678,13 +524,13 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -693,12 +539,11 @@ describe("Change Submit orchestration", () => {
 
       expect(result).toMatchObject({ ok: true, status: "published", pullRequest: { number: 42 } });
       expect(seenPublishInput).toMatchObject({
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
       });
       expect(seenValidationInput).toMatchObject({
-        changeId: change.id,
-        candidateId: "candidate-1",
+        candidateId: 1,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -715,8 +560,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -752,14 +597,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "revised-run",
+              validationRunId: 109,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -767,8 +612,8 @@ describe("Change Submit orchestration", () => {
       ).toMatchObject({
         ok: true,
         status: "published",
-        candidateId: "candidate-1",
-        validationRunId: "revised-run",
+        candidateId: 1,
+        validationRunId: 109,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -792,25 +637,22 @@ describe("Change Submit orchestration", () => {
             description: "Deliver it",
           },
         });
-        const submit = openChangeSubmit(
-          dependencies({ events, change, acceptanceContextSupplied: true }),
-        );
+        const submit = openChangeSubmit(dependencies({ events, change }));
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
-          validateAcceptanceContextCandidate: (input) =>
+          validateAcceptanceContextCandidate: () =>
             Effect.sync(() => {
               events.push("validate_change_linked_to_task");
-              expect(input.changeId).toBe(change.id);
               return {
                 ok: true,
                 reused: false,
-                validationRunId: "run-1",
+                validationRunId: 1,
                 outcome: "passed",
               } as const;
             }),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -834,8 +676,8 @@ describe("Change Submit orchestration", () => {
         [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -855,7 +697,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -876,8 +718,8 @@ describe("Change Submit orchestration", () => {
             baseBranch: "main",
             headBranch: "change-1",
             mergedHeadSha: "published-head",
-            candidateId: "published-candidate",
-            validationRunId: "published-run",
+            candidateId: 106,
+            validationRunId: 108,
             expectedHeadSha: "published-head",
           },
         },
@@ -890,8 +732,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -922,14 +764,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-1",
+              validationRunId: 1,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -955,8 +797,8 @@ describe("Change Submit orchestration", () => {
           description: "Deliver it",
         },
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -978,13 +820,12 @@ describe("Change Submit orchestration", () => {
               };
             },
           },
-          acceptanceContextSupplied: true,
           branchHeadSha: "base",
           captureResults: [
             { ...candidate, trackedTreeMatchesChangeBase: false },
             {
               ...candidate,
-              candidateId: "candidate-2",
+              candidateId: 2,
               headSha: "revised-head",
               trackedTreeMatchesChangeBase: false,
             },
@@ -999,13 +840,13 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "run-revised",
+              validationRunId: 110,
               outcome: "passed",
             } as const;
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const first = yield* submit
@@ -1028,7 +869,7 @@ describe("Change Submit orchestration", () => {
         pullRequest: { number: 42 },
       });
       expect(change.publication).toMatchObject({
-        candidateId: "published-candidate",
+        candidateId: 106,
         expectedHeadSha: "published-head",
       });
       expect(events).toEqual([
@@ -1036,12 +877,12 @@ describe("Change Submit orchestration", () => {
         "capture",
         "detect_target",
         "validate_change_linked_to_task",
-        "publish:candidate-1",
+        "publish:1",
         "observe_pull_request",
         "capture",
         "detect_target",
         "validate_change_linked_to_task",
-        "publish:candidate-2",
+        "publish:2",
       ]);
     }),
   );
@@ -1051,8 +892,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -1080,7 +921,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1099,8 +940,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
+          candidateId: 106,
+          validationRunId: 108,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "published-head",
@@ -1119,7 +960,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1139,17 +980,14 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         activeBlocker: {
-          id: "blocker-1",
+          id: 1,
           changeId: "change-1",
-          sequence: 1,
-          reportedAt: now,
           content: "Need an external decision.",
-          resolvedAt: null,
           resolution: null,
         },
         publication: {
-          candidateId: "candidate-1",
-          validationRunId: "run-1",
+          candidateId: 1,
+          validationRunId: 1,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "head",
@@ -1163,7 +1001,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Blocked Submission must not validate"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1175,54 +1013,50 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect(
-    "returns completed publication before fetching the Change Base or resolving configuration",
-    () =>
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const change = readyChange({
-          publication: {
-            candidateId: "candidate-1",
-            validationRunId: "run-1",
-            target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
-            headBranch: "change-1",
-            expectedHeadSha: "head",
-            pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+  it.effect("returns completed publication before fetching the Change Base", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: 1,
+          validationRunId: 1,
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_unreachable",
+            remoteName: "origin",
           },
-        });
-        const submit = openChangeSubmit(
-          dependencies({
-            events,
-            change,
-            trackPolicyResolution: true,
-            refreshResult: {
-              ok: false,
-              code: "publication_remote_unreachable",
-              remoteName: "origin",
+          publication: {
+            publish: () => {
+              throw new Error("Duplicate publication");
             },
-            baselineRepoConfigError: "Later Change Base Repo Config is invalid.",
-            publication: {
-              publish: () => {
-                throw new Error("Duplicate publication");
-              },
-            },
-          }),
-        );
-        const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () => Effect.die("Duplicate validation"),
-          validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
-          listFindings: () => Effect.succeed([]),
-          listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
-        });
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Duplicate validation"),
+        validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
+      });
 
-        const result = yield* submit
-          .submit({ changeId: change.id, now })
-          .pipe(Effect.provide(validationLayer));
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
 
-        expect(result).toMatchObject({ ok: true, status: "published", created: false });
-        expect(events).toEqual(["observe_pull_request", "read_publication_evidence"]);
-      }),
+      expect(result).toMatchObject({ ok: true, status: "published", created: false });
+      expect(events).toEqual(["observe_pull_request", "read_publication_evidence"]);
+    }),
   );
 
   it.effect("does not reuse publication when only the Repository Branch head matches", () =>
@@ -1230,8 +1064,8 @@ describe("Change Submit orchestration", () => {
       const events: string[] = [];
       const change = readyChange({
         publication: {
-          candidateId: "other-candidate",
-          validationRunId: "other-run",
+          candidateId: 107,
+          validationRunId: 111,
           target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
           headBranch: "change-1",
           expectedHeadSha: "head",
@@ -1252,14 +1086,14 @@ describe("Change Submit orchestration", () => {
             return {
               ok: true,
               reused: false,
-              validationRunId: "new-run",
+              validationRunId: 112,
               outcome: "passed",
             } as const;
           }),
         validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1269,8 +1103,8 @@ describe("Change Submit orchestration", () => {
       expect(result).toMatchObject({
         ok: true,
         status: "published",
-        candidateId: "candidate-1",
-        validationRunId: "new-run",
+        candidateId: 1,
+        validationRunId: 112,
       });
       expect(events).toEqual([
         "observe_pull_request",
@@ -1311,7 +1145,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         expect(
@@ -1336,7 +1170,6 @@ describe("Change Submit orchestration", () => {
                 description: "Deliver it",
               },
             }),
-            acceptanceContextSupplied: true,
             refreshResult: { ok: true, base: refreshedBase },
             captureResult: {
               ok: false,
@@ -1353,7 +1186,7 @@ describe("Change Submit orchestration", () => {
           validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
+          listPhaseResults: () => Effect.succeed([]),
         });
 
         expect(
@@ -1389,7 +1222,7 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       expect(
@@ -1419,7 +1252,7 @@ describe("Change Submit orchestration", () => {
           Effect.die("Validation must not start without a GitHub target"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1440,21 +1273,19 @@ describe("Change Submit orchestration", () => {
           description: "Deliver it",
         },
       });
-      const submit = openChangeSubmit(
-        dependencies({ change, acceptanceContextSupplied: true, findings: [finding] }),
-      );
+      const submit = openChangeSubmit(dependencies({ change, findings: [finding] }));
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Change without a Task validation was not expected"),
         validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: true,
             reused: false,
-            validationRunId: "run-1",
+            validationRunId: 1,
             outcome: "blocked",
           }),
         listFindings: () => Effect.succeed([finding]),
         listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1465,8 +1296,8 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "validation_findings",
         changeId: change.id,
-        candidateId: "candidate-1",
-        validationRunId: "run-1",
+        candidateId: 1,
+        validationRunId: 1,
         findings: [finding],
       });
     }),
@@ -1484,7 +1315,6 @@ describe("Change Submit orchestration", () => {
       const submit = openChangeSubmit(
         dependencies({
           change,
-          acceptanceContextSupplied: true,
           toolingFailures: [toolingFailure],
         }),
       );
@@ -1493,12 +1323,12 @@ describe("Change Submit orchestration", () => {
         validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: false,
-            validationRunId: "run-1",
+            validationRunId: 1,
             outcome: "tooling_failed",
           }),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([toolingFailure]),
-        listRounds: () => Effect.succeed([]),
+        listPhaseResults: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -1508,7 +1338,7 @@ describe("Change Submit orchestration", () => {
       expect(result).toMatchObject({
         ok: false,
         code: "validation_tooling_failed",
-        validationRunId: "run-1",
+        validationRunId: 1,
         toolingFailures: [toolingFailure],
       });
     }),
@@ -1528,17 +1358,6 @@ type PullRequestObservation =
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
-  readonly acceptanceContextSupplied?: boolean;
-  readonly agentEnvironment?: readonly string[];
-  readonly baselineRepoConfigError?: string;
-  readonly trackPolicyResolution?: boolean;
-  readonly baselineRepoConfig?: RepoConfig;
-  readonly resolvePolicy?: (
-    acceptanceContextSupplied: boolean,
-    repoConfig: RepoConfig,
-    worktreePath: string,
-  ) => CandidateValidationPolicyResolution;
-  readonly policyRejection?: SubmitRejectionError | GlobalConfigValidationFailed;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1550,8 +1369,8 @@ const dependencies = (input: {
   readonly refreshResult?: RemoteChangeBaseResult;
   readonly branchHeadSha?: string;
   readonly publicationEvidence?: {
-    readonly candidateId: string;
-    readonly validationRunId: string;
+    readonly candidateId: number;
+    readonly validationRunId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   } | null;
@@ -1577,7 +1396,6 @@ const dependencies = (input: {
   const pullRequestObservations = [...(input.pullRequestObservations ?? [])];
   let currentTargetSha: string = refreshedBase.commit;
   return {
-    repositoryCommonDirectory: "/repo/.git",
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
@@ -1589,8 +1407,7 @@ const dependencies = (input: {
           return (
             input.publicationEvidence ?? {
               candidateId: input.change.publication?.candidateId ?? candidate.candidateId,
-              validationRunId:
-                input.change.publication?.validationRunId ?? "published-validation-run",
+              validationRunId: input.change.publication?.validationRunId ?? 999,
               changeBaseSha: candidate.changeBaseSha,
               headSha: input.change.publication?.expectedHeadSha ?? candidate.headSha,
             }
@@ -1607,57 +1424,6 @@ const dependencies = (input: {
         }),
     } satisfies ChangeSubmissionPort,
     github: pullRequestGateway(input, events, pullRequestObservations),
-    loadRepoConfigAtCommit: () => {
-      if (input.trackPolicyResolution) events.push("load_base_repo_config");
-      const error = input.baselineRepoConfigError;
-      return error === undefined
-        ? { ok: true as const, config: input.baselineRepoConfig ?? { idPrefix: "BY" } }
-        : { ok: false as const, message: error };
-    },
-    resolvePolicy: (
-      acceptanceContextSupplied: boolean,
-      repoConfig: RepoConfig,
-      worktreePath: string,
-    ) => {
-      if (input.trackPolicyResolution) events.push("resolve_policy");
-      if (input.resolvePolicy !== undefined) {
-        return input.resolvePolicy(acceptanceContextSupplied, repoConfig, worktreePath);
-      }
-      if (input.policyRejection !== undefined) {
-        return { ok: false as const, error: input.policyRejection };
-      }
-      return input.acceptanceContextSupplied
-        ? ({
-            ok: true,
-            resolved: {
-              acceptanceContextSupplied: true,
-              policy: {
-                ...changeWithoutTaskPolicy,
-                acceptanceReview: {
-                  instructions: "Review intent",
-                  instructionsSource: "built_in",
-                  profile: {
-                    agentProfile: "default",
-                    scope: "global",
-                    profile: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
-                  },
-                },
-              },
-            },
-          } as const)
-        : ({
-            ok: true,
-            resolved: {
-              acceptanceContextSupplied: false,
-              policy: {
-                ...changeWithoutTaskPolicy,
-                ...(input.agentEnvironment === undefined
-                  ? {}
-                  : { agentEnvironment: input.agentEnvironment }),
-              },
-            },
-          } as const);
-    },
     publicationFor: () => {
       const publication =
         input.publication ??
@@ -1765,14 +1531,16 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.test/acme/repo.git",
-  startingCommit: "base",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
-  reviewerConfiguration: {
-    acceptanceReview: storedAcceptanceReviewer,
-    specialistReviews: [],
+  policy: {
+    reviewerConfiguration: {
+      acceptanceReview: storedAcceptanceReviewer,
+      specialistReviews: [],
+    },
+    prepare: null,
+    checks: changeWithoutTaskPolicy.checks,
   },
-  prepare: null,
   prepareFailure: null,
   implementationDecisions: [],
   activeBlocker: null,
@@ -1781,9 +1549,6 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   state: "open",
   closeReason: null,
   cancelReason: null,
-  createdAt: now,
-  updatedAt: now,
-  closedAt: null,
   ...overrides,
 });
 
@@ -1797,16 +1562,14 @@ const refreshedBase = {
 
 const toolingFailure = {
   sequence: 1,
-  validationRunId: "run-1",
+  validationRunId: 1,
   errorKind: "workspace_setup_failed",
   operationName: "create_workspace",
   errorMessage: "Workspace unavailable",
-  createdAt: now,
 } as const;
 
 const finding = {
-  id: "finding-1",
-  validationRunId: "run-1",
+  validationRunId: 1,
   phase: "checks",
   producer: "quality",
   title: "Quality failed",
@@ -1814,6 +1577,4 @@ const finding = {
   evidence: "quality exited with code 1",
   files: [],
   artifactRefs: [],
-  createdAt: now,
-  updatedAt: now,
 } as const;

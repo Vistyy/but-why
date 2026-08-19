@@ -15,7 +15,6 @@ import { openTaskUseCases } from "../../src/task/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const taskId = publicTaskId("BY-1");
-const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 
 const task = (description = "Original description"): TaskRecord => ({
@@ -24,8 +23,6 @@ const task = (description = "Original description"): TaskRecord => ({
   description,
   state: "new",
   cancelReason: null,
-  createdAt: firstNow,
-  updatedAt: firstNow,
   startable: false,
   blockedBy: [],
   prerequisites: [],
@@ -37,7 +34,6 @@ const contextFor = (root: string): LocalRepositoryContext => {
   const butWhyDir = join(root, ".but-why");
   return {
     root,
-    mainCheckoutRoot: root,
     commonDirectory: join(root, ".git"),
     idPrefix: "BY",
     config: { idPrefix: "BY" },
@@ -48,6 +44,7 @@ const contextFor = (root: string): LocalRepositoryContext => {
       statePath: join(operationalDir, "state.sqlite"),
       reviewersPath: join(butWhyDir, "reviewers"),
       artifactsPath: join(operationalDir, "artifacts"),
+      agentSessionsPath: join(operationalDir, "agent-sessions"),
       snapshotsPath: join(operationalDir, "snapshots"),
       taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
     },

@@ -31,7 +31,7 @@ import { openHerdrInteractiveSessionHost } from "../interactiveSession/adapters/
 import { loadLocalInteractiveSessionProfile } from "../interactiveSession/adapters/localInteractiveSessionProfile.js";
 import type { InteractiveSessionHost } from "../interactiveSession/interactiveSessionHost.js";
 import { type ChangeReconciliationResult, openChangeReconciliation } from "../reconcileChange.js";
-import { resolveChangeReviewerConfiguration } from "./resolveChangeReviewerConfiguration.js";
+import { resolveChangePolicyAtCommit } from "./resolveChangePolicy.js";
 import { composeTerminalCleanup } from "./terminalCleanup.js";
 
 export type LoadChangeOperationError =
@@ -44,9 +44,10 @@ export type LoadedChangeOperationResult<A> =
 
 type LoadInput = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
+  readonly herdrSocketPath?: string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly platform: NodeJS.Platform;
 };
 
 export type UnlinkedChangeStartInput = {
@@ -57,8 +58,7 @@ export type UnlinkedChangeStartInput = {
 
 export type ChangeStartCommand = TaskChangeStartInput | UnlinkedChangeStartInput;
 
-const loadContext = (input: LoadInput) =>
-  openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+const loadContext = (input: LoadInput) => openRepositoryRuntime(input.cwd);
 
 export const withChangeStart = <A, E, R>(
   input: LoadInput,
@@ -83,30 +83,24 @@ export const withChangeStart = <A, E, R>(
         use((command) =>
           Effect.gen(function* () {
             const git: ChangeStartGitOperations = {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(context.root, change, recovering),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(context, requestedBaseBranch),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(context.root, change, recovering, startingCommit),
             };
             if (command.taskId !== undefined) {
               return yield* taskStart(command);
             }
-            const reviewerConfiguration = resolveChangeReviewerConfiguration(
-              context.config,
-              input.globalConfigPath,
-              context.root,
-              false,
-            );
-            if (!reviewerConfiguration.ok) {
-              return {
-                ok: false as const,
-                code: "reviewer_configuration_invalid" as const,
-                message: reviewerConfiguration.message,
-              };
-            }
             return yield* startChange(changes, git, executeLocalRepositoryPreparation, {
               ...command,
-              reviewerConfiguration: reviewerConfiguration.configuration,
+              resolvePolicy: (startingCommit) =>
+                resolveChangePolicyAtCommit({
+                  repositoryRoot: context.root,
+                  commit: startingCommit,
+                  globalConfigPath: input.globalConfigPath,
+                  acceptanceContextSupplied: false,
+                  expectedIdPrefix: context.idPrefix,
+                }),
             });
           }),
         ),
@@ -135,10 +129,10 @@ export const withChangePrepare = <A, E, R>(
           prepareChange(
             store,
             {
-              resolveIntent: (slug, requestedBaseBranch) =>
-                resolveChangeStartGitIntent(context, slug, requestedBaseBranch),
-              provisionWorktree: (change, recovering) =>
-                provisionChangeWorktree(context.root, change, recovering),
+              resolveIntent: (requestedBaseBranch) =>
+                resolveChangeStartGitIntent(context, requestedBaseBranch),
+              provisionWorktree: (change, recovering, startingCommit) =>
+                provisionChangeWorktree(context.root, change, recovering, startingCommit),
             },
             executeLocalRepositoryPreparation,
             changeId,
@@ -168,10 +162,16 @@ export const withChangeImplement = <A, E, R>(
       Effect.flatMap((store) =>
         use((changeId, implementerPrompt) =>
           implementChange(
-            context.mainCheckoutRoot,
+            context.root,
             context.config,
             store,
-            input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
+            input.interactiveSessionHost ??
+              openHerdrInteractiveSessionHost(undefined, {
+                ...(input.herdrSocketPath === undefined
+                  ? {}
+                  : { socketPath: input.herdrSocketPath }),
+                platform: input.platform,
+              }),
             input.globalConfigPath,
             loadLocalInteractiveSessionProfile,
             changeId,

@@ -1,32 +1,36 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-import type { AgentInvocationRecord } from "../agent/agentSession/agentSession.js";
+import type { AgentInvocationRecord, AgentThinking } from "../agent/agentSession/agentSession.js";
+import {
+  assertValidationArtifactRecord,
+  assertValidationToolingFailureEvidence,
+  decodeValidationFindingEvidence,
+} from "../change/candidateValidation/candidateValidationEvidence.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
-  CandidateValidationRound,
-  CandidateValidationRunRecord,
+  CandidateValidationPhaseResult,
   CandidateValidationToolingFailure,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ValidationToolingFailureKind } from "../change/validationRun/toolingErrorKind.js";
-import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
+import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
-import { readValidationRunById } from "./sqliteValidationRunStorage.js";
+import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
+import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 
-export type StoredValidationRoundRow = {
-  readonly validationRunId: string;
-  readonly phase: ValidationPhase;
+type StoredPhaseResultRow = {
+  readonly validationRunId: number;
+  readonly phase: string;
   readonly producer: string;
-  readonly roundNumber: number;
-  readonly status: CandidateValidationRound["status"];
-  readonly createdAt: string;
+  readonly outcome: string;
+  readonly findings: string;
+  readonly artifacts: string;
+  readonly toolingFailure: string | null;
 };
 
 type StoredValidationAgentInvocationRow = {
-  readonly phase: ValidationPhase;
+  readonly phase: string;
   readonly producer: string;
   readonly id: number;
   readonly agentSessionId: number;
@@ -47,83 +51,33 @@ type StoredValidationAgentInvocationRow = {
   readonly unusableReason: string | null;
 };
 
-export type StoredValidationFindingRow = {
-  readonly id: string;
-  readonly validationRunId: string;
-  readonly phase: ValidationPhase;
-  readonly producer: string;
-  readonly title: string;
-  readonly description: string;
-  readonly evidence: string;
-  readonly files: string;
-  readonly artifactRefs: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-};
-
-type StoredToolingFailureRow = {
-  readonly sequence: number;
-  readonly validationRunId: string;
-  readonly errorKind: ValidationToolingFailureKind;
-  readonly operationName: string;
-  readonly errorMessage: string;
-  readonly createdAt: string;
-};
-
-type StoredValidationArtifactRow = {
-  readonly ref: string;
-  readonly validationRunId: string;
-  readonly phase: ValidationPhase;
-  readonly producer: string;
-  readonly path: string;
-  readonly originalBytes: number;
-  readonly storedBytes: number;
-  readonly truncated: number;
-  readonly createdAt: string;
-};
-
-export const findingReadColumns = `
-  id, validation_run_id AS validationRunId, phase, producer, title,
-  description, evidence, files, artifact_refs AS artifactRefs,
-  created_at AS createdAt, updated_at AS updatedAt
-`;
-
-export const listValidationRounds = (
+export const listValidationPhaseResults = (
   sql: SqlClient.SqlClient,
-  validationRunId: string,
+  validationRunId: number,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const operationName = "list Candidate validation rounds";
-    const rows = yield* sql<StoredValidationRoundRow>`
-      SELECT validation_run_id AS validationRunId, phase, producer,
-        round_number AS roundNumber,
-        status, created_at AS createdAt
-      FROM candidate_validation_rounds
-      WHERE validation_run_id = ${validationRunId}
-    `;
-    const rounds = yield* decodePersisted(operationName, () =>
-      rows
-        .map((row) => assertRunOwner(decodeValidationRound(row), validationRunId))
-        .sort(compareRounds),
-    );
-    if (rounds.length === 0) return rounds;
-    const run = yield* readValidationRunById(
+    const rows = yield* readOrderedPhaseResults(
       sql,
       validationRunId,
-      "decode Candidate Validation Run",
+      "list Validation Phase Results",
       idPrefix,
     );
-    if (run === undefined) {
-      return yield* invalidData(operationName, "Validation rounds belong to an unknown Run");
-    }
-    yield* decodePersisted(operationName, () =>
-      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]])),
+    return yield* decodePersisted("list Validation Phase Results", () =>
+      rows.map((row) => ({
+        validationRunId: assertRunId(row.validationRunId, validationRunId),
+        phase: decodePhase(row.phase),
+        producer: row.producer,
+        outcome: decodeOutcome(row.outcome),
+      })),
     );
-    return rounds;
   });
 
-export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validationRunId: string) =>
+export const listValidationAgentInvocations = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  idPrefix: string,
+) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredValidationAgentInvocationRow>`
       SELECT link.phase, link.producer,
@@ -136,143 +90,196 @@ export const listValidationAgentInvocations = (sql: SqlClient.SqlClient, validat
         invocation.cache_write_tokens AS cacheWriteTokens,
         invocation.output_tokens AS outputTokens,
         invocation.total_tokens AS totalTokens,
-        continuation.harness,
-        continuation.provider,
-        continuation.model,
-        continuation.thinking,
-        continuation.transcript_path AS transcriptPath,
+        continuation.harness, continuation.provider, continuation.model,
+        continuation.thinking, continuation.transcript_path AS transcriptPath,
         continuation.unusable_reason AS unusableReason
-      FROM validation_phase_agent_invocations link
-      JOIN agent_invocations invocation ON invocation.id = link.agent_invocation_id
-      JOIN agent_continuations continuation ON continuation.id = invocation.continuation_id
+      FROM validation_phase_agent_invocations AS link
+      JOIN agent_invocations AS invocation ON invocation.id = link.agent_invocation_id
+      JOIN agent_continuations AS continuation ON continuation.id = invocation.continuation_id
       WHERE link.validation_run_id = ${validationRunId}
-      ORDER BY invocation.id ASC
+      ORDER BY invocation.id
     `;
+    if (rows.length === 0) return [];
+    const authority = yield* requireValidationExecutionAuthority(
+      sql,
+      validationRunId,
+      "list Candidate Agent Invocations",
+      idPrefix,
+    );
     return yield* decodePersisted("list Candidate Agent Invocations", () =>
-      rows.map((row) => ({
-        ...decodeAgentInvocation(row),
-        phase: row.phase,
-        producer: row.producer,
-      })),
+      rows.map((row) => {
+        configuredValidationPosition(row.phase, row.producer, authority.changePolicy);
+        return {
+          ...decodeAgentInvocation(row),
+          phase: decodeValidationPhase(row.phase),
+          producer: row.producer,
+        };
+      }),
     );
   });
 
 export const listValidationFindings = (
   sql: SqlClient.SqlClient,
-  validationRunId: string,
+  validationRunId: number,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const operationName = "decode Candidate validation Finding";
-    const rows = yield* sql.unsafe<StoredValidationFindingRow>(
-      `SELECT ${findingReadColumns}
-       FROM candidate_validation_findings
-       WHERE validation_run_id = ?`,
-      [validationRunId],
-    );
-    const findings = yield* decodePersisted(operationName, () =>
-      rows.map((row) => assertRunOwner(decodeValidationFinding(row), validationRunId)),
-    );
-    if (findings.length === 0) return findings;
-    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
-    const roundRows = yield* sql<StoredValidationRoundRow>`
-      SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
-        round.round_number AS roundNumber,
-        round.status, round.created_at AS createdAt
-      FROM candidate_validation_rounds AS round
-      WHERE round.validation_run_id = ${validationRunId}
-        AND EXISTS (
-          SELECT 1 FROM candidate_validation_findings AS finding
-          WHERE finding.validation_run_id = round.validation_run_id
-            AND finding.phase = round.phase AND finding.producer = round.producer
-        )
-    `;
-    const rounds = yield* decodePersisted(operationName, () => {
-      const selected = roundRows.map((row) =>
-        assertRunOwner(decodeValidationRound(row), validationRunId),
-      );
-      validateRoundPolicyRelationships(selected, new Map([[run.id, run]]));
-      validateFindingRoundRelationships(findings, selected);
-      return selected;
-    });
-    return findings.sort((left, right) => compareEvidence(left, right, rounds));
-  });
-
-export const listValidationToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  Effect.gen(function* () {
-    const operationName = "list Candidate validation Tooling Failures";
-    const rows = yield* sql<StoredToolingFailureRow>`
-      SELECT sequence, validation_run_id AS validationRunId, error_kind AS errorKind,
-        operation_name AS operationName, error_message AS errorMessage,
-        created_at AS createdAt
-      FROM candidate_validation_tooling_failures
-      WHERE validation_run_id = ${validationRunId}
-    `;
-    const failures = yield* decodePersisted(operationName, () =>
-      rows
-        .map((row) => assertRunOwner(decodeToolingFailure(row), validationRunId))
-        .sort((left, right) => left.sequence - right.sequence),
-    );
-    if (failures.length === 0) return failures;
-    yield* requireRunIdentity(
+    const rows = yield* readOrderedPhaseResults(
       sql,
       validationRunId,
-      operationName,
-      "Tooling Failures belong to an unknown Run",
+      "list Candidate validation Findings",
+      idPrefix,
     );
-    return failures;
+    const artifacts = yield* listValidationArtifacts(sql, validationRunId, idPrefix);
+    const availableArtifactRefs = new Set(artifacts.map((artifact) => artifact.ref));
+    return yield* decodePersisted("list Candidate validation Findings", () =>
+      rows.flatMap((row) =>
+        parseFindings(row.findings, availableArtifactRefs).map((finding) => ({
+          ...finding,
+          validationRunId: assertRunId(row.validationRunId, validationRunId),
+          phase: decodePhase(row.phase),
+          producer: row.producer,
+        })),
+      ),
+    );
+  });
+
+export const listValidationToolingFailures = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const phaseRows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Candidate validation Tooling Failures",
+      idPrefix,
+    );
+    const runRows = yield* sql<{ readonly toolingFailure: string | null }>`
+      SELECT run_tooling_failure AS toolingFailure
+      FROM validation_runs WHERE id = ${validationRunId}
+    `;
+    return yield* decodePersisted("list Candidate validation Tooling Failures", () => {
+      const encoded = [
+        ...phaseRows.flatMap((row) => (row.toolingFailure === null ? [] : [row.toolingFailure])),
+        ...(runRows[0]?.toolingFailure === null || runRows[0]?.toolingFailure === undefined
+          ? []
+          : [runRows[0].toolingFailure]),
+      ];
+      return encoded.map((source, index) => ({
+        sequence: index + 1,
+        validationRunId,
+        ...parseToolingFailure(source),
+      }));
+    });
   });
 
 export const listValidationArtifacts = (
   sql: SqlClient.SqlClient,
-  validationRunId: string,
+  validationRunId: number,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const operationName = "list Candidate validation Artifacts";
-    const rows = yield* sql<StoredValidationArtifactRow>`
-      SELECT ref, validation_run_id AS validationRunId, phase, producer, path,
-        original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated,
-        created_at AS createdAt
-      FROM candidate_validation_artifacts
-      WHERE validation_run_id = ${validationRunId}
-    `;
-    const artifacts = yield* decodePersisted(operationName, () =>
-      rows
-        .map((row) => assertRunOwner(decodeValidationArtifact(row), validationRunId))
-        .sort(compareArtifacts),
+    const rows = yield* readOrderedPhaseResults(
+      sql,
+      validationRunId,
+      "list Candidate validation Artifacts",
+      idPrefix,
     );
-    if (artifacts.length === 0) return artifacts;
-    const run = yield* requireRun(sql, validationRunId, operationName, idPrefix);
-    const roundRows = yield* sql<StoredValidationRoundRow>`
-      SELECT round.validation_run_id AS validationRunId, round.phase, round.producer,
-        round.round_number AS roundNumber,
-        round.status, round.created_at AS createdAt
-      FROM candidate_validation_rounds AS round
-      WHERE round.validation_run_id = ${validationRunId}
-        AND EXISTS (
-          SELECT 1 FROM candidate_validation_artifacts AS artifact
-          WHERE artifact.validation_run_id = round.validation_run_id
-            AND artifact.phase = round.phase AND artifact.producer = round.producer
-        )
-    `;
-    yield* decodePersisted(operationName, () => {
-      const rounds = roundRows.map((row) =>
-        assertRunOwner(decodeValidationRound(row), validationRunId),
-      );
-      validateRoundPolicyRelationships(rounds, new Map([[run.id, run]]));
-    });
-    return artifacts;
+    return yield* decodePersisted("list Candidate validation Artifacts", () =>
+      rows.flatMap((row) =>
+        parseArtifacts(row.artifacts).map((artifact) => {
+          const record = {
+            ...artifact,
+            ref: `artifact:${artifact.path}`,
+            truncated: artifact.storedBytes < artifact.originalBytes,
+            validationRunId: assertRunId(row.validationRunId, validationRunId),
+            phase: decodePhase(row.phase),
+            producer: row.producer,
+          };
+          assertValidationArtifactRecord(record);
+          return record;
+        }),
+      ),
+    );
   });
 
-export const decodeValidationRound = (row: StoredValidationRoundRow): CandidateValidationRound => ({
-  validationRunId: row.validationRunId,
-  phase: row.phase,
-  producer: row.producer,
-  roundNumber: row.roundNumber,
-  status: row.status,
-  createdAt: row.createdAt,
-});
+const readOrderedPhaseResults = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<StoredPhaseResultRow>`
+      SELECT validation_run_id AS validationRunId, phase, producer, outcome,
+        findings, artifacts, tooling_failure AS toolingFailure
+      FROM validation_phase_results
+      WHERE validation_run_id = ${validationRunId}
+    `;
+    if (rows.length === 0) return rows;
+    const authority = yield* requireValidationExecutionAuthority(
+      sql,
+      validationRunId,
+      operationName,
+      idPrefix,
+    );
+    return yield* decodePersisted(operationName, () =>
+      rows
+        .map((row) => ({
+          row,
+          phasePosition: phasePosition(row.phase),
+          producerPosition: configuredValidationPosition(
+            row.phase,
+            row.producer,
+            authority.changePolicy,
+          ),
+        }))
+        .sort(
+          (left, right) =>
+            left.phasePosition - right.phasePosition ||
+            left.producerPosition - right.producerPosition,
+        )
+        .map(({ row }) => row),
+    );
+  });
+
+const parseFindings = (
+  source: string,
+  availableArtifactRefs: ReadonlySet<string>,
+): readonly Omit<CandidateValidationFinding, "validationRunId" | "phase" | "producer">[] =>
+  parseArray(source).map((value) => decodeValidationFindingEvidence(value, availableArtifactRefs));
+
+const parseArtifacts = (
+  source: string,
+): readonly Pick<CandidateValidationArtifact, "path" | "originalBytes" | "storedBytes">[] =>
+  parseArray(source).map((value) => {
+    const row = objectValue(value, "Artifact");
+    const artifact = {
+      path: stringValue(field(row, "path"), "Artifact path"),
+      originalBytes: numberValue(field(row, "originalBytes"), "Artifact original bytes"),
+      storedBytes: numberValue(field(row, "storedBytes"), "Artifact stored bytes"),
+    };
+    return artifact;
+  });
+
+const parseToolingFailure = (
+  source: string,
+): Omit<CandidateValidationToolingFailure, "sequence" | "validationRunId"> => {
+  const row = objectValue(JSON.parse(source) as unknown, "Tooling Failure");
+  requireExactFields(row, ["errorKind", "operationName", "errorMessage"], "Tooling Failure");
+  const failure = {
+    errorKind: stringValue(
+      field(row, "errorKind"),
+      "Tooling Failure kind",
+    ) as CandidateValidationToolingFailure["errorKind"],
+    operationName: stringValue(field(row, "operationName"), "Tooling Failure operation"),
+    errorMessage: stringValue(field(row, "errorMessage"), "Tooling Failure message"),
+  };
+  assertValidationToolingFailureEvidence(failure);
+  return failure;
+};
 
 const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentInvocationRecord => {
   const validKinds = ["returned", "launch_failed", "failed", "return_unknown"] as const;
@@ -314,133 +321,18 @@ const decodeAgentInvocation = (row: StoredValidationAgentInvocationRow): AgentIn
     continuation: {
       id: row.continuationId,
       agentSessionId: row.agentSessionId,
-      harness: decodeAgentHarness(row.harness),
+      harness: row.harness === "pi" ? "pi" : invalidHarness(row.harness),
       provider: row.provider,
       model: row.model,
-      thinking: row.thinking === null ? null : decodeAgentThinking(row.thinking),
+      thinking: decodeThinking(row.thinking),
       transcriptPath: row.transcriptPath,
       unusableReason: row.unusableReason,
     },
   };
 };
 
-const decodeAgentHarness = (value: string): "pi" => {
-  if (value !== "pi") throw new Error(`Invalid Agent Harness: ${value}`);
-  return "pi";
-};
-
-const decodeAgentThinking = (value: string) => {
-  if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(value))
-    throw new Error(`Invalid Agent thinking level: ${value}`);
-  return value as "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-};
-
-export const decodeValidationFinding = (
-  row: StoredValidationFindingRow,
-): CandidateValidationFinding => ({
-  id: row.id,
-  validationRunId: row.validationRunId,
-  phase: row.phase,
-  producer: row.producer,
-  title: row.title,
-  description: row.description,
-  evidence: row.evidence,
-  files: decodeSqliteJsonStringArray(row.files),
-  artifactRefs: decodeSqliteJsonStringArray(row.artifactRefs),
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-});
-
-const decodeToolingFailure = (row: StoredToolingFailureRow): CandidateValidationToolingFailure => ({
-  sequence: row.sequence,
-  validationRunId: row.validationRunId,
-  errorKind: row.errorKind,
-  operationName: row.operationName,
-  errorMessage: row.errorMessage,
-  createdAt: row.createdAt,
-});
-
-const decodeValidationArtifact = (
-  row: StoredValidationArtifactRow,
-): CandidateValidationArtifact => ({
-  ref: row.ref,
-  validationRunId: row.validationRunId,
-  phase: row.phase,
-  producer: row.producer,
-  path: row.path,
-  originalBytes: row.originalBytes,
-  storedBytes: row.storedBytes,
-  truncated: row.truncated === 1,
-  createdAt: row.createdAt,
-});
-
-export const assertRunOwner = <A extends { readonly validationRunId: string }>(
-  record: A,
-  validationRunId: string,
-): A => {
-  if (record.validationRunId !== validationRunId)
-    throw new Error("Validation evidence belongs to another Run");
-  return record;
-};
-
-export const validateRoundPolicyRelationships = (
-  rounds: readonly CandidateValidationRound[],
-  runs: ReadonlyMap<string, CandidateValidationRunRecord>,
-): void => {
-  for (const round of rounds) {
-    const run = runs.get(round.validationRunId);
-    if (run === undefined) throw new Error("Validation round belongs to an unknown Run");
-    const expectedRoundNumber = configuredRoundNumber(round, run);
-    if (expectedRoundNumber === undefined) {
-      throw new Error("Validation round is not configured by its Run policy");
-    }
-    if (round.roundNumber !== expectedRoundNumber) {
-      throw new Error("Validation round ordering does not match its Run policy");
-    }
-  }
-};
-
-export const validateFindingRoundRelationships = (
-  findings: readonly CandidateValidationFinding[],
-  rounds: readonly CandidateValidationRound[],
-): void => {
-  for (const finding of findings) findingRound(finding, rounds);
-};
-
-const requireRun = (
-  sql: SqlClient.SqlClient,
-  validationRunId: string,
-  operationName: string,
-  idPrefix: string,
-) =>
-  Effect.flatMap(
-    readValidationRunById(sql, validationRunId, "decode Candidate Validation Run", idPrefix),
-    (run) =>
-      run === undefined
-        ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
-        : Effect.succeed(run),
-  );
-
-const requireRunIdentity = (
-  sql: SqlClient.SqlClient,
-  validationRunId: string,
-  operationName: string,
-  missingMessage: string,
-) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidate_validation_runs WHERE id = ${validationRunId}
-    `;
-    const row = rows[0];
-    if (row === undefined) return yield* invalidData(operationName, missingMessage);
-    yield* decodePersisted(operationName, () => {
-      if (row.id !== validationRunId)
-        throw new Error("Validation Run identity does not match lookup");
-    });
-  });
-
-const phaseOrder = (phase: CandidateValidationRound["phase"]): number => {
-  switch (phase) {
+const phasePosition = (phase: string): number => {
+  switch (decodePhase(phase)) {
     case validationPhase.prepare:
       return 0;
     case validationPhase.checks:
@@ -452,76 +344,68 @@ const phaseOrder = (phase: CandidateValidationRound["phase"]): number => {
   }
 };
 
-const compareRounds = (left: CandidateValidationRound, right: CandidateValidationRound): number =>
-  phaseOrder(left.phase) - phaseOrder(right.phase) ||
-  left.roundNumber - right.roundNumber ||
-  compareStrings(left.producer, right.producer);
+const requireValidationExecutionAuthority = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.flatMap(
+    readValidationExecutionAuthorityById(sql, validationRunId, operationName, idPrefix),
+    (authority) =>
+      authority === undefined
+        ? invalidData(operationName, "Validation evidence belongs to an unknown Run")
+        : Effect.succeed(authority),
+  );
 
-const configuredRoundNumber = (
-  round: CandidateValidationRound,
-  run: CandidateValidationRunRecord,
-): number | undefined => {
-  switch (round.phase) {
-    case validationPhase.prepare:
-      return run.policy.prepare === undefined ? undefined : 1;
-    case validationPhase.checks: {
-      const index = run.policy.checks.findIndex((check) => check.id === round.producer);
-      return index < 0 ? undefined : index + 1;
-    }
-    case validationPhase.acceptanceReview:
-      return run.policy.acceptanceReview === undefined ? undefined : 1;
-    case validationPhase.specialistReview: {
-      const index = (run.policy.specialistReviews ?? []).findIndex(
-        (specialist) => specialist.id === round.producer,
-      );
-      return index < 0 ? undefined : index + 1;
-    }
+const decodePhase = decodeValidationPhase;
+const decodeOutcome = (value: string): CandidateValidationPhaseResult["outcome"] => {
+  if (value === "passed" || value === "failed") return value;
+  throw new Error("Validation Phase Result outcome is unsupported");
+};
+const assertRunId = (actual: number, expected: number): number => {
+  if (actual !== expected) throw new Error("Validation evidence belongs to another Run");
+  return actual;
+};
+const parseArray = (source: string): readonly unknown[] => {
+  const value: unknown = JSON.parse(source) as unknown;
+  if (!Array.isArray(value)) throw new Error("Stored evidence is not an array");
+  return value;
+};
+const objectValue = (value: unknown, name: string): Record<string, unknown> => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${name} is not an object`);
+  }
+  return value as Record<string, unknown>;
+};
+const field = (value: Record<string, unknown>, name: string): unknown => value[name];
+const stringValue = (value: unknown, name: string): string => {
+  if (typeof value !== "string") throw new Error(`${name} is not a string`);
+  return value;
+};
+const requireExactFields = (
+  value: Record<string, unknown>,
+  fields: readonly string[],
+  name: string,
+): void => {
+  const keys = Object.keys(value);
+  if (keys.length !== fields.length || fields.some((fieldName) => !(fieldName in value))) {
+    throw new Error(`${name} fields are invalid`);
   }
 };
-
-const compareEvidence = (
-  left: CandidateValidationFinding,
-  right: CandidateValidationFinding,
-  rounds: readonly CandidateValidationRound[],
-): number =>
-  phaseOrder(left.phase) - phaseOrder(right.phase) ||
-  findingRound(left, rounds) - findingRound(right, rounds) ||
-  compareStrings(left.id, right.id);
-
-const findingRound = (
-  finding: CandidateValidationFinding,
-  rounds: readonly CandidateValidationRound[],
-): number => {
-  const round = rounds.find(
-    (candidate) =>
-      candidate.validationRunId === finding.validationRunId &&
-      candidate.phase === finding.phase &&
-      candidate.producer === finding.producer,
-  );
-  if (round === undefined) throw new Error("Finding has no related Validation round");
-  if (round.status !== "failed") throw new Error("Finding belongs to a passed Validation round");
-  return round.roundNumber;
+const numberValue = (value: unknown, name: string): number => {
+  if (typeof value !== "number") throw new Error(`${name} is not a number`);
+  return value;
 };
-
-const artifactPathOrder = (path: string): number => {
-  if (path.endsWith("/stdout.txt")) return 0;
-  if (path.endsWith("/stderr.txt")) return 1;
-  if (path.endsWith("/exit-code.json")) return 2;
-  if (path.endsWith("/logs.txt")) return 3;
-  return 4;
+const invalidHarness = (value: string): never => {
+  throw new Error(`Invalid Agent Harness: ${value}`);
 };
-
-const compareArtifacts = (
-  left: CandidateValidationArtifact,
-  right: CandidateValidationArtifact,
-): number =>
-  phaseOrder(left.phase) - phaseOrder(right.phase) ||
-  compareStrings(left.producer, right.producer) ||
-  artifactPathOrder(left.path) - artifactPathOrder(right.path) ||
-  compareStrings(left.ref, right.ref);
-
-const compareStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
-
+const decodeThinking = (value: string | null): AgentThinking | null => {
+  if (value === null) return null;
+  if (["off", "minimal", "low", "medium", "high", "xhigh"].includes(value)) {
+    return value as AgentThinking;
+  }
+  throw new Error(`Invalid Agent thinking level: ${value}`);
+};
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

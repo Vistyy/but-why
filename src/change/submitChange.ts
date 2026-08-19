@@ -1,8 +1,5 @@
 import { Effect } from "effect";
-import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
-import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { RepoConfig } from "../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../submission/submissionProgress.js";
 import type {
@@ -18,17 +15,13 @@ import type {
   CandidateValidationFinding,
   CandidateValidationToolingFailure,
 } from "./candidateValidation/candidateValidationRunStore.js";
-import type {
-  CandidateValidationPolicyResolution,
-  ResolvedCandidateValidationPolicy,
-} from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import {
   CandidateValidation,
   type CandidateValidationService,
 } from "./candidateValidation/validateCandidate.js";
 import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "./changePorts.js";
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
+import { validateChangeReviewerConfigurationResources } from "./changeReviewerConfiguration.js";
 import {
   type OwnedPublication,
   type OwnedPullRequestUnavailableReason,
@@ -44,9 +37,6 @@ import type {
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
 import type { ReconciledChange } from "./reconcileChange.js";
-import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
-import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
-import type { ReviewerExecutionEvidence } from "./validationRun/reviewerArtifacts.js";
 
 export type ChangeSubmitResult =
   | {
@@ -58,12 +48,10 @@ export type ChangeSubmitResult =
       readonly ok: true;
       readonly status: "published";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: true;
@@ -74,27 +62,23 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: "validation_findings";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly findings: readonly CandidateValidationFinding[];
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
       readonly code: "validation_tooling_failed";
       readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
+      readonly candidateId: number;
+      readonly validationRunId: number;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
-      readonly reviewerEvidence?: ReviewerExecutionEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
       readonly code: "submission_in_progress" | "active_validation_run";
       readonly changeId: string;
-      readonly validationRunId: string | null;
+      readonly validationRunId: number | null;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | {
@@ -112,12 +96,6 @@ export type ChangeSubmitResult =
       readonly ok: false;
       readonly code: "validation_policy_invalid";
       readonly message: string;
-      readonly details?:
-        | {
-            readonly path?: string;
-            readonly diagnostics?: readonly ContractDiagnostic[];
-          }
-        | undefined;
     }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
   | RemoteChangeBaseError
@@ -144,15 +122,6 @@ export type PublicationTargetDetectionResult =
       readonly code: "PR_TARGET_NOT_FOUND" | "GITHUB_TOOLING_ERROR";
     };
 
-export type ManagedRepoConfigResolution =
-  | { readonly ok: true; readonly config: RepoConfig }
-  | {
-      readonly ok: false;
-      readonly message: string;
-      readonly path?: string;
-      readonly diagnostics?: readonly ContractDiagnostic[];
-    };
-
 export type ChangeSubmitInput = {
   readonly changeId: string;
   readonly now: string;
@@ -176,20 +145,9 @@ type CaptureCandidate = (
 ) => Effect.Effect<CaptureLocalCandidateResult, RepositoryStorageError>;
 
 export const openChangeSubmit = (dependencies: {
-  readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangeSubmissionPort;
   readonly github: GitHubPullRequestReader;
-  readonly loadRepoConfigAtCommit: (
-    worktreePath: string,
-    commit: string,
-  ) => ManagedRepoConfigResolution;
-  readonly resolvePolicy: (
-    acceptanceContextSupplied: boolean,
-    repoConfig: RepoConfig,
-    worktreePath: string,
-    reviewerConfiguration?: ChangeReviewerConfiguration,
-  ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
     cwd: string,
@@ -262,199 +220,44 @@ const submitChange = (
     const candidate = yield* dependencies.captureCandidate({
       cwd: change.worktreePath,
       changeId: change.id,
-      now: input.now,
       changeBaseSha: refreshedBase.base.commit,
     });
     if (!candidate.ok) return candidate;
     if (candidate.trackedTreeMatchesChangeBase) {
       return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
     }
-    const baselineRepoConfig = dependencies.loadRepoConfigAtCommit(
-      change.worktreePath,
-      refreshedBase.base.commit,
-    );
-    if (!baselineRepoConfig.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: baselineRepoConfig.message,
-        ...(configFailureDetails(baselineRepoConfig) === undefined
-          ? {}
-          : { details: configFailureDetails(baselineRepoConfig) }),
-      } as const;
-    }
-    if (change.reviewerConfiguration === null || change.reviewerConfiguration === undefined) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      } as const;
-    }
     if (
       change.acceptanceContext !== null &&
-      change.reviewerConfiguration.acceptanceReview === null
+      change.policy.reviewerConfiguration.acceptanceReview === null
     ) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
+        message: "The Change policy has no Acceptance Reviewer for its Acceptance Context.",
       } as const;
     }
-    const policy = dependencies.resolvePolicy(
-      change.acceptanceContext !== null,
-      baselineRepoConfig.config,
-      change.worktreePath,
-      change.reviewerConfiguration,
+    const resources = validateChangeReviewerConfigurationResources(
+      change.policy.reviewerConfiguration,
+      dependencies.repositoryPath,
     );
-    if (!policy.ok) {
+    if (!resources.ok) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        ...formatValidationPolicyFailure(policy.error),
+        message: resources.message,
       } as const;
     }
-    const fixedPolicy = yield* applyChangeReviewerConfiguration(
-      dependencies.persistence,
-      change.id,
-      policy.resolved,
-      change.reviewerConfiguration,
-      () =>
-        dependencies.resolvePolicy(
-          change.acceptanceContext !== null,
-          baselineRepoConfig.config,
-          change.worktreePath,
-        ),
-    );
-    if (!fixedPolicy.ok) return fixedPolicy;
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
     return yield* validateAndPublish(
       dependencies,
       change,
       candidate,
-      fixedPolicy.resolved,
       target.target,
       input.now,
       input.progress,
     );
   });
-
-const applyChangeReviewerConfiguration = (
-  persistence: ChangeSubmissionPort,
-  changeId: string,
-  resolved: ResolvedCandidateValidationPolicy,
-  configuration: ChangeReviewerConfiguration | null | undefined,
-  resolveCurrentPolicy: () => CandidateValidationPolicyResolution,
-): Effect.Effect<
-  | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
-  | {
-      readonly ok: false;
-      readonly code: "validation_policy_invalid";
-      readonly message: string;
-    },
-  RepositoryStorageError
-> =>
-  Effect.gen(function* () {
-    if (configuration === null || configuration === undefined) {
-      return {
-        ok: false as const,
-        code: "validation_policy_invalid" as const,
-        message: "This Change has no stored reviewer configuration and cannot be submitted.",
-      };
-    }
-    let currentPolicy: ResolvedCandidateValidationPolicy | undefined;
-    let currentPolicyLoaded = false;
-    const current = () => {
-      if (currentPolicyLoaded) return currentPolicy;
-      currentPolicyLoaded = true;
-      const result = resolveCurrentPolicy();
-      currentPolicy = result.ok ? result.resolved : undefined;
-      return currentPolicy;
-    };
-    const specialistReviews = yield* Effect.forEach(configuration.specialistReviews, (stored) =>
-      Effect.gen(function* () {
-        const canCorrect =
-          persistence.agentSessionConfigurationCanBeCorrected !== undefined
-            ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, stored.id)
-            : false;
-        const replacement = canCorrect
-          ? current()?.policy.specialistReviews.find((candidate) => candidate.id === stored.id)
-          : undefined;
-        return replacement ?? stored;
-      }),
-    );
-    const policy = { ...resolved.policy, specialistReviews };
-    if (!resolved.acceptanceContextSupplied)
-      return { ok: true as const, resolved: { ...resolved, policy } };
-    if (configuration.acceptanceReview === null) {
-      return {
-        ok: false as const,
-        code: "validation_policy_invalid" as const,
-        message: "The Change reviewer configuration has no Acceptance Reviewer for its Task.",
-      };
-    }
-    const canCorrectAcceptance =
-      persistence.agentSessionConfigurationCanBeCorrected !== undefined
-        ? yield* persistence.agentSessionConfigurationCanBeCorrected(changeId, "acceptance")
-        : false;
-    const currentResolved = canCorrectAcceptance ? current() : undefined;
-    const currentAcceptanceReview =
-      currentResolved?.acceptanceContextSupplied === true
-        ? currentResolved.policy.acceptanceReview
-        : undefined;
-    return {
-      ok: true as const,
-      resolved: {
-        acceptanceContextSupplied: true as const,
-        policy: {
-          ...policy,
-          acceptanceReview: currentAcceptanceReview ?? configuration.acceptanceReview,
-        },
-      },
-    };
-  });
-
-const configFailureDetails = (failure: {
-  readonly path?: string;
-  readonly diagnostics?: readonly ContractDiagnostic[];
-}):
-  | { readonly path?: string; readonly diagnostics?: readonly ContractDiagnostic[] }
-  | undefined => {
-  if (failure.path === undefined && failure.diagnostics === undefined) return undefined;
-  return {
-    ...(failure.path === undefined ? {} : { path: failure.path }),
-    ...(failure.diagnostics === undefined ? {} : { diagnostics: failure.diagnostics }),
-  };
-};
-
-type ValidationPolicyFailure =
-  | { readonly message: string }
-  | {
-      readonly message: string;
-      readonly details: NonNullable<ReturnType<typeof configFailureDetails>>;
-    };
-
-const formatValidationPolicyFailure = (
-  error: SubmitRejectionError | GlobalConfigValidationFailed,
-): ValidationPolicyFailure => {
-  switch (error._tag) {
-    case "MissingAgentProfile":
-      return error.profileName === undefined
-        ? { message: "Global Config needs a default Agent Profile for reviewer selection." }
-        : {
-            message: `Agent Profile "${error.profileName}" in ${error.scope ?? "unknown"} scope was not found.`,
-          };
-    case "MissingAgentModel":
-      return {
-        message: `Agent Profile "${error.profileName}" in ${error.scope ?? "unknown"} scope has no Pi model in runtimeConfig.`,
-      };
-    case "RepoConfigValidationFailed":
-    case "GlobalConfigValidationFailed":
-      return { message: error.message, details: configFailureDetails(error) ?? {} };
-    default:
-      return { message: error.message };
-  }
-};
 
 const observeBeforeSubmission = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
@@ -589,7 +392,6 @@ const validateAndPublish = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
-  policy: ResolvedCandidateValidationPolicy,
   target: ChangePublicationTarget,
   now: string,
   progress: SubmitProgress | undefined,
@@ -597,22 +399,14 @@ const validateAndPublish = (
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
     const validationResult =
-      policy.acceptanceContextSupplied && change.acceptanceContext !== null
+      change.acceptanceContext !== null
         ? yield* validation.validateAcceptanceContextCandidate({
-            changeId: change.id,
             ...candidateIdentity(candidate),
-            resourceRoot: change.worktreePath,
-            policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
-            now,
           })
         : yield* validation.validateCandidate({
-            changeId: change.id,
             ...candidateIdentity(candidate),
-            resourceRoot: change.worktreePath,
-            policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
-            now,
           });
     if ("code" in validationResult) {
       if (validationResult.code === "blocked") {
@@ -629,12 +423,6 @@ const validateAndPublish = (
       return yield* blockedValidationResult(validation, change, candidate, {
         validationRunId: validationResult.validationRunId,
         outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
-        ...(validationResult.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: validationResult.reviewerEvidence }),
-        ...(validationResult.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
       });
     }
 
@@ -657,12 +445,6 @@ const validateAndPublish = (
       validationRunId: validationResult.validationRunId,
       created: publication.created,
       pullRequest: publication.pullRequest,
-      ...(validationResult.reviewerEvidence === undefined
-        ? {}
-        : { reviewerEvidence: validationResult.reviewerEvidence }),
-      ...(validationResult.specialistReviewerEvidence === undefined
-        ? {}
-        : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
     } as const;
   });
 
@@ -672,9 +454,7 @@ const blockedValidationResult = (
   candidate: CapturedCandidate,
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
-    readonly validationRunId: string;
-    readonly reviewerEvidence?: ReviewerExecutionEvidence;
-    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
+    readonly validationRunId: number;
   },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -686,12 +466,6 @@ const blockedValidationResult = (
           candidateId: candidate.candidateId,
           validationRunId: validation.validationRunId,
           findings: yield* candidateValidation.listFindings(validation.validationRunId),
-          ...(validation.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validation.reviewerEvidence }),
-          ...(validation.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         }
       : {
           ok: false,
@@ -702,12 +476,6 @@ const blockedValidationResult = (
           toolingFailures: yield* candidateValidation.listToolingFailures(
             validation.validationRunId,
           ),
-          ...(validation.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validation.reviewerEvidence }),
-          ...(validation.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         };
   });
 

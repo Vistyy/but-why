@@ -2,10 +2,8 @@ import { spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { decodeRepoConfigSource } from "../../init/adapters/repoConfig.js";
 import type { LocalRepositoryContext } from "../../repositoryRuntime/repositoryContext.js";
 import { fetchRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";
-import { changeBranchRefForSlug } from "../changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
@@ -14,7 +12,6 @@ import type { ChangeStartRecord } from "../changeStartStore.js";
 
 export const resolveChangeStartGitIntent = (
   context: LocalRepositoryContext,
-  slug: string,
   requestedBaseBranch?: string,
 ): ResolveChangeStartGitResult => {
   const fetched = fetchRemoteChangeBase(context.root, requestedBaseBranch);
@@ -22,37 +19,17 @@ export const resolveChangeStartGitIntent = (
   const baseRef = fetched.base.ref;
   const startingCommit = fetched.base.commit;
 
-  const configSource = git(context.root, "show", `${startingCommit}:.but-why/config.json`);
-  if (!configSource.ok) return { ok: false, code: "committed_repo_config_missing" };
-
-  const config = decodeRepoConfigSource(configSource.stdout);
-  if (!config.ok || config.config.idPrefix !== context.idPrefix) {
-    return { ok: false, code: "committed_repo_config_invalid" };
-  }
-
-  const branchRef = changeBranchRefForSlug(slug);
   return {
     ok: true,
     intent: {
-      repositoryCommonDirectory: context.commonDirectory,
       baseRef,
       baseRemoteUrl: fetched.base.remoteUrl,
-      branchRef,
       startingCommit,
-      worktreePath: join(
-        dirname(context.mainCheckoutRoot),
-        `${basename(context.mainCheckoutRoot)}-worktrees`,
+      managedWorktreeParent: join(
+        dirname(context.root),
+        `${basename(context.root)}-worktrees`,
         "but-why",
-        slug,
       ),
-      ...(config.config.prepare === undefined
-        ? {}
-        : {
-            prepare: {
-              command: config.config.prepare.command,
-              timeoutSeconds: config.config.prepare.timeoutSeconds ?? 1200,
-            },
-          }),
     },
   };
 };
@@ -61,11 +38,12 @@ export const provisionChangeWorktree = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
+  startingCommit?: string,
 ): ProvisionChangeWorktreeResult => {
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
-  const branch = ensureRecordedBranch(cwd, start, recovering);
+  const branch = ensureRecordedBranch(cwd, start, recovering, startingCommit);
   if (!branch.ok) return branch;
 
   const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
@@ -136,6 +114,7 @@ const ensureRecordedBranch = (
   cwd: string,
   start: ChangeStartRecord,
   recovering: boolean,
+  startingCommit: string | undefined,
 ): ProvisionChangeWorktreeResult => {
   const branch = inspectRecordedBranch(cwd, start.branchRef);
   if (branch === "present") {
@@ -148,11 +127,11 @@ const ensureRecordedBranch = (
       code: "managed_branch_missing",
       branch: start.branchRef,
       path: start.worktreePath,
-      startingCommit: start.startingCommit,
     };
   }
+  if (startingCommit === undefined) return { ok: false, code: "git_tooling_error" };
   const branchName = start.branchRef.slice("refs/heads/".length);
-  const create = git(cwd, "branch", branchName, start.startingCommit);
+  const create = git(cwd, "branch", branchName, startingCommit);
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 

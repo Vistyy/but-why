@@ -1,19 +1,22 @@
 import { dirname, join } from "node:path";
 
-import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/agentProfiles.js";
+import {
+  type ResolvedReviewerPiAgentProfile,
+  resolveAgentProfile,
+} from "../../agent/agentProfiles.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig, ReviewerConfig } from "../../contracts/repoConfig.js";
 import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js";
 import {
   InvalidReviewerConfig,
-  type SubmitRejectionError,
-} from "../submit/submitRejectionErrors.js";
+  type ReviewerResolutionError,
+} from "../reviewerResolutionErrors.js";
 
 export type SpecialistReviewPolicy = {
   readonly id: string;
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global";
-  readonly profile: ResolvedPiAgentProfile;
+  readonly profile: ResolvedReviewerPiAgentProfile;
 };
 
 export const resolveSpecialistReviewPolicies = (input: {
@@ -21,9 +24,14 @@ export const resolveSpecialistReviewPolicies = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructions?: (
+    path: string,
+  ) =>
+    | { readonly ok: true; readonly content: string }
+    | { readonly ok: false; readonly message: string };
 }):
   | { readonly ok: true; readonly policies: readonly SpecialistReviewPolicy[] }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  | { readonly ok: false; readonly error: ReviewerResolutionError } => {
   const active =
     input.repoConfig.review?.specialists ?? input.globalConfig.review?.specialists ?? [];
   const seen = new Set<string>();
@@ -49,11 +57,16 @@ const resolveSpecialist = (
     readonly globalConfig: GlobalConfig;
     readonly repoRoot: string;
     readonly globalConfigPath: string;
+    readonly readRepoInstructions?: (
+      path: string,
+    ) =>
+      | { readonly ok: true; readonly content: string }
+      | { readonly ok: false; readonly message: string };
   },
   id: string,
 ):
   | { readonly ok: true; readonly policy: SpecialistReviewPolicy }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  | { readonly ok: false; readonly error: ReviewerResolutionError } => {
   const repoDefinition = input.repoConfig.reviewers?.[id];
   const globalDefinition = input.globalConfig.reviewers?.[id];
   const definition: ReviewerConfig | typeof globalDefinition = repoDefinition ?? globalDefinition;
@@ -83,14 +96,23 @@ const resolveSpecialist = (
     instructionsSource === "repo"
       ? join(input.repoRoot, definition.instructionsFile)
       : join(dirname(input.globalConfigPath), definition.instructionsFile);
-  const instructions = readAcceptanceInstructions(instructionsPath);
+  const instructions =
+    instructionsSource === "repo" && input.readRepoInstructions !== undefined
+      ? input.readRepoInstructions(definition.instructionsFile)
+      : (() => {
+          const read = readAcceptanceInstructions(instructionsPath);
+          return read.ok ? { ok: true as const, content: read.instructions } : read;
+        })();
   if (!instructions.ok) return invalid(instructions.message);
+  if (instructions.content.trim().length === 0) {
+    return invalid(`Specialist instructions file is empty: ${definition.instructionsFile}`);
+  }
 
   return {
     ok: true,
     policy: {
       id,
-      instructions: instructions.instructions,
+      instructions: instructions.content,
       instructionsSource,
       profile: profileResolution.resolved,
     },

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -11,13 +12,9 @@ import type { ReviewerProcessExecutor } from "../../src/agent/reviewerExecution.
 import type { ReviewerOutput } from "../../src/agent/reviewerOutput.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
-import type { AcceptanceContextCandidateValidationPolicy } from "../../src/change/candidateValidation/validateCandidate.js";
-import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
@@ -27,21 +24,40 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
-import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const unusedReviewerExecutor: ReviewerProcessExecutor = {
   execute: () => Effect.die("Reviewer test runtime must not execute a reviewer process."),
 };
 
-const now = "2026-07-15T10:00:00.000Z";
-const successorNow = "2026-07-15T10:05:00.000Z";
 type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
 let candidateRepoTemplate: string;
 
 beforeAll(() => {
   candidateRepoTemplate = acquireTestWorkspace();
   candidateReadyRepo(candidateRepoTemplate);
+  const database = new DatabaseSync(join(candidateRepoTemplate, ".git", "but-why", "state.sqlite"));
+  try {
+    database
+      .prepare("INSERT INTO tasks (id, title, description, state) VALUES (1, ?, ?, 'todo')")
+      .run(acceptanceContext.title, acceptanceContext.description);
+    database
+      .prepare(
+        "UPDATE changes SET initial_acceptance_context = ?, reviewer_configuration = ?, checks_definition = ? WHERE id = 1",
+      )
+      .run(
+        JSON.stringify(acceptanceContext),
+        JSON.stringify({
+          acceptanceReview: acceptancePolicy,
+          specialistReviews: [],
+          agentEnvironment: passingValidationPolicy.agentEnvironment,
+        }),
+        JSON.stringify(passingValidationPolicy.checks),
+      );
+    database.prepare("INSERT INTO task_change_links (task_id, change_id) VALUES (1, 1)").run();
+  } finally {
+    database.close();
+  }
 });
 
 afterAll(() => {
@@ -58,7 +74,7 @@ class AcceptanceTemplate extends Context.Tag("@but-why/AcceptanceTemplate")<
 const acceptanceTemplateLayer = Layer.effect(
   AcceptanceTemplate,
   Effect.gen(function* () {
-    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate, now });
+    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate });
     if (!captured.ok) return yield* Effect.dieMessage(`Candidate capture failed: ${captured.code}`);
     return { captured };
   }),
@@ -86,7 +102,6 @@ const acceptancePolicy = {
 const passingValidationPolicy = {
   agentEnvironment: ["nix", "develop", "-c"] as const,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
-  copyFiles: [],
   acceptanceReview: acceptancePolicy,
   specialistReviews: [],
 };
@@ -131,46 +146,8 @@ layer(acceptanceTemplateLayer)(
           state: "complete",
           outcome: "blocked",
         });
-        const findingColumns = yield* withTestRepository(
-          ready.repo,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            return yield* repository.operation(
-              "inspect reviewer Finding table columns",
-              (sql) =>
-                sql<{ readonly name: string }>`
-                PRAGMA table_info(candidate_validation_findings)
-              `,
-            );
-          }),
-        );
-        expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
-        yield* withTestRepository(
-          ready.repo,
-          Effect.gen(function* () {
-            const repository = yield* RepositorySql;
-            yield* repository.operation(
-              "seed historical reviewer Finding",
-              (sql) =>
-                sql`
-                INSERT INTO candidate_validation_findings (
-                  id, validation_run_id, phase, producer, title, description,
-                  evidence, files, artifact_refs, created_at, updated_at
-                ) VALUES (
-                  ${`${result.validationRunId}-historical`}, ${result.validationRunId},
-                  'acceptance_review', 'acceptance', 'Historical Finding',
-                  'A historical reviewer Finding remains readable.',
-                  'Historical evidence.', '[]', '[]', ${now}, ${now}
-                )
-              `,
-            );
-          }),
-        );
         const findings = yield* validation.listFindings(result.validationRunId);
-        expect(findings).toHaveLength(3);
-        expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
-          evidence: "Historical evidence.",
-        });
+        expect(findings).toHaveLength(2);
         expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
@@ -206,14 +183,14 @@ layer(acceptanceTemplateLayer)(
             operationName: "run_reviewer_process",
           }),
         ]);
-        expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
-          { producer: "quality", status: "passed" },
-          { producer: "acceptance", status: "failed" },
+        expect(yield* ready.validation.listPhaseResults(result.validationRunId)).toEqual([
+          { producer: "quality", outcome: "passed" },
+          { producer: "acceptance", outcome: "failed" },
         ]);
       }),
     );
 
-    it.scoped("preserves earlier Acceptance Findings through failure until a clean report", () =>
+    it.scoped("does not carry Acceptance Findings across an intermediate Candidate", () =>
       Effect.gen(function* () {
         const earlierFinding = reviewerFinding("Earlier acceptance Finding");
         const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
@@ -232,7 +209,6 @@ layer(acceptanceTemplateLayer)(
         git(ready.repo, "commit", "--allow-empty", "-m", "failed acceptance candidate");
         const failedCandidate = yield* captureLocalCandidate({
           cwd: ready.repo,
-          now: "2026-07-15T10:01:00.000Z",
         });
         if (!failedCandidate.ok)
           throw new Error(`Candidate capture failed: ${failedCandidate.code}`);
@@ -259,7 +235,6 @@ layer(acceptanceTemplateLayer)(
         git(ready.repo, "commit", "--allow-empty", "-m", "clean acceptance candidate");
         const cleanCandidate = yield* captureLocalCandidate({
           cwd: ready.repo,
-          now: "2026-07-15T10:02:00.000Z",
         });
         if (!cleanCandidate.ok) throw new Error(`Candidate capture failed: ${cleanCandidate.code}`);
         review.mockImplementation(() =>
@@ -272,10 +247,10 @@ layer(acceptanceTemplateLayer)(
         );
         const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
         expect(clean).toMatchObject({ ok: true, outcome: "passed" });
-        expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+        expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
 
         git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
-        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo });
         if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
 
         const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
@@ -295,50 +270,51 @@ type AcceptanceReadyRepo = {
   readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
 };
 
+type AcceptanceReviewTestPolicy = typeof passingValidationPolicy;
+
 const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceReviewTestPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) => runReviewPhases(ready, policy, captured);
 
 const runReviewPhases = (
   ready: AcceptanceReadyRepo,
-  policy: AcceptanceContextCandidateValidationPolicy,
+  policy: AcceptanceReviewTestPolicy,
   captured: Captured,
 ) =>
   ready.validation.runWithPersistence((persistence) =>
     Effect.gen(function* () {
-      const policySnapshot: CandidateValidationPolicySnapshot = { ...policy, acceptanceContext };
       const started = yield* persistence.execution.startOrReuse({
         candidateId: captured.candidateId,
         headSha: captured.headSha,
         changeBaseSha: captured.changeBaseSha,
-        policy: policySnapshot,
-        now,
       });
       if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
       if ("blocked" in started) {
         throw new Error("Unexpected active Blocker in Acceptance Review fixture");
       }
+      yield* persistence.execution.recordWorkspaceCleanup({
+        validationRunId: started.validationRunId,
+        cleanupWorkspace: "not_created",
+      });
 
-      yield* persistence.execution.recordCheckRound({
+      yield* persistence.execution.recordCheckResult({
         validationRunId: started.validationRunId,
         producer: "quality",
-        roundNumber: 1,
-        roundStatus: "passed",
+        outcome: "passed",
         artifactRecords: [
           {
             ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
             validationRunId: started.validationRunId,
             phase: "checks",
             producer: "quality",
-            path: "stdout.txt",
+            path: `${started.validationRunId}/checks/quality/stdout.txt`,
             originalBytes: 0,
             storedBytes: 0,
             truncated: false,
           },
         ],
-        now,
       });
       const commandExecutor = () =>
         Effect.succeed({
@@ -369,59 +345,31 @@ const runReviewPhases = (
         resourceRoot: ready.repo,
         sessionStorageRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         agentPersistence: persistence.agentPersistence,
-        getAgentSession: persistence.reviewerSessions.getAgentSession,
-        linkAgentInvocation: persistence.reviewerSessions.linkAgentInvocation,
-        settleAgentInvocationRound: persistence.execution.settleAgentInvocationRound,
+        getAgentSession: persistence.agentSessions.getAgentSession,
+        linkAgentInvocation: persistence.agentSessions.linkAgentInvocation,
+        settleAgentInvocationResult: persistence.execution.settleAgentInvocationResult,
+        recordAcceptanceResult: persistence.execution.recordAcceptanceResult,
         allowedUntrackedFiles: [],
-        now,
         listArtifacts: persistence.reads.listArtifacts,
         listPreviousCandidateReviewerFindings:
           persistence.execution.listPreviousCandidateReviewerFindings,
       }).pipe(Effect.provide(NodeFileSystem.layer));
-      if (acceptance.toolingFailure !== undefined) {
-        yield* persistence.execution.recordToolingFailure({
-          validationRunId: started.validationRunId,
-          ...validationToolingFailureRecord(acceptance.toolingFailure),
-          now,
-        });
-        yield* persistence.execution.complete({
-          validationRunId: started.validationRunId,
-          outcome: "tooling_failed",
-          now,
-        });
-        return {
-          ok: false as const,
-          validationRunId: started.validationRunId,
-          outcome: "tooling_failed" as const,
-        };
-      }
-      if (acceptance.findings === 1) {
-        yield* persistence.execution.complete({
-          validationRunId: started.validationRunId,
-          outcome: "blocked",
-          now,
-        });
-        return {
-          ok: true as const,
-          reused: false as const,
-          validationRunId: started.validationRunId,
-          outcome: "blocked" as const,
-        };
-      }
       yield* persistence.execution.complete({
         validationRunId: started.validationRunId,
-        outcome: "passed",
-        now,
+        outcome: acceptance.outcome,
       });
-      return {
-        ok: true as const,
-        reused: false as const,
-        validationRunId: started.validationRunId,
-        outcome: "passed" as const,
-        ...(acceptance.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: acceptance.reviewerEvidence }),
-      };
+      return acceptance.outcome === "tooling_failed"
+        ? {
+            ok: false as const,
+            validationRunId: started.validationRunId,
+            outcome: acceptance.outcome,
+          }
+        : {
+            ok: true as const,
+            reused: false as const,
+            validationRunId: started.validationRunId,
+            outcome: acceptance.outcome,
+          };
     }),
   );
 
@@ -433,7 +381,7 @@ const acceptanceReadyRepo = (
     const repo = yield* candidateReadyRepoCopy();
     const captured = template.captured;
     const validation = candidateValidationForTest({
-      localRepositoryMainCheckoutRoot: repo,
+      localRepositoryRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       repository: repositoryConfig(repo),
       reviewerAgentRuntime,

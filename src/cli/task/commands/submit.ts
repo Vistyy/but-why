@@ -102,7 +102,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
         code: result.code,
         message: result.message,
         details: {},
-        help: ["Restore the canonical main checkout and its committed Repo Config, then retry."],
+        help: ["Restore the current worktree and its committed Repo Config, then retry."],
       });
     case "task_review_config_invalid":
       return runtimeError({
@@ -128,6 +128,7 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
               path: result.review.workspacePath,
               cleanup: result.review.workspaceCleanup,
             },
+            toolingFailure: result.review.toolingFailure,
           },
         },
         help: [`Run \`by task-review show ${result.review.id}\` to inspect recovery state.`],

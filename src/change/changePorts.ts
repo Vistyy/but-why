@@ -1,6 +1,5 @@
 import type { Effect } from "effect";
 import type { AgentSessionSqlLink } from "../agent/agentSession/agentSession.js";
-import type { ReviewerSessionRecord } from "../agent/reviewerSession/reviewerSession.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   ChangeCleanup,
@@ -14,10 +13,10 @@ import type {
 
 export type { TerminalCleanupChange } from "./change.js";
 
-import type { ChangeReviewerConfiguration } from "./changeStartStore.js";
+import type { ChangePolicy } from "./changePolicy.js";
+import type { ChangeReviewerPolicy } from "./changeReviewerConfiguration.js";
 import type {
   BeginChangePublicationInput,
-  CancelChangeInput,
   CompleteMergedChangeInput,
   ListChangesInput,
   RecordChangeCleanupInput,
@@ -29,14 +28,13 @@ import type {
   ImplementationBlockerHistory,
 } from "./implementationBlocker.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
-import type { LegacyReviewerTranscriptReference } from "./legacyReviewerTranscript.js";
 import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 
 export type ChangePublicationEvidence = {
-  readonly candidateId: string;
-  readonly validationRunId: string;
+  readonly candidateId: number;
+  readonly validationRunId: number;
   readonly changeBaseSha: string;
   readonly headSha: string;
 };
@@ -86,8 +84,8 @@ type ImplementationBlockerPersistenceResult =
   | Extract<ImplementationBlockerMutationResult, { readonly ok: false }>;
 
 export type CurrentChangeEvidenceQuery = {
-  readonly candidateId?: string;
-  readonly validationRunId?: string;
+  readonly candidateId?: number;
+  readonly validationRunId?: number;
   readonly changeBaseSha?: string;
 };
 
@@ -117,8 +115,7 @@ export type ChangeListRecord = {
   readonly id: string;
   readonly state: ChangeState;
   readonly branchRef: string;
-  readonly worktreePath: string | null;
-  readonly createdAt: string;
+  readonly worktreePath: string;
 };
 
 export type ChangeReadPort = {
@@ -126,10 +123,7 @@ export type ChangeReadPort = {
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeListRecord[]>;
 };
 
-export type ChangeReviewerSessionPort = {
-  readonly listReviewerSessions: (
-    changeId: string,
-  ) => StorageEffect<readonly ReviewerSessionRecord[]>;
+export type ChangeAgentSessionPort = {
   readonly getAgentSession: (
     changeId: string,
     producer: string,
@@ -137,16 +131,10 @@ export type ChangeReviewerSessionPort = {
   readonly linkAgentInvocation: (input: {
     readonly changeId: string;
     readonly producer: string;
-    readonly validationRunId: string;
+    readonly validationRunId: number;
     readonly phase: string;
-    readonly configurationSnapshot?: unknown;
+    readonly configurationSnapshot: ChangeReviewerPolicy;
   }) => AgentSessionSqlLink;
-};
-
-export type ChangeReviewerTranscriptPort = {
-  readonly listReviewerTranscripts: (
-    changeId: string,
-  ) => StorageEffect<readonly LegacyReviewerTranscriptReference[]>;
 };
 
 export type SubmissionChange = {
@@ -154,11 +142,11 @@ export type SubmissionChange = {
   readonly state: ChangeState;
   readonly activeBlocker: ImplementationBlocker | null;
   readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly worktreePath: string | null;
+  readonly baseRef: string;
+  readonly baseRemoteUrl: string;
+  readonly worktreePath: string;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
-  readonly reviewerConfiguration?: ChangeReviewerConfiguration | null;
+  readonly policy: ChangePolicy;
   readonly publication: ChangePublication | null;
 };
 
@@ -181,15 +169,11 @@ export type ChangeCancellationMutationFailure = {
 
 export type ChangeSubmissionPort = {
   readonly getChangeById: (changeId: string) => StorageEffect<SubmissionChange | undefined>;
-  readonly agentSessionConfigurationCanBeCorrected?: (
-    changeId: string,
-    producer: string,
-  ) => StorageEffect<boolean>;
   readonly getChangeForOutputById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getCompletedPublicationEvidence: (
     changeId: string,
-    candidateId: string,
-    validationRunId: string,
+    candidateId: number,
+    validationRunId: number,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
   readonly completeMergedChange: (
     input: CompleteMergedChangeInput,
@@ -221,22 +205,6 @@ type CompleteMergedFailure = {
     | "task_completion_rejected";
 };
 
-export type ChangeCancellationOwnerPort = {
-  readonly getChangeById: (changeId: string) => StorageEffect<ChangeCancellationRecord | undefined>;
-  readonly completeMergedChange: (
-    input: CompleteMergedChangeInput,
-  ) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
-    | ChangeCancellationCompletionFailure
-  >;
-  readonly cancelChange: (
-    input: CancelChangeInput,
-  ) => StorageEffect<
-    | { readonly ok: true; readonly changed: boolean; readonly change: ChangeCancellationRecord }
-    | ChangeCancellationMutationFailure
-  >;
-};
-
 export type TerminalChangeCleanupPort = {
   readonly recordCleanup: (
     input: RecordChangeCleanupInput,
@@ -250,7 +218,6 @@ type CandidatePublicationChangeBase = {
   readonly id: string;
   readonly state: ChangeState;
   readonly branchRef: string;
-  readonly startingCommit: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions: readonly ImplementationDecision[];
 };

@@ -9,8 +9,6 @@ export type DecodedTaskSummaryRow = {
   readonly numericId: number;
   readonly title: string;
   readonly state: TaskState;
-  readonly createdAt: string;
-  readonly updatedAt: string;
 };
 
 export type DecodedStoredTaskRecordRow = DecodedTaskSummaryRow & {
@@ -23,8 +21,6 @@ export type StoredTaskSummaryRow = {
   readonly numericId: number;
   readonly title: string;
   readonly state: unknown;
-  readonly createdAt: string;
-  readonly updatedAt: string;
 };
 
 export type StoredTaskRecordRow = StoredTaskSummaryRow & {

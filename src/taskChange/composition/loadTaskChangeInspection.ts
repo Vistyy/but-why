@@ -15,14 +15,14 @@ export type LoadedTaskChangeInspection<A> =
   | { readonly ok: true; readonly commonDirectory: string; readonly operation: A }
   | { readonly ok: false; readonly error: LoadTaskChangeInspectionError };
 
-type LoadInput = { readonly cwd: string; readonly operationalRepoRoot?: string };
+type LoadInput = { readonly cwd: string };
 
 export const loadTaskChangeProjection = (
   input: LoadInput,
 ): LoadedTaskChangeInspection<
   (taskId: string) => Effect.Effect<TaskChangeProjection | null, RepositoryStorageError>
 > => {
-  const loaded = openRepositoryRuntime(input.cwd, input.operationalRepoRoot);
+  const loaded = openRepositoryRuntime(input.cwd);
   if (!loaded.ok) return loaded;
   return {
     ok: true,

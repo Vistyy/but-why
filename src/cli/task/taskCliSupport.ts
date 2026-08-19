@@ -39,7 +39,6 @@ export type TaskIdCommand = { readonly taskId: string };
 
 export type TaskCommandEnvironment = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
   readonly globalConfigPath?: string;
@@ -68,10 +67,7 @@ export const withTasks = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(
-          error,
-          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
-        ),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -100,10 +96,7 @@ export const withTaskChangeTasks = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(
-          error,
-          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
-        ),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -172,10 +165,7 @@ export const withTaskReviewSubmission = (
   return program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(
-          error,
-          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
-        ),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
@@ -188,19 +178,13 @@ const catchTaskReviewStorageError = (
   program.pipe(
     Effect.catchAll((error) =>
       Effect.succeed(
-        repositoryStorageErrorResult(
-          error,
-          resolveRepositoryIdPrefix(environment.cwd, environment.operationalRepoRoot),
-        ),
+        repositoryStorageErrorResult(error, resolveRepositoryIdPrefix(environment.cwd)),
       ),
     ),
   );
 
 export const taskRepositoryInput = (environment: TaskCommandEnvironment) => ({
   cwd: environment.cwd,
-  ...(environment.operationalRepoRoot === undefined
-    ? {}
-    : { operationalRepoRoot: environment.operationalRepoRoot }),
 });
 
 const taskReviewLoadErrorResult = (error: LoadTaskReviewError): CliResult =>
@@ -238,8 +222,6 @@ export const taskMutationView = (task: TaskRecord) => ({
   id: task.id,
   title: task.title,
   state: task.state,
-  createdAt: task.createdAt,
-  updatedAt: task.updatedAt,
   ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
   prerequisites: task.prerequisites,
   dependents: task.dependents,

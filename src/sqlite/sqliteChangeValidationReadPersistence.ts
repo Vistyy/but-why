@@ -13,7 +13,7 @@ import {
   listValidationAgentInvocations,
   listValidationArtifacts,
   listValidationFindings,
-  listValidationRounds,
+  listValidationPhaseResults,
   listValidationToolingFailures,
 } from "./sqliteValidationEvidenceStorage.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
@@ -62,9 +62,9 @@ export const openSqliteChangeValidationReadPort = () =>
         repository.transaction("list Candidate Validation Runs", (sql) =>
           listRunsForCandidate(sql, candidateId, repository.idPrefix),
         ),
-      listRounds: (validationRunId) =>
-        repository.transaction("list Candidate validation rounds", (sql) =>
-          listValidationRounds(sql, validationRunId, repository.idPrefix),
+      listPhaseResults: (validationRunId) =>
+        repository.transaction("list Validation Phase Results", (sql) =>
+          listValidationPhaseResults(sql, validationRunId, repository.idPrefix),
         ),
       listFindings: (validationRunId) =>
         repository.transaction("list Candidate validation Findings", (sql) =>
@@ -72,7 +72,7 @@ export const openSqliteChangeValidationReadPort = () =>
         ),
       listToolingFailures: (validationRunId) =>
         repository.transaction("list Candidate validation Tooling Failures", (sql) =>
-          listValidationToolingFailures(sql, validationRunId),
+          listValidationToolingFailures(sql, validationRunId, repository.idPrefix),
         ),
       listArtifacts: (validationRunId) =>
         repository.transaction("list Candidate validation Artifacts", (sql) =>
@@ -80,15 +80,15 @@ export const openSqliteChangeValidationReadPort = () =>
         ),
       listAgentInvocations: (validationRunId) =>
         repository.transaction("list Candidate Agent Invocations", (sql) =>
-          listValidationAgentInvocations(sql, validationRunId),
+          listValidationAgentInvocations(sql, validationRunId, repository.idPrefix),
         ),
     }),
   );
 
-const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string, idPrefix: string) =>
+const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: number, idPrefix: string) =>
   Effect.gen(function* () {
-    const selected = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidate_validation_runs WHERE candidate_id = ${candidateId}
+    const selected = yield* sql<{ readonly id: number }>`
+      SELECT id FROM validation_runs WHERE candidate_id = ${candidateId} ORDER BY id
     `;
     const runs = yield* Effect.forEach(selected, ({ id }) =>
       readValidationRunById(sql, id, "decode Candidate Validation Run", idPrefix).pipe(
@@ -108,14 +108,8 @@ const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string, idP
         }),
       ),
     );
-    return runs.sort(
-      (left, right) =>
-        compareStrings(left.createdAt, right.createdAt) || compareStrings(left.id, right.id),
-    );
+    return runs;
   });
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-const compareStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;

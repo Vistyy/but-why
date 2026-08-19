@@ -14,7 +14,6 @@ export const runList = (
 ): Effect.Effect<CliResult> => {
   const loaded = loadChangeList(support.changeOperationInput(environment));
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-  const now = environment.now().getTime();
   return loaded
     .operation({
       repositoryCommonDirectory: loaded.commonDirectory,
@@ -26,12 +25,6 @@ export const runList = (
           changes: changes.map((change) => ({
             id: change.id,
             state: change.state,
-            createdAt: change.createdAt,
-            ...(change.state === "open"
-              ? {
-                  ageSeconds: Math.max(0, Math.floor((now - Date.parse(change.createdAt)) / 1_000)),
-                }
-              : {}),
           })),
         }),
       ),

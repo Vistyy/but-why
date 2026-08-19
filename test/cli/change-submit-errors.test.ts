@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { submitResult } from "../../src/cli/change/submitResult.js";
 
-describe("Change Submit validation-policy errors", () => {
+describe("Change Submit Change Policy errors", () => {
   it("serializes unchanged Candidate guidance without running Submission setup", () => {
     expect(
       submitResult({ ok: true, status: "nothing_to_submit", changeId: "change-1" }, "change-1"),
@@ -163,70 +163,6 @@ describe("Change Submit validation-policy errors", () => {
         help: [
           "Correct the selected publication remote's effective push destination, then retry Submit.",
         ],
-      },
-    });
-  });
-
-  it("serializes an exact validation-policy rejection with supplied message and help", () => {
-    const result = submitResult(
-      {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-      },
-      "change-1",
-    );
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stdout: {
-        error: {
-          code: "validation_policy_invalid",
-          message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-        },
-        help: ["Fix Repo Config or Global Config, then retry Change Submit."],
-      },
-    });
-  });
-
-  it("serializes validation-policy path and structured contract diagnostics", () => {
-    const result = submitResult(
-      {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "Global Config is invalid.",
-        details: {
-          path: "/repo/global-config.json",
-          diagnostics: [
-            {
-              path: ["agentProfiles", "implementation", "agentModel"],
-              expected: "a Pi runtimeConfig model",
-              actual: undefined,
-              message: "Required value is missing.",
-            },
-          ],
-        },
-      },
-      "change-1",
-    );
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stdout: {
-        error: {
-          code: "validation_policy_invalid",
-          message: "Global Config is invalid.",
-          path: "/repo/global-config.json",
-          diagnostics: [
-            {
-              path: ["agentProfiles", "implementation", "agentModel"],
-              expected: "a Pi runtimeConfig model",
-              actual: "<missing>",
-              message: "Required value is missing.",
-            },
-          ],
-        },
-        help: ["Fix Repo Config or Global Config, then retry Change Submit."],
       },
     });
   });

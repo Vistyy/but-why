@@ -37,13 +37,12 @@ export const createChangeImplementFixture = (
           yield* repository.operation(
             "create Change Implement fixture Task for a Change linked to a Task",
             (sql) => sql`
-              INSERT INTO tasks (
-                id, title, description, state, created_at, updated_at
-              ) VALUES (
+              INSERT INTO tasks (id, title, description, state)
+              VALUES (
                 ${numericId},
                 ${options.acceptanceContext?.title ?? "Fixture Task"},
                 ${options.acceptanceContext?.description ?? ""},
-                'todo', '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z'
+                'todo'
               )
             `,
           );
@@ -52,14 +51,12 @@ export const createChangeImplementFixture = (
           "create Change Implement fixture",
           (sql) => sql`
             INSERT INTO changes (
-              id, repository_common_directory, branch_ref, base_ref, base_remote_url,
-              starting_commit, worktree_path, acceptance_context,
-              prepare_command, prepare_timeout_seconds, prepare_failure,
-              state, close_reason, created_at, updated_at, closed_at, cleanup_state
+              id, branch_ref, base_ref, base_remote_url, worktree_path,
+              initial_acceptance_context, reviewer_configuration,
+              prepare_definition, checks_definition, prepare_failure, cleanup_pending
             ) VALUES (
-              ${internalChangeId(id, "BY")}, ${join(root, ".git")}, 'refs/heads/implement-fixture',
-              'refs/remotes/origin/main', 'https://github.com/acme/repo.git',
-              '18fca05273fefafb6a99d64e81d2b698d60e17a4', ${worktreePath},
+              ${internalChangeId(id, "BY")}, 'refs/heads/implement-fixture',
+              'refs/remotes/origin/main', 'https://github.com/acme/repo.git', ${worktreePath},
               ${
                 options.acceptanceContext === undefined
                   ? null
@@ -69,12 +66,20 @@ export const createChangeImplementFixture = (
                       description: options.acceptanceContext.description,
                     })
               },
-              ${options.prepareFailure?.command ?? null},
-              ${options.prepareFailure === undefined ? null : 1200},
+              '{"acceptanceReview":null,"specialistReviews":[]}',
+              ${
+                options.prepareFailure === undefined
+                  ? null
+                  : JSON.stringify({
+                      command: options.prepareFailure.command,
+                      timeoutSeconds: 1200,
+                    })
+              },
+              '[{"id":"quality","command":"true","timeoutSeconds":30}]',
               ${
                 options.prepareFailure === undefined ? null : JSON.stringify(options.prepareFailure)
               },
-              'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL, 'complete'
+              0
             )
           `,
         );

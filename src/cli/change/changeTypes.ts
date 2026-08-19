@@ -7,9 +7,10 @@ import type { CancellationUseCases } from "../../taskChange/cancelTaskChange.js"
 import type { TextInputStdin } from "../input/textInput.js";
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
-  readonly operationalRepoRoot?: string;
   readonly globalConfigPath: string;
+  readonly herdrSocketPath?: string;
   readonly now: () => Date;
+  readonly platform: NodeJS.Platform;
   readonly stdin: TextInputStdin;
   readonly writeStderr?: (message: string) => void;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;

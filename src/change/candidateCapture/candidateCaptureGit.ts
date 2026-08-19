@@ -2,7 +2,6 @@ import type { Effect } from "effect";
 
 export type LocalCandidateWorkspace = {
   readonly repositoryCommonDirectory: string;
-  readonly primaryRoot: string;
   readonly branchRef: string;
   readonly headSha: string;
   readonly renameFromRef?: string;

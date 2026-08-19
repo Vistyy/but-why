@@ -49,7 +49,7 @@ export const buildSpecialistReviewerSystemPrompt = (input: {
 
 export const buildSpecialistReviewerPrompt = (input: {
   readonly specialist: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
     readonly changeBaseSha: string;
@@ -79,10 +79,10 @@ export const buildSpecialistReviewerPrompt = (input: {
 
 export const buildSpecialistContinuationPrompt = (input: {
   readonly specialist: string;
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
-    readonly candidateId: string;
+    readonly candidateId: number;
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
@@ -90,7 +90,7 @@ export const buildSpecialistContinuationPrompt = (input: {
   readonly acceptanceContext?: unknown;
 }): string =>
   [
-    `Continue this Specialist Reviewer Session for the configured concern: ${input.specialist}.`,
+    `Continue this Specialist Agent Session for the configured concern: ${input.specialist}.`,
     ...(input.acceptanceContext === undefined
       ? []
       : ["", acceptanceContextEvidence(input.acceptanceContext)]),

@@ -1,27 +1,18 @@
 import { existsSync } from "node:fs";
-import { MigrationError } from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Clock, Context, Effect, Layer } from "effect";
 import {
-  PredecessorReconciliationRequiredError,
   RepositoryIdentityConflict,
   RepositoryIdPrefixConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
-  RepositoryPredecessorReconciliationRequired,
-  RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
   type RepositoryStorageError,
-  RestoredTransientStateError,
 } from "../contracts/repositoryStorageError.js";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
-import {
-  migrateRepositoryState,
-  migrateRepositoryStateThrough,
-  repositoryMigrationIds,
-} from "./repositoryMigrations.js";
+import { migrateRepositoryState, repositoryMigrationIds } from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 
 type RepositorySqlService = {
@@ -67,8 +58,6 @@ export type RepositorySqlConfig = {
   readonly sqliteBusyTimeoutMs?: number;
   readonly migrationContentionTimeoutMs?: number;
   readonly migrationContentionRetryDelayMs?: number;
-  /** Test-only compatibility target for inspecting a pre-baseline schema. */
-  readonly migrationTarget?: number;
 };
 
 const defaultSqliteBusyTimeoutMs = 5_000;
@@ -79,38 +68,27 @@ const ensureRepositoryIdentity = (
   sql: SqlClient.SqlClient,
   commonDirectory: string,
   idPrefix: string,
-  includesIdPrefix: boolean,
 ): Effect.Effect<
   void,
   SqlError | RepositoryIdentityConflict | RepositoryIdPrefixConflict | RepositorySqlOperationFailed
 > =>
   Effect.gen(function* () {
-    const identities = includesIdPrefix
-      ? yield* sql<{ readonly commonDirectory: string; readonly idPrefix: string }>`
-          SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
-          FROM shared_state_identity WHERE id = 1
-        `
-      : yield* sql<{ readonly commonDirectory: string; readonly idPrefix?: undefined }>`
-          SELECT common_directory AS commonDirectory
-          FROM shared_state_identity WHERE id = 1
-        `;
+    const identities = yield* sql<{
+      readonly commonDirectory: string;
+      readonly idPrefix: string;
+    }>`
+      SELECT common_directory AS commonDirectory, id_prefix AS idPrefix
+      FROM shared_state_identity WHERE id = 1
+    `;
     const identity = identities[0];
 
     if (identity === undefined) {
-      if (includesIdPrefix) {
-        yield* sql`
-          INSERT INTO shared_state_identity (id, common_directory, id_prefix)
-          VALUES (1, ${commonDirectory}, ${idPrefix})
-          ON CONFLICT(id) DO NOTHING
-        `;
-      } else {
-        yield* sql`
-          INSERT INTO shared_state_identity (id, common_directory)
-          VALUES (1, ${commonDirectory})
-          ON CONFLICT(id) DO NOTHING
-        `;
-      }
-      return yield* ensureRepositoryIdentity(sql, commonDirectory, idPrefix, includesIdPrefix);
+      yield* sql`
+        INSERT INTO shared_state_identity (id, common_directory, id_prefix)
+        VALUES (1, ${commonDirectory}, ${idPrefix})
+        ON CONFLICT(id) DO NOTHING
+      `;
+      return yield* ensureRepositoryIdentity(sql, commonDirectory, idPrefix);
     }
 
     if (identity.commonDirectory !== commonDirectory) {
@@ -119,7 +97,7 @@ const ensureRepositoryIdentity = (
         actualCommonDirectory: identity.commonDirectory,
       });
     }
-    if (includesIdPrefix && identity.idPrefix !== idPrefix) {
+    if (identity.idPrefix !== idPrefix) {
       return yield* new RepositoryIdPrefixConflict({
         configuredIdPrefix: idPrefix,
         storedIdPrefix: identity.idPrefix ?? "",
@@ -191,12 +169,7 @@ const isMissingMigrationLedger = (error: SqlError): boolean => {
 const readMigrationLedgerState = (
   sql: SqlClient.SqlClient,
   config: RepositorySqlConfig,
-  expectedMigrationIds: readonly number[] = (() => {
-    const target = config.migrationTarget;
-    return target === undefined
-      ? repositoryMigrationIds
-      : repositoryMigrationIds.filter((id) => id <= target);
-  })(),
+  expectedMigrationIds: readonly number[] = repositoryMigrationIds,
 ): Effect.Effect<MigrationLedgerState, RepositoryStorageError> =>
   classifyRepositoryMigrationLedger(sql, config.lifecycle ?? "open", expectedMigrationIds).pipe(
     Effect.catchTag("SqlError", (error) =>
@@ -228,16 +201,8 @@ const migrateRepositoryStateWithContention = (
     config.migrationContentionTimeoutMs ?? defaultMigrationContentionTimeoutMs;
   const retryDelayMs =
     config.migrationContentionRetryDelayMs ?? defaultMigrationContentionRetryDelayMs;
-  const migrationTarget = config.migrationTarget;
-  const expectedMigrationIds =
-    migrationTarget === undefined
-      ? repositoryMigrationIds
-      : repositoryMigrationIds.filter((id) => id <= migrationTarget);
-  const idPrefix = config.idPrefix ?? "BY";
-  const migration =
-    migrationTarget === undefined
-      ? migrateRepositoryState(idPrefix)
-      : migrateRepositoryStateThrough(migrationTarget, idPrefix);
+  const expectedMigrationIds = repositoryMigrationIds;
+  const migration = migrateRepositoryState;
 
   const attempt = Effect.gen(function* () {
     yield* migration.pipe(
@@ -284,97 +249,7 @@ const migrateRepositoryStateWithContention = (
 const migrationFailureToStorageError = (
   cause: Cause.Cause<unknown>,
   statePath: string,
-): RepositoryStorageError => {
-  const prefixConflict = Array.from(Cause.defects(cause)).find(
-    (defect): defect is MigrationError & { readonly cause: RepositoryIdPrefixConflict } =>
-      defect instanceof MigrationError && defect.cause instanceof RepositoryIdPrefixConflict,
-  );
-  if (prefixConflict !== undefined) return prefixConflict.cause;
-  const predecessorRequired = Array.from(Cause.defects(cause)).find(
-    (
-      defect,
-    ): defect is MigrationError & { readonly cause: PredecessorReconciliationRequiredError } =>
-      defect instanceof MigrationError &&
-      defect.cause instanceof PredecessorReconciliationRequiredError,
-  );
-  if (predecessorRequired !== undefined) {
-    return new RepositoryPredecessorReconciliationRequired({
-      blocked: predecessorRequired.cause.blocked,
-    });
-  }
-  const restored = Array.from(Cause.defects(cause)).find(
-    (defect): defect is MigrationError & { readonly cause: RestoredTransientStateError } =>
-      defect instanceof MigrationError && defect.cause instanceof RestoredTransientStateError,
-  );
-  if (restored !== undefined) {
-    return new RepositoryRestoredTransientState({
-      tasks: restored.cause.tasks,
-      changes: restored.cause.changes,
-    });
-  }
-  return new RepositoryMigrationFailed({
-    statePath,
-    cause: addPrereleaseMigrationGuidance(cause),
-  });
-};
-
-const addPrereleaseMigrationGuidance = (cause: Cause.Cause<unknown>): Cause.Cause<unknown> => {
-  const migration = Array.from(Cause.defects(cause)).find(isMigrationError);
-  if (migration !== undefined) {
-    const guided = prereleaseMigrationGuidance(migration);
-    return guided === undefined ? cause : Cause.die(guided);
-  }
-  const failure = Cause.failureOption(cause);
-  if (failure._tag === "Some" && isMigrationError(failure.value)) {
-    const guided = prereleaseMigrationGuidance(failure.value);
-    return guided === undefined ? cause : Cause.fail(guided);
-  }
-  return cause;
-};
-
-const isMigrationError = (error: unknown): error is MigrationError =>
-  error instanceof MigrationError;
-
-const prereleaseMigrationGuidance = (error: MigrationError): MigrationError | undefined => {
-  const isAgentSession = /^Migration "(?:0040|40)_agent_sessions" failed$/u.test(error.message);
-  const isInternalIdentity =
-    /^Migration "(?:0043|43)_internal_task_change_identities" failed$/u.test(error.message);
-  if (!isAgentSession && !isInternalIdentity) return undefined;
-  const causeMessage = error.cause instanceof Error ? error.cause.message : String(error.cause);
-  if (isInternalIdentity && causeMessage.startsWith("Configured ID Prefix conflicts")) {
-    return new MigrationError({
-      ...error,
-      cause: new Error(causeMessage),
-    });
-  }
-  const match =
-    /^(?:Agent Session|Internal identity) migration requires settled prerelease state: (\{.*\})$/u.exec(
-      causeMessage,
-    );
-  if (match === null || match[1] === undefined) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(match[1]) as unknown;
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-  const blocked = Object.entries(parsed)
-    .filter(([, count]) => typeof count === "number" && count !== 0)
-    .map(([condition, count]) => `${condition}=${count}`)
-    .join(", ");
-  if (blocked.length === 0) return undefined;
-
-  return new MigrationError({
-    ...error,
-    cause: new Error(
-      `Pinned predecessor reconciliation is required before this prerelease migration can proceed. ` +
-        `Blocked prerelease conditions: ${blocked}. ` +
-        `Run the pinned predecessor executable to reconcile these conditions; do not restore or initialize Shared Repository State.`,
-    ),
-  });
-};
+): RepositoryStorageError => new RepositoryMigrationFailed({ statePath, cause });
 
 export const repositorySqlLayer = (
   config: RepositorySqlConfig,
@@ -423,12 +298,7 @@ export const repositorySqlLayer = (
           ),
         );
       const idPrefix = config.idPrefix ?? "BY";
-      yield* ensureRepositoryIdentity(
-        sql,
-        config.commonDirectory,
-        idPrefix,
-        config.migrationTarget === undefined || config.migrationTarget >= 43,
-      ).pipe(
+      yield* ensureRepositoryIdentity(sql, config.commonDirectory, idPrefix).pipe(
         Effect.mapError((cause) =>
           cause instanceof RepositoryIdentityConflict || cause instanceof RepositoryIdPrefixConflict
             ? cause

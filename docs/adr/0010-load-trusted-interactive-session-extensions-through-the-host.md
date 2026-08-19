@@ -7,7 +7,7 @@ status: accepted
 But Why's Interactive Session host loads But Why-owned trusted extensions separately from user-configured Agent Profile resources.
 
 The host always loads the packaged `continue-change` extension for an Implementer Interactive Session.
-It loads no trusted extension for reviewer sessions.
+It loads no trusted extension for headless reviewer Agent Sessions.
 
 Agent Profile resource settings remain the authority for user-configured extensions.
 They do not enable, disable, or replace trusted But Why extensions.

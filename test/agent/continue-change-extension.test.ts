@@ -94,9 +94,8 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     async exec(command: string, args: string[], options?: { signal?: AbortSignal }) {
       execCalls.push({ command, args });
       execSignals.push(options?.signal);
-      const sourceCli = command === "just" && args[0] === "by";
-      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
-      if ((sourceCli || publishedCli) && inspectionGate !== undefined) {
+      const installedCli = command === "by";
+      if (installedCli && inspectionGate !== undefined) {
         await Promise.race([
           inspectionGate,
           new Promise<void>((resolve) =>
@@ -107,11 +106,10 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
           return { stdout: "", stderr: "", code: 1, killed: true };
         }
       }
-      if ((sourceCli || publishedCli) && inspectionFails)
-        return { stdout: "", stderr: "", code: 1, killed: true };
-      if ((sourceCli || publishedCli) && args.includes("blocker"))
+      if (installedCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
+      if (installedCli && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
-      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
+      if (installedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -201,7 +199,7 @@ describe("packaged Change Implement continuation extension", () => {
       type: "tool_call",
       toolCallId: "submit-1",
       toolName: "bash",
-      input: { command: `git status && just by change submit ${changeId}` },
+      input: { command: `git status && by change submit ${changeId}` },
     };
 
     const first = await harness.emit("tool_call", submit);
@@ -237,7 +235,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.getExecCallCount()).toBe(inspectionCallCount);
@@ -254,9 +252,9 @@ describe("packaged Change Implement continuation extension", () => {
     });
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
+        currentCandidate: { id: 2, headSha: "head" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -270,7 +268,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.latestWidgetText()).toEqual([
@@ -294,7 +292,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "help-1",
         toolName: "bash",
-        input: { command: "just by change submit --help" },
+        input: { command: "by change submit --help" },
       }),
     ).toBeUndefined();
     expect(harness.getExecCallCount()).toBe(inspectionCallCount);
@@ -303,7 +301,7 @@ describe("packaged Change Implement continuation extension", () => {
         type: "tool_call",
         toolCallId: "submit-1",
         toolName: "bash",
-        input: { command: `just by change submit ${changeId}` },
+        input: { command: `by change submit ${changeId}` },
       }),
     ).toBeUndefined();
     expect(harness.execCalls.filter(({ args }) => args.includes("blocker"))).toHaveLength(
@@ -321,7 +319,7 @@ describe("packaged Change Implement continuation extension", () => {
       type: "tool_call",
       toolCallId: "submit-1",
       toolName: "bash",
-      input: { command: `just by change submit ${changeId}` },
+      input: { command: `by change submit ${changeId}` },
     });
 
     expect(result).toMatchObject({
@@ -343,7 +341,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.getExecCallCount()).toBe(execCallCount);
   });
 
-  it("uses the canonical source-repository Trusted But Why Executable", async () => {
+  it("uses the globally installed executable from every worktree", async () => {
     const harness = createHarness();
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
@@ -351,26 +349,14 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(1);
     expect(harness.execCalls).toContainEqual({
-      command: "just",
-      args: ["by", "change", "show", changeId],
+      command: "by",
+      args: ["change", "show", changeId],
     });
     expect(harness.execCalls).toContainEqual({
-      command: "just",
-      args: ["by", "change", "blocker", "list", changeId],
+      command: "by",
+      args: ["change", "blocker", "list", changeId],
     });
-  });
-
-  it("uses the published executable for a separate target repository", async () => {
-    const harness = createHarness("/managed/change");
-
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    await harness.emit("agent_settled");
-
-    expect(harness.execCalls).toContainEqual({
-      command: "npx",
-      args: ["-y", "but-why", "change", "show", changeId],
-    });
-    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
+    expect(harness.sent[0]).toContain(`by change show ${changeId}`);
   });
 
   it("does not leave an inspection failure idle", async () => {
@@ -526,7 +512,7 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
       active: null,
     });
 
@@ -534,7 +520,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toEqual([expect.stringContaining("Use the approved design.")]);
     expect(harness.entries.at(-1)).toMatchObject({
-      data: { resolutionId: "resolution-1", pendingResolutionId: null },
+      data: { resolutionBlockerId: 1, pendingResolutionBlockerId: null },
     });
   });
 
@@ -555,7 +541,7 @@ describe("packaged Change Implement continuation extension", () => {
 
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+        resolutions: [{ blockerId: 1, content: "Use the approved design." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(1);
@@ -589,7 +575,7 @@ describe("packaged Change Implement continuation extension", () => {
       harness.setInspectionFails(false);
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        resolutions: [{ blockerId: 1, content: "Continue safely." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(30_000);
@@ -614,7 +600,7 @@ describe("packaged Change Implement continuation extension", () => {
 
       harness.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Continue safely." }],
+        resolutions: [{ blockerId: 1, content: "Continue safely." }],
         active: null,
       });
       await vi.advanceTimersByTimeAsync(60_000);
@@ -683,7 +669,7 @@ describe("packaged Change Implement continuation extension", () => {
       await vi.advanceTimersByTimeAsync(30_000);
       inFlight.setBlockerHistory({
         blockers: [{ id: "blocker-1" }],
-        resolutions: [{ id: "resolution-1", content: "Do not deliver after shutdown." }],
+        resolutions: [{ blockerId: 1, content: "Do not deliver after shutdown." }],
         active: null,
       });
       await inFlight.emit("session_shutdown");
@@ -711,7 +697,7 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(snapshot({ findingCount: 1 }));
     harness.setBlockerHistory({
       blockers: [{ id: "blocker-1" }],
-      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      resolutions: [{ blockerId: 1, content: "Use the approved design." }],
       active: null,
     });
     await harness.emit("agent_settled");
@@ -732,7 +718,7 @@ describe("packaged Change Implement continuation extension", () => {
     harness.setSnapshot(
       snapshot({
         toolingFailureCount: 1,
-        currentValidationRun: { id: "validation-run-1", state: "complete" },
+        currentValidationRun: { id: 1, state: "complete" },
       }),
     );
 
@@ -742,7 +728,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.runCommand("continue-change");
     expect(harness.sent).toHaveLength(1);
-    expect(harness.sent[0]).toContain("by validation-run show validation-run-1");
+    expect(harness.sent[0]).toContain("by validation-run show 1");
   });
 
   it("keeps the first Change identity bound to the Pi session", async () => {
@@ -754,7 +740,7 @@ describe("packaged Change Implement continuation extension", () => {
     });
     await harness.runCommand("continue-change");
 
-    expect(harness.execCalls.filter(({ command }) => command === "just").at(-1)).toMatchObject({
+    expect(harness.execCalls.filter(({ command }) => command === "by").at(-1)).toMatchObject({
       args: expect.arrayContaining([changeId]),
     });
     expect(harness.latestWidgetText()).toEqual(["● Implementing revision"]);
@@ -765,10 +751,10 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-1", headSha: "head" },
-        currentValidationRun: { id: "run-1", state: "complete" },
+        currentCandidate: { id: 1, headSha: "head" },
+        currentValidationRun: { id: 1, state: "complete" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -794,9 +780,9 @@ describe("packaged Change Implement continuation extension", () => {
     const harness = createHarness();
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
+        currentCandidate: { id: 2, headSha: "head" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -810,10 +796,10 @@ describe("packaged Change Implement continuation extension", () => {
 
     harness.setSnapshot(
       snapshot({
-        currentCandidate: { id: "candidate-2", headSha: "head" },
-        currentValidationRun: { id: "run-2", state: "running" },
+        currentCandidate: { id: 2, headSha: "head" },
+        currentValidationRun: { id: 2, state: "running" },
         publication: {
-          candidateId: "candidate-1",
+          candidateId: 1,
           expectedHeadSha: "old-head",
           pullRequest: { number: 12, url: "https://github.test/pull/12" },
         },
@@ -947,7 +933,7 @@ describe("packaged Change Implement continuation extension", () => {
     ["integer Tooling Failure count", snapshot({ toolingFailureCount: 0.5 }), undefined],
     [
       "publication identity",
-      snapshot({ publication: { candidateId: "candidate-1", pullRequest: null } }),
+      snapshot({ publication: { candidateId: 1, pullRequest: null } }),
       undefined,
     ],
     ["JSON object", undefined, { blockers: [], resolutions: [], active: [] }],
@@ -956,7 +942,7 @@ describe("packaged Change Implement continuation extension", () => {
       undefined,
       {
         blockers: [{ body: { opaque: true } }],
-        resolutions: [{ id: "resolution-1" }],
+        resolutions: [{ blockerId: 1 }],
         active: null,
       },
     ],
@@ -1044,7 +1030,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.entries.at(-1)).toMatchObject({
       type: "custom",
       customType: "but-why-change-continuation",
-      data: { changeId, unchangedRestarts: 0, paused: false, resolutionId: null },
+      data: { changeId, unchangedRestarts: 0, paused: false, resolutionBlockerId: null },
     });
   });
 });

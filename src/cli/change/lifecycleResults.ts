@@ -16,7 +16,17 @@ export const startResult = (result: ChangeStartResult | TaskChangeStartResult): 
     return runtimeError({
       code: result.code,
       message: result.message,
-      help: ["Fix the configured Change reviewers, then run Change Start again."],
+      help: ["Fix the complete Change Policy inputs, then run Change Start again."],
+    });
+  }
+  if (
+    result.code === "committed_repo_config_missing" ||
+    result.code === "committed_repo_config_invalid"
+  ) {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      help: ["Fix the Repo Config at the selected Change Base, then run Change Start again."],
     });
   }
   if (result.code === "task_dependencies_unsatisfied") {
@@ -92,7 +102,6 @@ const isLinkedChangeStartResult = (
 const changeDetails = (change: ChangeStartRecord) => ({
   branch: change.branchRef,
   baseRef: change.baseRef,
-  startingCommit: change.startingCommit,
   worktreePath: change.worktreePath,
   ...(change.prepareFailure === null
     ? {}
@@ -145,7 +154,6 @@ const operationalError = (
       : {
           changeId: change.id,
           branch: change.branchRef,
-          startingCommit: change.startingCommit,
           worktreePath: change.worktreePath,
         };
   if (code === "managed_branch_attached") {

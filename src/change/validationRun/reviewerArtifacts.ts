@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { AgentExecutionEvidence } from "../../agent/agentSession/executeAgentSession.js";
 import type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
+import { validationArtifactRef } from "../../contracts/validationArtifact.js";
 
 export type { ReviewerExecutionEvidence } from "../../agent/reviewerExecutionEvidence.js";
 
@@ -21,27 +22,25 @@ import { writeValidationRunArtifactFile } from "./artifactFiles.js";
 import type { ValidationPhase, ValidationRunArtifactRecord } from "./validationRun.js";
 
 export const writeReviewerArtifacts = (input: {
-  readonly validationRunId: string;
+  readonly validationRunId: number;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly result:
     | {
         readonly ok: true;
         readonly report: unknown;
-        readonly attempts: number;
         readonly stdout: string;
       }
     | {
         readonly ok: false;
         readonly failure: ValidationToolingFailure;
-        readonly attempts: number;
         readonly stdout: string;
       };
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly executionEvidence: ReviewerExecutionEvidence;
 }): Effect.Effect<
-  readonly Omit<ValidationRunArtifactRecord, "createdAt">[],
+  readonly ValidationRunArtifactRecord[],
   ValidationToolingFailure,
   FileSystem.FileSystem
 > =>
@@ -56,11 +55,11 @@ export const writeReviewerArtifacts = (input: {
       },
       {
         fileName: "execution.json",
-        content: `${encodeReviewerWireValue(executionArtifact(input.executionEvidence, input.result.attempts))}\n`,
+        content: `${encodeReviewerWireValue(input.executionEvidence)}\n`,
       },
     ] as const;
 
-    const artifacts: Omit<ValidationRunArtifactRecord, "createdAt">[] = [];
+    const artifacts: ValidationRunArtifactRecord[] = [];
     for (const { fileName, content } of contents) {
       const artifact = yield* writeValidationRunArtifactFile({
         artifactsRoot: input.artifactsRoot,
@@ -72,7 +71,12 @@ export const writeReviewerArtifacts = (input: {
         ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
       });
       artifacts.push({
-        ref: `artifact:${input.validationRunId}/${input.phase}/${input.producer}/${fileName}`,
+        ref: validationArtifactRef({
+          validationRunId: input.validationRunId,
+          phase: input.phase,
+          producer: input.producer,
+          fileName,
+        }),
         validationRunId: input.validationRunId,
         phase: input.phase,
         producer: input.producer,
@@ -89,15 +93,6 @@ export const writeReviewerArtifacts = (input: {
         }),
     ),
   );
-
-const executionArtifact = (evidence: ReviewerExecutionEvidence, attempts: number): unknown =>
-  evidence.invocations === undefined
-    ? { ...evidence, attempts }
-    : {
-        agentSessionId: evidence.agentSessionId,
-        invocations: evidence.invocations,
-        attempts,
-      };
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

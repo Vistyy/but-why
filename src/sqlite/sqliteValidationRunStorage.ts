@@ -1,123 +1,193 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 
 import type {
   ActiveCandidateValidationRun,
   CandidateValidationRunRecord,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
-import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
-import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
+import { type ChangePolicy, decodeSqliteChangePolicy } from "../change/changePolicy.js";
+import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { readCandidateById } from "./sqliteCandidateStorage.js";
-import { decodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
-  decodeImplementationBlockerHistory,
-  implementationBlockerReadColumns,
-  latestResolvedBlockerId,
-  type StoredImplementationBlockerRow,
-} from "./sqliteChangeReadModel.js";
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
+import { readCandidateById } from "./sqliteCandidateStorage.js";
+import {
+  decodeImplementationDecisions,
+  readImplementationBlockerPrefix,
+  type StoredImplementationDecisionRow,
+} from "./sqliteChangeAuthorityHistory.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { decodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 
 export type StoredValidationRunRow = {
-  readonly id: string;
-  readonly candidateId: string;
-  readonly policySnapshot: string;
-  readonly implementationDecisions: string;
-  readonly latestResolvedBlockerId: string | null;
-  readonly state: CandidateValidationRunRecord["state"];
+  readonly id: number;
+  readonly candidateId: number;
+  readonly validationInputSnapshot: string;
+  readonly highestDecisionId: number | null;
+  readonly highestBlockerId: number | null;
   readonly outcome: CandidateValidationRunRecord["outcome"];
-  readonly createdAt: string;
-  readonly updatedAt: string;
+  readonly cleanupPending: number;
+  readonly cleanupBlockingReason: string | null;
 };
 
 export const validationRunReadColumns = `
-  id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
-  implementation_decisions AS implementationDecisions,
-  latest_resolved_blocker_id AS latestResolvedBlockerId,
-  state, outcome, created_at AS createdAt, updated_at AS updatedAt
+  id, candidate_id AS candidateId, validation_input_snapshot AS validationInputSnapshot,
+  highest_decision_id AS highestDecisionId, highest_blocker_id AS highestBlockerId,
+  outcome, cleanup_pending AS cleanupPending, cleanup_blocking_reason AS cleanupBlockingReason
 `;
 
-export type DecodedValidationRun = {
+type DecodedValidationRun = {
   readonly record: CandidateValidationRunRecord;
-  readonly policySnapshot: string;
-  readonly implementationDecisionsSnapshot: string;
-  readonly latestResolvedBlockerId: string | null;
+  readonly validationInputSnapshot: string;
+  readonly highestDecisionId: number | null;
+  readonly highestBlockerId: number | null;
 };
 
-export const decodeValidationRun = (row: StoredValidationRunRow): DecodedValidationRun => {
-  const policySnapshot = row.policySnapshot;
-  const implementationDecisionsSnapshot = row.implementationDecisions;
+const decodeValidationRunRow = (
+  row: StoredValidationRunRow,
+  validationInput: CandidateValidationRunRecord["validationInput"],
+  implementationDecisions: CandidateValidationRunRecord["implementationDecisions"],
+): DecodedValidationRun => {
+  if (
+    row.outcome !== null &&
+    row.outcome !== "passed" &&
+    row.outcome !== "blocked" &&
+    row.outcome !== "tooling_failed"
+  ) {
+    throw new Error("Validation Run outcome is unsupported");
+  }
+  if (row.cleanupPending !== 0 && row.cleanupPending !== 1) {
+    throw new Error("Validation Run cleanup obligation is unsupported");
+  }
+  if (
+    (row.cleanupPending === 0 && row.cleanupBlockingReason !== null) ||
+    (row.outcome !== null && row.cleanupPending === 1)
+  ) {
+    throw new Error("Validation Run cleanup relationship is invalid");
+  }
   return {
     record: {
       id: row.id,
       candidateId: row.candidateId,
-      policy: decodeSqliteCandidateValidationPolicy(policySnapshot),
-      implementationDecisions: Schema.decodeUnknownSync(
-        Schema.parseJson(implementationDecisionSnapshotSchema),
-        { onExcessProperty: "error" },
-      )(implementationDecisionsSnapshot),
-      state: row.state,
+      validationInput,
+      implementationDecisions,
+      state: row.outcome === null ? "running" : "complete",
       outcome: row.outcome,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      cleanup: {
+        state: row.cleanupPending === 0 ? "complete" : "pending",
+        blockingReason: row.cleanupBlockingReason,
+      },
     },
-    policySnapshot,
-    implementationDecisionsSnapshot,
-    latestResolvedBlockerId: row.latestResolvedBlockerId,
+    validationInputSnapshot: row.validationInputSnapshot,
+    highestDecisionId: row.highestDecisionId,
+    highestBlockerId: row.highestBlockerId,
   };
 };
 
 export const readValidationRunById = (
   sql: SqlClient.SqlClient,
-  validationRunId: string,
+  validationRunId: number,
   operationName: string,
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<StoredValidationRunRow>(
-      `SELECT ${validationRunReadColumns}
-       FROM candidate_validation_runs WHERE id = ?`,
+      `SELECT ${validationRunReadColumns} FROM validation_runs WHERE id = ?`,
       [validationRunId],
     );
     const row = rows[0];
     if (row === undefined) return undefined;
-    const decoded = yield* decodePersisted(operationName, () => {
-      const run = decodeValidationRun(row);
-      if (run.record.id !== validationRunId)
-        throw new Error("Validation Run identity does not match lookup");
-      return run;
-    });
-    const candidate = yield* readCandidateById(
-      sql,
-      decoded.record.candidateId,
-      operationName,
-      idPrefix,
-    );
+    if (row.id !== validationRunId) {
+      return yield* invalidData(operationName, "Validation Run identity does not match lookup");
+    }
+    const candidate = yield* readCandidateById(sql, row.candidateId, operationName, idPrefix);
     if (candidate === undefined) {
       return yield* invalidData(operationName, "Validation Run belongs to an unknown Candidate");
     }
-    yield* validateSelectedValidationRunAuthority(
+    const decisions = yield* readDecisionSnapshot(
       sql,
-      decoded,
       candidate.changeId,
+      row.highestDecisionId,
       operationName,
       idPrefix,
     );
-    return decoded.record;
+    const blockers = yield* readImplementationBlockerPrefix(
+      sql,
+      candidate.changeId,
+      row.highestBlockerId,
+      operationName,
+      idPrefix,
+    );
+    if (blockers.active !== null) {
+      return yield* invalidData(
+        operationName,
+        "Validation Run includes an unresolved Implementation Blocker",
+      );
+    }
+    const changeRows = yield* sql<{ readonly acceptanceContext: string | null }>`
+      SELECT initial_acceptance_context AS acceptanceContext
+      FROM changes WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
+    `;
+    return yield* decodePersisted(operationName, () => {
+      const change = changeRows[0];
+      if (change === undefined) throw new Error("Validation Run owning Change was not selected");
+      const validationInput = decodeSqliteValidationInputSnapshot(row.validationInputSnapshot);
+      const initialContext =
+        change.acceptanceContext === null
+          ? null
+          : decodeSqliteAcceptanceContextSnapshot(change.acceptanceContext);
+      const expectedContext = deriveAcceptanceContext(initialContext, blockers);
+      const policyContext = validationInput.acceptanceContext ?? null;
+      if (
+        (expectedContext === null) !== (policyContext === null) ||
+        (expectedContext !== null &&
+          policyContext !== null &&
+          encodeSqliteAcceptanceContextSnapshot(expectedContext) !==
+            encodeSqliteAcceptanceContextSnapshot(policyContext))
+      ) {
+        throw new Error("Validation Run Acceptance Context does not match its Change authority");
+      }
+      return decodeValidationRunRow(row, validationInput, decisions).record;
+    });
   });
 
-type StoredActiveValidationRunRow = {
-  readonly validationRunId: string;
-  readonly changeId: number;
-  readonly runId: string;
-  readonly runCandidateId: string;
-  readonly runState: CandidateValidationRunRecord["state"];
-  readonly runOutcome: string | null;
-  readonly candidateId: string;
-  readonly candidateChangeId: number;
-  readonly storedChangeId: number;
+type ValidationExecutionAuthority = {
+  readonly run: CandidateValidationRunRecord;
+  readonly changePolicy: ChangePolicy;
 };
+
+export const readValidationExecutionAuthorityById = (
+  sql: SqlClient.SqlClient,
+  validationRunId: number,
+  operationName: string,
+  idPrefix: string,
+) =>
+  Effect.gen(function* () {
+    const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    if (run === undefined) return undefined;
+    const rows = yield* sql<{
+      readonly reviewerConfiguration: string;
+      readonly prepareDefinition: string | null;
+      readonly checksDefinition: string;
+    }>`
+      SELECT change_row.reviewer_configuration AS reviewerConfiguration,
+        change_row.prepare_definition AS prepareDefinition,
+        change_row.checks_definition AS checksDefinition
+      FROM validation_runs AS validation_run
+      JOIN candidates AS candidate ON candidate.id = validation_run.candidate_id
+      JOIN changes AS change_row ON change_row.id = candidate.change_id
+      WHERE validation_run.id = ${validationRunId}
+    `;
+    return yield* decodePersisted(operationName, () => {
+      const row = rows[0];
+      if (row === undefined) throw new Error("Validation Run owning Change was not selected");
+      const changePolicy = decodeSqliteChangePolicy(row);
+      return { run, changePolicy } satisfies ValidationExecutionAuthority;
+    });
+  });
 
 export const readActiveValidationRunForChange = (
   sql: SqlClient.SqlClient,
@@ -126,134 +196,57 @@ export const readActiveValidationRunForChange = (
   idPrefix: string,
 ) =>
   Effect.gen(function* () {
-    const rows = yield* sql<StoredActiveValidationRunRow>`
-      SELECT active.validation_run_id AS validationRunId, active.change_id AS changeId,
-        run.id AS runId, run.candidate_id AS runCandidateId,
-        run.state AS runState, run.outcome AS runOutcome,
-        candidate.id AS candidateId, candidate.change_id AS candidateChangeId,
-        change_row.id AS storedChangeId
-      FROM active_validation_runs AS active
-      LEFT JOIN candidate_validation_runs AS run ON run.id = active.validation_run_id
-      LEFT JOIN candidates AS candidate ON candidate.id = run.candidate_id
-      LEFT JOIN changes AS change_row ON change_row.id = candidate.change_id
-      WHERE active.change_id = ${internalChangeId(changeId, idPrefix)}
+    const rows = yield* sql<{
+      readonly validationRunId: number;
+      readonly changeId: number;
+    }>`
+      SELECT run.id AS validationRunId, candidate.change_id AS changeId
+      FROM validation_runs AS run
+      JOIN candidates AS candidate ON candidate.id = run.candidate_id
+      WHERE candidate.change_id = ${internalChangeId(changeId, idPrefix)}
+        AND run.outcome IS NULL
+      ORDER BY run.id DESC
     `;
+    if (rows.length > 1) {
+      return yield* invalidData(operationName, "Change has more than one active Validation Run");
+    }
     const row = rows[0];
-    return row === undefined
-      ? undefined
-      : yield* decodePersisted(operationName, () =>
-          decodeActiveValidationRun(row, changeId, idPrefix),
-        );
+    if (row === undefined) return undefined;
+    if (publicChangeId(idPrefix, row.changeId) !== changeId) {
+      return yield* invalidData(operationName, "Active Validation Run belongs to another Change");
+    }
+    return {
+      validationRunId: row.validationRunId,
+      changeId,
+    } satisfies ActiveCandidateValidationRun;
   });
 
-export const validateValidationRunAuthorityRelationships = (
-  run: DecodedValidationRun,
-  changeId: string,
-  blockers: ImplementationBlockerHistory,
-): void => {
-  const expectedLatestResolvedBlockerId = [...blockers.blockers]
-    .filter(
-      (blocker): blocker is typeof blocker & { readonly resolvedAt: string } =>
-        blocker.resolvedAt !== null && blocker.resolvedAt <= run.record.createdAt,
-    )
-    .sort(
-      (left, right) =>
-        compareStrings(right.resolvedAt, left.resolvedAt) || right.sequence - left.sequence,
-    )[0]?.id;
-  validateValidationRunLatestResolvedBlockerRelationship(
-    run,
-    expectedLatestResolvedBlockerId ?? null,
-  );
-  validateValidationRunImplementationDecisionRelationships(run, changeId);
-};
-
-export const validateValidationRunLatestResolvedBlockerRelationship = (
-  run: DecodedValidationRun,
-  expectedLatestResolvedBlockerId: string | null,
-): void => {
-  if (run.latestResolvedBlockerId !== expectedLatestResolvedBlockerId) {
-    throw new Error("Validation Run latest resolved Blocker identity is inconsistent");
-  }
-};
-
-export const validateValidationRunImplementationDecisionRelationships = (
-  run: DecodedValidationRun,
-  changeId: string,
-): void => {
-  const decisionIds = new Set<string>();
-  const decisionSequences = new Set<number>();
-  let previousSequence = 0;
-  for (const decision of run.record.implementationDecisions) {
-    if (decision.changeId !== changeId) {
-      throw new Error("Validation Run Implementation Decision belongs to another Change");
-    }
-    if (!Number.isSafeInteger(decision.sequence) || decision.sequence <= 0) {
-      throw new Error(
-        "Validation Run Implementation Decision sequence must be a positive safe integer",
-      );
-    }
-    if (
-      decisionIds.has(decision.id) ||
-      decisionSequences.has(decision.sequence) ||
-      decision.sequence <= previousSequence
-    ) {
-      throw new Error("Validation Run Implementation Decision ordering is inconsistent");
-    }
-    decisionIds.add(decision.id);
-    decisionSequences.add(decision.sequence);
-    previousSequence = decision.sequence;
-  }
-};
-
-const decodeActiveValidationRun = (
-  row: StoredActiveValidationRunRow,
-  expectedChangeId: string,
-  idPrefix: string,
-): ActiveCandidateValidationRun => {
-  if (
-    publicChangeId(idPrefix, row.changeId) !== expectedChangeId ||
-    row.candidateChangeId !== row.changeId ||
-    row.storedChangeId !== row.changeId
-  ) {
-    throw new Error("Active Validation Run belongs to another or unknown Change");
-  }
-  if (
-    row.runId !== row.validationRunId ||
-    row.runCandidateId !== row.candidateId ||
-    row.runState !== "running" ||
-    row.runOutcome !== null
-  ) {
-    throw new Error("Active Validation Run relationship is inconsistent");
-  }
-  return { validationRunId: row.validationRunId, changeId: publicChangeId(idPrefix, row.changeId) };
-};
-
-const validateSelectedValidationRunAuthority = (
+const readDecisionSnapshot = (
   sql: SqlClient.SqlClient,
-  run: DecodedValidationRun,
   changeId: string,
+  highestDecisionId: number | null,
   operationName: string,
   idPrefix: string,
 ) =>
-  Effect.gen(function* () {
-    const latestRows = yield* sql.unsafe<StoredImplementationBlockerRow>(
-      `SELECT ${implementationBlockerReadColumns}
-       FROM implementation_blockers
-       WHERE change_id = ? AND resolved_at IS NOT NULL AND resolved_at <= ?
-       ORDER BY resolved_at DESC, sequence DESC LIMIT 1`,
-      [internalChangeId(changeId, idPrefix), run.record.createdAt],
-    );
-    const latestBlockerId = yield* decodePersisted(operationName, () =>
-      latestResolvedBlockerId(decodeImplementationBlockerHistory(latestRows, changeId, idPrefix)),
-    );
-    yield* decodePersisted(operationName, () => {
-      validateValidationRunImplementationDecisionRelationships(run, changeId);
-      validateValidationRunLatestResolvedBlockerRelationship(run, latestBlockerId);
-    });
-  });
+  Effect.flatMap(
+    highestDecisionId === null
+      ? Effect.succeed([] as readonly StoredImplementationDecisionRow[])
+      : sql<StoredImplementationDecisionRow>`
+          SELECT id, change_id AS changeId, choice, rationale
+          FROM implementation_decisions
+          WHERE change_id = ${internalChangeId(changeId, idPrefix)}
+            AND id <= ${highestDecisionId}
+          ORDER BY id
+        `,
+    (rows) =>
+      decodePersisted(operationName, () => {
+        const decisions = decodeImplementationDecisions(rows, changeId, idPrefix);
+        if ((decisions.at(-1)?.id ?? null) !== highestDecisionId) {
+          throw new Error("Validation Run Decision high-water identity is unknown");
+        }
+        return decisions;
+      }),
+  );
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
-
-const compareStrings = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;

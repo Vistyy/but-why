@@ -1,17 +1,12 @@
 export type ImplementationBlocker = {
-  readonly id: string;
+  readonly id: number;
   readonly changeId: string;
-  readonly sequence: number;
-  readonly reportedAt: string;
   readonly content: string;
-  readonly resolvedAt: string | null;
   readonly resolution: ImplementationBlockerResolution | null;
 };
 
 export type ImplementationBlockerResolution = {
-  readonly id: string;
-  readonly blockerId: string;
-  readonly recordedAt: string;
+  readonly blockerId: number;
   readonly content: string;
 };
 
@@ -20,3 +15,8 @@ export type ImplementationBlockerHistory = {
   readonly resolutions: readonly ImplementationBlockerResolution[];
   readonly active: ImplementationBlocker | null;
 };
+
+export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): number | null =>
+  [...history.blockers]
+    .filter((blocker) => blocker.resolution !== null)
+    .sort((left, right) => right.id - left.id)[0]?.id ?? null;

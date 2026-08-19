@@ -11,15 +11,17 @@ const change = (prepareFailure: ChangeStartRecord["prepareFailure"] = null): Cha
   branchRef: "refs/heads/but-why/by-197-change-1",
   baseRef: "refs/remotes/origin/main",
   baseRemoteUrl: "https://github.com/acme/repo.git",
-  startingCommit: "1111111111111111111111111111111111111111",
   worktreePath: "/repo-worktrees/but-why/by-197-change-1",
   acceptanceContext: {
     version: 1,
     title: "Accepted title",
     description: "Accepted description",
   },
-  reviewerConfiguration: null,
-  prepare: { command: "prepare repository", timeoutSeconds: 17 },
+  policy: {
+    reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+    prepare: { command: "prepare repository", timeoutSeconds: 17 },
+    checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
+  },
   prepareFailure,
   state: "open",
 });
@@ -32,7 +34,6 @@ describe("Change lifecycle CLI results", () => {
         change: { id: "change-1", taskId: "BY-197" },
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
-        startingCommit: "1111111111111111111111111111111111111111",
         worktreePath: "/repo-worktrees/but-why/by-197-change-1",
       },
     });
@@ -45,8 +46,48 @@ describe("Change lifecycle CLI results", () => {
         change: { id: "change-1", taskId: null },
         branch: "refs/heads/but-why/by-197-change-1",
         baseRef: "refs/remotes/origin/main",
-        startingCommit: "1111111111111111111111111111111111111111",
         worktreePath: "/repo-worktrees/but-why/by-197-change-1",
+      },
+    });
+  });
+
+  it("identifies complete Change Policy resolution failures", () => {
+    expect(
+      startResult({
+        ok: false,
+        code: "reviewer_configuration_invalid",
+        message: "Validation Checks are missing.",
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "reviewer_configuration_invalid",
+          message: "Validation Checks are missing.",
+        },
+        help: ["Fix the complete Change Policy inputs, then run Change Start again."],
+      },
+    });
+  });
+
+  it.each([
+    "committed_repo_config_missing",
+    "committed_repo_config_invalid",
+  ] as const)("preserves %s as a Change Policy resolution failure", (code) => {
+    expect(
+      startResult({
+        ok: false,
+        code,
+        message: "The selected Change Base has unusable Repo Config.",
+      }),
+    ).toEqual({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code,
+          message: "The selected Change Base has unusable Repo Config.",
+        },
+        help: ["Fix the Repo Config at the selected Change Base, then run Change Start again."],
       },
     });
   });

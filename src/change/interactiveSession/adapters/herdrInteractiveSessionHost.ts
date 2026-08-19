@@ -10,6 +10,7 @@ import type {
   InteractiveSessionLaunchInput,
   InteractiveSessionLaunchResult,
 } from "../interactiveSessionHost.js";
+import { type HerdrAgentPromptTransport, sendHerdrAgentPrompt } from "./herdrAgentPromptSocket.js";
 
 export type HerdrCommandExecutor = (
   args: readonly string[],
@@ -22,6 +23,9 @@ export type HerdrInteractiveSessionHostOptions = {
   readonly commandTimeoutMs?: number;
   readonly readinessTimeoutMs?: number;
   readonly observationRetries?: number;
+  readonly socketPath?: string;
+  readonly platform?: NodeJS.Platform;
+  readonly promptTransport?: HerdrAgentPromptTransport;
 };
 
 type ResolvedOptions = {
@@ -120,6 +124,23 @@ const launchHerdrSession = async (
   const options = { ...defaultOptions, ...environment };
   const preflight = await preflightTrustedResources(input);
   if (!preflight.ok) return preflight.result;
+  const socketPath = environment.socketPath;
+  const platform = environment.platform;
+  if (platform === undefined) {
+    return {
+      ok: false,
+      code: "host_unavailable",
+      message: "The Interactive Session runtime platform is unavailable.",
+    };
+  }
+  if (socketPath === undefined && environment.promptTransport === undefined) {
+    return {
+      ok: false,
+      code: "host_unavailable",
+      message: "Start Change Implement from a Herdr-managed pane with HERDR_SOCKET_PATH set.",
+    };
+  }
+  const promptTransport = environment.promptTransport ?? sendHerdrAgentPrompt;
 
   const command = boundedExecutor(execute, options.commandTimeoutMs);
   const sessionName = input.hostSessionName ?? herdrSessionName(input.changeId);
@@ -147,7 +168,16 @@ const launchHerdrSession = async (
   );
   if (!nativeAgent.ok) return nativeAgent.result;
 
-  return submitInitialPrompt(command, input, sessionName, signal, options);
+  return submitInitialPrompt(
+    command,
+    promptTransport,
+    socketPath ?? "injected",
+    platform,
+    input,
+    sessionName,
+    signal,
+    options,
+  );
 };
 
 const preflightTrustedResources = async (
@@ -365,6 +395,9 @@ const startAgentWhenPaneReady = async (
 
 const submitInitialPrompt = async (
   command: HerdrCommandExecutor,
+  promptTransport: HerdrAgentPromptTransport,
+  socketPath: string,
+  platform: NodeJS.Platform,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
   signal: AbortSignal | undefined,
@@ -376,13 +409,16 @@ const submitInitialPrompt = async (
   if (input.initialPrompt.includes("\u0000")) {
     return launchFailure("The initial Change handoff contains NUL and was not submitted.");
   }
-  const prompted = await command(["agent", "prompt", sessionName, input.initialPrompt], signal);
-  if (prompted.ok && isConfirmedAgentPrompt(prompted.stdout)) {
-    return { ok: true, host: "herdr", status: "started" };
-  }
-  if (prompted.ok)
-    return launchIndeterminate("Herdr did not confirm initial Change handoff submission.");
-  if (!isUncertainMutationFailure(prompted.message)) {
+  const prompted = await promptTransport({
+    socketPath,
+    platform,
+    target: sessionName,
+    text: input.initialPrompt,
+    timeoutMs: options.commandTimeoutMs,
+    ...(signal === undefined ? {} : { signal }),
+  });
+  if (prompted.ok) return { ok: true, host: "herdr", status: "started" };
+  if (prompted.transmission === "none") {
     return launchFailure(`Herdr rejected initial Change handoff submission: ${prompted.message}`);
   }
   const observed = await observe(command, ["agent", "list"], signal, options.observationRetries);
@@ -406,7 +442,7 @@ const piArguments = (
     "--append-system-prompt",
     implementationInstructions,
     "--name",
-    input.agentSessionName ?? input.hostSessionName ?? herdrSessionName(input.changeId),
+    input.changeId,
     ...(runtimeConfig?.model === undefined ? [] : ["--model", runtimeConfig.model]),
     ...(runtimeConfig?.thinking === undefined ? [] : ["--thinking", runtimeConfig.thinking]),
     ...piResourceArgs(
@@ -440,8 +476,6 @@ const paneNotReady = (readinessTimeoutMs: number): InteractiveSessionLaunchResul
 });
 
 const isConfirmedAgentStart = (source: string): boolean => decodeAgentStarted(source) !== undefined;
-
-const isConfirmedAgentPrompt = (source: string): boolean => decodeAgentPrompted(source);
 
 const observe = async (
   execute: HerdrCommandExecutor,
@@ -559,10 +593,6 @@ const herdrAgentStartedResponseSchema = Schema.Struct({
   }),
 });
 
-const herdrAgentPromptedResponseSchema = Schema.Struct({
-  result: Schema.Struct({ type: Schema.Literal("agent_prompted") }),
-});
-
 const herdrErrorResponseSchema = Schema.Struct({
   error: Schema.Struct({ code: Schema.String }),
 });
@@ -616,9 +646,6 @@ const decodeAgentStarted = (source: string): { readonly terminalId: string } | u
   const response = decodeHerdrJson(source, herdrAgentStartedResponseSchema);
   return response === undefined ? undefined : { terminalId: response.result.agent.terminal_id };
 };
-
-const decodeAgentPrompted = (source: string): boolean =>
-  decodeHerdrJson(source, herdrAgentPromptedResponseSchema) !== undefined;
 
 const isAgentPaneBusyFailure = (message: string): boolean => {
   const trimmed = message.trim();
