@@ -27,8 +27,6 @@ The work is split into independently reviewable deliverables.
 1. A separate prerequisite generalizes the current Reviewer Session infrastructure into a shared Agent Session capability while preserving existing review behavior.
 2. This Candidate Publication presentation work consumes the shared Agent Session capability.
 
-`agent-session-execution.md` owns shared Agent Session and Agent Invocation behavior.
-`release-baseline-cutover.md` owns the first-release physical schema without this deferred presentation behavior.
 This plan owns Publication Agent behavior and Candidate Publication state and consumes those shared capabilities.
 This plan assumes only that Candidate Publication receives an exact Candidate and an upstream-selected eligible passing Validation Run.
 It does not define when Validation must rerun.

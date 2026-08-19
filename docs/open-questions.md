@@ -210,6 +210,10 @@ Before implementation, define support for staged, unstaged, untracked, ignored, 
 V1 uses Herdr for Interactive Sessions.
 Add another host only after a second implementation proves a shared interface.
 
+## Should direct Herdr protocol/socket ownership be reconsidered?
+
+Direct Herdr protocol/socket ownership is accepted for v1 because installed Herdr lacks an stdin prompt transport, and it should be reconsidered only if an upstream capability can preserve exact submission and unknown-transmission no-replay semantics.
+
 ## Should validation be conditional?
 
 V1 uses the fixed changed-code Validation Gate and does not validate an unchanged tracked tree.

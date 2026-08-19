@@ -3,7 +3,7 @@
 **Status:** Active exploration in the current Operator-directed session.
 This file records evidence, settled direction, current recommendations, and unresolved decisions.
 It is not an approved specification or implementation authority.
-It remains subordinate to the product boundaries under exploration in `plans/task-change-boundary.md`.
+It remains subordinate to the product boundaries documented in [Architecture](../docs/architecture.md).
 
 **Removal condition:** Remove this file after the Operator accepts or rejects the redesign and every accepted outcome is recorded in the smallest applicable authoritative work record, current documentation source, or ADR.
 
@@ -274,7 +274,7 @@ Task Intent owns Task Lifecycle, Task Review facts, Task Dependencies, readiness
 Change Delivery owns Change Activity and Change inspection facts.
 
 A combined Task operational projection crosses those facts.
-Under the boundary currently explored in `plans/task-change-boundary.md`, Task and Change coordination should join supported Task and Change projections for CLI output.
+Under the current Task and Change coordination boundary, Task and Change coordination should join supported Task and Change projections for CLI output.
 It should not store Change Activity on Tasks, reproduce Change derivation rules, or let Task persistence query Change-owned tables through an undocumented seam.
 
 CLI modules should select the applicable read operation and translate its result.
