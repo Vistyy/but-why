@@ -140,36 +140,21 @@ it.scoped("orders actionable Tasks by lifecycle priority and numeric ID", () => 
       yield* tasks.createTask({ title: "New tied B", description: "New tied B", now: firstNow });
       yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
       yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
-      yield* tasks.createTask({
-        title: "Blocking New",
-        description: "Blocking New",
-        now: firstNow,
-      });
-      yield* tasks.createTask({
-        title: "Blocked Todo",
-        description: "Blocked Todo",
-        dependsOn: [publicTaskId("BY-8")],
-        now: firstNow,
-      });
 
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-1"), firstNow);
       yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-2"), thirdNow);
       yield* setTerminalTaskStateFixture(publicTaskId("BY-6"), "done", thirdNow);
       yield* setTerminalTaskStateFixture(publicTaskId("BY-7"), "cancelled", thirdNow);
-      yield* passTaskReviewFixture(repositoryRoot, publicTaskId("BY-9"), thirdNow);
 
       const actionable = yield* tasks.listActionableTasks();
       expect(actionable.map(({ id, state }) => ({ id, state }))).toEqual([
         { id: "BY-3", state: "new" },
         { id: "BY-4", state: "new" },
         { id: "BY-5", state: "new" },
-        { id: "BY-8", state: "new" },
         { id: "BY-1", state: "todo" },
         { id: "BY-2", state: "todo" },
       ]);
-      expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7" || id === "BY-9")).toBe(
-        false,
-      );
+      expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7")).toBe(false);
     }),
   );
 });

@@ -29,10 +29,10 @@ import {
   deriveAcceptanceContext,
   implementationBlockerReadColumns,
   isValidationRunEligibleForCurrentChangeAuthority,
+  latestResolvedBlockerId,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
-import { latestResolvedBlockerId } from "./sqliteChangeReadModel.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import {
@@ -317,7 +317,7 @@ const startOrReuse = (
           "Reusable Validation Run does not match its Candidate and passing outcome",
         );
       }
-      const currentHighestBlockerId = blockerHistory.blockers.at(-1)?.id ?? null;
+      const currentHighestBlockerId = latestResolvedBlockerId(blockerHistory);
       if (
         isValidationRunEligibleForCurrentChangeAuthority({
           hasAcceptanceContext: changeAuthority.acceptanceContext !== null,

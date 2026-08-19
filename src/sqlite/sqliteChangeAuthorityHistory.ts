@@ -75,6 +75,11 @@ export const decodeImplementationBlockerHistory = (
   };
 };
 
+export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): number | null =>
+  [...history.blockers]
+    .filter((blocker) => blocker.resolution !== null)
+    .sort((left, right) => right.id - left.id)[0]?.id ?? null;
+
 export const isValidationRunEligibleForCurrentChangeAuthority = (input: {
   readonly hasAcceptanceContext: boolean;
   readonly runHighestBlockerId: number | null;

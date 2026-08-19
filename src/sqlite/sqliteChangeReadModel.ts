@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
 import { publicChangeId } from "../change/changeId.js";
 import { decodeSqliteChangePolicy } from "../change/changePolicy.js";
-import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -124,11 +123,6 @@ export const decodeChangeRow = (
     cancelReason,
   };
 };
-
-export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): number | null =>
-  [...history.blockers]
-    .filter((blocker) => blocker.resolution !== null)
-    .sort((left, right) => right.id - left.id)[0]?.id ?? null;
 
 export const validateChangePublicationRelationships = (
   sql: SqlClient.SqlClient,

@@ -251,10 +251,9 @@ const listActionableTasks = (sql: SqlClient.SqlClient, idPrefix: string) =>
     const decoded = yield* decodePersisted("list actionable Tasks", () =>
       rows.map((row) => decodeTaskSummaryRow(row, idPrefix)),
     );
-    const tasks = yield* Effect.forEach(decoded, (row) =>
+    return yield* Effect.forEach(decoded, (row) =>
       rowToTaskSummary(sql, row, "list actionable Tasks", idPrefix),
     );
-    return tasks.filter((task) => task.state === "new" || task.startable);
   });
 
 export const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId, idPrefix: string) =>

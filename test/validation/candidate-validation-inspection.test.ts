@@ -474,7 +474,15 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: fixture.validationRunId,
       });
 
-      yield* fixture.recordResolvedBlocker();
+      yield* fixture.raiseBlocker();
+      expect(yield* fixture.getCurrentPassingEvidence()).toMatchObject({
+        validationRunId: fixture.validationRunId,
+      });
+      expect(yield* fixture.getCompletedPassingEvidence()).toMatchObject({
+        validationRunId: fixture.validationRunId,
+      });
+
+      yield* fixture.resolveBlocker();
 
       expect(yield* fixture.getCurrentPassingEvidence()).toBeUndefined();
       expect(yield* fixture.getCompletedPassingEvidence()).toBeUndefined();
@@ -1116,22 +1124,24 @@ const candidateValidationFixture = () =>
         ),
         Effect.provide(repositoryLayer),
       );
-    const recordResolvedBlocker = () =>
+    const raiseBlocker = () =>
       openSqliteChangeTestDependencies().pipe(
         Effect.flatMap((changes) =>
-          Effect.gen(function* () {
-            const raised = yield* changes.authority.raiseImplementationBlocker({
-              changeId: candidateResult.changeId,
-              content: "Decide how to continue.",
-              now,
-            });
-            if (!raised.ok) throw new Error(raised.code);
-            const resolved = yield* changes.authority.resolveImplementationBlocker({
-              changeId: candidateResult.changeId,
-              content: "Continue under the approved resolution.",
-              now: later,
-            });
-            if (!resolved.ok) throw new Error(resolved.code);
+          changes.authority.raiseImplementationBlocker({
+            changeId: candidateResult.changeId,
+            content: "Decide how to continue.",
+            now,
+          }),
+        ),
+        Effect.provide(repositoryLayer),
+      );
+    const resolveBlocker = () =>
+      openSqliteChangeTestDependencies().pipe(
+        Effect.flatMap((changes) =>
+          changes.authority.resolveImplementationBlocker({
+            changeId: candidateResult.changeId,
+            content: "Continue under the approved resolution.",
+            now: later,
           }),
         ),
         Effect.provide(repositoryLayer),
@@ -1185,7 +1195,8 @@ const candidateValidationFixture = () =>
       recordPassingResults,
       getCurrentPassingEvidence,
       getCompletedPassingEvidence,
-      recordResolvedBlocker,
+      raiseBlocker,
+      resolveBlocker,
       setPassingAcceptanceResultWithoutInvocation,
       setValidationRunPassedWithoutEvidence,
       setReviewerConfiguration,

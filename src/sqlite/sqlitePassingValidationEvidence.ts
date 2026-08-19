@@ -12,6 +12,7 @@ import {
 } from "./sqliteCandidateStorage.js";
 import {
   isValidationRunEligibleForCurrentChangeAuthority,
+  latestResolvedBlockerId,
   readImplementationBlockerHistory,
 } from "./sqliteChangeAuthorityHistory.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
@@ -179,7 +180,7 @@ const readPassingEvidenceForCandidate = (
       !isValidationRunEligibleForCurrentChangeAuthority({
         hasAcceptanceContext: changeAuthority.hasAcceptanceContext,
         runHighestBlockerId: rows[0]?.highestBlockerId ?? null,
-        currentHighestBlockerId: blockerHistory.blockers.at(-1)?.id ?? null,
+        currentHighestBlockerId: latestResolvedBlockerId(blockerHistory),
       })
     ) {
       return undefined;
