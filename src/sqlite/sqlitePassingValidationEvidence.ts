@@ -10,6 +10,10 @@ import {
   decodeCandidate,
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
+import {
+  isValidationRunEligibleForCurrentChangeAuthority,
+  readImplementationBlockerHistory,
+} from "./sqliteChangeAuthorityHistory.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
@@ -136,8 +140,11 @@ const readPassingEvidenceForCandidate = (
       candidate.id,
       ...(query?.validationRunId === undefined ? [] : [query.validationRunId]),
     ];
-    const rows = yield* sql.unsafe<{ readonly id: number }>(
-      `SELECT id
+    const rows = yield* sql.unsafe<{
+      readonly id: number;
+      readonly highestBlockerId: number | null;
+    }>(
+      `SELECT id, highest_blocker_id AS highestBlockerId
        FROM validation_runs
        WHERE candidate_id = ? AND outcome = 'passed' ${requestedRunPredicate}
        ORDER BY id DESC`,
@@ -146,6 +153,37 @@ const readPassingEvidenceForCandidate = (
     const validationRunId = rows[0]?.id;
     if (validationRunId === undefined) return undefined;
     const run = yield* readValidationRunById(sql, validationRunId, operationName, idPrefix);
+    const changeRows = yield* sql<{
+      readonly id: number;
+      readonly acceptanceContext: string | null;
+    }>`
+      SELECT id, initial_acceptance_context AS acceptanceContext
+      FROM changes
+      WHERE id = ${internalChangeId(candidate.changeId, idPrefix)}
+    `;
+    const changeAuthority = yield* decodePersisted(operationName, () => {
+      const row = changeRows[0];
+      if (row === undefined || publicChangeId(idPrefix, row.id) !== candidate.changeId) {
+        throw new Error("Passing Validation Run requires its owning Change");
+      }
+      return { hasAcceptanceContext: row.acceptanceContext !== null };
+    });
+    const blockerHistory = yield* readImplementationBlockerHistory(
+      sql,
+      candidate.changeId,
+      operationName,
+      idPrefix,
+    );
+    if (
+      run !== undefined &&
+      !isValidationRunEligibleForCurrentChangeAuthority({
+        hasAcceptanceContext: changeAuthority.hasAcceptanceContext,
+        runHighestBlockerId: rows[0]?.highestBlockerId ?? null,
+        currentHighestBlockerId: blockerHistory.blockers.at(-1)?.id ?? null,
+      })
+    ) {
+      return undefined;
+    }
     yield* requireCoherentValidationCompletion(
       sql,
       validationRunId,

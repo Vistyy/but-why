@@ -28,6 +28,7 @@ import {
   decodeImplementationDecisions,
   deriveAcceptanceContext,
   implementationBlockerReadColumns,
+  isValidationRunEligibleForCurrentChangeAuthority,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
@@ -316,11 +317,20 @@ const startOrReuse = (
           "Reusable Validation Run does not match its Candidate and passing outcome",
         );
       }
-      return {
-        reused: true,
-        validationRunId: decoded.id,
-        outcome: "passed",
-      } satisfies StartCandidateValidationRunResult;
+      const currentHighestBlockerId = blockerHistory.blockers.at(-1)?.id ?? null;
+      if (
+        isValidationRunEligibleForCurrentChangeAuthority({
+          hasAcceptanceContext: changeAuthority.acceptanceContext !== null,
+          runHighestBlockerId: latest.highestBlockerId,
+          currentHighestBlockerId,
+        })
+      ) {
+        return {
+          reused: true,
+          validationRunId: decoded.id,
+          outcome: "passed",
+        } satisfies StartCandidateValidationRunResult;
+      }
     }
 
     const decisionRows = yield* sql<StoredImplementationDecisionRow>`

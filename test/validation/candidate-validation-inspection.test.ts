@@ -462,6 +462,32 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("makes an unlinked passing Run historical after a later Resolution", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.recordPassingResults(fixture.validationRunId);
+      yield* fixture.runStore.completeAfterCleanup({
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+      });
+      expect(yield* fixture.getCurrentPassingEvidence()).toMatchObject({
+        validationRunId: fixture.validationRunId,
+      });
+
+      yield* fixture.recordResolvedBlocker();
+
+      expect(yield* fixture.getCurrentPassingEvidence()).toBeUndefined();
+      expect(yield* fixture.getCompletedPassingEvidence()).toBeUndefined();
+      const started = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+      });
+      expect(started.reused).toBe(false);
+      if ("blocked" in started) throw new Error("Expected a new Validation Run");
+      expect(started.validationRunId).not.toBe(fixture.validationRunId);
+    }),
+  );
+
   it.effect("snapshots Implementation Decisions in a new Validation Run", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
@@ -1079,6 +1105,37 @@ const candidateValidationFixture = () =>
         ),
         Effect.provide(repositoryLayer),
       );
+    const getCompletedPassingEvidence = () =>
+      openSqliteChangeTestDependencies().pipe(
+        Effect.flatMap((changes) =>
+          changes.submission.getCompletedPublicationEvidence(
+            candidateResult.changeId,
+            candidateResult.candidateId,
+            runResult.validationRunId,
+          ),
+        ),
+        Effect.provide(repositoryLayer),
+      );
+    const recordResolvedBlocker = () =>
+      openSqliteChangeTestDependencies().pipe(
+        Effect.flatMap((changes) =>
+          Effect.gen(function* () {
+            const raised = yield* changes.authority.raiseImplementationBlocker({
+              changeId: candidateResult.changeId,
+              content: "Decide how to continue.",
+              now,
+            });
+            if (!raised.ok) throw new Error(raised.code);
+            const resolved = yield* changes.authority.resolveImplementationBlocker({
+              changeId: candidateResult.changeId,
+              content: "Continue under the approved resolution.",
+              now: later,
+            });
+            if (!resolved.ok) throw new Error(resolved.code);
+          }),
+        ),
+        Effect.provide(repositoryLayer),
+      );
     const setPassingAcceptanceResultWithoutInvocation = () =>
       withRepository(
         Effect.flatMap(RepositorySql, (repository) =>
@@ -1127,6 +1184,8 @@ const candidateValidationFixture = () =>
       recordReviewerResult,
       recordPassingResults,
       getCurrentPassingEvidence,
+      getCompletedPassingEvidence,
+      recordResolvedBlocker,
       setPassingAcceptanceResultWithoutInvocation,
       setValidationRunPassedWithoutEvidence,
       setReviewerConfiguration,

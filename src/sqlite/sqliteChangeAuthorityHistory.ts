@@ -75,6 +75,13 @@ export const decodeImplementationBlockerHistory = (
   };
 };
 
+export const isValidationRunEligibleForCurrentChangeAuthority = (input: {
+  readonly hasAcceptanceContext: boolean;
+  readonly runHighestBlockerId: number | null;
+  readonly currentHighestBlockerId: number | null;
+}): boolean =>
+  input.hasAcceptanceContext || input.runHighestBlockerId === input.currentHighestBlockerId;
+
 export const deriveAcceptanceContext = (
   initial: AcceptanceContextSnapshotV1 | null,
   history: ImplementationBlockerHistory,
