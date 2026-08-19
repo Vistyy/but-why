@@ -280,7 +280,7 @@ describe("repository-authored tooling diagnostics", () => {
 set -euo pipefail
 case "$*" in
   *"fallow health"*)
-    [[ " $* " == *" --report-only "* ]] || exit 8
+    [[ " $* " == *" --report-only "* && " $* " != *" --coverage "* ]] || exit 8
     printf '%s' '{"findings":[{"path":"src/complex.ts","name":"complexWork","line":4,"col":7,"severity":"high","actions":[{"description":"Extract focused helper functions"}]}]}'
     ;;
   *"fallow dupes"*)
@@ -300,7 +300,7 @@ esac
     );
     chmodSync(pnpm, 0o755);
 
-    const result = run(process.execPath, [healthReportScriptPath, "coverage.json"], fixtureRoot, {
+    const result = run(process.execPath, [healthReportScriptPath], fixtureRoot, {
       // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
       PATH: `${fixtureRoot}:${process.env["PATH"] ?? ""}`,
     });
@@ -319,6 +319,17 @@ esac
     expect(result.output).toContain(
       "Findings are advisory. This report exits successfully when findings exist.",
     );
+  });
+
+  test("health recipe runs advisory analysis without the coverage workload", () => {
+    const result = run(
+      "just",
+      ["--justfile", join(repositoryRoot, "justfile"), "--dry-run", "health"],
+      createTestWorkspace(),
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.output.trim()).toBe("node scripts/run-health-report.mjs");
   });
 
   test.each([

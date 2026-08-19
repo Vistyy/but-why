@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -48,7 +48,9 @@ exit 1
           join(tools, "herdr"),
           `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
-  if [ -n "$BY_FAKE_CAPTURE" ] && [ -f "$BY_FAKE_CAPTURE.started" ]; then
+  if [ -n "$BY_FAKE_CAPTURE" ] && [ -f "$BY_FAKE_CAPTURE" ]; then
+    printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"done"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
+  elif [ -n "$BY_FAKE_CAPTURE" ] && [ -f "$BY_FAKE_CAPTURE.started" ]; then
     printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
   else
     printf '{"result":{"type":"agent_list","agents":[]}}\\n'
@@ -82,8 +84,9 @@ exit 1
           ...baseEnv,
           BY_FAKE_CAPTURE: capture,
           BY_FAKE_WORKTREE: fixture.worktreePath,
-          BY_FAKE_SESSION: fixture.id,
+          BY_FAKE_SESSION: fixture.id.toLowerCase(),
         };
+        writeFileSync(capture, "done\n");
 
         const socketPath = join(tools, "herdr.sock");
         const server = yield* Effect.promise(() =>
@@ -105,7 +108,10 @@ exit 1
             "-",
           );
           expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
+          expect(JSON.parse(piped.stdout)).toMatchObject({ host: "herdr", status: "started" });
           expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
+          expect(existsSync(`${capture}.args`)).toBe(false);
+          expect(existsSync(`${capture}.started`)).toBe(false);
         } finally {
           yield* Effect.promise(server.stop);
         }

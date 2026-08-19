@@ -1,13 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { isAbsolute, relative } from "node:path";
 
-const coveragePath = process.argv[2];
-if (coveragePath === undefined) {
-  console.error("error: a coverage report path is required");
-  console.error("usage: node scripts/run-health-report.mjs <coverage-final.json>");
-  process.exit(2);
-}
-
 /**
  * @param {string} label
  * @param {readonly string[]} args
@@ -151,8 +144,6 @@ const health = decodeObject(
     "health",
     "--no-production",
     "--no-cache",
-    "--coverage",
-    coveragePath,
     "--report-only",
     "--format",
     "json",
