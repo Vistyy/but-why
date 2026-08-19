@@ -45,7 +45,6 @@ const contextFor = (root: string): LocalRepositoryContext => {
       reviewersPath: join(butWhyDir, "reviewers"),
       artifactsPath: join(operationalDir, "artifacts"),
       agentSessionsPath: join(operationalDir, "agent-sessions"),
-      snapshotsPath: join(operationalDir, "snapshots"),
       taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
     },
   };

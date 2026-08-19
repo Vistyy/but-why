@@ -25,7 +25,6 @@ export type LocalRepositoryPaths = {
   readonly reviewersPath: string;
   readonly artifactsPath: string;
   readonly agentSessionsPath: string;
-  readonly snapshotsPath: string;
   readonly taskContextDraftsPath: string;
 };
 
@@ -136,7 +135,6 @@ const repoLocalPaths = (
     reviewersPath: join(butWhyDir, "reviewers"),
     artifactsPath: join(operationalDir, "artifacts"),
     agentSessionsPath: join(operationalDir, "agent-sessions"),
-    snapshotsPath: join(operationalDir, "snapshots"),
     taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
   };
 };

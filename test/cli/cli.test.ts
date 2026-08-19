@@ -17,7 +17,6 @@ const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 const expectedCommandPaths = [
   "init",
-  "snapshot",
   "task create",
   "task dependencies add",
   "task dependencies remove",
@@ -74,6 +73,7 @@ describe("by CLI", () => {
       }
       expect(help).not.toContain("task task");
       expect(help).not.toContain("change change");
+      expect(help).not.toContain("- snapshot");
       for (const nativeCapability of [
         "(-h, --help)",
         "--version",

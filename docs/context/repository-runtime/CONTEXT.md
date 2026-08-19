@@ -22,12 +22,6 @@ Task and Change owner tables remain separate, while `task_change_links` stores t
 Direct modification outside But Why is unsupported.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
-**Shared Repository State Snapshot**:
-One operator-created, independently readable full SQLite copy of Shared Repository State at a coherent point.
-But Why assigns each Snapshot a unique path under the Git Common Directory and never overwrites or changes it after successful creation.
-It does not promise filesystem tamper prevention.
-_Avoid_: Task Archive, restore point, retention policy
-
 **Installed But Why Executable**:
 The globally installed `by` executable authorized to operate a Local Repository's Shared Repository State.
 Source and Candidate executables must not open live Shared Repository State.
