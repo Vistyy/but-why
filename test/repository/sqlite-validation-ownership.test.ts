@@ -381,6 +381,90 @@ describe("SQLite Validation ownership", () => {
           { producer: "types", outcome: "passed" },
           { producer: "first", outcome: "failed" },
         ]);
+
+        const invalidSpecialists = yield* createRun(
+          input.commonDirectory,
+          "specialist-after-failure",
+          {
+            reviewerConfiguration: {
+              acceptanceReview: null,
+              specialistReviews: [specialist("first"), specialist("second"), specialist("third")],
+            },
+          },
+        );
+        yield* invalidSpecialists.validation.execution.recordCheckResult({
+          validationRunId: invalidSpecialists.started.validationRunId,
+          producer: "types",
+          outcome: "passed",
+          artifactRecords: [],
+        });
+        const failedInvocation = yield* beginInvocation(invalidSpecialists.validation, {
+          validationRunId: invalidSpecialists.started.validationRunId,
+          changeId: invalidSpecialists.captured.changeId,
+          producer: "first",
+        });
+        if (!failedInvocation.ok) throw new Error(failedInvocation.code);
+        yield* invalidSpecialists.validation.agentPersistence.settleInvocation({
+          invocationId: failedInvocation.dispatch.invocation.id,
+          continuationId: failedInvocation.dispatch.continuation.id,
+          settlement: {
+            settledAt: "2026-10-02T10:00:04.000Z",
+            kind: "returned",
+          },
+          settleDomain: invalidSpecialists.validation.execution.settleAgentInvocationResult({
+            validationRunId: invalidSpecialists.started.validationRunId,
+            phase: "specialist_review",
+            producer: "first",
+            outcome: "failed",
+            findings: [
+              {
+                validationRunId: invalidSpecialists.started.validationRunId,
+                phase: "specialist_review",
+                producer: "first",
+                title: "First Specialist Finding",
+                description: "The first Specialist found a blocking problem.",
+                evidence: "The Candidate does not satisfy the concern.",
+                files: [],
+                artifactRefs: [],
+              },
+            ],
+            artifactRecords: [],
+          }),
+        });
+        const laterInvocation = yield* beginInvocation(invalidSpecialists.validation, {
+          validationRunId: invalidSpecialists.started.validationRunId,
+          changeId: invalidSpecialists.captured.changeId,
+          producer: "second",
+        });
+        if (!laterInvocation.ok) throw new Error(laterInvocation.code);
+        yield* invalidSpecialists.validation.agentPersistence.settleInvocation({
+          invocationId: laterInvocation.dispatch.invocation.id,
+          continuationId: laterInvocation.dispatch.continuation.id,
+          settlement: {
+            settledAt: "2026-10-02T10:00:05.000Z",
+            kind: "returned",
+          },
+          settleDomain: invalidSpecialists.validation.execution.settleAgentInvocationResult({
+            validationRunId: invalidSpecialists.started.validationRunId,
+            phase: "specialist_review",
+            producer: "second",
+            outcome: "passed",
+            findings: [],
+            artifactRecords: [],
+          }),
+        });
+        yield* invalidSpecialists.validation.execution.recordWorkspaceCleanup({
+          validationRunId: invalidSpecialists.started.validationRunId,
+          cleanupWorkspace: "not_created",
+        });
+        expect(
+          yield* invalidSpecialists.validation.execution
+            .complete({
+              validationRunId: invalidSpecialists.started.validationRunId,
+              outcome: "blocked",
+            })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(RepositoryPersistedDataInvalid);
       }),
     ),
   );

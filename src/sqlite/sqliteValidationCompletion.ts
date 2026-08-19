@@ -190,6 +190,7 @@ export const requireCoherentValidationCompletion = (
         const finalGroup = lastReached.group;
         const finalResults = resultsForGroup(finalGroup, resultByPosition);
         requireConfiguredPrefix(finalGroup, resultByPosition);
+        validateSpecialistFailureBoundary(finalGroup, finalResults);
         const failed = finalResults.filter((result) => result.outcome === "failed");
         if (failed.length === 0) {
           if (finalResults.length !== finalGroup.producers.length) {
@@ -296,6 +297,24 @@ const resultsForGroup = <T extends { readonly outcome: "passed" | "failed" }>(
     const result = results.get(positionKey(group.phase, producer));
     return result === undefined ? [] : [result];
   });
+
+const validateSpecialistFailureBoundary = (
+  group: ExpectedPhase,
+  results: readonly { readonly outcome: "passed" | "failed" }[],
+): void => {
+  if (group.phase !== validationPhase.specialistReview) return;
+  const firstFailure = results.findIndex((result) => result.outcome === "failed");
+  if (firstFailure === -1) return;
+  if (results.slice(firstFailure + 1).length > 0) {
+    throw new Error("Specialist Validation results continue after the first failure");
+  }
+  if (
+    results.length < group.producers.length &&
+    results.filter((result) => result.outcome === "failed").length !== 1
+  ) {
+    throw new Error("Incomplete Specialist Validation results must contain one final failure");
+  }
+};
 
 const requireCompletePassingGroup = (
   group: ExpectedPhase,
