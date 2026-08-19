@@ -171,7 +171,7 @@ describe("Change Submit Change Policy errors", () => {
     const result = submitResult(
       {
         ok: false,
-        code: "change_policy_invalid",
+        code: "validation_policy_invalid",
         message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
       },
       "change-1",
@@ -181,53 +181,8 @@ describe("Change Submit Change Policy errors", () => {
       exitCode: 1,
       stdout: {
         error: {
-          code: "change_policy_invalid",
+          code: "validation_policy_invalid",
           message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-        },
-        help: [
-          "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
-          "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
-        ],
-      },
-    });
-  });
-
-  it("serializes Change Policy path and structured contract diagnostics", () => {
-    const result = submitResult(
-      {
-        ok: false,
-        code: "change_policy_invalid",
-        message: "Global Config is invalid.",
-        details: {
-          path: "/repo/global-config.json",
-          diagnostics: [
-            {
-              path: ["agentProfiles", "implementation", "agentModel"],
-              expected: "a Pi runtimeConfig model",
-              actual: undefined,
-              message: "Required value is missing.",
-            },
-          ],
-        },
-      },
-      "change-1",
-    );
-
-    expect(result).toEqual({
-      exitCode: 1,
-      stdout: {
-        error: {
-          code: "change_policy_invalid",
-          message: "Global Config is invalid.",
-          path: "/repo/global-config.json",
-          diagnostics: [
-            {
-              path: ["agentProfiles", "implementation", "agentModel"],
-              expected: "a Pi runtimeConfig model",
-              actual: "<missing>",
-              message: "Required value is missing.",
-            },
-          ],
         },
         help: [
           "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",

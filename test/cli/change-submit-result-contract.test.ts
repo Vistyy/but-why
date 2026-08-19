@@ -310,9 +310,9 @@ const cases = {
       { changeId, reason: "pull_request_unavailable" },
     ),
   },
-  change_policy_invalid: {
-    result: { ok: false, code: "change_policy_invalid", message: "Policy is invalid." },
-    expected: errorResult("change_policy_invalid", "Policy is invalid.", [
+  validation_policy_invalid: {
+    result: { ok: false, code: "validation_policy_invalid", message: "Policy is invalid." },
+    expected: errorResult("validation_policy_invalid", "Policy is invalid.", [
       "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
       "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",
     ]),

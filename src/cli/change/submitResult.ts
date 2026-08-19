@@ -8,7 +8,6 @@ type SubmitRecoveryAction =
   | "fix_validation_findings"
   | "integrate_change_base";
 
-import { structuredContractDiagnostics } from "../../output/contractDiagnostics.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
 
@@ -255,20 +254,10 @@ export const submitResult = (submit: ChangeSubmitResult, changeId: string): CliR
       help: ["Restore GitHub access and the owned pull request, then retry Submit."],
     });
   }
-  if (result.code === "change_policy_invalid") {
+  if (result.code === "validation_policy_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,
-      ...(result.details === undefined
-        ? {}
-        : {
-            details: {
-              ...(result.details.path === undefined ? {} : { path: result.details.path }),
-              ...(result.details.diagnostics === undefined
-                ? {}
-                : { diagnostics: structuredContractDiagnostics(result.details.diagnostics) }),
-            },
-          }),
       help: [
         "Restore any external resource required by the frozen Change Policy, then retry Change Submit.",
         "If the frozen Change Policy is permanently unusable, cancel the Change and start a new one.",

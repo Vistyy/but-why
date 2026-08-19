@@ -25,7 +25,7 @@ export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | {
       readonly ok: false;
-      readonly code: "change_policy_invalid";
+      readonly code: "reviewer_configuration_invalid";
       readonly message: string;
     }
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
@@ -59,7 +59,7 @@ export const startChange = <CreationFailure extends object = never>(
     if (!policy.ok) {
       return {
         ok: false as const,
-        code: "change_policy_invalid" as const,
+        code: "reviewer_configuration_invalid" as const,
         message: policy.message,
       };
     }

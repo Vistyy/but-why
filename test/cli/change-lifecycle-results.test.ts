@@ -55,14 +55,14 @@ describe("Change lifecycle CLI results", () => {
     expect(
       startResult({
         ok: false,
-        code: "change_policy_invalid",
+        code: "reviewer_configuration_invalid",
         message: "Validation Checks are missing.",
       }),
     ).toEqual({
       exitCode: 1,
       stdout: {
         error: {
-          code: "change_policy_invalid",
+          code: "reviewer_configuration_invalid",
           message: "Validation Checks are missing.",
         },
         help: ["Fix the complete Change Policy inputs, then run Change Start again."],

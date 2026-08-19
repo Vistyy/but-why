@@ -129,7 +129,7 @@ describe("Change Start orchestration", () => {
       );
       expect(result).toEqual({
         ok: false,
-        code: "change_policy_invalid",
+        code: "reviewer_configuration_invalid",
         message: "Exact-base Change policy is invalid.",
       });
       expect(captured.events).toEqual([

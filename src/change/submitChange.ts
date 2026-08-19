@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { SubmitProgress } from "../submission/submissionProgress.js";
@@ -95,14 +94,8 @@ export type ChangeSubmitResult =
     }
   | {
       readonly ok: false;
-      readonly code: "change_policy_invalid";
+      readonly code: "validation_policy_invalid";
       readonly message: string;
-      readonly details?:
-        | {
-            readonly path?: string;
-            readonly diagnostics?: readonly ContractDiagnostic[];
-          }
-        | undefined;
     }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
   | RemoteChangeBaseError
@@ -239,7 +232,7 @@ const submitChange = (
     ) {
       return {
         ok: false,
-        code: "change_policy_invalid",
+        code: "validation_policy_invalid",
         message: "The Change policy has no Acceptance Reviewer for its Acceptance Context.",
       } as const;
     }
@@ -250,7 +243,7 @@ const submitChange = (
     if (!resources.ok) {
       return {
         ok: false,
-        code: "change_policy_invalid",
+        code: "validation_policy_invalid",
         message: resources.message,
       } as const;
     }

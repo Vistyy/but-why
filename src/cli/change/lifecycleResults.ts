@@ -12,7 +12,7 @@ export const startResult = (result: ChangeStartResult | TaskChangeStartResult): 
         : unlinkedStartChangeView(result.change),
     );
   }
-  if (result.code === "change_policy_invalid") {
+  if (result.code === "reviewer_configuration_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,
