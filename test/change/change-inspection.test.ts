@@ -197,6 +197,11 @@ describe("Change inspection CLI", () => {
           branchRef: "refs/heads/older",
           baseRef: "refs/remotes/origin/main",
           worktreePath: join(root, "worktree-older"),
+          policy: {
+            reviewerConfiguration: { acceptanceReview: null, specialistReviews: [] },
+            prepare: null,
+            checks: [],
+          },
         },
         currentCandidate: null,
         currentValidationRun: null,

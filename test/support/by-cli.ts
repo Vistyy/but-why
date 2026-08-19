@@ -20,6 +20,7 @@ import { createTestWorkspace } from "./testWorkspace.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = "by";
+const inProcessExecutablePath = join(repoRoot, "dist/main.js");
 
 // Keep CLI process sentinels bounded without changing Vitest's global timeout.
 const cliProcessTimeoutMs = 30_000;
@@ -144,7 +145,7 @@ const runByInProcessEffectRaw = (
   options: InProcessCliOptions = {},
 ): Effect.Effect<InProcessCliResult> =>
   runCli(args, {
-    executablePath: byExecutable,
+    executablePath: inProcessExecutablePath,
     cwd,
     globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
     now: () => new Date(now),

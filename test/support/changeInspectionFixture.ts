@@ -340,24 +340,25 @@ const recordValidationCompletionEvidence = (
       WHERE id = ${validationRunId}
     `;
   }
+  if (outcome === "passed") {
+    return sql`
+      DELETE FROM validation_phase_results WHERE validation_run_id = ${validationRunId}
+    `;
+  }
   return sql`
     INSERT INTO validation_phase_results (
       validation_run_id, phase, producer, outcome, findings, artifacts
     ) VALUES (
-      ${validationRunId}, 'checks', 'types', ${outcome === "passed" ? "passed" : "failed"},
-      ${JSON.stringify(
-        outcome === "passed"
-          ? []
-          : [
-              {
-                title: "Check failed: types",
-                description: "Type checking failed.",
-                evidence: "exitCode: 1",
-                files: ["src/main.ts"],
-                artifactRefs: [],
-              },
-            ],
-      )},
+      ${validationRunId}, 'checks', 'types', 'failed',
+      ${JSON.stringify([
+        {
+          title: "Check failed: types",
+          description: "Type checking failed.",
+          evidence: "exitCode: 1",
+          files: ["src/main.ts"],
+          artifactRefs: [],
+        },
+      ])},
       '[]'
     )
   `;

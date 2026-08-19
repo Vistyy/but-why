@@ -17,8 +17,7 @@ const changeChecksSchema = Schema.Array(
 
 const decodeChecks = Schema.decodeUnknownSync(changeChecksSchema, { onExcessProperty: "error" });
 
-export const decodeChangeChecks = (value: unknown): readonly SubmitCheckConfig[] =>
-  decodeChecks(value);
+const decodeChangeChecks = (value: unknown): readonly SubmitCheckConfig[] => decodeChecks(value);
 
 export const decodeSqliteChangeChecks = (source: string): readonly SubmitCheckConfig[] =>
   decodeChangeChecks(JSON.parse(source) as unknown);

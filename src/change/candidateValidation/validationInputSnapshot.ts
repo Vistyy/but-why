@@ -5,6 +5,4 @@ export const validationInputSnapshotSchema = Schema.Struct({
   acceptanceContext: Schema.optional(acceptanceContextSnapshotSchema),
 });
 
-export type ValidationInputSnapshot = Schema.Schema.Type<
-  typeof validationInputSnapshotSchema
->;
+export type ValidationInputSnapshot = Schema.Schema.Type<typeof validationInputSnapshotSchema>;
