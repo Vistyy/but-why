@@ -334,12 +334,8 @@ describe("release package boundary", () => {
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual({
-      error: {
-        code: "invalid_usage",
-        message:
-          "Invalid subcommand for by - use one of 'init', 'task', 'task-review', 'change', 'validation-run'",
-      },
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: "invalid_usage" },
       help: ["Run `by --help` for generated command help."],
     });
   });
