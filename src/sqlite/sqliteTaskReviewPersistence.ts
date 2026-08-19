@@ -592,14 +592,6 @@ const decodeReview = (
         reviewer_configuration AS configuration FROM tasks WHERE id = ${row.taskId}
     `;
     const invocations = yield* readAgentInvocations(sql, row.id);
-    const latestTaskInvocations = yield* sql<{ readonly invocationId: number }>`
-      SELECT link.agent_invocation_id AS invocationId
-      FROM task_review_agent_invocations AS link
-      JOIN task_reviews AS review ON review.id = link.task_review_id
-      WHERE review.task_id = ${row.taskId}
-      ORDER BY link.agent_invocation_id DESC
-      LIMIT 1
-    `;
     return yield* Effect.try({
       try: (): TaskReviewRecord => {
         const cleanupPending = decodeBoolean(row.cleanupPending, "Task Review cleanup obligation");
@@ -623,9 +615,6 @@ const decodeReview = (
         const policyMatchesInvocationEvidence =
           policy !== undefined &&
           invocationSessionId === taskAuthority.agentSessionId &&
-          invocations.some(
-            (invocation) => invocation.id === latestTaskInvocations[0]?.invocationId,
-          ) &&
           invocations.every(
             (invocation) =>
               invocation.harness === "pi" &&

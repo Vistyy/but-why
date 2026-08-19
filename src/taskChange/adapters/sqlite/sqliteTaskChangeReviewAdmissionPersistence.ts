@@ -12,9 +12,11 @@ import { readTaskChangeLinkByTaskId } from "./sqliteTaskChangePersistence.js";
 
 export type TaskChangeReviewAdmissionPersistence = TaskReviewAdmissionPersistence;
 
-export const openSqliteTaskChangeReviewAdmissionPersistence = (
-  repositoryRoot: string,
-): Effect.Effect<TaskChangeReviewAdmissionPersistence, never, RepositorySql> =>
+export const openSqliteTaskChangeReviewAdmissionPersistence = (): Effect.Effect<
+  TaskChangeReviewAdmissionPersistence,
+  never,
+  RepositorySql
+> =>
   Effect.map(RepositorySql, (repository) => ({
     checkAdmission: (taskId) =>
       repository.transaction("check Task Review admission", (sql) =>
@@ -25,7 +27,13 @@ export const openSqliteTaskChangeReviewAdmissionPersistence = (
     admit: (input: AdmitTaskReviewInput) =>
       repository.transactionImmediate("admit Task Review", (sql) =>
         Effect.flatMap(readTaskChangeLinkByTaskId(sql, input.taskId, repository.idPrefix), (link) =>
-          admitTaskReview(sql, input, repository.idPrefix, repositoryRoot, link?.changeId),
+          admitTaskReview(
+            sql,
+            input,
+            repository.idPrefix,
+            repository.commonDirectory,
+            link?.changeId,
+          ),
         ),
       ),
   }));

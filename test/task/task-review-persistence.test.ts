@@ -14,6 +14,7 @@ import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskRevi
 import { withTaskReviewRecoveryUseCases } from "../../src/task/composition/loadTaskReviewUseCases.js";
 import { expectedTaskReviewWorkspacePath } from "../../src/task/review/taskReviewWorkspace.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { openSqliteTaskChangeReviewAdmissionPersistence } from "../../src/taskChange/adapters/sqlite/sqliteTaskChangeReviewAdmissionPersistence.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { withTemporaryRepositoryState, withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
@@ -80,6 +81,31 @@ it.scoped("allocates ordered numeric Task Review IDs and enforces one Active Rev
           now,
         }),
       ).toEqual({ ok: false, code: "active_task_review", reviewId: 1 });
+    }),
+  ),
+);
+
+it.scoped("derives an admitted Task Review workspace from the Git Common Directory", () =>
+  withTemporaryRepositoryState((input) =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence();
+      const admission = yield* openSqliteTaskChangeReviewAdmissionPersistence();
+      yield* tasks.createTask({ title: "Proposal", description: "Exact", now });
+
+      const admitted = yield* admission.admit({
+        taskId: publicTaskId("BY-1"),
+        policy,
+        baseRef: "refs/heads/main",
+        baseCommit: "a".repeat(40),
+        now,
+      });
+
+      expect(admitted).toMatchObject({
+        ok: true,
+        review: {
+          workspacePath: expectedTaskReviewWorkspacePath(input.commonDirectory, 1),
+        },
+      });
     }),
   ),
 );
@@ -154,7 +180,7 @@ it.scoped("rejects Task reviewer policy changes after the first Invocation", () 
   ),
 );
 
-it.scoped("attributes Task Reviewer configuration only to the latest invoked Review", () =>
+it.scoped("attributes frozen Task Reviewer configuration to every matching invoked Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence();
@@ -234,7 +260,9 @@ it.scoped("attributes Task Reviewer configuration only to the latest invoked Rev
       expect(yield* reviews.getById(withoutInvocation.review.id)).not.toHaveProperty(
         "reviewerConfiguration",
       );
-      expect(yield* reviews.getById(older.review.id)).not.toHaveProperty("reviewerConfiguration");
+      expect(yield* reviews.getById(older.review.id)).toMatchObject({
+        reviewerConfiguration: policy,
+      });
       expect(yield* reviews.getById(newest.review.id)).toMatchObject({
         reviewerConfiguration: policy,
       });
