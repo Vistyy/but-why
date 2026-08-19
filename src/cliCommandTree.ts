@@ -731,7 +731,7 @@ export const runCommandTree = (
           log: (message) => {
             const text = String(message);
             if (versionProbe && nativeHelpText(text) !== packageVersion) {
-              return Effect.fail("not_version_output") as unknown as Effect.Effect<void>;
+              return Effect.void;
             }
             return Effect.sync(() => void helpOutput.push(text));
           },
