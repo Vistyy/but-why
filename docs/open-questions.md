@@ -21,6 +21,7 @@ A benchmark remains deferred work rather than a v1 release requirement or an app
 
 Specialists run sequentially in v1.
 Reconsider parallel execution only after real-use evidence justifies workspace isolation, resource limits, failure collection, cancellation, and deterministic ordering.
+The unresolved scheduling question also includes whether unified reviewer scheduling could prioritize Specialists that failed a previous Candidate before the Acceptance Reviewer, while preserving exact-Candidate approval and distinct reviewer authority.
 
 ## How should agent monetary cost be measured?
 
