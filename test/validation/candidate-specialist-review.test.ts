@@ -195,7 +195,7 @@ const phaseHarness = (): PhaseHarness => {
 
 describe("Candidate Specialist Review phase", () => {
   it.scoped(
-    "uses the exact Candidate and named concern in configured order without suppressing later Specialists",
+    "uses the exact Candidate and named concern in configured order and stops after a Finding",
     () =>
       Effect.gen(function* () {
         const harness = phaseHarness();
@@ -219,11 +219,7 @@ describe("Candidate Specialist Review phase", () => {
           ),
         );
 
-        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
-          "zeta",
-          "broken",
-          "alpha",
-        ]);
+        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual(["zeta"]);
         for (const [input] of review.mock.calls) {
           expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
           expect(input.sessionStorageRoot).toContain("sessions");
@@ -247,10 +243,7 @@ describe("Candidate Specialist Review phase", () => {
             expect(input.prompt).not.toContain(`${other} concern instructions`);
           }
         }
-        expect(result).toEqual({ outcome: "tooling_failed" });
-        expect(harness.results[1]?.toolingFailure).toMatchObject({
-          errorKind: "reviewer_output_contract_failed",
-        });
+        expect(result).toEqual({ outcome: "blocked" });
         expect(
           harness.results.map(({ producer, outcome, findings }) => ({
             producer,
@@ -263,8 +256,6 @@ describe("Candidate Specialist Review phase", () => {
             outcome: "failed",
             findingTitles: ["Zeta Finding"],
           },
-          { producer: "broken", outcome: "failed", findingTitles: [] },
-          { producer: "alpha", outcome: "passed", findingTitles: [] },
         ]);
         for (const result of harness.results) {
           expect(result.artifactRecords).toEqual(
@@ -273,6 +264,34 @@ describe("Candidate Specialist Review phase", () => {
             ]),
           );
         }
+
+        const toolingHarness = phaseHarness();
+        const toolingReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
+          input.reviewer === "broken"
+            ? Effect.succeed({
+                ok: false as const,
+                failure: outputFailure("broken", "Broken Specialist output."),
+                sessionUsability: "unknown" as const,
+                attempts: 2,
+                stdout: "invalid specialist output",
+              })
+            : Effect.succeed(success([], `${input.reviewer}-session`)),
+        );
+        const toolingResult = yield* Effect.suspend(() =>
+          toolingHarness.run(
+            { review: toolingReview },
+            { policies: [policy("broken"), policy("alpha")] },
+          ),
+        );
+        expect(toolingResult).toEqual({ outcome: "tooling_failed" });
+        expect(toolingReview.mock.calls.map(([input]) => input.reviewer)).toEqual(["broken"]);
+        expect(toolingHarness.results).toMatchObject([
+          {
+            producer: "broken",
+            outcome: "failed",
+            toolingFailure: { errorKind: "reviewer_output_contract_failed" },
+          },
+        ]);
 
         const changeWithoutTaskReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
@@ -340,7 +359,7 @@ describe("Candidate Specialist Review phase", () => {
   );
 
   it.scoped(
-    "persists producer-specific results, Findings, Tooling Failures, and Artifacts across a clean successor",
+    "persists the first Specialist result and skips later Specialists across successors",
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
@@ -453,15 +472,13 @@ describe("Candidate Specialist Review phase", () => {
           policy("broken-second"),
         ];
         const durable = yield* Effect.suspend(() =>
-          runPersisted(first, frozenPolicies, { review: firstReview }, "tooling_failed"),
+          runPersisted(first, frozenPolicies, { review: firstReview }, "blocked"),
         );
         expect(
           yield* Effect.suspend(() => validation.listPhaseResults(durable.validationRunId)),
         ).toEqual([
           { producer: "quality", outcome: "passed" },
           { producer: "standards", outcome: "failed" },
-          { producer: "broken-first", outcome: "failed" },
-          { producer: "broken-second", outcome: "failed" },
         ]);
         expect(
           (yield* Effect.suspend(() => validation.listFindings(durable.validationRunId))).map(
@@ -470,25 +487,12 @@ describe("Candidate Specialist Review phase", () => {
         ).toEqual(["Durable Specialist Finding"]);
         expect(
           yield* Effect.suspend(() => validation.listToolingFailures(durable.validationRunId)),
-        ).toEqual([
-          expect.objectContaining({
-            errorKind: "reviewer_output_contract_failed",
-            errorMessage: expect.stringContaining("Broken durable broken-first Specialist output."),
-          }),
-          expect.objectContaining({
-            errorKind: "reviewer_output_contract_failed",
-            errorMessage: expect.stringContaining(
-              "Broken durable broken-second Specialist output.",
-            ),
-          }),
-        ]);
+        ).toEqual([]);
         expect(
           yield* Effect.suspend(() => validation.listArtifacts(durable.validationRunId)),
         ).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
-            expect.objectContaining({ phase: "specialist_review", producer: "broken-first" }),
-            expect.objectContaining({ phase: "specialist_review", producer: "broken-second" }),
           ]),
         );
 
@@ -505,9 +509,24 @@ describe("Candidate Specialist Review phase", () => {
             stdout: "invalid intermediate output",
           }),
         );
-        yield* Effect.suspend(() =>
+        const failed = yield* Effect.suspend(() =>
           runPersisted(failedSuccessor, frozenPolicies, { review: failedReview }, "tooling_failed"),
         );
+        expect(failedReview).toHaveBeenCalledOnce();
+        expect(
+          yield* Effect.suspend(() => validation.listPhaseResults(failed.validationRunId)),
+        ).toEqual([
+          { producer: "quality", outcome: "passed" },
+          { producer: "standards", outcome: "failed" },
+        ]);
+        expect(
+          yield* Effect.suspend(() => validation.listToolingFailures(failed.validationRunId)),
+        ).toEqual([
+          expect.objectContaining({
+            errorKind: "reviewer_output_contract_failed",
+            errorMessage: expect.stringContaining("Intermediate Specialist output failed."),
+          }),
+        ]);
 
         git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
         const successor = yield* Effect.suspend(() => captureLocalCandidate({ cwd: repo }));

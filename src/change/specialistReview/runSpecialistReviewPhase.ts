@@ -112,8 +112,6 @@ export const runSpecialistReviewPhase = (
   FileSystem.FileSystem
 > =>
   Effect.gen(function* () {
-    let outcome: CandidateValidationOutcome = "passed";
-
     for (const policy of input.policies) {
       const result = yield* runWithSubmitProgress({
         progress: input.progress,
@@ -131,11 +129,15 @@ export const runSpecialistReviewPhase = (
               ? { reason: "findings" as const }
               : undefined,
       });
-      if (result.outcome === "tooling_failed") outcome = "tooling_failed";
-      else if (result.outcome === "blocked" && outcome === "passed") outcome = "blocked";
+      if (result.outcome === "tooling_failed") {
+        return { outcome: "tooling_failed" };
+      }
+      if (result.outcome === "blocked") {
+        return { outcome: "blocked" };
+      }
     }
 
-    return { outcome };
+    return { outcome: "passed" };
   });
 
 const runSpecialist = (
