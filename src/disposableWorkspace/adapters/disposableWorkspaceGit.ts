@@ -145,14 +145,13 @@ export const cleanupExactDisposableWorkspace = (
     const parent = yield* inspectSafeWorkspaceContainers(repositoryCommonDirectory);
     if (!parent.ok) return cleanupFailed(parent.message);
 
-    const inspected = yield* inspectDisposableWorktree(
+    const owned = yield* inspectProductOwnedDisposableWorktree(
       repositoryRoot,
       repositoryCommonDirectory,
       input.workspaceId,
-      input.expectedCommitSha,
     );
-    if (inspected.state === "absent") return { workspace: "removed" } as const;
-    if (inspected.state === "unproven") return cleanupFailed(inspected.message);
+    if (owned.state === "absent") return { workspace: "removed" } as const;
+    if (owned.state === "unproven") return cleanupFailed(owned.message);
 
     const removed = yield* git(repositoryRoot, [
       "worktree",
@@ -171,6 +170,59 @@ export const cleanupExactDisposableWorkspace = (
     return cleanupFailed(
       removed.ok ? "Exact Snapshot Workspace cleanup did not complete." : removed.message,
     );
+  });
+
+type ProductOwnedDisposableWorktreeInspection =
+  | { readonly state: "absent" }
+  | { readonly state: "owned" }
+  | { readonly state: "unproven"; readonly message: string };
+
+const inspectProductOwnedDisposableWorktree = (
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
+  workspaceId: string,
+): Effect.Effect<ProductOwnedDisposableWorktreeInspection> =>
+  Effect.gen(function* () {
+    const identity = yield* verifyRepositoryCommonDirectory(
+      repositoryRoot,
+      repositoryCommonDirectory,
+    );
+    if (!identity.ok) return { state: "unproven", message: identity.message } as const;
+    const worktreePath = expectedDisposableWorkspacePath(repositoryCommonDirectory, workspaceId);
+    if (!isExpectedDisposableWorkspacePath(repositoryCommonDirectory, workspaceId, worktreePath)) {
+      return {
+        state: "unproven",
+        message: "Derived Snapshot Workspace identity is invalid.",
+      } as const;
+    }
+    const containers = yield* inspectSafeWorkspaceContainers(repositoryCommonDirectory);
+    if (!containers.ok) return { state: "unproven", message: containers.message } as const;
+    const records = yield* readWorktreeRecords(repositoryRoot);
+    if (!records.ok) return { state: "unproven", message: records.message } as const;
+    const matches = records.records.filter(
+      (record) => resolve(record.path) === resolve(worktreePath),
+    );
+    if (matches.length === 0) {
+      return pathExists(worktreePath)
+        ? ({
+            state: "unproven",
+            message: "Snapshot Workspace path exists without a Local Repository registration.",
+          } as const)
+        : ({ state: "absent" } as const);
+    }
+    if (matches.length !== 1) {
+      return {
+        state: "unproven",
+        message: "Snapshot Workspace registration is not unique.",
+      } as const;
+    }
+    if (!matches[0]?.detached || !isSafeWorktreeDirectory(worktreePath)) {
+      return {
+        state: "unproven",
+        message: "Snapshot Workspace ownership cannot be proven.",
+      } as const;
+    }
+    return { state: "owned" } as const;
   });
 
 const verifyRepositoryCommonDirectory = (

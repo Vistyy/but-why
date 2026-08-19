@@ -66,7 +66,7 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     }),
   );
 
-  it.effect("leaves a registered worktree with an unrelated HEAD untouched", () =>
+  it.effect("removes a registered product-owned worktree after its HEAD changes", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
       const commonDirectory = repositoryCommonDirectory(repository);
@@ -83,9 +83,8 @@ describe("Snapshot Workspace Git cleanup verification", () => {
         submittedSha,
       });
 
-      expect(result).toMatchObject({ workspace: "failed" });
-      expect(existsSync(worktreePath)).toBe(true);
-      expect(git(worktreePath, "rev-parse", "HEAD")).toBe(unrelatedSha);
+      expect(result).toEqual({ workspace: "removed" });
+      expect(existsSync(worktreePath)).toBe(false);
     }),
   );
 });
