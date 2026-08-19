@@ -1,4 +1,4 @@
-set positional-arguments := true
+set positional-arguments
 
 # List available commands.
 default:
