@@ -4,10 +4,10 @@ import type { ChangeRecord, ChangeState } from "../change/change.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeListRecord, ChangeReadPort } from "../change/changePorts.js";
 import type { ListChangesInput } from "../change/changeStore.js";
+import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   decodeImplementationDecisions,
-  deriveAcceptanceContext,
   readImplementationBlockerHistory,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";

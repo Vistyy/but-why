@@ -13,8 +13,13 @@ import type {
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
+import { latestResolvedBlockerId } from "../change/implementationBlocker.js";
 import type { CandidateValidationExecutionPort } from "../change/validation/changeValidationPorts.js";
-import { validationPhase } from "../change/validationRun/validationRun.js";
+import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
+import {
+  isValidationRunEligibleForCurrentChangeAuthority,
+  validationPhase,
+} from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
@@ -26,10 +31,7 @@ import {
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
-  deriveAcceptanceContext,
   implementationBlockerReadColumns,
-  isValidationRunEligibleForCurrentChangeAuthority,
-  latestResolvedBlockerId,
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
@@ -388,7 +390,6 @@ const startOrReuse = (
         validationInput: executionAuthority.run.validationInput,
         implementationDecisions,
         blockerHistory,
-        latestResolvedBlockerId: latestResolvedBlockerId(blockerHistory),
       },
     } satisfies StartCandidateValidationRunResult;
   });

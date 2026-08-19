@@ -3,11 +3,11 @@ import { Effect } from "effect";
 import type { ChangeRecord } from "../change/change.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeSubmissionPort, SubmissionChange } from "../change/changePorts.js";
+import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   decodeImplementationDecisions,
-  deriveAcceptanceContext,
   readImplementationBlockerHistory,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";

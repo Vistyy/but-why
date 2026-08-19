@@ -7,6 +7,7 @@ import type {
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { type ChangePolicy, decodeSqliteChangePolicy } from "../change/changePolicy.js";
+import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
@@ -15,7 +16,6 @@ import {
 import { readCandidateById } from "./sqliteCandidateStorage.js";
 import {
   decodeImplementationDecisions,
-  deriveAcceptanceContext,
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";

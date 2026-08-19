@@ -48,7 +48,6 @@ export type CandidateValidationAuthority = {
   readonly validationInput: ValidationInputSnapshot;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory: ImplementationBlockerHistory;
-  readonly latestResolvedBlockerId: number | null;
 };
 
 export type StartCandidateValidationRunResult =

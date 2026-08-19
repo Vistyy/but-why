@@ -496,6 +496,36 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("keeps a linked passing Run eligible after a later Resolution", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture({ linked: true });
+      yield* fixture.recordPassingResults(fixture.validationRunId);
+      yield* fixture.runStore.completeAfterCleanup({
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+      });
+
+      yield* fixture.raiseBlocker();
+      yield* fixture.resolveBlocker();
+
+      expect(yield* fixture.getCurrentPassingEvidence()).toMatchObject({
+        validationRunId: fixture.validationRunId,
+      });
+      expect(yield* fixture.getCompletedPassingEvidence()).toMatchObject({
+        validationRunId: fixture.validationRunId,
+      });
+      const reused = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+      });
+      expect(reused).toEqual({
+        reused: true,
+        validationRunId: fixture.validationRunId,
+        outcome: "passed",
+      });
+    }),
+  );
+
   it.effect("snapshots Implementation Decisions in a new Validation Run", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
@@ -893,7 +923,7 @@ describe("Candidate-owned Validation Run inspection", () => {
   );
 });
 
-const candidateValidationFixture = () =>
+const candidateValidationFixture = (options: { readonly linked?: boolean } = {}) =>
   Effect.gen(function* () {
     const root = yield* cloneInitializedTestRepository(candidateValidationRepoTemplate);
     const commonDirectory = join(root, ".git");
@@ -910,6 +940,13 @@ const candidateValidationFixture = () =>
       );
     const withRepository = <A, E>(program: Effect.Effect<A, E, RepositorySql>) =>
       program.pipe(Effect.provide(repositoryLayer));
+    const initialAcceptanceContext = options.linked
+      ? JSON.stringify({
+          version: 1,
+          title: "Linked acceptance",
+          description: "Preserve linked Change authority.",
+        })
+      : null;
     yield* withTestRepository(
       root,
       Effect.gen(function* () {
@@ -919,12 +956,13 @@ const candidateValidationFixture = () =>
           (sql) => sql`
           INSERT INTO changes (
             branch_ref, base_ref, base_remote_url, worktree_path,
-            reviewer_configuration, prepare_definition, checks_definition, cleanup_pending
+            initial_acceptance_context, reviewer_configuration,
+            prepare_definition, checks_definition, cleanup_pending
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', ${root},
-            ${JSON.stringify(reviewerConfiguration)}, ${JSON.stringify(policy.prepare)},
-            ${JSON.stringify(policy.checks)}, 0
+            ${initialAcceptanceContext}, ${JSON.stringify(reviewerConfiguration)},
+            ${JSON.stringify(policy.prepare)}, ${JSON.stringify(policy.checks)}, 0
           )
         `,
         );

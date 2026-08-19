@@ -15,3 +15,8 @@ export type ImplementationBlockerHistory = {
   readonly resolutions: readonly ImplementationBlockerResolution[];
   readonly active: ImplementationBlocker | null;
 };
+
+export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): number | null =>
+  [...history.blockers]
+    .filter((blocker) => blocker.resolution !== null)
+    .sort((left, right) => right.id - left.id)[0]?.id ?? null;

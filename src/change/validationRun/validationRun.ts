@@ -7,6 +7,13 @@ export const validationPhase = {
 
 export type ValidationPhase = (typeof validationPhase)[keyof typeof validationPhase];
 
+export const isValidationRunEligibleForCurrentChangeAuthority = (input: {
+  readonly hasAcceptanceContext: boolean;
+  readonly runHighestBlockerId: number | null;
+  readonly currentHighestBlockerId: number | null;
+}): boolean =>
+  input.hasAcceptanceContext || input.runHighestBlockerId === input.currentHighestBlockerId;
+
 export type GitHubPrTarget = {
   readonly owner: string;
   readonly repo: string;

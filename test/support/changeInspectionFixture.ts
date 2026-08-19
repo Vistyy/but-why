@@ -3,12 +3,12 @@ import { join } from "node:path";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
+import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import {
   decodeImplementationBlockerHistory,
-  deriveAcceptanceContext,
   implementationBlockerReadColumns,
   type StoredImplementationBlockerRow,
 } from "../../src/sqlite/sqliteChangeAuthorityHistory.js";

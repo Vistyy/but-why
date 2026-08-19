@@ -6,7 +6,6 @@ import type {
   ImplementationBlockerHistory,
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export type StoredImplementationDecisionRow = {
@@ -72,36 +71,6 @@ export const decodeImplementationBlockerHistory = (
       blocker.resolution === null ? [] : [blocker.resolution],
     ),
     active: active[0] ?? null,
-  };
-};
-
-export const latestResolvedBlockerId = (history: ImplementationBlockerHistory): number | null =>
-  [...history.blockers]
-    .filter((blocker) => blocker.resolution !== null)
-    .sort((left, right) => right.id - left.id)[0]?.id ?? null;
-
-export const isValidationRunEligibleForCurrentChangeAuthority = (input: {
-  readonly hasAcceptanceContext: boolean;
-  readonly runHighestBlockerId: number | null;
-  readonly currentHighestBlockerId: number | null;
-}): boolean =>
-  input.hasAcceptanceContext || input.runHighestBlockerId === input.currentHighestBlockerId;
-
-export const deriveAcceptanceContext = (
-  initial: AcceptanceContextSnapshotV1 | null,
-  history: ImplementationBlockerHistory,
-): AcceptanceContextSnapshotV1 | null => {
-  if (initial === null) return null;
-  const resolutions = [
-    ...(initial.resolutions ?? []),
-    ...history.resolutions.map((resolution) => resolution.content),
-  ];
-  return {
-    version: initial.version,
-    title: initial.title,
-    description: initial.description,
-    ...(initial.comments === undefined ? {} : { comments: [...initial.comments] }),
-    ...(resolutions.length === 0 ? {} : { resolutions }),
   };
 };
 

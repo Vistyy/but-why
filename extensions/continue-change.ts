@@ -120,11 +120,7 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const blockerPollingIntervalMs = 30_000;
 const changeIdPattern = /^\s*Change identity:\s*([A-Z][A-Z0-9]{1,9}-C[1-9][0-9]*)\.?\s*$/mu;
-type ButWhyCommandPrefix = "by";
-
-const defaultCommandPrefix: ButWhyCommandPrefix = "by";
-const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
-  [prefix, ...args].join(" ");
+const butWhyCommand = (...args: readonly string[]): string => ["by", ...args].join(" ");
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
@@ -432,18 +428,17 @@ export const decideContinuation = (
 export const buildContinuationMessage = (
   decision: ContinuationDecision,
   changeId: string,
-  commandPrefix: ButWhyCommandPrefix = defaultCommandPrefix,
 ): string => {
   if (decision.kind === "idle") return "";
   if (decision.kind === "findings") {
     return [
       `The Change ${changeId} has Findings.`,
-      `Inspect the Findings with \`${butWhyCommand(commandPrefix, "change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", changeId)}\`.`,
+      `Inspect the Findings with \`${butWhyCommand("change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", changeId)}\`.`,
     ].join(" ");
   }
   return [
     `Resume implementation of Change ${changeId}.`,
-    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
+    `Inspect \`${butWhyCommand("change", "show", changeId)}\`, including its complete Acceptance Context when present, and the Managed Worktree.`,
     "Implement the complete accepted intent and continue until Change Submit passes.",
   ].join(" ");
 };
@@ -641,22 +636,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const commandPrefixFor = (_cwd: string): ButWhyCommandPrefix => "by";
-
-  const cliInvocation = (
-    prefix: ButWhyCommandPrefix,
-    args: readonly string[],
-  ): readonly [string, ...string[]] => [prefix, ...args];
-
-  const inspectCommand = async (
+  const inspectCommand = (
     commandArgs: readonly string[],
     cwd: string,
     signal?: AbortSignal,
-  ): Promise<RunResult> => {
-    const prefix = commandPrefixFor(cwd);
-    const [command, ...args] = cliInvocation(prefix, commandArgs);
-    return run(command, args, cwd, signal);
-  };
+  ): Promise<RunResult> => run("by", commandArgs, cwd, signal);
 
   const inspect = async (
     ctx: ExtensionContext,
@@ -861,26 +845,21 @@ export default function continueChange(pi: ExtensionAPI): void {
     id: string,
     resolution: BlockerResolution,
     hasFindings: boolean,
-    commandPrefix: ButWhyCommandPrefix,
   ): string => {
     const explanation = resolution.content;
     const next = hasFindings
-      ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
+      ? `Now inspect the earlier Findings with \`${butWhyCommand("change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", id)}\`.`
+      : `Now inspect \`${butWhyCommand("change", "show", id)}\`, including its complete Acceptance Context when present, and the Managed Worktree. Continue implementing the complete accepted intent until Change Submit passes.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
-  const validationFailureMessage = (
-    id: string,
-    snapshot: ChangeInspectionSnapshot,
-    commandPrefix: ButWhyCommandPrefix,
-  ): string => {
+  const validationFailureMessage = (id: string, snapshot: ChangeInspectionSnapshot): string => {
     const runId = snapshot.currentValidationRun?.id;
     const detail =
       runId !== undefined
-        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", String(runId))}\`.`
-        : `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "change", "show", id)}\`.`;
-    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
+        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand("validation-run", "show", String(runId))}\`.`
+        : `Inspect the Validation Tooling Failure with \`${butWhyCommand("change", "show", id)}\`.`;
+    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand("change", "submit", id)}\`.`;
   };
 
   const clearBlockedPolling = (): void => {
@@ -955,14 +934,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         pendingResolutionBlockerId: null,
       });
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
-      pi.sendUserMessage(
-        resolutionMessage(
-          changeId,
-          latest,
-          observed.snapshot.findingCount > 0,
-          commandPrefixFor(ctx.cwd),
-        ),
-      );
+      pi.sendUserMessage(resolutionMessage(changeId, latest, observed.snapshot.findingCount > 0));
     }
   };
 
@@ -1067,7 +1039,6 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const commandPrefix = commandPrefixFor(ctx.cwd);
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
@@ -1114,12 +1085,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           });
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
           pi.sendUserMessage(
-            resolutionMessage(
-              id,
-              currentResolution,
-              observed.snapshot.findingCount > 0,
-              commandPrefix,
-            ),
+            resolutionMessage(id, currentResolution, observed.snapshot.findingCount > 0),
           );
         } else {
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
@@ -1128,7 +1094,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       }
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
         showWatcher(ctx, { kind: "stopped" });
-        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, commandPrefix));
+        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot));
         return;
       }
 
@@ -1145,7 +1111,7 @@ export default function continueChange(pi: ExtensionAPI): void {
             pullRequestUrl: publicationPullRequestUrl(observed.snapshot),
           });
           pi.sendUserMessage(
-            `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand(commandPrefix, "change", "submit", id)} before publication.`,
+            `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand("change", "submit", id)} before publication.`,
           );
         } else {
           showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
@@ -1160,7 +1126,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         );
         return;
       }
-      const message = buildContinuationMessage(decision, id, commandPrefix);
+      const message = buildContinuationMessage(decision, id);
       showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
       if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {

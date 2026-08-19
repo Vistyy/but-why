@@ -62,6 +62,14 @@ describe("Change Start Managed Worktree boundaries", () => {
         expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
         expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(startingCommit);
         expect(existsSync(join(output.worktreePath, "dirty.txt"))).toBe(false);
+        const persisted = yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const changes = yield* openSqliteChangeStartPersistence();
+            return yield* changes.getById(output.change.id);
+          }),
+        );
+        expect(persisted?.policy.prepare).toBeNull();
       }),
   );
 

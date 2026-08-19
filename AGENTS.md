@@ -46,7 +46,9 @@
 - `src/change/validationRun/`: Validation Run domain records and evidence.
 - `src/agent/agentSession/`: shared Agent Session execution, continuation and invocation records, transcript paths, and token evidence.
 - `src/change/publication/`: Candidate publication policy and Git Adapter.
-- `src/change/submit/`: Change submission configuration and errors.
+- `src/change/submitChange.ts`: Change submission orchestration.
+- `src/change/changePolicy.ts`: frozen Change Policy definitions, resolution, and persistence codec.
+- `src/change/reviewerResolutionErrors.ts`: Change reviewer resolution errors.
 - `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/contracts/`: configuration, output, and shared error contracts.
 - `src/repositoryRuntime/`: Local Repository resolution, initialization coordination, and the Shared Repository State open lifecycle.
