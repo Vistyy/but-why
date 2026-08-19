@@ -48,6 +48,17 @@ const reviewerConfiguration = {
   },
   specialistReviews: [],
 };
+
+const unlinkedReviewerConfiguration = {
+  acceptanceReview: null,
+  specialistReviews: [],
+};
+
+const linkedAcceptanceContext = {
+  version: 1 as const,
+  title: "Linked acceptance",
+  description: "Preserve linked Change authority.",
+};
 let candidateValidationRepoTemplate: string;
 
 beforeAll(() => {
@@ -99,7 +110,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
   it.effect("settles linked Agent Invocations when a Validation Run is abandoned", () =>
     Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
+      const fixture = yield* candidateValidationFixture({ linked: true });
       const result = yield* withTestRepository(
         fixture.root,
         Effect.gen(function* () {
@@ -177,7 +188,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
   it.effect("projects measured Agent Invocation usage with public token names", () =>
     Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
+      const fixture = yield* candidateValidationFixture({ linked: true });
       const dispatch = yield* withTestRepository(
         fixture.root,
         Effect.gen(function* () {
@@ -340,7 +351,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
   it.effect("rejects reviewer passing evidence without an Agent Invocation", () =>
     Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
+      const fixture = yield* candidateValidationFixture({ linked: true });
       yield* fixture.runStore.recordPrepareResult({
         validationRunId: fixture.validationRunId,
         outcome: "passed",
@@ -710,7 +721,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
   it.effect("joins Change reviewer configuration without adding it to the Run policy", () =>
     Effect.gen(function* () {
-      const fixture = yield* candidateValidationFixture();
+      const fixture = yield* candidateValidationFixture({ linked: true });
       yield* fixture.recordRunToolingFailure("Replace the reviewer policy fixture");
       yield* fixture.runStore.completeAfterCleanup({
         validationRunId: fixture.validationRunId,
@@ -941,16 +952,27 @@ const candidateValidationFixture = (options: { readonly linked?: boolean } = {})
     const withRepository = <A, E>(program: Effect.Effect<A, E, RepositorySql>) =>
       program.pipe(Effect.provide(repositoryLayer));
     const initialAcceptanceContext = options.linked
-      ? JSON.stringify({
-          version: 1,
-          title: "Linked acceptance",
-          description: "Preserve linked Change authority.",
-        })
+      ? JSON.stringify(linkedAcceptanceContext)
       : null;
+    const fixtureReviewerConfiguration = options.linked
+      ? reviewerConfiguration
+      : unlinkedReviewerConfiguration;
     yield* withTestRepository(
       root,
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
+        if (options.linked) {
+          yield* repository.operation(
+            "create linked Task fixture",
+            (sql) => sql`
+              INSERT INTO tasks (id, title, description, state)
+              VALUES (
+                1, ${linkedAcceptanceContext.title},
+                ${linkedAcceptanceContext.description}, 'todo'
+              )
+            `,
+          );
+        }
         yield* repository.operation(
           "create Candidate-owning Change",
           (sql) => sql`
@@ -961,11 +983,20 @@ const candidateValidationFixture = (options: { readonly linked?: boolean } = {})
           ) VALUES (
             'refs/heads/feature', 'refs/remotes/origin/main',
             'https://example.com/acme/repo.git', ${root},
-            ${initialAcceptanceContext}, ${JSON.stringify(reviewerConfiguration)},
+            ${initialAcceptanceContext}, ${JSON.stringify(fixtureReviewerConfiguration)},
             ${JSON.stringify(policy.prepare)}, ${JSON.stringify(policy.checks)}, 0
           )
         `,
         );
+        if (options.linked) {
+          yield* repository.operation(
+            "link Change fixture to its Task",
+            (sql) => sql`
+              INSERT INTO task_change_links (task_id, change_id)
+              SELECT 1, id FROM changes WHERE branch_ref = 'refs/heads/feature'
+            `,
+          );
+        }
       }),
     );
     const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
@@ -1136,12 +1167,14 @@ const candidateValidationFixture = (options: { readonly linked?: boolean } = {})
               artifactRecords: [],
             });
           }
-          yield* recordReviewerResult(
-            validationRunId,
-            "acceptance_review",
-            "acceptance",
-            reviewerConfiguration.acceptanceReview,
-          );
+          if (fixtureReviewerConfiguration.acceptanceReview !== null) {
+            yield* recordReviewerResult(
+              validationRunId,
+              "acceptance_review",
+              "acceptance",
+              fixtureReviewerConfiguration.acceptanceReview,
+            );
+          }
         }),
       );
     const getCurrentPassingEvidence = () =>

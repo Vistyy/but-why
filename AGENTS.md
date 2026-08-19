@@ -40,14 +40,14 @@
 - `src/change/packageAssetPath.ts`: package-asset resolution.
 - `src/change/candidate/`: Candidate domain records.
 - `src/change/candidateCapture/`: Candidate capture interfaces and Git Adapters.
-- `src/change/changePolicy.ts`: complete immutable Change Policy owner representation and persisted Check codecs.
+- `src/change/changePolicy.ts`: immutable Change Policy representation, pure definition resolution, and persistence codecs.
+- `src/change/composition/resolveChangePolicy.ts`: complete Change Policy resolution from exact-commit repository inputs, Global Config, and installed resources.
 - `src/change/candidateValidation/`: Candidate validation execution, inspection, and composition.
 - `src/change/validation/`: Change Validation Gate and validation Adapters.
 - `src/change/validationRun/`: Validation Run domain records and evidence.
 - `src/agent/agentSession/`: shared Agent Session execution, continuation and invocation records, transcript paths, and token evidence.
 - `src/change/publication/`: Candidate publication policy and Git Adapter.
 - `src/change/submitChange.ts`: Change submission orchestration.
-- `src/change/changePolicy.ts`: frozen Change Policy definitions, resolution, and persistence codec.
 - `src/change/reviewerResolutionErrors.ts`: Change reviewer resolution errors.
 - `src/agent/`: project-owned reviewer execution, the Effect-managed Pi Reviewer Adapter, reviewer behavior, and Agent Profile resolution.
 - `src/contracts/`: configuration, output, and shared error contracts.
