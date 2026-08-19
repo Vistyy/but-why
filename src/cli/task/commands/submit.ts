@@ -111,6 +111,17 @@ const renderResult = (result: TaskReviewRepositorySubmitResult, taskId: string):
         details: {},
         help: ["Correct the Task Review configuration and retry."],
       });
+    case "task_review_not_found":
+      return runtimeError({
+        code: result.code,
+        message: "Task Review was not found while completing Task Submission.",
+        details: { taskId },
+        help: [
+          `Run \`by task reviews ${taskId}\` to inspect Review history.`,
+          `Run \`by task show ${taskId}\` to inspect the current Task state.`,
+          `Retry \`by task submit ${taskId}\` only if the Task is still New and has no Active Review.`,
+        ],
+      });
     case "task_review_recovery_required":
       return runtimeError({
         code: result.code,
