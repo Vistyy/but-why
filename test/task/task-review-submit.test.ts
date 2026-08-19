@@ -61,6 +61,130 @@ const defaultAgentPersistence = (): AgentSessionPersistence => ({
 
 const defaultAgentLink = () => () => Effect.void;
 
+it.effect("records Task Review preparation integrity failures and skips the reviewer", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    writeFileSync(
+      join(root, ".but-why", "config.json"),
+      JSON.stringify({
+        idPrefix: "BY",
+        prepare: { command: "printf changed > .but-why/config.json" },
+      }),
+    );
+    expect(runTestProcess("git", ["add", ".but-why/config.json"], { cwd: root }).status).toBe(0);
+    expect(
+      runTestProcess("git", ["commit", "-m", "Configure preparation"], { cwd: root }).status,
+    ).toBe(0);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: { review: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } } },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Prepare",
+      "--file",
+      proposalPath,
+    ]);
+    let reviewerCalls = 0;
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+      taskReviewerAgentRuntime: {
+        review: () => {
+          reviewerCalls += 1;
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+          });
+        },
+      },
+    });
+    expect(submitted.status).toBe(1);
+    expect(reviewerCalls).toBe(0);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: {
+        code: "task_review_tooling_failed",
+        review: {
+          outcome: "tooling_failed",
+          toolingFailure: { operation: "verify_task_review_workspace" },
+        },
+      },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
+      review: { workspace: { cleanup: "removed" } },
+    });
+  }),
+);
+
+it.effect("rejects Task Review evidence after every reviewer invocation without retry", () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const globalConfigPath = join(root, "global.json");
+    yield* runByInProcessEffect(root, ["init", "--id-prefix", "BY"]);
+    commitButWhyConfigAndRecordDefault(root);
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "review" },
+        agentProfiles: { review: { agentRuntime: "pi", runtimeConfig: { model: "test-model" } } },
+      }),
+    );
+    const proposalPath = join(root, "proposal.txt");
+    writeFileSync(proposalPath, "Exact proposal");
+    yield* runByInProcessEffect(root, [
+      "task",
+      "create",
+      "--title",
+      "Reviewer",
+      "--file",
+      proposalPath,
+    ]);
+    let reviewerCalls = 0;
+    const submitted = yield* runByInProcessEffect(root, ["task", "submit", "BY-1"], undefined, {
+      globalConfigPath,
+      taskReviewerAgentRuntime: {
+        review: (input) => {
+          reviewerCalls += 1;
+          writeFileSync(join(input.commandCwd ?? ".", ".but-why", "config.json"), "changed\n");
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: `<reviewer-output>{"findings":[]}</reviewer-output>`,
+          });
+        },
+      },
+    });
+    expect(submitted.status).toBe(1);
+    expect(reviewerCalls).toBe(1);
+    expect(JSON.parse(submitted.stdout)).toMatchObject({
+      error: {
+        code: "task_review_tooling_failed",
+        review: {
+          outcome: "tooling_failed",
+          toolingFailure: { operation: "verify_task_review_workspace" },
+        },
+      },
+    });
+    const shown = yield* runByInProcessEffect(root, ["task", "review", "show", "1"]);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
+      review: { workspace: { cleanup: "removed" } },
+    });
+  }),
+);
+
 it.effect("returns a reused judgment before every repository and reviewer collaborator", () =>
   Effect.gen(function* () {
     const taskId = publicTaskId("BY-1");

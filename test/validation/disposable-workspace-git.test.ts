@@ -77,6 +77,8 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       const unrelatedSha = git(repository, "rev-parse", "HEAD");
       const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, 130);
       createSnapshotWorkspace(repository, worktreePath, unrelatedSha);
+      writeFileSync(join(worktreePath, "tracked"), "changed\n");
+      writeFileSync(join(worktreePath, "untracked"), "untracked\n");
 
       const result = yield* snapshotWorkspaceCleanupGit(repository, commonDirectory).cleanup({
         validationRunId: 130,
