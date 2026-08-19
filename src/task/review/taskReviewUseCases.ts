@@ -7,16 +7,19 @@ import type {
 } from "../../agent/agentSession/agentSession.js";
 import { executeAgentSession } from "../../agent/agentSession/executeAgentSession.js";
 import {
+  type ReviewerAgentResult,
   type ReviewerAgentRuntime,
   ReviewerExecutionFailed,
 } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerProcessExecutor } from "../../agent/reviewerExecution.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type {
-  DisposableWorktreeInspection,
-  ExactDisposableWorkspaceCleanupInput,
-  ExactDisposableWorkspaceCleanupResult,
+import {
+  type DisposableWorkspaceIntegrityFailed,
+  type DisposableWorktreeInspection,
+  type ExactDisposableWorkspaceCleanupInput,
+  type ExactDisposableWorkspaceCleanupResult,
+  verifyDisposableWorkspaceIntegrity,
 } from "../../disposableWorkspace/disposableWorkspace.js";
 import type { RunDisposableExactCommitWorkspace } from "../../disposableWorkspace/runDisposableExactCommitWorkspace.js";
 import { runRepositoryPreparationEffect } from "../../repositoryPreparation/runRepositoryPreparation.js";
@@ -265,6 +268,20 @@ const submitTaskReview = (
                     },
                   } as const;
                 }
+                const integrity = yield* Effect.either(
+                  verifyDisposableWorkspaceIntegrity({
+                    commandExecutor: active.commandExecutor,
+                    commandCwd: active.worktreePath,
+                    expectedCommitSha: base.base.commit,
+                    allowedUntrackedFiles: [],
+                  }),
+                );
+                if (integrity._tag === "Left") {
+                  return {
+                    ok: false,
+                    failure: taskReviewIntegrityFailure(integrity.left),
+                  } as const;
+                }
                 if (prepared.right.exitCode !== 0) {
                   return {
                     ok: false,
@@ -327,6 +344,20 @@ const submitTaskReview = (
                 reviewer: "task",
                 sessionStorageRoot: input.agentSessionStorageRoot,
                 ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+                afterInvocation: ({ result }) =>
+                  Effect.gen(function* () {
+                    const integrity = yield* Effect.either(
+                      verifyDisposableWorkspaceIntegrity({
+                        commandExecutor: active.commandExecutor,
+                        commandCwd: active.worktreePath,
+                        expectedCommitSha: base.base.commit,
+                        allowedUntrackedFiles: [],
+                      }),
+                    );
+                    return integrity._tag === "Right"
+                      ? result
+                      : taskReviewerIntegrityFailureResult(result, integrity.left);
+                  }),
                 settleDomain: ({ result }) =>
                   Effect.gen(function* () {
                     const evidence = yield* Effect.either(
@@ -417,6 +448,34 @@ const submitTaskReview = (
     });
     return result;
   });
+
+const taskReviewIntegrityFailure = (
+  failure: DisposableWorkspaceIntegrityFailed | { readonly message: string },
+): TaskReviewToolingFailure => ({
+  operation: "verify_task_review_workspace",
+  message: failure.message,
+});
+
+const taskReviewerIntegrityFailureResult = (
+  result: ReviewerAgentResult<TaskReviewerOutput>,
+  failure: DisposableWorkspaceIntegrityFailed | { readonly message: string },
+): ReviewerAgentResult<TaskReviewerOutput> => ({
+  ok: false,
+  failure: {
+    kind: "process_execution",
+    operationName: "verify_task_review_workspace",
+    message: failure.message,
+    sessionUsability: "unknown",
+    ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
+    ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
+  },
+  sessionUsability: "unknown",
+  attempts: result.attempts,
+  stdout: result.stdout,
+  ...(result.invocationUsage === undefined ? {} : { invocationUsage: result.invocationUsage }),
+  ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
+  ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
+});
 
 const taskReviewPolicyFromSnapshot = (
   snapshot: TaskReviewPolicySnapshot,

@@ -66,7 +66,7 @@ describe("Snapshot Workspace Git cleanup verification", () => {
     }),
   );
 
-  it.effect("leaves a registered worktree with an unrelated HEAD untouched", () =>
+  it.effect("removes a registered product-owned worktree after its HEAD changes", () =>
     Effect.gen(function* () {
       const repository = initializedRepository();
       const commonDirectory = repositoryCommonDirectory(repository);
@@ -77,15 +77,16 @@ describe("Snapshot Workspace Git cleanup verification", () => {
       const unrelatedSha = git(repository, "rev-parse", "HEAD");
       const worktreePath = expectedSnapshotWorkspacePath(commonDirectory, 130);
       createSnapshotWorkspace(repository, worktreePath, unrelatedSha);
+      writeFileSync(join(worktreePath, "tracked"), "changed\n");
+      writeFileSync(join(worktreePath, "untracked"), "untracked\n");
 
       const result = yield* snapshotWorkspaceCleanupGit(repository, commonDirectory).cleanup({
         validationRunId: 130,
         submittedSha,
       });
 
-      expect(result).toMatchObject({ workspace: "failed" });
-      expect(existsSync(worktreePath)).toBe(true);
-      expect(git(worktreePath, "rev-parse", "HEAD")).toBe(unrelatedSha);
+      expect(result).toEqual({ workspace: "removed" });
+      expect(existsSync(worktreePath)).toBe(false);
     }),
   );
 });

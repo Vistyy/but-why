@@ -668,7 +668,18 @@ describe("Candidate Specialist Review phase", () => {
               review: () =>
                 Effect.sync(() => {
                   writeFileSync(join(repo, "unexpected-mutation.txt"), "mutation");
-                  return success();
+                  return {
+                    ok: false as const,
+                    failure: new ReviewerExecutionFailed({
+                      kind: "output_contract",
+                      operationName: "decode_reviewer_output",
+                      message: "Structured output correction is required.",
+                      sessionReference: "session-1",
+                    }),
+                    sessionUsability: "unknown" as const,
+                    attempts: 1,
+                    stdout: "invalid output",
+                  };
                 }),
             },
             commandExecutor,
@@ -700,7 +711,10 @@ describe("Candidate Specialist Review phase", () => {
             outcome: "failed",
             findings: [],
             artifactRecords: [],
-            toolingFailure: { operationName: "verify_candidate_head" },
+            toolingFailure: {
+              errorKind: "git_tooling_failed",
+              operationName: "verify_candidate_head",
+            },
           },
         ]);
         expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);

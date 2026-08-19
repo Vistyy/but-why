@@ -53,6 +53,84 @@ export const inspectDisposableWorktree = (
   expectedCommitSha: string,
 ): Effect.Effect<DisposableWorktreeInspection> =>
   Effect.gen(function* () {
+    const owned = yield* inspectProductOwnedDisposableWorktree(
+      repositoryRoot,
+      repositoryCommonDirectory,
+      workspaceId,
+    );
+    if (owned.state === "absent") return owned;
+    if (owned.state === "unproven") return owned;
+    if (owned.record.head !== expectedCommitSha) {
+      return {
+        state: "unproven",
+        message: "Live Snapshot Workspace identity does not match the expected workspace identity.",
+      } as const;
+    }
+    const liveHead = yield* git(owned.worktreePath, ["rev-parse", "HEAD"]);
+    if (!liveHead.ok || liveHead.stdout.trim() !== expectedCommitSha) {
+      return {
+        state: "unproven",
+        message: "Live Snapshot Workspace HEAD does not match the expected commit.",
+      } as const;
+    }
+    const status = yield* git(owned.worktreePath, ["status", "--porcelain=v1"]);
+    if (!status.ok) return { state: "unproven", message: status.message } as const;
+    return { state: "matching", dirty: status.stdout.length > 0 } as const;
+  });
+
+export const createDetachedDisposableWorktree = (
+  repositoryRoot: string,
+  worktreePath: string,
+  commitSha: string,
+): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
+  git(repositoryRoot, ["worktree", "add", "--detach", "--", worktreePath, commitSha]).pipe(
+    Effect.map((result) => (result.ok ? { ok: true as const } : result)),
+  );
+
+export const cleanupExactDisposableWorkspace = (
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
+  input: ExactDisposableWorkspaceCleanupInput,
+): Effect.Effect<ExactDisposableWorkspaceCleanupResult> =>
+  Effect.gen(function* () {
+    const owned = yield* inspectProductOwnedDisposableWorktree(
+      repositoryRoot,
+      repositoryCommonDirectory,
+      input.workspaceId,
+    );
+    if (owned.state === "absent") return { workspace: "removed" } as const;
+    if (owned.state === "unproven") return cleanupFailed(owned.message);
+
+    const removed = yield* git(repositoryRoot, [
+      "worktree",
+      "remove",
+      "--force",
+      "--",
+      owned.worktreePath,
+    ]);
+    const verified = yield* inspectDisposableWorktree(
+      repositoryRoot,
+      repositoryCommonDirectory,
+      input.workspaceId,
+      input.expectedCommitSha,
+    );
+    if (verified.state === "absent") return { workspace: "removed" } as const;
+    return cleanupFailed(
+      removed.ok ? "Exact Snapshot Workspace cleanup did not complete." : removed.message,
+    );
+  });
+
+type ProductOwnedDisposableWorktreeInspection =
+  | { readonly state: "absent" }
+  | { readonly state: "owned"; readonly record: WorktreeRecord; readonly worktreePath: string }
+  | { readonly state: "unproven"; readonly message: string };
+
+const inspectProductOwnedDisposableWorktree = (
+  repositoryRoot: string,
+  repositoryCommonDirectory: string,
+  workspaceId: string,
+): Effect.Effect<ProductOwnedDisposableWorktreeInspection> =>
+  Effect.gen(function* () {
     const identity = yield* verifyRepositoryCommonDirectory(
       repositoryRoot,
       repositoryCommonDirectory,
@@ -87,90 +165,13 @@ export const inspectDisposableWorktree = (
       } as const;
     }
     const record = matches[0];
-    if (
-      record?.head !== expectedCommitSha ||
-      !record.detached ||
-      !isSafeWorktreeDirectory(worktreePath)
-    ) {
+    if (!record?.detached || !isSafeWorktreeDirectory(worktreePath)) {
       return {
         state: "unproven",
-        message: "Live Snapshot Workspace identity does not match the expected workspace identity.",
+        message: "Snapshot Workspace ownership cannot be proven.",
       } as const;
     }
-    const liveHead = yield* git(worktreePath, ["rev-parse", "HEAD"]);
-    if (!liveHead.ok || liveHead.stdout.trim() !== expectedCommitSha) {
-      return {
-        state: "unproven",
-        message: "Live Snapshot Workspace HEAD does not match the expected commit.",
-      } as const;
-    }
-    const status = yield* git(worktreePath, ["status", "--porcelain=v1"]);
-    if (!status.ok) return { state: "unproven", message: status.message } as const;
-    return { state: "matching", dirty: status.stdout.length > 0 } as const;
-  });
-
-export const createDetachedDisposableWorktree = (
-  repositoryRoot: string,
-  worktreePath: string,
-  commitSha: string,
-): Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }> =>
-  git(repositoryRoot, ["worktree", "add", "--detach", "--", worktreePath, commitSha]).pipe(
-    Effect.map((result) => (result.ok ? { ok: true as const } : result)),
-  );
-
-export const cleanupExactDisposableWorkspace = (
-  repositoryRoot: string,
-  repositoryCommonDirectory: string,
-  input: ExactDisposableWorkspaceCleanupInput,
-): Effect.Effect<ExactDisposableWorkspaceCleanupResult> =>
-  Effect.gen(function* () {
-    const identity = yield* verifyRepositoryCommonDirectory(
-      repositoryRoot,
-      repositoryCommonDirectory,
-    );
-    if (!identity.ok) return cleanupFailed(identity.message);
-    const expectedWorktreePath = expectedDisposableWorkspacePath(
-      repositoryCommonDirectory,
-      input.workspaceId,
-    );
-    if (
-      !isExpectedDisposableWorkspacePath(
-        repositoryCommonDirectory,
-        input.workspaceId,
-        expectedWorktreePath,
-      )
-    ) {
-      return cleanupFailed("Derived Snapshot Workspace identity is invalid.");
-    }
-    const parent = yield* inspectSafeWorkspaceContainers(repositoryCommonDirectory);
-    if (!parent.ok) return cleanupFailed(parent.message);
-
-    const inspected = yield* inspectDisposableWorktree(
-      repositoryRoot,
-      repositoryCommonDirectory,
-      input.workspaceId,
-      input.expectedCommitSha,
-    );
-    if (inspected.state === "absent") return { workspace: "removed" } as const;
-    if (inspected.state === "unproven") return cleanupFailed(inspected.message);
-
-    const removed = yield* git(repositoryRoot, [
-      "worktree",
-      "remove",
-      "--force",
-      "--",
-      expectedWorktreePath,
-    ]);
-    const verified = yield* inspectDisposableWorktree(
-      repositoryRoot,
-      repositoryCommonDirectory,
-      input.workspaceId,
-      input.expectedCommitSha,
-    );
-    if (verified.state === "absent") return { workspace: "removed" } as const;
-    return cleanupFailed(
-      removed.ok ? "Exact Snapshot Workspace cleanup did not complete." : removed.message,
-    );
+    return { state: "owned", record, worktreePath } as const;
   });
 
 const verifyRepositoryCommonDirectory = (

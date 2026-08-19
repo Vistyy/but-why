@@ -88,6 +88,7 @@ export const runAgentReviewer = (
   FileSystem.FileSystem
 > => {
   let phaseOutcome: CandidateValidationOutcome | undefined;
+  let integrityFailure: ValidationToolingFailure | undefined;
   return Effect.gen(function* () {
     yield* executeAgentSession<ReviewerOutput, never, FileSystem.FileSystem>({
       ...(input.agentSessionId === undefined ? {} : { agentSessionId: input.agentSessionId }),
@@ -106,10 +107,8 @@ export const runAgentReviewer = (
       reviewer: input.reviewer,
       sessionStorageRoot: input.sessionStorageRoot,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
-      settleDomain: ({ result: runtimeResult, evidence }) =>
+      afterInvocation: ({ result }) =>
         Effect.gen(function* () {
-          const result = translateRuntimeResult(runtimeResult, input.reviewer);
-          const reviewerEvidence = reviewerEvidenceFromAgentSession(evidence);
           const integrity = yield* Effect.either(
             verifyCandidateIntegrity({
               commandExecutor: input.commandExecutor,
@@ -119,8 +118,22 @@ export const runAgentReviewer = (
               operationName: `verify_${input.phase}_candidate`,
             }),
           );
-          if (integrity._tag === "Left") {
+          if (integrity._tag === "Right") return result;
+          integrityFailure = integrity.left;
+          return integrityFailureResult(result, integrity.left);
+        }),
+      settleDomain: ({ result: runtimeResult, evidence }) =>
+        Effect.gen(function* () {
+          const result = translateRuntimeResult(runtimeResult, input.reviewer);
+          const reviewerEvidence = reviewerEvidenceFromAgentSession(evidence);
+          if (
+            !result.ok &&
+            result.failure._tag === "ReviewerProcessToolingFailed" &&
+            (result.failure.operationName === "verify_candidate_head" ||
+              result.failure.operationName === `verify_${input.phase}_candidate`)
+          ) {
             phaseOutcome = "tooling_failed";
+            const failure = integrityFailure ?? result.failure;
             return input.settleAgentInvocationResult({
               validationRunId: input.validationRunId,
               phase: input.phase,
@@ -129,7 +142,7 @@ export const runAgentReviewer = (
               findings: [],
               artifactRecords: [],
               toolingFailure: {
-                ...validationToolingFailureRecord(integrity.left),
+                ...validationToolingFailureRecord(failure),
                 validationRunId: input.validationRunId,
               },
             });
@@ -197,6 +210,30 @@ export const runAgentReviewer = (
     return { outcome: phaseOutcome };
   });
 };
+
+const integrityFailureResult = <Output>(
+  result: ReviewerAgentResult<Output>,
+  failure: ValidationToolingFailure,
+): ReviewerAgentResult<Output> => ({
+  ok: false,
+  failure: {
+    kind: "process_execution",
+    operationName: failure.operationName,
+    message: failureMessage(failure),
+    sessionUsability: "unknown",
+    ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
+    ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
+  },
+  sessionUsability: "unknown",
+  attempts: result.attempts,
+  stdout: result.stdout,
+  ...(result.invocationUsage === undefined ? {} : { invocationUsage: result.invocationUsage }),
+  ...(result.sessionReference === undefined ? {} : { sessionReference: result.sessionReference }),
+  ...(result.sessionFilePath === undefined ? {} : { sessionFilePath: result.sessionFilePath }),
+});
+
+const failureMessage = (failure: ValidationToolingFailure): string =>
+  failure._tag === "SnapshotWorkspaceSetupFailed" ? failure.errorMessage : failure.message;
 
 const translateRuntimeResult = <Output>(
   result: ReviewerAgentResult<Output>,

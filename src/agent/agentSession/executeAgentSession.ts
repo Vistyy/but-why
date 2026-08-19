@@ -46,6 +46,10 @@ export type ExecuteAgentSessionInput<Output, DomainError = never, DomainRequirem
   readonly agentEnvironment?: Parameters<
     ReviewerAgentRuntime<Output>["review"]
   >[0]["agentEnvironment"];
+  readonly afterInvocation?: (input: {
+    readonly result: ReviewerAgentResult<Output>;
+    readonly invocationNumber: number;
+  }) => Effect.Effect<ReviewerAgentResult<Output>, DomainError, DomainRequirements>;
   readonly settleDomain?: (input: {
     readonly invocationId: number;
     readonly result: ReviewerAgentResult<Output>;
@@ -163,9 +167,13 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
                 ? { sessionFilePath: interruptedSessionFilePath }
                 : {}),
             };
-      lastResult = result;
+      const settledResult =
+        input.afterInvocation === undefined
+          ? result
+          : yield* input.afterInvocation({ result, invocationNumber });
+      lastResult = settledResult;
       const settlement = settlementFor(
-        result,
+        settledResult,
         input.sessionStorageRoot,
         interrupted ? "return_unknown" : undefined,
         new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -186,9 +194,9 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         },
       };
       const shouldRetry =
-        !result.ok &&
-        result.failure.kind === "output_contract" &&
-        result.sessionReference !== undefined &&
+        !settledResult.ok &&
+        settledResult.failure.kind === "output_contract" &&
+        settledResult.sessionReference !== undefined &&
         invocationNumber < 3;
       const evidence: AgentExecutionEvidence = {
         agentSessionId: sessionId,
@@ -199,7 +207,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         !shouldRetry && input.settleDomain !== undefined
           ? yield* input.settleDomain({
               invocationId: dispatch.dispatch.invocation.id,
-              result,
+              result: settledResult,
               invocationNumber,
               evidence,
             })
@@ -220,9 +228,9 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
       );
       invocationEvidence.push(invocationEvidenceRecord);
 
-      if (result.ok) {
+      if (settledResult.ok) {
         return {
-          result,
+          result: settledResult,
           evidence: {
             agentSessionId: sessionId,
             continuationId,
@@ -231,7 +239,7 @@ export const executeAgentSession = <Output, DomainError = never, DomainRequireme
         };
       }
       if (!shouldRetry) break;
-      prompt = result.failure.correctionPrompt ?? result.failure.message;
+      prompt = settledResult.failure.correctionPrompt ?? settledResult.failure.message;
     }
 
     if (lastResult === undefined) throw new Error("Agent Invocation produced no result");
