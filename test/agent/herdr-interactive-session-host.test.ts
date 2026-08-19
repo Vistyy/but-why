@@ -452,6 +452,41 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(1);
   });
 
+  it("prompts an existing named done session instead of starting another agent", async () => {
+    const commands: readonly string[][] = [];
+    const prompts: Parameters<HerdrAgentPromptTransport>[0][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      (commands as string[][]).push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","pane_id":"pane-1","agent_status":"done"}]}}`,
+        };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        promptTransport: async (prompt) => {
+          prompts.push(prompt);
+          return { ok: true };
+        },
+      }).launch(input),
+    ).resolves.toEqual({
+      ok: true,
+      host: "herdr",
+      status: "started",
+    });
+    expect(commands).toEqual([["agent", "list"]]);
+    expect(prompts).toEqual([
+      expect.objectContaining({
+        target: input.hostSessionName,
+        text: input.initialPrompt,
+      }),
+    ]);
+  });
+
   it("does not start or prompt another agent when the named session is active", async () => {
     const commands: readonly string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {

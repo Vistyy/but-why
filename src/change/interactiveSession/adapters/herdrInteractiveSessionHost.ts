@@ -107,6 +107,7 @@ const preflightTrustedExtension = async (path: string): Promise<TrustedResourceP
 type LaunchPhaseResult<Value> =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly result: InteractiveSessionLaunchResult };
+type ExistingSessionState = "done" | undefined;
 
 const phaseComplete = <Value>(value: Value): LaunchPhaseResult<Value> => ({ ok: true, value });
 
@@ -152,6 +153,18 @@ const launchHerdrSession = async (
     options,
   );
   if (!existingSession.ok) return existingSession.result;
+  if (existingSession.value === "done") {
+    return submitInitialPrompt(
+      command,
+      promptTransport,
+      socketPath ?? "injected",
+      platform,
+      input,
+      sessionName,
+      signal,
+      options,
+    );
+  }
 
   const openedWorktree = await openManagedWorktree(command, input, sessionName, signal, options);
   if (!openedWorktree.ok) return openedWorktree.result;
@@ -202,7 +215,7 @@ const observeExistingSession = async (
   sessionName: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
-): Promise<LaunchPhaseResult<void>> => {
+): Promise<LaunchPhaseResult<ExistingSessionState>> => {
   const existing = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!existing.ok) {
     return phaseStopped({
@@ -225,6 +238,14 @@ const observeExistingSession = async (
     return phaseStopped(
       launchIndeterminate("Herdr could not determine the existing session state."),
     );
+  }
+  if (hasCompletedSession(existingAgents, input, sessionName)) {
+    if (hasActiveAgentInWorktree(existingAgents, input)) {
+      return phaseStopped(
+        launchFailure("Another Interactive Session is already active in this Managed Worktree."),
+      );
+    }
+    return phaseComplete("done");
   }
   return phaseComplete(undefined);
 };
@@ -313,6 +334,9 @@ const startNativeAgent = async (
       launchFailure("Another Interactive Session is already active in this Managed Worktree."),
     );
   }
+  if (hasCompletedSession(beforeStartAgents, input, sessionName)) {
+    return phaseComplete(undefined);
+  }
 
   const startArgs = [
     "agent",
@@ -352,6 +376,9 @@ const startNativeAgent = async (
       return phaseStopped(
         launchIndeterminate("Herdr reported an unknown state after native agent start."),
       );
+    }
+    if (hasCompletedSession(afterStartAgents, input, sessionName)) {
+      return phaseComplete(undefined);
     }
   }
   return phaseStopped(
@@ -661,6 +688,12 @@ const hasActiveSession = (
   const status = findSession(agents, input, sessionName)?.agent_status;
   return status !== undefined && isActiveAgentStatus(status);
 };
+
+const hasCompletedSession = (
+  agents: readonly HerdrAgent[],
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+): boolean => findSession(agents, input, sessionName)?.agent_status === "done";
 
 const hasUnknownSession = (
   agents: readonly HerdrAgent[],

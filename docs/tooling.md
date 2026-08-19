@@ -17,8 +17,8 @@ Do not combine it with narrower recipes as additional repository-wide checks.
 Change Submit owns the configured blocking Check and review phases.
 During Change implementation, use focused verification and let Change Submit run the configured repository-wide Check.
 
-`just health` is optional advisory analysis.
-It reruns the maintained tests with coverage before reporting complexity, duplication, and non-error Effect diagnostics.
+`just health` is optional advisory code-health analysis.
+It reports complexity, duplication, and non-error Effect diagnostics without rerunning tests or generating coverage.
 Health findings become implementation work only when repository evidence establishes a concrete defect or maintenance cost.
 
 Repository-wide quality, unselected test, and unselected coverage workloads share a capacity lock.
