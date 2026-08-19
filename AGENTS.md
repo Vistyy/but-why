@@ -35,7 +35,12 @@
 - `src/cli/`: command modules and output boundary.
 - `src/cli/change/implementerPromptFile.ts`: Implementer Prompt file input handling.
 - `src/task/`: Task intent, lifecycle, persistence interfaces, files, and composition.
+- `src/taskChange/`: Task/Change coordination for linked Change Start, joined inspection, coordinated cancellation, and exact merged completion.
+- `src/taskChange/taskChangeStart.ts`: linked Change Start eligibility and coordination around the Change-owned start operation.
 - `src/change/`: Change workflows and Change-owned implementation, Candidate, validation, and delivery modules.
+- `src/change/changeLifecycle.ts`: Change Start, Change Prepare, and Change Implement orchestration; `startChange` owns Change creation and preparation.
+- `src/change/composition/loadChangeLifecycle.ts`: Change lifecycle composition; `withChangeStart` routes unlinked starts to `startChange` and linked starts to Task/Change coordination.
+- `src/cli/change/start.ts`: `change start` command input and result routing.
 - `src/change/interactiveSession/`: Interactive Session launch preparation and host execution (`launchInteractiveImplementer.ts`, `interactiveSessionHost.ts`, `adapters/herdrInteractiveSessionHost.ts`, `implementerPrompt.ts`) with `InteractiveSessionHost` as the only injected seam and Herdr as the default host selected by `loadChangeLifecycle.ts`; `implementChange` retains Change lookup and open-state validation.
 - `src/change/packageAssetPath.ts`: package-asset resolution.
 - `src/change/candidate/`: Candidate domain records.
