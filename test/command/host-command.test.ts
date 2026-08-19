@@ -28,6 +28,12 @@ describe("host command Adapter", () => {
     ).resolves.toEqual({ exitCode: 0, stdout: "stdin-closed", stderr: "" });
   });
 
+  it("writes supplied command stdin", async () => {
+    await expect(
+      executeHostCommand({ command: "sh", args: ["-c", "cat"], stdin: "review prompt" }),
+    ).resolves.toEqual({ exitCode: 0, stdout: "review prompt", stderr: "" });
+  });
+
   it("translates spawn failures into a typed error", async () => {
     await expect(executeHostCommand({ command: "missing-host-command" })).rejects.toSatisfy(
       (error: unknown) =>

@@ -59,6 +59,7 @@ const executePiReviewerProcess = (
       command: invocation.command,
       args: invocation.args,
       cwd: input.commandCwd,
+      stdin: input.prompt,
     }).pipe(Effect.mapError((error) => reviewerProcessExecutionFailed(error)));
     if (commandResult.exitCode !== 0) {
       const diagnostic = [commandResult.stderr.trim(), commandResult.stdout.trim()]
@@ -155,7 +156,6 @@ const commandInvocation = (
     input.systemPrompt,
     "--name",
     `${input.reviewer} Review`,
-    input.prompt,
   ];
   return applyAgentEnvironment("pi", args, input.agentEnvironment);
 };

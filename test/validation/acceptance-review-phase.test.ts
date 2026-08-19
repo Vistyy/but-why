@@ -146,7 +146,7 @@ describe("Acceptance Review phase", () => {
     }),
   );
 
-  it.scoped("runs the normal Pi reviewer process through the Acceptance Candidate boundary", () =>
+  it.scoped("runs an oversized Acceptance Context through the normal Pi reviewer process", () =>
     Effect.gen(function* () {
       const workspace = createTestWorkspace();
       const agentPersistence: NonNullable<RunAcceptanceReviewPhaseInput["agentPersistence"]> = {
@@ -205,6 +205,10 @@ describe("Acceptance Review phase", () => {
         },
       };
       const fixture = acceptancePhaseFixture(piReviewerAgentRuntime, {
+        acceptanceContext: {
+          ...acceptanceContext,
+          description: "Accepted detail. ".repeat(10_000),
+        },
         policy: actualPolicy,
         agentEnvironment: [],
         agentPersistence,
@@ -499,6 +503,7 @@ describe("Acceptance Review phase", () => {
 type FixtureOptions = {
   readonly validationRunId?: number;
   readonly candidate?: typeof candidate;
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly policy?: RunAcceptanceReviewPhaseInput["policy"];
   readonly agentEnvironment?: RunAcceptanceReviewPhaseInput["agentEnvironment"];
   readonly reviewerExecutor?: RunAcceptanceReviewPhaseInput["reviewerExecutor"];
@@ -568,7 +573,7 @@ const acceptancePhaseFixture = (
         validationRunId,
         changeId: "change-1",
         candidate: exactCandidate,
-        acceptanceContext,
+        acceptanceContext: options.acceptanceContext ?? acceptanceContext,
         implementationDecisions: options.implementationDecisions ?? [],
         ...(options.blockerHistory === undefined ? {} : { blockerHistory: options.blockerHistory }),
         policy: phasePolicy,

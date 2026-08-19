@@ -86,9 +86,9 @@ describe("Pi reviewer process executor", () => {
           "Act as the Acceptance Reviewer.",
           "--name",
           "acceptance Review",
-          "Review the Candidate.",
         ],
         cwd: "/validation/workspace",
+        stdin: "Review the Candidate.",
       });
       expect(result).toMatchObject({
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
