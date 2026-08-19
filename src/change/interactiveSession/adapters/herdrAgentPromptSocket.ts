@@ -3,9 +3,9 @@ import { createConnection } from "node:net";
 
 import { Either, Schema } from "effect";
 
-export const herdr08Protocol = 19;
-export const herdr08MaxInitialRequestBytes = 1024 * 1024;
-const herdr08InitialRequestTimeoutMs = 5_000;
+export const supportedHerdrProtocol = 19;
+export const herdrMaxInitialRequestBytes = 1024 * 1024;
+const herdrInitialRequestTimeoutMs = 5_000;
 
 export type HerdrAgentPromptTransportInput = {
   readonly socketPath: string;
@@ -95,11 +95,11 @@ export const sendHerdrAgentPrompt: HerdrAgentPromptTransport = async (input) => 
       message: "Herdr returned a malformed or mismatched ping response.",
     };
   }
-  if (pingResponse.result.protocol !== herdr08Protocol) {
+  if (pingResponse.result.protocol !== supportedHerdrProtocol) {
     return {
       ok: false,
       transmission: "none",
-      message: `Herdr protocol ${pingResponse.result.protocol} is incompatible with required protocol ${herdr08Protocol}.`,
+      message: `Herdr protocol ${pingResponse.result.protocol} is incompatible with required protocol ${supportedHerdrProtocol}.`,
     };
   }
 
@@ -139,12 +139,12 @@ const encodeRequest = (
   | { readonly ok: false; readonly transmission: "none"; readonly message: string } => {
   const line = JSON.stringify(request);
   const bytes = Buffer.byteLength(line, "utf8");
-  return bytes <= herdr08MaxInitialRequestBytes
+  return bytes <= herdrMaxInitialRequestBytes
     ? { ok: true, line }
     : {
         ok: false,
         transmission: "none",
-        message: `Herdr socket request is ${bytes} bytes; Herdr 0.8 accepts at most ${herdr08MaxInitialRequestBytes} bytes.`,
+        message: `Herdr socket request is ${bytes} bytes; the supported transport accepts at most ${herdrMaxInitialRequestBytes} bytes.`,
       };
 };
 
@@ -163,7 +163,7 @@ const exchangeHerdrRequest = (input: {
     const socketPath =
       input.platform === "win32" ? `\\\\.\\pipe\\${input.socketPath}` : input.socketPath;
     const socket = createConnection(socketPath);
-    const timeoutMs = Math.min(input.timeoutMs, herdr08InitialRequestTimeoutMs);
+    const timeoutMs = Math.min(input.timeoutMs, herdrInitialRequestTimeoutMs);
 
     const finish = (result: HerdrSocketExchangeResult): void => {
       if (settled) return;
@@ -199,7 +199,7 @@ const exchangeHerdrRequest = (input: {
     });
     socket.on("data", (chunk: Buffer) => {
       response = Buffer.concat([response, chunk]);
-      if (response.length > herdr08MaxInitialRequestBytes) {
+      if (response.length > herdrMaxInitialRequestBytes) {
         finish(failure("Herdr socket response exceeded 1048576 bytes."));
         return;
       }

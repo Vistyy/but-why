@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   type HerdrAgentPromptTransportInput,
-  herdr08MaxInitialRequestBytes,
-  herdr08Protocol,
+  herdrMaxInitialRequestBytes,
   sendHerdrAgentPrompt as sendPlatformHerdrAgentPrompt,
+  supportedHerdrProtocol,
 } from "../../src/change/interactiveSession/adapters/herdrAgentPromptSocket.js";
 
 const roots: string[] = [];
@@ -43,7 +43,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
               }
             : {
                 id: envelope.id,
@@ -65,8 +65,8 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
     });
   });
 
-  it("rejects a prompt request larger than Herdr 0.8 accepts before connecting", async () => {
-    const text = "x".repeat(herdr08MaxInitialRequestBytes);
+  it("rejects a prompt request larger than the supported transport accepts", async () => {
+    const text = "x".repeat(herdrMaxInitialRequestBytes);
 
     await expect(
       sendHerdrAgentPrompt({
@@ -78,7 +78,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
     ).resolves.toMatchObject({
       ok: false,
       transmission: "none",
-      message: expect.stringContaining("accepts at most 1048576 bytes"),
+      message: expect.stringContaining("supported transport accepts at most 1048576 bytes"),
     });
   });
 
@@ -90,7 +90,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
       socket.end(
         `${JSON.stringify({
           id: envelope.id,
-          result: { type: "pong", version: "0.9.0", protocol: herdr08Protocol + 1 },
+          result: { type: "pong", version: "0.9.0", protocol: supportedHerdrProtocol + 1 },
         })}\n`,
       );
     });
@@ -119,7 +119,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
         socket.end(
           `${JSON.stringify({
             id: envelope.id,
-            result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+            result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
           })}\n`,
         );
         return;
@@ -148,7 +148,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
               }
             : {
                 id: "another-request",
@@ -182,7 +182,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
         socket.end(
           `${JSON.stringify({
             id: envelope.id,
-            result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+            result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
           })}\n`,
         );
       }
@@ -213,7 +213,7 @@ describe.skipIf(process.platform === "win32")("Herdr agent.prompt socket transpo
           envelope.method === "ping"
             ? {
                 id: envelope.id,
-                result: { type: "pong", version: "0.8.0", protocol: herdr08Protocol },
+                result: { type: "pong", version: "0.8.0", protocol: supportedHerdrProtocol },
               }
             : {
                 id: envelope.id,
