@@ -598,7 +598,10 @@ describe("Herdr Interactive Session Host", () => {
     expect(promptAttempts).toBe(1);
   });
 
-  it("does not prompt a done session while another agent is active in the worktree", async () => {
+  it.each([
+    ["working", "launch_failed"],
+    ["unknown", "launch_indeterminate"],
+  ] as const)("does not prompt an initial done session while another agent is %s in the worktree", async (peerStatus, expectedCode) => {
     let promptAttempts = 0;
     const execute: HerdrCommandExecutor = async () =>
       listedAgents([
@@ -607,7 +610,7 @@ describe("Herdr Interactive Session Host", () => {
           name: "other-session",
           cwd: input.worktreePath,
           pane_id: "pane-2",
-          agent_status: "working",
+          agent_status: peerStatus,
         },
       ]);
 
@@ -618,7 +621,7 @@ describe("Herdr Interactive Session Host", () => {
           return { ok: true };
         },
       }).launch(input),
-    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
+    ).resolves.toMatchObject({ ok: false, code: expectedCode });
 
     expect(promptAttempts).toBe(0);
   });

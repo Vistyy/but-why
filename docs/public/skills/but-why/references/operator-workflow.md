@@ -81,6 +81,8 @@ For a Change linked to a Task, confirm that the selected Task is approved and st
 Then start or verify the Change's Implementer Interactive Session.
 
 For a Change without a Task, start it with `<but-why> change start` and keep implementation in the current session unless the authorization explicitly requests a separate Implementer Interactive Session.
+A separate Implementer Interactive Session runs outside the current Operator session.
+It may reuse the Change's matching Done agent with a new initial handoff and does not require a new agent identity.
 
 This section is complete when a direct edit is authorized or the exact Open Change and required session behavior are established for the selected work item.
 
