@@ -280,60 +280,51 @@ it.effect("rejects concurrent unsettled dispatch and rolls back failed domain se
   }),
 );
 
-it.effect(
-  "appends a replacement continuation after launch failure and keeps configuration fixed after return",
-  () =>
-    Effect.gen(function* () {
-      const root = yield* initializedRepository();
-      yield* withPersistence(root, (persistence) =>
-        Effect.gen(function* () {
-          const first = yield* persistence.beginInvocation({
-            configuration,
-            createdAt: "2026-08-14T12:00:00.000Z",
-            linkInvocation: noOpLink,
-          });
-          if (!first.ok) return;
-          yield* persistence.settleInvocation({
-            invocationId: first.dispatch.invocation.id,
-            continuationId: first.dispatch.continuation.id,
-            settlement: {
-              settledAt: "2026-08-14T12:00:01.000Z",
-              kind: "launch_failed",
-              unusableReason: "model unavailable",
-            },
-          });
-          const corrected = yield* persistence.beginInvocation({
+it.effect("retries a failed launch with the same frozen configuration", () =>
+  Effect.gen(function* () {
+    const root = yield* initializedRepository();
+    yield* withPersistence(root, (persistence) =>
+      Effect.gen(function* () {
+        const first = yield* persistence.beginInvocation({
+          configuration,
+          createdAt: "2026-08-14T12:00:00.000Z",
+          linkInvocation: noOpLink,
+        });
+        if (!first.ok) return;
+        yield* persistence.settleInvocation({
+          invocationId: first.dispatch.invocation.id,
+          continuationId: first.dispatch.continuation.id,
+          settlement: {
+            settledAt: "2026-08-14T12:00:01.000Z",
+            kind: "launch_failed",
+            unusableReason: "model unavailable",
+          },
+        });
+        const changed = yield* Effect.exit(
+          persistence.beginInvocation({
             agentSessionId: first.dispatch.agentSessionId,
-            configuration: { ...configuration, model: "provider/corrected" },
+            configuration: { ...configuration, model: "provider/changed" },
             createdAt: "2026-08-14T12:00:02.000Z",
             linkInvocation: noOpLink,
-          });
-          expect(corrected).toMatchObject({
-            ok: true,
-            dispatch: { resumed: false, continuation: { model: "provider/corrected" } },
-          });
-          if (!corrected.ok) return;
-          yield* persistence.settleInvocation({
-            invocationId: corrected.dispatch.invocation.id,
-            continuationId: corrected.dispatch.continuation.id,
-            settlement: {
-              settledAt: "2026-08-14T12:00:03.000Z",
-              kind: "returned",
-              transcriptPath: "sessions/corrected.jsonl",
-            },
-          });
-          const rejected = yield* Effect.exit(
-            persistence.beginInvocation({
-              agentSessionId: first.dispatch.agentSessionId,
-              configuration: { ...configuration, model: "provider/another" },
-              createdAt: "2026-08-14T12:00:04.000Z",
-              linkInvocation: noOpLink,
-            }),
-          );
-          expect(rejected._tag).toBe("Failure");
-        }),
-      );
-    }),
+          }),
+        );
+        expect(changed._tag).toBe("Failure");
+
+        const retry = yield* persistence.beginInvocation({
+          agentSessionId: first.dispatch.agentSessionId,
+          configuration,
+          createdAt: "2026-08-14T12:00:03.000Z",
+          linkInvocation: noOpLink,
+        });
+        expect(retry).toMatchObject({
+          ok: true,
+          dispatch: { resumed: false, continuation: { model: configuration.model } },
+        });
+        if (!retry.ok) return;
+        expect(retry.dispatch.continuation.id).not.toBe(first.dispatch.continuation.id);
+      }),
+    );
+  }),
 );
 
 it.effect("does not resume a continuation marked unusable despite its transcript", () =>

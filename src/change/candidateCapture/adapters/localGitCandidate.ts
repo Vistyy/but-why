@@ -24,12 +24,8 @@ const readLocalCandidateWorkspace = (cwd: string): LocalCandidateWorkspaceResult
   const worktrees = git(cwd, "worktree", "list", "--porcelain");
   if (!commonDirectory.ok || !worktrees.ok) return { ok: false, code: "git_tooling_error" };
   const worktreeEntries = worktrees.stdout.split("\n\n");
-  const primaryRoot = worktreeEntries[0]
-    ?.split("\n")
-    .find((line) => line.startsWith("worktree "))
-    ?.slice("worktree ".length);
   const currentRoot = git(cwd, "rev-parse", "--path-format=absolute", "--show-toplevel");
-  if (primaryRoot === undefined || !currentRoot.ok) return { ok: false, code: "git_tooling_error" };
+  if (!currentRoot.ok) return { ok: false, code: "git_tooling_error" };
 
   const branch = git(cwd, "symbolic-ref", "-q", "HEAD");
   if (!branch.ok) return { ok: false, code: "detached_head" };
@@ -54,7 +50,6 @@ const readLocalCandidateWorkspace = (cwd: string): LocalCandidateWorkspaceResult
     ok: true,
     facts: {
       repositoryCommonDirectory: realpathSync(commonDirectory.stdout),
-      primaryRoot,
       branchRef: branch.stdout,
       headSha: head.stdout,
       ...(renameFromRef === undefined ? {} : { renameFromRef }),

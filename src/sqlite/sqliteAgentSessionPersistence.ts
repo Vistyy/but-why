@@ -124,38 +124,10 @@ const beginInvocation = (
       currentConfiguration !== undefined &&
       !sameConfiguration(currentConfiguration, input.configuration)
     ) {
-      const latest = yield* sql<{ readonly settlementKind: string | null }>`
-        SELECT invocation.settlement_kind AS settlementKind
-        FROM agent_invocations AS invocation
-        JOIN agent_continuations AS continuation
-          ON continuation.id = invocation.continuation_id
-        WHERE continuation.agent_session_id = ${sessionId}
-        ORDER BY invocation.id DESC LIMIT 1
-      `;
-      const returned = yield* sql<{ readonly id: number }>`
-        SELECT invocation.id
-        FROM agent_invocations AS invocation
-        JOIN agent_continuations AS continuation
-          ON continuation.id = invocation.continuation_id
-        WHERE continuation.agent_session_id = ${sessionId}
-          AND invocation.settlement_kind = 'returned'
-        LIMIT 1
-      `;
-      const transcript = yield* sql<{ readonly id: number }>`
-        SELECT id FROM agent_continuations
-        WHERE agent_session_id = ${sessionId} AND transcript_path IS NOT NULL
-        LIMIT 1
-      `;
-      const correctionAllowed =
-        latest[0]?.settlementKind === "launch_failed" &&
-        current.transcriptPath === null &&
-        transcript.length === 0 &&
-        returned.length === 0;
-      if (!correctionAllowed)
-        return yield* invalid(
-          "dispatch Agent Invocation",
-          "Agent Session configuration is fixed after conversation establishment",
-        );
+      return yield* invalid(
+        "dispatch Agent Invocation",
+        "Agent Session configuration is immutable",
+      );
     }
     const continuation =
       current !== undefined &&

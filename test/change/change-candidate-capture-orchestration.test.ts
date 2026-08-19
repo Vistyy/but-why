@@ -45,7 +45,6 @@ describe("Change Candidate capture orchestration", () => {
               ok: true as const,
               facts: {
                 repositoryCommonDirectory: "/repo/.git",
-                primaryRoot: "/repo",
                 branchRef: "refs/heads/feature",
                 headSha: "head",
               },
@@ -93,7 +92,6 @@ describe("Change Candidate capture orchestration", () => {
       };
       const workspace = {
         repositoryCommonDirectory: "/repo/.git",
-        primaryRoot: "/repo",
         branchRef: "refs/heads/feature",
         headSha: "head",
       };

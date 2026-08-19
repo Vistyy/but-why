@@ -230,7 +230,6 @@ describe("Change Candidate capture boundaries", () => {
         ok: true,
         facts: {
           repositoryCommonDirectory: commonDirectory(repo),
-          primaryRoot: repo,
           branchRef: "refs/heads/linked",
         },
       });

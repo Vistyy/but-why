@@ -285,23 +285,26 @@ describe("Change Start Managed Worktree boundaries", () => {
   it.effect("uses the invoking worktree without selecting a privileged checkout", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
+      const originUrl = git(root, "config", "--get", "remote.origin.url");
       configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
+      git(root, "config", "--add", `url.${initializedRepositoryTemplate}.insteadOf`, originUrl);
       git(root, "config", "branch.main.remote", "upstream");
+      git(root, "config", "branch.main.merge", "refs/heads/main");
       const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
       git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
 
       const fromMain = yield* runByInProcessEffect(root, ["change", "start"], now);
       const fromLinked = yield* runByInProcessEffect(linkedWorktree, ["change", "start"], now);
 
-      expect(fromMain.status).toBe(0);
-      expect(fromLinked.status).toBe(0);
+      expect(fromMain.status, fromMain.stdout).toBe(0);
+      expect(fromLinked.status, fromLinked.stdout).toBe(0);
       const mainOutput = JSON.parse(fromMain.stdout) as ChangeOutput;
       const linkedOutput = JSON.parse(fromLinked.stdout) as ChangeOutput;
       expect(mainOutput).toMatchObject({
         baseRef: "refs/remotes/upstream/main",
       });
       expect(linkedOutput).toMatchObject({
-        baseRef: "refs/remotes/upstream/main",
+        baseRef: "refs/remotes/origin/main",
       });
       expect(dirname(dirname(mainOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),

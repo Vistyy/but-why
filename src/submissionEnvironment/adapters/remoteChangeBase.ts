@@ -60,7 +60,7 @@ const selectPublicationRemote = (
     });
   if (remoteNames.length === 0) return { ok: false, code: "publication_remote_missing" };
   if (remoteNames.length === 1) return { ok: true, remoteName: remoteNames[0] as string };
-  const upstreamRemote = canonicalMainCheckoutUpstreamRemote(cwd);
+  const upstreamRemote = invokingBranchUpstreamRemote(cwd);
   if (upstreamRemote !== undefined && remoteNames.includes(upstreamRemote)) {
     return { ok: true, remoteName: upstreamRemote };
   }
@@ -68,18 +68,14 @@ const selectPublicationRemote = (
   return { ok: false, code: "publication_remote_ambiguous", remoteNames };
 };
 
-const canonicalMainCheckoutUpstreamRemote = (cwd: string): string | undefined => {
-  const worktrees = git(cwd, "worktree", "list", "--porcelain");
-  if (!worktrees.ok) return undefined;
-  const primaryBranchRef = worktrees.stdout
-    .split("\n\n")[0]
-    ?.split("\n")
-    .find((line) => line.startsWith("branch "))
-    ?.slice("branch ".length);
-  if (primaryBranchRef?.startsWith("refs/heads/") !== true) return undefined;
-  const branchName = primaryBranchRef.slice("refs/heads/".length);
-  const configured = git(cwd, "config", "--get", `branch.${branchName}.remote`);
-  return configured.ok && configured.stdout.length > 0 ? configured.stdout : undefined;
+const invokingBranchUpstreamRemote = (cwd: string): string | undefined => {
+  const branch = git(cwd, "symbolic-ref", "--quiet", "--short", "HEAD");
+  if (!branch.ok || branch.stdout.length === 0) return undefined;
+  const remote = git(cwd, "config", "--get", `branch.${branch.stdout}.remote`);
+  const merge = git(cwd, "config", "--get", `branch.${branch.stdout}.merge`);
+  return remote.ok && remote.stdout.length > 0 && merge.ok && merge.stdout.startsWith("refs/heads/")
+    ? remote.stdout
+    : undefined;
 };
 
 const isGitHubRemoteUrl = (url: string): boolean => {
