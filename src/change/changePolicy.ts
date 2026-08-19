@@ -51,12 +51,8 @@ const changePolicySchema = Schema.Struct({
 const decodePolicyShape = Schema.decodeUnknownSync(changePolicySchema, {
   onExcessProperty: "error",
 });
-const decodePrepare = Schema.decodeUnknownSync(changePrepareSchema, {
-  onExcessProperty: "error",
-});
-const decodeChecks = Schema.decodeUnknownSync(changeChecksSchema, { onExcessProperty: "error" });
 
-export const decodeChangePolicy = (value: unknown): ChangePolicy => {
+const decodeChangePolicy = (value: unknown): ChangePolicy => {
   const policy = decodePolicyShape(value);
   return {
     reviewerConfiguration: decodeChangeReviewerConfiguration(policy.reviewerConfiguration),
@@ -64,12 +60,6 @@ export const decodeChangePolicy = (value: unknown): ChangePolicy => {
     checks: policy.checks,
   };
 };
-
-export const decodeSqliteChangePrepare = (source: string): ChangePrepareDefinition =>
-  decodePrepare(JSON.parse(source) as unknown);
-
-export const decodeSqliteChangeChecks = (source: string): ChangeChecks =>
-  decodeChecks(JSON.parse(source) as unknown);
 
 export const encodeSqliteChangePolicy = (policy: ChangePolicy) => {
   const decoded = decodeChangePolicy(policy);
