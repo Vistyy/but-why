@@ -1,7 +1,7 @@
 import { Effect } from "effect";
+import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
-import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { openSqliteValidationRunAbandonmentPort } from "../../sqlite/sqliteValidationRunAbandonmentPersistence.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "../abandonValidationRun.js";
 import { snapshotWorkspaceCleanupGit } from "../validation/adapters/snapshotWorkspaceCleanupGit.js";

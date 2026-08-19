@@ -5,11 +5,11 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { CompleteMergedChangeInput } from "../change/changeStore.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeChangePublication,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   type StoredTerminalChangeRow,
   terminalChangeSelectionColumns,

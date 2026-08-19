@@ -7,7 +7,10 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeReviewerPolicy } from "../../src/change/changeReviewerConfiguration.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";

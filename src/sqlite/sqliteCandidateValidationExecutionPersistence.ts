@@ -21,7 +21,8 @@ import {
   validationPhase,
 } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import {
   compareCandidatesAscending,
@@ -35,7 +36,6 @@ import {
   type StoredImplementationBlockerRow,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import {
   listValidationArtifacts,

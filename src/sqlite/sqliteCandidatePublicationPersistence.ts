@@ -14,7 +14,8 @@ import type {
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeImplementationDecisions,
   type StoredImplementationDecisionRow,
@@ -26,7 +27,6 @@ import {
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
 import { readCurrentPassingValidationEvidence } from "./sqlitePassingValidationEvidence.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidatePublicationPort = () =>
   Effect.map(

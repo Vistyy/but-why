@@ -8,13 +8,13 @@ import type {
 import { changeState } from "../change/change.js";
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   candidateReadColumns,
   decodeCandidate,
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
   CandidateCapturePersistence,

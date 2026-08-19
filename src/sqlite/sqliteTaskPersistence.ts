@@ -2,6 +2,8 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { DependencyValidationCode, TaskDependencyFact, TaskSummary } from "../task/task.js";
 import {
@@ -21,11 +23,9 @@ import type {
   StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
-import { RepositorySql } from "./repositorySql.js";
 import {
   type DecodedStoredTaskRecordRow,
   type DecodedTaskSummaryRow,
-  decodePersisted,
   decodeStoredTaskRecordRow,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,

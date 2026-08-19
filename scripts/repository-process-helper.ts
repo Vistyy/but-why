@@ -4,7 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 
 import { Effect } from "effect";
 
-import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
 

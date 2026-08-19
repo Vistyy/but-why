@@ -10,9 +10,9 @@ import {
   loadRaiseImplementationBlocker,
   loadRecordImplementationDecision,
 } from "../../src/change/composition/loadChangeInspection.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { openSqliteExecutionLock } from "../../src/repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import { resolveLocalRepository } from "../../src/repositoryRuntime/repositoryContext.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   captureCandidateFixture,

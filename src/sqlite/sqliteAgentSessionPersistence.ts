@@ -10,8 +10,8 @@ import type {
 } from "../agent/agentSession/agentSession.js";
 import { piSessionIdForContinuation } from "../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 
 const positiveIntegerMax = 9_007_199_254_740_991;
 

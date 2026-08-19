@@ -5,7 +5,7 @@ import type {
   ChangeSubmissionPort,
 } from "../../../change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../../change/changeStore.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { requireTerminalChange } from "../../../sqlite/sqliteTerminalChangeStorage.js";
 import { completeLinkedChange } from "./sqliteTaskChangePersistence.js";
 

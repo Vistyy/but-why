@@ -15,7 +15,10 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { makeCreateSnapshotWorkspace } from "../../src/change/validation/createSnapshotWorkspace.js";
 import { runDisposableExactCommitWorkspace } from "../../src/disposableWorkspace/adapters/runDisposableExactCommitWorkspace.js";
-import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  type RepositorySqlConfig,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteAgentSessionPersistence } from "../../src/sqlite/sqliteAgentSessionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../src/sqlite/sqliteChangeAgentSessionPersistence.js";
 import {

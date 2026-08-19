@@ -7,13 +7,13 @@ import type {
 } from "../change/changePorts.js";
 import { latestResolvedBlockerId } from "../change/implementationBlocker.js";
 import { isValidationRunEligibleForCurrentChangeAuthority } from "../change/validationRun/validationRun.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   candidateReadColumns,
   decodeCandidate,
   type StoredCandidateRow,
 } from "./sqliteCandidateStorage.js";
 import { readImplementationBlockerHistory } from "./sqliteChangeAuthorityHistory.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { requireCoherentValidationCompletion } from "./sqliteValidationCompletion.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 

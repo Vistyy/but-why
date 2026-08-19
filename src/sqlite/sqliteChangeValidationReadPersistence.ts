@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import type { ChangeValidationReadPort } from "../change/validation/changeValidationPorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   readCandidateById,
   readCandidatesForChange,

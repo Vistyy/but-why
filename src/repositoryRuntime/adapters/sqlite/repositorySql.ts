@@ -10,7 +10,7 @@ import {
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
   type RepositoryStorageError,
-} from "../contracts/repositoryStorageError.js";
+} from "../../../contracts/repositoryStorageError.js";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import { migrateRepositoryState, repositoryMigrationIds } from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";

@@ -4,7 +4,8 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { ChangeStartRecord } from "../../../change/changeStartStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../../../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   createChange,
   insertLinkedChange,
@@ -12,7 +13,6 @@ import {
   recordPrepareOutcome as recordChangePrepareOutcome,
 } from "../../../sqlite/sqliteChangeStartPersistence.js";
 import {
-  decodePersisted,
   decodeTaskContextRow,
   decodeTaskDependencyFacts,
   decodeTaskState,

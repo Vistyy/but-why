@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { ChangeCleanup, ChangeRecord } from "../change/change.js";
 import { publicChangeId } from "../change/changeId.js";
 import { decodeSqliteChangePolicy } from "../change/changePolicy.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
@@ -10,7 +11,6 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import { decodeStoredNullableString, decodeStoredString } from "./sqliteChangeValueDecoders.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const changeReadColumns = [

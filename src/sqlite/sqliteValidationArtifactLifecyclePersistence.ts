@@ -3,8 +3,8 @@ import { Effect } from "effect";
 
 import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ValidationArtifactLifecyclePort } from "../change/validation/changeValidationPorts.js";
-import { RepositorySql } from "./repositorySql.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 
 export const openSqliteValidationArtifactLifecyclePort = () =>
   Effect.map(

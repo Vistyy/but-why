@@ -8,7 +8,10 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import {
   type ChangeTestDependencies,

@@ -5,7 +5,7 @@ import type { CandidateValidationOutcome } from "../change/candidateValidation/c
 import type { ChangePolicy } from "../change/changePolicy.js";
 import { type ValidationPhase, validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   listValidationArtifacts,
   listValidationFindings,

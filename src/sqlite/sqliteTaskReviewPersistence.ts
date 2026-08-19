@@ -7,6 +7,7 @@ import type {
 } from "../agent/agentSession/agentSession.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { decodeReviewerFindingCore } from "../contracts/reviewerFinding.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import type { TaskState } from "../task/lifecycle.js";
 import {
   decodeTaskReviewPolicySnapshot,
@@ -27,7 +28,6 @@ import type {
 } from "../task/review/taskReviewPersistence.js";
 import { expectedTaskReviewWorkspacePath } from "../task/review/taskReviewWorkspace.js";
 import { internalTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
-import { RepositorySql } from "./repositorySql.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
 
 const reviewColumns = `

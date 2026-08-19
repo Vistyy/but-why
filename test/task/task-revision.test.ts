@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { taskReviewBuiltInInstructions } from "../../src/reviewerPrompts/taskReviewerPrompt.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";

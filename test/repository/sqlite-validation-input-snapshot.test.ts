@@ -3,7 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { encodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";

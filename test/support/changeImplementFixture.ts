@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { ChangePrepareFailure } from "../../src/change/change.js";
 import { internalChangeId } from "../../src/change/changeId.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { internalTaskId } from "../../src/task/taskId.js";
 import { withTestRepository } from "./repository.js";
 

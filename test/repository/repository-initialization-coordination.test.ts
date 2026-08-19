@@ -6,7 +6,10 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { repoRoot } from "../support/by-cli.js";
 import { observeUntil } from "../support/observe.js";
 import { startTestProcess } from "../support/testProcess.js";

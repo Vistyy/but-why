@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeSqliteJsonStringArray,
   encodeSqliteJsonStringArray,
-} from "../../src/sqlite/sqliteJsonStringArray.js";
+} from "../../src/repositoryRuntime/adapters/sqlite/sqliteJsonStringArray.js";
 
 describe("SQLite persisted string arrays", () => {
   it("round-trips quotes, escapes, whitespace, control characters, and empty values", () => {

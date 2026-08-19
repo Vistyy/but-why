@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteChangeAuthorityPort } from "../../sqlite/sqliteChangeAuthorityPersistence.js";

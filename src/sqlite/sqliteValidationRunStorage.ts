@@ -9,6 +9,7 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import { type ChangePolicy, decodeSqliteChangePolicy } from "../change/changePolicy.js";
 import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,
@@ -19,7 +20,6 @@ import {
   readImplementationBlockerPrefix,
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { decodeSqliteValidationInputSnapshot } from "./sqliteValidationInputSnapshot.js";
 
 export type StoredValidationRunRow = {

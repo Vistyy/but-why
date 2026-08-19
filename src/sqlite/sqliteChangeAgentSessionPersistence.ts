@@ -11,7 +11,7 @@ import {
 } from "../change/changeReviewerConfiguration.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { requireValidationPosition } from "./sqliteValidationPosition.js";
 
 export const openSqliteChangeAgentSessionPort = () =>

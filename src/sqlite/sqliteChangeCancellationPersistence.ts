@@ -4,10 +4,10 @@ import { changeState } from "../change/change.js";
 import { internalChangeId } from "../change/changeId.js";
 import type { ChangeCancellationRecord } from "../change/changePorts.js";
 import type { CancelChangeInput } from "../change/changeStore.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import { validateChangePublicationRelationships } from "./sqliteChangeReadModel.js";
 import { decodeChangeLifecycle, decodeStoredNullableString } from "./sqliteChangeValueDecoders.js";
 import { readChangeLifecycle } from "./sqliteCompleteMergedChangeStorage.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import {
   decodeTerminalChange,
   type StoredTerminalChangeRow,

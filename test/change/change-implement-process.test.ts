@@ -4,7 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { internalChangeId } from "../../src/change/changeId.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   commitButWhyConfigAndRecordDefault,
   runBuiltByWithEnv,

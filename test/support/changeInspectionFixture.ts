@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../src/change/changeId.js";
 import { deriveAcceptanceContext } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import {
   decodeImplementationBlockerHistory,

@@ -5,9 +5,9 @@ import type { CandidateValidationRunAbandonmentContext } from "../change/candida
 import { publicChangeId } from "../change/changeId.js";
 import type { ValidationRunAbandonmentPort } from "../change/validation/changeValidationPorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import { settleUnsettledAgentInvocations } from "./sqliteAgentSessionPersistence.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 import { readValidationRunById } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteValidationRunAbandonmentPort = () =>

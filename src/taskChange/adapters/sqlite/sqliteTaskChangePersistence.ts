@@ -6,7 +6,7 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { completeMergedChange as completeChangeOnly } from "../../../sqlite/sqliteCompleteMergedChangeStorage.js";
 import {
   completeTask,

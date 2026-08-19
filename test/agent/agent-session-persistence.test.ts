@@ -12,8 +12,8 @@ import {
   RepositoryPersistedDataInvalid,
   type RepositoryStorageError,
 } from "../../src/contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openRepositoryRuntime } from "../../src/repositoryRuntime/repositoryRuntime.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import {
   openSqliteAgentSessionPersistence,
   settleUnsettledAgentInvocations,

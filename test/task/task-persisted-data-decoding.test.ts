@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { openSqliteChangeAuthorityPort } from "../../src/sqlite/sqliteChangeAuthorityPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";

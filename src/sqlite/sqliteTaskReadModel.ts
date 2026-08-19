@@ -1,5 +1,3 @@
-import { Effect } from "effect";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { isTaskState, type TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, publicTaskIdFromInternal } from "../task/taskId.js";
@@ -80,13 +78,4 @@ export const decodeTaskDependencyFacts = (
     const id = publicTaskIdFromInternal(row.id, idPrefix);
     if (id === ownerTaskId) throw new Error("Task dependency relates a Task to itself");
     return { id, title: row.title, state: decodeTaskState(row.state) };
-  });
-
-export const decodePersisted = <A>(
-  operationName: string,
-  decode: () => A,
-): Effect.Effect<A, RepositoryPersistedDataInvalid> =>
-  Effect.try({
-    try: decode,
-    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });

@@ -10,7 +10,8 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeSqliteAcceptanceContextSnapshot,
   encodeSqliteAcceptanceContextSnapshot,
@@ -20,7 +21,6 @@ import {
   encodeSqliteChangePrepareFailure,
 } from "./sqliteChangePreparation.js";
 import { decodeStoredNullableString, decodeStoredString } from "./sqliteChangeValueDecoders.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeStartPersistence = (): Effect.Effect<
   ChangeStartPersistence,

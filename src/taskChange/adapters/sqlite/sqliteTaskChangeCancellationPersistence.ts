@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { internalChangeId, publicChangeId } from "../../../change/changeId.js";
 import type { CancelChangeInput } from "../../../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../../../contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../../sqlite/repositorySql.js";
+import { RepositorySql } from "../../../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   cancelChange as cancelChangeOnly,
   readCancellationChange,

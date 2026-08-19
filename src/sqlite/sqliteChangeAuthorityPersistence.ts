@@ -6,7 +6,8 @@ import type {
   RecordImplementationDecisionInput,
 } from "../change/changePorts.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeImplementationBlockerHistory,
   decodeImplementationDecisions,
@@ -15,7 +16,6 @@ import {
   type StoredImplementationDecisionRow,
 } from "./sqliteChangeAuthorityHistory.js";
 import { readCurrentPassingValidationEvidence } from "./sqlitePassingValidationEvidence.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeAuthorityPort = () =>
   Effect.map(

@@ -222,7 +222,7 @@ files:
 ignores:
   - src/repositoryRuntime/repositoryContext.ts
   - src/repositoryRuntime/repositoryRuntime.ts
-  - src/sqlite/repositorySql.ts
+  - src/repositoryRuntime/adapters/sqlite/repositorySql.ts
 rule:
   any:
     - pattern: repositorySqlLayer($$$ARGS)

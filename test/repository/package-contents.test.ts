@@ -13,7 +13,10 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import {
+  RepositorySql,
+  repositorySqlLayer,
+} from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { commitButWhyConfigAndRecordDefault, createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { startFakeHerdrApiServer } from "../support/fakeHerdrApiServer.js";

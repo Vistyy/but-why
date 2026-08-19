@@ -6,7 +6,7 @@ import type {
   ImplementationBlockerHistory,
 } from "../change/implementationBlocker.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 
 export type StoredImplementationDecisionRow = {
   readonly id: number;

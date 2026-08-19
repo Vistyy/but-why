@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import {
   type ExecutionLock,
   ExecutionLockUnavailable as ExecutionLockUnavailableError,
-} from "../contracts/executionLock.js";
+} from "../../../contracts/executionLock.js";
 
 export type SqliteExecutionLockConfig = {
   readonly commonDirectory: string;

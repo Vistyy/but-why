@@ -4,6 +4,7 @@ import type { AgentSessionPersistence } from "../../agent/agentSession/agentSess
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ReviewerOutput } from "../../agent/reviewerOutput.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { openSqliteExecutionLock } from "../../repositoryRuntime/adapters/sqlite/sqliteExecutionLock.js";
 import type { ResolveLocalRepositoryError } from "../../repositoryRuntime/repositoryContext.js";
 import { openSubmissionRepositoryRuntime } from "../../repositoryRuntime/repositoryRuntime.js";
 import { openSqliteAgentSessionPersistence } from "../../sqlite/sqliteAgentSessionPersistence.js";
@@ -12,7 +13,6 @@ import { openSqliteCandidatePublicationPort } from "../../sqlite/sqliteCandidate
 import { openSqliteCandidateValidationExecutionPort } from "../../sqlite/sqliteCandidateValidationExecutionPersistence.js";
 import { openSqliteChangeAgentSessionPort } from "../../sqlite/sqliteChangeAgentSessionPersistence.js";
 import { openSqliteChangeSubmissionPort } from "../../sqlite/sqliteChangeSubmissionPersistence.js";
-import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
 import { detectGitHubPrTarget } from "../../submissionEnvironment/adapters/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../../submissionEnvironment/adapters/localGitHubPullRequestGateway.js";
 import { refreshRemoteChangeBase } from "../../submissionEnvironment/adapters/remoteChangeBase.js";

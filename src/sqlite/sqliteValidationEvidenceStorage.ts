@@ -15,7 +15,7 @@ import type {
 } from "../change/candidateValidation/candidateValidationRunStore.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import { configuredValidationPosition, decodeValidationPhase } from "./sqliteValidationPosition.js";
 import { readValidationExecutionAuthorityById } from "./sqliteValidationRunStorage.js";
 

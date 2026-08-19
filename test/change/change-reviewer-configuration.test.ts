@@ -9,7 +9,7 @@ import {
 } from "../../src/change/changeReviewerConfiguration.js";
 import { resolveChangePolicyAtCommit } from "../../src/change/composition/resolveChangePolicy.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import {
   createChange,
   readChangeStartById,

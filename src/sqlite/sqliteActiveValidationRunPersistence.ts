@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 import type { ActiveValidationRunPort } from "../change/validation/changeValidationPorts.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { readActiveValidationRunForChange } from "./sqliteValidationRunStorage.js";
 
 export const openSqliteActiveValidationRunPort = () =>

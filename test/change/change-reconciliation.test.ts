@@ -7,7 +7,7 @@ import type { ChangeReconciliationPort } from "../../src/change/changePorts.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql } from "../../src/repositoryRuntime/adapters/sqlite/repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "../../src/sqlite/sqliteAcceptanceContextSnapshot.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { encodeSqliteValidationInputSnapshot } from "../../src/sqlite/sqliteValidationInputSnapshot.js";

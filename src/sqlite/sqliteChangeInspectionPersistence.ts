@@ -5,7 +5,8 @@ import { internalChangeId, publicChangeId } from "../change/changeId.js";
 import type { ChangeListRecord, ChangeReadPort } from "../change/changePorts.js";
 import type { ListChangesInput } from "../change/changeStore.js";
 import { deriveAcceptanceContext } from "../change/validationRun/acceptanceContextSnapshot.js";
-import { RepositorySql } from "./repositorySql.js";
+import { RepositorySql } from "../repositoryRuntime/adapters/sqlite/repositorySql.js";
+import { decodePersisted } from "../repositoryRuntime/adapters/sqlite/sqlitePersistedData.js";
 import {
   decodeImplementationDecisions,
   readImplementationBlockerHistory,
@@ -17,7 +18,6 @@ import {
   type StoredChangeRow,
   validateChangePublicationRelationships,
 } from "./sqliteChangeReadModel.js";
-import { decodePersisted } from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangeReadPort = () =>
   Effect.map(
